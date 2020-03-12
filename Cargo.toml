@@ -1,0 +1,9 @@
+[workspace]
+
+members = [
+    "splashsurf_lib",
+    "splashsurf",
+]
+
+[profile.release]
+lto = true

@@ -1,0 +1,16 @@
+[package]
+name = "splashsurf_lib"
+version = "0.1.0"
+authors = ["Fabian Löschner <loeschner@cs.rwth-aachen.de>"]
+edition = "2018"
+
+[dependencies]
+log = "0.4"
+nalgebra = "0.20"
+num = "0.2"
+anyhow = "1.0"
+thiserror = "1.0"
+coarse-prof = "0.2"
+vtkio = "0.3"
+itertools = "0.9"
+rayon = "1.3"
