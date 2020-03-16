@@ -104,45 +104,13 @@ pub fn generate_sparse_density_map<I: Index, R: Real>(
     kernel_radius: R,
     cube_size: R,
 ) -> MapType<I, R> {
-    profile!("generate_sparse_density_map");
-
-    match active_particles {
-        None => _generate_sparse_density(
-            grid,
-            particle_positions.iter(),
-            particle_densities.iter().copied(),
-            particle_rest_mass,
-            kernel_radius,
-            cube_size,
-        ),
-        Some(indices) => _generate_sparse_density(
-            grid,
-            indices.iter().map(|&i| &particle_positions[i]),
-            indices.iter().map(|&i| particle_densities[i]),
-            particle_rest_mass,
-            kernel_radius,
-            cube_size,
-        ),
-    }
-}
-
-fn _generate_sparse_density<
-    'a,
-    I: Index,
-    R: Real,
-    ParticlePosIter: ExactSizeIterator<Item = &'a Vector3<R>>,
-    ParticleDensityIter: Iterator<Item = R>,
->(
-    grid: &UniformGrid<I, R>,
-    particle_positions_iter: ParticlePosIter,
-    particle_density_iter: ParticleDensityIter,
-    particle_rest_mass: R,
-    kernel_radius: R,
-    cube_size: R,
-) -> MapType<I, R> {
     info!(
         "Starting construction of sparse density map for {} particles...",
-        particle_positions_iter.len()
+        if let Some(active_particles) = active_particles {
+            active_particles.len()
+        } else {
+            particle_positions.len()
+        }
     );
 
     let mut sparse_densities = MapType::new();
@@ -182,10 +150,12 @@ fn _generate_sparse_density<
             allowed_domain
         );
 
-        for (particle, particle_density) in particle_positions_iter.zip(particle_density_iter) {
+        let process_particle = |particle_data: (&Vector3<R>, R)| {
+            let (particle, particle_density) = particle_data;
+
             // Skip particles outside of allowed domain
             if !allowed_domain.contains_point(particle) {
-                continue;
+                return;
             }
 
             // Compute the volume of this particle
@@ -250,6 +220,18 @@ fn _generate_sparse_density<
                 }
                 i = i + I::one();
             }
+        };
+
+        match active_particles {
+            None => particle_positions
+                .iter()
+                .zip(particle_densities.iter().copied())
+                .for_each(process_particle),
+            Some(indices) => indices
+                .iter()
+                .map(|&i| &particle_positions[i])
+                .zip(indices.iter().map(|&i| particle_densities[i]))
+                .for_each(process_particle),
         }
     }
 
