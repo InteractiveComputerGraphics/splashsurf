@@ -169,6 +169,7 @@ pub fn generate_sparse_density_map<I: Index, R: Real>(
     cube_size: R,
     allow_threading: bool,
 ) -> DensityMap<I, R> {
+    // TODO: Reduce code duplication between these two functions
     if allow_threading {
         parallel_generate_sparse_density_map(
             grid,
@@ -365,7 +366,7 @@ pub fn parallel_generate_sparse_density_map<I: Index, R: Real>(
         }
     );
 
-    let mut sparse_densities = MapType::new();
+    let sparse_densities = DashMap::new();
 
     // The number of cells in each direction from a particle that can be affected by a its compact support
     let half_supported_cells_real = (kernel_radius / cube_size).ceil();
@@ -474,15 +475,23 @@ pub fn parallel_generate_sparse_density_map<I: Index, R: Real>(
             }
         };
 
+        // TODO: Use chunks for sparse indexing below
+        // TODO: Use something like num_cpus * 0.66
+        let chunk_size = particle_positions.len() / 8;
         match active_particles {
             None => particle_positions
-                .iter()
-                .zip(particle_densities.iter().copied())
-                .for_each(process_particle),
+                .par_chunks(chunk_size)
+                .zip(particle_densities.par_chunks(chunk_size))
+                .for_each(|(position_chunk, density_chunk)| {
+                    position_chunk
+                        .iter()
+                        .zip(density_chunk.iter().copied())
+                        .for_each(process_particle)
+                }),
             Some(indices) => indices
-                .iter()
+                .par_iter()
                 .map(|&i| &particle_positions[i])
-                .zip(indices.iter().map(|&i| particle_densities[i]))
+                .zip(indices.par_iter().map(|&i| particle_densities[i]))
                 .for_each(process_particle),
         }
     }
