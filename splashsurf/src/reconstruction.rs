@@ -74,7 +74,7 @@ pub(crate) fn entry_point_generic<I: Index, R: Real>(
         splashsurf_lib::reconstruct_surface::<I, R>(particle_positions.as_slice(), &params)?;
 
     let grid = reconstruction.grid();
-    let point_data = reconstruction.point_data();
+    let density_map = reconstruction.density_map();
     let mesh = reconstruction.mesh();
 
     info!(
@@ -93,8 +93,8 @@ pub(crate) fn entry_point_generic<I: Index, R: Real>(
         info!("Constructing density map point cloud...");
 
         let point_cloud: PointCloud3d<R> = {
-            let mut points = Vec::with_capacity(point_data.len());
-            for &flat_point_index in point_data.keys() {
+            let mut points = Vec::with_capacity(density_map.len());
+            for (flat_point_index, _) in density_map.iter() {
                 let point = grid.try_unflatten_point_index(flat_point_index).unwrap();
                 points.push(grid.point_coordinates(&point));
             }
@@ -120,7 +120,7 @@ pub(crate) fn entry_point_generic<I: Index, R: Real>(
         info!("Constructing density map hex mesh...");
 
         let density_mesh =
-            density_map::sparse_density_map_to_hex_mesh(&point_data, &grid, R::zero());
+            density_map::sparse_density_map_to_hex_mesh(&density_map, &grid, R::zero());
 
         info!(
             "Saving density map hex mesh to \"{}\"...",

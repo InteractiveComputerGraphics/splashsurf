@@ -12,6 +12,7 @@ mod uniform_grid;
 mod utils;
 
 pub use aabb::{AxisAlignedBoundingBox, AxisAlignedBoundingBox2d, AxisAlignedBoundingBox3d};
+pub use density_map::DensityMap;
 pub use numeric_types::{Index, Real};
 pub use uniform_grid::{GridConstructionError, UniformGrid};
 
@@ -89,7 +90,7 @@ pub struct SurfaceReconstruction<I: Index, R: Real> {
     /// The background grid that was used as a basis for generating the density map for marching cubes
     grid: UniformGrid<I, R>,
     /// The point-based density map generated from the particles that was used as input to marching cubes
-    point_data: MapType<I, R>,
+    density_map: DensityMap<I, R>,
     /// The actual mesh that is the result of the surface reconstruction
     mesh: TriMesh3d<R>,
 }
@@ -101,8 +102,8 @@ impl<I: Index, R: Real> SurfaceReconstruction<I, R> {
     }
 
     /// Returns a reference to the point-based density map generated from the particles that was used as input to marching cubes
-    pub fn point_data(&self) -> &MapType<I, R> {
-        &self.point_data
+    pub fn density_map(&self) -> &DensityMap<I, R> {
+        &self.density_map
     }
 
     /// Returns a reference to the actual mesh that is the result of the surface reconstruction
@@ -221,7 +222,7 @@ pub fn reconstruct_surface<I: Index, R: Real>(
         active_particles
     });
 
-    let point_data = density_map::generate_sparse_density_map::<I, R>(
+    let density_map = density_map::generate_sparse_density_map::<I, R>(
         &grid,
         particle_positions,
         particle_densities.as_slice(),
@@ -229,14 +230,15 @@ pub fn reconstruct_surface<I: Index, R: Real>(
         particle_rest_mass,
         kernel_radius,
         cube_size,
+        allow_multi_threading,
     );
 
     let mesh =
-        marching_cubes::triangulate_point_data::<I, R>(&grid, &point_data, iso_surface_threshold);
+        marching_cubes::triangulate_density_map::<I, R>(&grid, &density_map, iso_surface_threshold);
 
     Ok(SurfaceReconstruction {
         grid,
-        point_data,
+        density_map,
         mesh,
     })
 }

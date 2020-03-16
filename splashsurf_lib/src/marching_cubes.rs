@@ -4,16 +4,17 @@ use na::Vector3;
 
 use crate::marching_cubes_lut::get_marching_cubes_triangulation;
 use crate::mesh::TriMesh3d;
+use crate::DensityMap;
 use crate::{Index, MapType, Real, UniformGrid};
 
-pub fn triangulate_point_data<I: Index, R: Real>(
+pub fn triangulate_density_map<I: Index, R: Real>(
     grid: &UniformGrid<I, R>,
-    point_data: &MapType<I, R>,
+    density_map: &DensityMap<I, R>,
     iso_surface_threshold: R,
 ) -> TriMesh3d<R> {
-    profile!("triangulate_point_data");
+    profile!("triangulate_density_map");
     let marching_cubes_data =
-        interpolate_points_to_cell_data::<I, R>(&grid, &point_data, iso_surface_threshold);
+        interpolate_points_to_cell_data::<I, R>(&grid, &density_map, iso_surface_threshold);
     triangulate::<I, R>(marching_cubes_data)
 }
 
@@ -73,7 +74,7 @@ pub(crate) struct MarchingCubesInput<I: Index, R: Real> {
 #[inline(never)]
 pub(crate) fn interpolate_points_to_cell_data<I: Index, R: Real>(
     grid: &UniformGrid<I, R>,
-    point_data: &MapType<I, R>,
+    density_map: &DensityMap<I, R>,
     iso_surface_threshold: R,
 ) -> MarchingCubesInput<I, R> {
     profile!("interpolate_points_to_cell_data");
@@ -89,7 +90,7 @@ pub(crate) fn interpolate_points_to_cell_data<I: Index, R: Real>(
     // Generate iso-surface vertices and identify affected cells & edges
     {
         profile!("generate_iso_surface_vertices");
-        for (&flat_point_index, &point_value) in point_data {
+        for (flat_point_index, point_value) in density_map.iter() {
             // Skip grid points with values above the surface threshold
             if point_value > iso_surface_threshold {
                 continue;
@@ -104,7 +105,7 @@ pub(crate) fn interpolate_points_to_cell_data<I: Index, R: Real>(
 
                 let flat_neighbor_index = grid.flatten_point_index(neighbor);
                 // Try to read out the function value at the neighboring point
-                let neighbor_value = if let Some(&v) = point_data.get(&flat_neighbor_index) {
+                let neighbor_value = if let Some(v) = density_map.get(flat_neighbor_index) {
                     v
                 } else {
                     // Neighbors that are not in the point-value map were outside of the kernel evaluation radius.
@@ -117,7 +118,8 @@ pub(crate) fn interpolate_points_to_cell_data<I: Index, R: Real>(
                 // Check if an edge crossing the iso-surface was found
                 if neighbor_value > iso_surface_threshold {
                     // Interpolate iso-surface vertex
-                    let alpha = (iso_surface_threshold - point_value) / (neighbor_value - point_value);
+                    let alpha =
+                        (iso_surface_threshold - point_value) / (neighbor_value - point_value);
                     let point_coords = grid.point_coordinates(&point);
                     let neighbor_coords = grid.point_coordinates(neighbor);
                     let interpolated_coords =
@@ -140,7 +142,8 @@ pub(crate) fn interpolate_points_to_cell_data<I: Index, R: Real>(
                         cell_data_entry.iso_surface_vertices[local_edge_index] = Some(vertex_index);
 
                         // Mark the neighbor as above the iso-surface threshold
-                        let local_vertex_index = cell.local_point_index_of(neighbor.index()).unwrap();
+                        let local_vertex_index =
+                            cell.local_point_index_of(neighbor.index()).unwrap();
                         cell_data_entry.corner_above_threshold[local_vertex_index] =
                             RelativeToThreshold::Above;
                     }
@@ -175,7 +178,7 @@ pub(crate) fn interpolate_points_to_cell_data<I: Index, R: Real>(
                 // Otherwise try to look up its value and potentially mark it as above the threshold
                 let point = cell.global_index_of(local_point_index).unwrap();
                 let flat_point_index = grid.flatten_point_index(&point);
-                if let Some(&point_value) = point_data.get(&flat_point_index) {
+                if let Some(point_value) = density_map.get(flat_point_index) {
                     if point_value > iso_surface_threshold {
                         *flag_above = RelativeToThreshold::Above;
                     } else {
@@ -189,7 +192,7 @@ pub(crate) fn interpolate_points_to_cell_data<I: Index, R: Real>(
     }
 
     #[cfg(debug_assertions)]
-    assert_cell_data_point_data_consistency(point_data, &cell_data, grid, iso_surface_threshold);
+    assert_cell_data_point_data_consistency(density_map, &cell_data, grid, iso_surface_threshold);
 
     info!(
         "Generated cell data for marching cubes with {} cells and {} vertices.",
@@ -250,7 +253,7 @@ pub(crate) fn triangulate<I: Index, R: Real>(input: MarchingCubesInput<I, R>) ->
 #[allow(unused)]
 #[inline(never)]
 fn assert_cell_data_point_data_consistency<I: Index, R: Real>(
-    point_data: &MapType<I, R>,
+    density_map: &DensityMap<I, R>,
     cell_data: &MapType<I, CellData>,
     grid: &UniformGrid<I, R>,
     iso_surface_threshold: R,
@@ -265,7 +268,7 @@ fn assert_cell_data_point_data_consistency<I: Index, R: Real>(
         for i in 0..8 {
             let point = cell.global_index_of(i).unwrap();
             let flat_point_index = grid.flatten_point_index(&point);
-            if let Some(&point_value) = point_data.get(&flat_point_index) {
+            if let Some(point_value) = density_map.get(flat_point_index) {
                 if point_value > iso_surface_threshold {
                     has_point_data_above_threshold = true;
                 }
