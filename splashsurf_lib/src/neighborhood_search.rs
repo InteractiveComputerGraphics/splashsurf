@@ -37,13 +37,9 @@ fn sequential_generate_cell_to_particle_map<I: Index, R: Real>(
 fn parallel_generate_cell_to_particle_map<I: Index, R: Real>(
     grid: &UniformGrid<I, R>,
     particle_positions: &[Vector3<R>],
-) -> (DashMap<I, usize>, Vec<(I, Vec<usize>)>) {
+) -> DashMap<I, Vec<usize>> {
     profile!("parallel_generate_cell_to_particle_map");
-    let particles_per_cell: DashMap<I, usize> = DashMap::new();
-
-    // This is obviously super slow. Maybe it's not worth to parallelize this function
-    use std::sync::{Arc, RwLock};
-    let particles_per_cell_storage = Arc::new(RwLock::new(Vec::new()));
+    let particles_per_cell = DashMap::new();
 
     // Assign all particles to enclosing cells
     particle_positions
@@ -54,31 +50,13 @@ fn parallel_generate_cell_to_particle_map<I: Index, R: Real>(
             let cell = grid.get_cell(&cell_ijk).unwrap();
             let flat_cell_index = grid.flatten_cell_index(&cell);
 
-            let index = *particles_per_cell
+            particles_per_cell
                 .entry(flat_cell_index)
-                .or_insert_with(|| {
-                    let mut mutable_storage = particles_per_cell_storage.write().unwrap();
-                    let new_index = mutable_storage.len();
-                    mutable_storage.push((flat_cell_index, Vec::with_capacity(15)));
-                    new_index
-                })
-                .value();
-
-            particles_per_cell_storage
-                .write()
-                .unwrap()
-                .get_mut(index)
-                .unwrap()
-                .1
+                .or_insert_with(Vec::new)
                 .push(particle_i);
         });
 
-    let particles_per_cell_storage = Arc::try_unwrap(particles_per_cell_storage)
-        .unwrap()
-        .into_inner()
-        .unwrap();
-
-    (particles_per_cell, particles_per_cell_storage)
+    particles_per_cell
 }
 
 #[inline(never)]
@@ -175,48 +153,16 @@ pub fn parallel_search<I: Index, R: Real>(
     let grid = UniformGrid::from_aabb(&domain, search_radius).unwrap();
 
     // Map for spatially hashed storage of all particles (map from cell -> enclosed particles)
+    /*
     let particles_per_cell_map =
         sequential_generate_cell_to_particle_map::<I, R>(&grid, particle_positions);
+        */
+    let particles_per_cell_map =
+        parallel_generate_cell_to_particle_map::<I, R>(&grid, particle_positions).into_read_only();
     let particles_per_cell_vec: Vec<(I, Vec<usize>)> = particles_per_cell_map
         .iter()
         .map(|(&i, v)| (i, v.clone()))
         .collect::<Vec<_>>();
-
-    // In order to use Dashmap here, the whole process below has to be changed:
-    //     In `adjacent_cell_particle_vecs`, we cannot store references into the map anymore.
-    //     Therefore, these references have to point into a vector (e.g. `particles_per_cell_vec`) instead.
-    //     For this, we need a map that maps the flat cell index to the position in the cell vec.
-    //     This could be created here, or alternatively, already during the construction,
-    //     inside of `parallel_generate_cell_to_particle_map`
-    /*
-    let (map, storage) = parallel_generate_cell_to_particle_map::<I, R>(&grid, particle_positions);
-    let particles_per_cell_map = map;
-    let particles_per_cell_vec = storage;
-
-    // Extract, per cell, the particle lists of all adjacent cells
-    let adjacent_cell_particle_vecs = {
-        profile!("get_cell_neighborhoods_par");
-        particles_per_cell_vec
-            .par_iter()
-            .map(|(flat_cell_index, _)| {
-                let current_cell = grid.try_unflatten_cell_index(*flat_cell_index).unwrap();
-
-                // Collect references to the particle lists of all existing adjacent cells
-                let potential_neighbor_particle_vecs: Vec<&Vec<usize>> = grid
-                    .cells_adjacent_to_cell(&current_cell)
-                    .filter_map(|c| {
-                        let flat_cell_index = grid.flatten_cell_index(&c);
-                        particles_per_cell_map
-                            .get(&flat_cell_index)
-                            .map(|entry| *entry.value())
-                            .map(|vec_index| &particles_per_cell_vec.get(vec_index).unwrap().1)
-                    })
-                    .collect();
-                potential_neighbor_particle_vecs
-            })
-            .collect::<Vec<_>>()
-    };
-    */
 
     // Extract, per cell, the particle lists of all adjacent cells
     let adjacent_cell_particle_vecs = {
