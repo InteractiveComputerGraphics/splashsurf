@@ -21,6 +21,7 @@ use mesh::TriMesh3d;
 use na::Vector3;
 use thiserror::Error as ThisError;
 
+// TODO: Remove anyhow/thiserror from lib?
 // TODO: Write more unit tests (e.g. AABB, UniformGrid, neighborhood search)
 // TODO: Write some integration tests
 // TODO: Test kernels with property based testing?
