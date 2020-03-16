@@ -104,6 +104,8 @@ pub fn generate_sparse_density_map<I: Index, R: Real>(
     kernel_radius: R,
     cube_size: R,
 ) -> MapType<I, R> {
+    profile!("sequential_generate_sparse_density_map");
+
     info!(
         "Starting construction of sparse density map for {} particles...",
         if let Some(active_particles) = active_particles {
