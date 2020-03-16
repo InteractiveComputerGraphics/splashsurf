@@ -118,7 +118,7 @@ pub fn generate_sparse_density_map<I: Index, R: Real>(
         Some(indices) => _generate_sparse_density(
             grid,
             indices.iter().map(|&i| &particle_positions[i]),
-            particle_densities.iter().copied(),
+            indices.iter().map(|&i| particle_densities[i]),
             particle_rest_mass,
             kernel_radius,
             cube_size,
