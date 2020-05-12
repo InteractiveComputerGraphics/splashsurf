@@ -1,5 +1,5 @@
 use coarse_prof::profile;
-use dashmap::{DashMap, ReadOnlyView as ReadDashMap};
+use dashmap::ReadOnlyView as ReadDashMap;
 use log::{info, warn};
 use na::Vector3;
 use rayon::prelude::*;
@@ -7,7 +7,7 @@ use rayon::prelude::*;
 use crate::kernel::DiscreteSquaredDistanceCubicKernel;
 use crate::mesh::{HexMesh3d, MeshWithPointData};
 use crate::uniform_grid::UniformGrid;
-use crate::{Index, MapType, Real};
+use crate::{HashState, Index, MapType, ParallelMapType, Real};
 
 #[inline(never)]
 pub fn compute_particle_densities<I: Index, R: Real>(
@@ -98,7 +98,7 @@ pub fn parallel_compute_particle_densities<I: Index, R: Real>(
 #[derive(Clone, Debug)]
 pub enum DensityMap<I: Index, R: Real> {
     Standard(MapType<I, R>),
-    DashMap(ReadDashMap<I, R>),
+    DashMap(ReadDashMap<I, R, HashState>),
 }
 
 impl<I: Index, R: Real> From<MapType<I, R>> for DensityMap<I, R> {
@@ -107,8 +107,8 @@ impl<I: Index, R: Real> From<MapType<I, R>> for DensityMap<I, R> {
     }
 }
 
-impl<I: Index, R: Real> From<DashMap<I, R>> for DensityMap<I, R> {
-    fn from(map: DashMap<I, R>) -> Self {
+impl<I: Index, R: Real> From<ParallelMapType<I, R>> for DensityMap<I, R> {
+    fn from(map: ParallelMapType<I, R>) -> Self {
         Self::DashMap(map.into_read_only())
     }
 }
@@ -214,7 +214,7 @@ pub fn sequential_generate_sparse_density_map<I: Index, R: Real>(
         }
     );
 
-    let mut sparse_densities = MapType::new();
+    let mut sparse_densities = MapType::with_hasher(HashState::default());
 
     // The number of cells in each direction from a particle that can be affected by a its compact support
     let half_supported_cells_real = (kernel_radius / cube_size).ceil();
@@ -366,7 +366,7 @@ pub fn parallel_generate_sparse_density_map<I: Index, R: Real>(
         }
     );
 
-    let sparse_densities = DashMap::new();
+    let sparse_densities = ParallelMapType::with_hasher(HashState::default());
 
     // The number of cells in each direction from a particle that can be affected by a its compact support
     let half_supported_cells_real = (kernel_radius / cube_size).ceil();
@@ -518,7 +518,7 @@ pub fn sparse_density_map_to_hex_mesh<I: Index, R: Real>(
         cells: Vec::new(),
     };
     let mut values = Vec::new();
-    let mut cells = MapType::new();
+    let mut cells = MapType::with_hasher(HashState::default());
 
     // Create vertices and cells for points with values
     for (flat_point_index, point_value) in density_map.iter() {
@@ -545,7 +545,7 @@ pub fn sparse_density_map_to_hex_mesh<I: Index, R: Real>(
     }
 
     // Add missing vertices of cells using default values
-    let mut additional_vertices = MapType::new();
+    let mut additional_vertices = MapType::with_hasher(HashState::default());
     for (flat_cell_index, cell_vertices) in cells.iter_mut() {
         let cell = grid.try_unflatten_cell_index(*flat_cell_index).unwrap();
 

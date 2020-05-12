@@ -1,11 +1,10 @@
 use coarse_prof::profile;
-use dashmap::DashMap;
 use na::Vector3;
 use rayon::prelude::*;
 
 use crate::uniform_grid::UniformGrid;
 use crate::utils::SendSyncWrapper;
-use crate::{AxisAlignedBoundingBox3d, Index, MapType, Real};
+use crate::{AxisAlignedBoundingBox3d, HashState, Index, MapType, ParallelMapType, Real};
 
 // TODO: Replace some unwrap() calls with errors
 
@@ -16,7 +15,7 @@ fn sequential_generate_cell_to_particle_map<I: Index, R: Real>(
     particle_positions: &[Vector3<R>],
 ) -> MapType<I, Vec<usize>> {
     profile!("sequential_generate_cell_to_particle_map");
-    let mut particles_per_cell = MapType::new();
+    let mut particles_per_cell = MapType::with_hasher(HashState::default());
 
     // Assign all particles to enclosing cells
     for (particle_i, particle) in particle_positions.iter().enumerate() {
@@ -37,9 +36,9 @@ fn sequential_generate_cell_to_particle_map<I: Index, R: Real>(
 fn parallel_generate_cell_to_particle_map<I: Index, R: Real>(
     grid: &UniformGrid<I, R>,
     particle_positions: &[Vector3<R>],
-) -> DashMap<I, Vec<usize>> {
+) -> ParallelMapType<I, Vec<usize>> {
     profile!("parallel_generate_cell_to_particle_map");
-    let particles_per_cell = DashMap::new();
+    let particles_per_cell = ParallelMapType::with_hasher(HashState::default());
 
     // Assign all particles to enclosing cells
     particle_positions

@@ -37,11 +37,15 @@ use thiserror::Error as ThisError;
 // TODO: Make deterministic ordering a feature flag / runtime option
 // TODO: Function that detects smallest usable index type
 
+pub(crate) type HashState = fxhash::FxBuildHasher;
+
 // Switch to BTreeMap in debug mode for easier debugging due to deterministic iteration order
 #[cfg(debug_assertions)]
 pub(crate) type MapType<K, V> = std::collections::BTreeMap<K, V>;
 #[cfg(not(debug_assertions))]
-pub(crate) type MapType<K, V> = std::collections::HashMap<K, V>;
+pub(crate) type MapType<K, V> = std::collections::HashMap<K, V, HashState>;
+
+pub(crate) type ParallelMapType<K, V> = dashmap::DashMap<K, V, HashState>;
 
 /// Parameters for the surface reconstruction
 #[derive(Clone, Debug)]

@@ -214,6 +214,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b2c60b71d9dbcd810a3be879dc9aafac6cec5c50dc2346e245f61f54a61fdf22"
 
 [[package]]
+name = "fxhash"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c31b6d751ae2c7f11320402d34e41349dd1016f8d5d45e48c4312bc8625af50c"
+dependencies = [
+ "byteorder",
+]
+
+[[package]]
 name = "generic-array"
 version = "0.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -652,6 +661,7 @@ dependencies = [
  "anyhow",
  "coarse-prof",
  "dashmap",
+ "fxhash",
  "itertools",
  "log",
  "nalgebra",
