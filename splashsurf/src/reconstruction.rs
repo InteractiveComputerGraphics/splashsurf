@@ -44,6 +44,7 @@ pub(crate) fn entry_point_generic<I: Index, R: Real>(
         paths.input_file.to_string_lossy()
     );
     let particle_positions = if let Some(extension) = paths.input_file.extension() {
+        profile!("loading particle positions");
         let extension = extension.to_string_lossy();
         match extension.to_lowercase().as_str() {
             "vtk" => {
@@ -77,17 +78,20 @@ pub(crate) fn entry_point_generic<I: Index, R: Real>(
     let density_map = reconstruction.density_map();
     let mesh = reconstruction.mesh();
 
-    info!(
-        "Writing surface mesh to \"{}\"...",
-        paths.output_file.to_string_lossy()
-    );
-    io::write_vtk(mesh, &paths.output_file, "mesh").with_context(|| {
-        format!(
-            "Failed to write reconstructed surface to output file '{}'",
+    {
+        profile!("write surface mesh to file");
+        info!(
+            "Writing surface mesh to \"{}\"...",
             paths.output_file.to_string_lossy()
-        )
-    })?;
-    info!("Done.");
+        );
+        io::write_vtk(mesh, &paths.output_file, "mesh").with_context(|| {
+            format!(
+                "Failed to write reconstructed surface to output file '{}'",
+                paths.output_file.to_string_lossy()
+            )
+        })?;
+        info!("Done.");
+    }
 
     if let Some(output_density_map_points_file) = &paths.output_density_map_points_file {
         info!("Constructing density map point cloud...");
