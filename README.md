@@ -1,7 +1,5 @@
-# splashsurf
+# ![splashsurf logo](logos/logo_small.svg "splashsurf")
 Surface reconstruction for particle data from SPH simulations, written in Rust.
-
-![splashsurf logo](logos/logo_small.svg "splashsurf logo")
 
 This is a basic but high-performance implementation of surface reconstruction for SPH using marching cubes.
 The output of this tool is the reconstructed triangle surface mesh of the fluid.
