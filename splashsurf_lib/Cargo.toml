@@ -7,7 +7,7 @@ edition = "2018"
 [dependencies]
 log = "0.4"
 nalgebra = "0.21"
-num = "0.2"
+num = "0.3"
 anyhow = "1.0"
 thiserror = "1.0"
 coarse-prof = "0.2"
