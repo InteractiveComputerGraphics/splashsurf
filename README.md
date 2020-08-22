@@ -1,19 +1,30 @@
 # splashsurf
 Surface reconstruction for particle data from SPH simulations, written in Rust.
 
+
+This is a basic but high-performance implementation of surface reconstruction for SPH using marching cubes.
+The output of this tool is the reconstructed triangle surface mesh of the fluid.
+At the moment it does not compute normals or other additional data.
+As input, it supports particle positions from .vtk files and binary .xyz files. In addition, required parameters are the kernel radius and particle radius (to compute the volume of particles) used for the original SPH simulation as well as the surface threshold.
+
+The implementation first computes the density of each particles using the typical SPH approach with a cubic kernel. This density is then interpolated onto a sparse grid using spatial hashing in the support radius of each particle. Finally, the marching cubes reconstruction is performed only in those grid cells where the density values cross the surface threshold.
+
+Due the use of hash maps and multi-threading (if enabled), the output of this implementation is not deterministic.
+To help with debugging, the implementation switches to binary trees in debug builds.
+
 ## Usage
 
 ```
 USAGE:
-    splashsurf [FLAGS] [OPTIONS] <input-file> --cube-size <cube-size> --kernel-radius <kernel-radius> --particle-radius <particle-radius> --surface-threshold <surface-threshold>
+    splashsurf.exe [FLAGS] [OPTIONS] <input-file> --cube-size <cube-size> --kernel-radius <kernel-radius> --particle-radius <particle-radius> --surface-threshold <surface-threshold>
 
 FLAGS:
     -h, --help            Prints help information
-        --mt-files        Whether to allow multi-threading to process multiple input files at once, conflicts with --mt-
-                          particles
-        --mt-particles    Whether to allow multi-threading internally for a single input file over particles, conflicts
-                          with --mt-files
-    -d                    Optional filename for writing the intermediate density map grid to disk
+        --mt-files        Whether to enable multi-threading to process multiple input files in parallel, conflicts with
+                          --mt-particles
+        --mt-particles    Whether to enable multi-threading for a single input file by processing chunks of particles in
+                          parallel, conflicts with --mt-files
+    -d                    Whether to enable the use of double precision for all computations (disabled by default)
     -V, --version         Prints version information
 
 OPTIONS:
@@ -31,20 +42,20 @@ OPTIONS:
 
         --output-dir <output-dir>                              Optional base directory for all output files
         --output-dm-grid <output-dm-grid>
-            Optional filename for writing the intermediate density map grid to disk
+            Optional filename for writing the grid representation of the intermediate density map to disk
 
         --output-dm-points <output-dm-points>
-            Optional filename for writing the intermediate density map point cloud to disk
+            Optional filename for writing the point cloud representation of the intermediate density map to disk
 
     -o <output-file>                                           Filename for writing the reconstructed surface to disk
         --particle-radius <particle-radius>                    The particle radius of the input data
         --rest-density <rest-density>                          The rest density of the fluid [default: 1000.0]
         --splash-detection-radius <splash-detection-radius>
-            If a particle has no neighbors in this radius (in multiplies of the particle radius), it is considered as a
+            If a particle has no neighbors in this radius (in multiplies of the particle radius) it is considered as a
             free particles
         --surface-threshold <surface-threshold>
-            The iso-surface threshold for the density, i.e. at what reconstructed density does the fluid start
-
+            The iso-surface threshold for the density, i.e. value of the reconstructed density that indicates the fluid
+            surface
 
 ARGS:
     <input-file>    Path to the input file where the particle positions are stored (supported formats: VTK, binary
