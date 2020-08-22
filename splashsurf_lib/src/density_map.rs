@@ -7,7 +7,7 @@ use rayon::prelude::*;
 use crate::kernel::DiscreteSquaredDistanceCubicKernel;
 use crate::mesh::{HexMesh3d, MeshWithPointData};
 use crate::uniform_grid::UniformGrid;
-use crate::{HashState, Index, MapType, ParallelMapType, Real};
+use crate::{new_map, HashState, Index, MapType, ParallelMapType, Real};
 
 #[inline(never)]
 pub fn compute_particle_densities<I: Index, R: Real>(
@@ -214,7 +214,7 @@ pub fn sequential_generate_sparse_density_map<I: Index, R: Real>(
         }
     );
 
-    let mut sparse_densities = MapType::with_hasher(HashState::default());
+    let mut sparse_densities = new_map();
 
     // The number of cells in each direction from a particle that can be affected by a its compact support
     let half_supported_cells_real = (kernel_radius / cube_size).ceil();
@@ -518,7 +518,7 @@ pub fn sparse_density_map_to_hex_mesh<I: Index, R: Real>(
         cells: Vec::new(),
     };
     let mut values = Vec::new();
-    let mut cells = MapType::with_hasher(HashState::default());
+    let mut cells = new_map();
 
     // Create vertices and cells for points with values
     for (flat_point_index, point_value) in density_map.iter() {
@@ -545,7 +545,7 @@ pub fn sparse_density_map_to_hex_mesh<I: Index, R: Real>(
     }
 
     // Add missing vertices of cells using default values
-    let mut additional_vertices = MapType::with_hasher(HashState::default());
+    let mut additional_vertices = new_map();
     for (flat_cell_index, cell_vertices) in cells.iter_mut() {
         let cell = grid.try_unflatten_cell_index(*flat_cell_index).unwrap();
 

@@ -34,7 +34,7 @@ use thiserror::Error as ThisError;
 // TODO: More and better error messages with distinct types
 // TODO: Make flat indices strongly typed
 // TODO: Windowed approach that supports multi threading and dense operations without hashmap
-// TODO: Make deterministic ordering a feature flag / runtime option
+// TODO: Make deterministic ordering a feature flag / runtime option instead of based on debug/release build
 // TODO: Function that detects smallest usable index type
 
 pub(crate) type HashState = fxhash::FxBuildHasher;
@@ -44,6 +44,16 @@ pub(crate) type HashState = fxhash::FxBuildHasher;
 pub(crate) type MapType<K, V> = std::collections::BTreeMap<K, V>;
 #[cfg(not(debug_assertions))]
 pub(crate) type MapType<K, V> = std::collections::HashMap<K, V, HashState>;
+
+// Function for consistent construction of the used map type (depending on debug/release build)
+#[cfg(debug_assertions)]
+pub(crate) fn new_map<K: std::cmp::Ord, V>() -> MapType<K, V> {
+    MapType::new()
+}
+#[cfg(not(debug_assertions))]
+pub(crate) fn new_map<K, V>() -> MapType<K, V> {
+    MapType::with_hasher(HashState::default())
+}
 
 pub(crate) type ParallelMapType<K, V> = dashmap::DashMap<K, V, HashState>;
 

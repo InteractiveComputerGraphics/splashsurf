@@ -4,7 +4,7 @@ use na::Vector3;
 
 use crate::marching_cubes_lut::get_marching_cubes_triangulation;
 use crate::mesh::TriMesh3d;
-use crate::{DensityMap, HashState, Index, MapType, Real, UniformGrid};
+use crate::{new_map, DensityMap, Index, MapType, Real, UniformGrid};
 
 pub fn triangulate_density_map<I: Index, R: Real>(
     grid: &UniformGrid<I, R>,
@@ -82,7 +82,7 @@ pub(crate) fn interpolate_points_to_cell_data<I: Index, R: Real>(
     info!("Starting interpolation of cell data for marching cubes...");
 
     // Map from flat cell index to all data that is required per cell for the marching cubes triangulation
-    let mut cell_data: MapType<I, CellData> = MapType::with_hasher(HashState::default());
+    let mut cell_data: MapType<I, CellData> = new_map();
     // Storage for vertices that are created on edges crossing the iso-surface
     let mut vertices = Vec::new();
 
