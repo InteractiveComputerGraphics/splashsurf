@@ -43,16 +43,16 @@ struct CommandlineArgs {
     /// The kernel radius used for building the density map in multiplies of the particle radius
     #[structopt(long)]
     kernel_radius: f64,
-    /// If a particle has no neighbors in this radius (in multiplies of the particle radius), it is considered as a free particles
+    /// If a particle has no neighbors in this radius (in multiplies of the particle radius) it is considered as a free particles
     #[structopt(long)]
     splash_detection_radius: Option<f64>,
     /// The marching cubes grid size in multiplies of the particle radius
     #[structopt(long)]
     cube_size: f64,
-    /// The iso-surface threshold for the density, i.e. at what reconstructed density does the fluid start
+    /// The iso-surface threshold for the density, i.e. value of the reconstructed density that indicates the fluid surface
     #[structopt(long)]
     surface_threshold: f64,
-    /// Optional filename for writing the intermediate density map grid to disk
+    /// Whether to enable the use of double precision for all computations (disabled by default)
     #[structopt(short = "-d")]
     use_double_precision: bool,
     /// Lower corner of the domain where surface reconstruction should be performed, format: domain-min=x_min;y_min;z_min (requires domain-max to be specified)
@@ -71,16 +71,16 @@ struct CommandlineArgs {
         requires = "domain-min"
     )]
     domain_max: Option<Vec<f64>>,
-    /// Optional filename for writing the intermediate density map point cloud to disk
+    /// Optional filename for writing the point cloud representation of the intermediate density map to disk
     #[structopt(long, parse(from_os_str))]
     output_dm_points: Option<PathBuf>,
-    /// Optional filename for writing the intermediate density map grid to disk
+    /// Optional filename for writing the grid representation of the intermediate density map to disk
     #[structopt(long, parse(from_os_str))]
     output_dm_grid: Option<PathBuf>,
-    /// Whether to allow multi-threading to process multiple input files at once, conflicts with --mt-particles
+    /// Whether to enable multi-threading to process multiple input files in parallel, conflicts with --mt-particles
     #[structopt(long = "mt-files", conflicts_with = "parallelize-over-particles")]
     parallelize_over_files: bool,
-    /// Whether to allow multi-threading internally for a single input file over particles, conflicts with --mt-files
+    /// Whether to enable multi-threading for a single input file by processing chunks of particles in parallel, conflicts with --mt-files
     #[structopt(long = "mt-particles", conflicts_with = "parallelize-over-files")]
     parallelize_over_particles: bool,
 }
@@ -93,14 +93,6 @@ fn main() -> Result<(), anyhow::Error> {
     }));
 
     initialize_logging()?;
-
-    if cfg!(target_env = "gnu") {
-        info!("Compiled with gnu toolchain");
-    } else if cfg!(target_env = "msvc") {
-        info!("Compiled with msvc toolchain");
-    } else {
-        info!("Compiled with unknown toolchain");
-    }
 
     let cmd_args = CommandlineArgs::from_args();
     let paths = ReconstrunctionRunnerPathCollection::try_from(&cmd_args)?.collect();
