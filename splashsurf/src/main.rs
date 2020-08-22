@@ -12,8 +12,8 @@ use anyhow::{anyhow, Context};
 use log::{error, info};
 use na::Vector3;
 use rayon::prelude::*;
-use structopt::StructOpt;
 use splashsurf_lib::AxisAlignedBoundingBox3d;
+use structopt::StructOpt;
 
 // TODO: Reduce most info! calls to lower level
 // TODO: Use different logging when processing multiple files in parallel
@@ -24,6 +24,11 @@ use splashsurf_lib::AxisAlignedBoundingBox3d;
 // TODO: Append context to more error messages, e.g. when writing output files fails
 
 #[derive(Debug, StructOpt)]
+#[structopt(
+    name = "splashsurf",
+    author = "Fabian Löschner <loeschner@cs.rwth-aachen.de>",
+    about = "Surface reconstruction for particle data from SPH simulations (https://github.com/w1th0utnam3/splashsurf)"
+)]
 struct CommandlineArgs {
     /// Path to the input file where the particle positions are stored (supported formats: VTK, binary XYZ)
     #[structopt(parse(from_os_str))]

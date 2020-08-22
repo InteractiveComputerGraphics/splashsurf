@@ -1,4 +1,3 @@
-
 /// Wrapper type to make any type Send + Sync
 pub struct SendSyncWrapper<T>(T);
 

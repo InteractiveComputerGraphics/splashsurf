@@ -126,7 +126,15 @@ fn test_discrete_kernel() {
         let diff = (discrete - continuous).abs();
         let rel_diff = diff / continuous;
         if rel_diff > 5e-2 && diff > 1e-1 {
-            eprintln!("at r={}, r/h={}, discrete: {}, continuous: {}, diff: {}, rel_diff: {}", r, r/h, discrete, continuous, diff, rel_diff);
+            eprintln!(
+                "at r={}, r/h={}, discrete: {}, continuous: {}, diff: {}, rel_diff: {}",
+                r,
+                r / h,
+                discrete,
+                continuous,
+                diff,
+                rel_diff
+            );
             assert!(false);
         }
     }

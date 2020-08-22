@@ -7,8 +7,8 @@ use na::Vector3;
 use vtkio::model::{DataSet, Version, Vtk};
 use vtkio::{export_be, import_be};
 
-use std::io::Read;
 use splashsurf_lib::Real;
+use std::io::Read;
 
 pub fn write_vtk<P: AsRef<Path>>(
     data: impl Into<DataSet>,
