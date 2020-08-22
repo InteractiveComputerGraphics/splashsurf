@@ -1,6 +1,7 @@
 # splashsurf
 Surface reconstruction for particle data from SPH simulations, written in Rust.
 
+![splashsurf logo](logos/logo_small.svg "splashsurf logo")
 
 This is a basic but high-performance implementation of surface reconstruction for SPH using marching cubes.
 The output of this tool is the reconstructed triangle surface mesh of the fluid.
@@ -9,7 +10,7 @@ As input, it supports particle positions from .vtk files and binary .xyz files. 
 
 The implementation first computes the density of each particles using the typical SPH approach with a cubic kernel. This density is then interpolated onto a sparse grid using spatial hashing in the support radius of each particle. Finally, the marching cubes reconstruction is performed only in those grid cells where the density values cross the surface threshold.
 
-Due the use of hash maps and multi-threading (if enabled), the output of this implementation is not deterministic.
+Due the use of hash maps in release mode and multi-threading (if enabled), the output of this implementation is not deterministic.
 To help with debugging, the implementation switches to binary trees in debug builds.
 
 ## Usage
@@ -104,3 +105,8 @@ With these parameters, a scene with 13353401 particles is reconstructed in less 
 [2020-05-12T20:22:54.710955+02:00][splashsurf][INFO]       triangulate: 4.50%, 170.41ms/call @ 0.04Hz
 [2020-05-12T20:22:54.710956+02:00][splashsurf][INFO]   write surface mesh to file: 1.25%, 328.75ms/call @ 0.04Hz
 ```
+
+## License
+
+For license information of this project, see the LICENSE file.
+The splashsurf logo is based on two graphics ([1](https://www.svgrepo.com/svg/295647/wave), [2](https://www.svgrepo.com/svg/295652/surfboard-surfboard)) published on SVG Repo under a CC0 ("No Rights Reserved") license.
