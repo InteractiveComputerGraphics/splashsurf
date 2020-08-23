@@ -47,6 +47,8 @@ fn test_cubic_kernel_r_compact_support() {
 
 #[test]
 fn test_cubic_kernel_r_integral() {
+    use na::Vector3;
+
     let hs = [0.025, 0.1, 2.0];
     let n = 10;
 

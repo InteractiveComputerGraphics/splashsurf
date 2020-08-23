@@ -302,20 +302,20 @@ fn assert_cell_data_point_data_consistency<I: Index, R: Real>(
 #[test]
 fn test_interpolate_cell_data() {
     let iso_surface_threshold = 0.25;
-    let default_value = 0.0;
+    //let default_value = 0.0;
 
     let origin = Vector3::new(0.0, 0.0, 0.0);
     let n_cubes_per_dim = [1, 1, 1];
     let cube_size = 1.0;
 
-    let grid = UniformGrid::<i32, f64>::new(&origin, &n_cubes_per_dim, cube_size);
+    let grid = UniformGrid::<i32, f64>::new(&origin, &n_cubes_per_dim, cube_size).unwrap();
 
     assert_eq!(grid.aabb().max(), &Vector3::new(1.0, 1.0, 1.0));
 
-    let mut sparse_data = MapType::new();
+    let mut sparse_data = new_map();
 
     let marching_cubes_data =
-        interpolate_points_to_cell_data(&sparse_data, &grid, iso_surface_threshold, default_value);
+        interpolate_points_to_cell_data(&grid, &sparse_data.clone().into(), iso_surface_threshold);
 
     assert_eq!(marching_cubes_data.vertices.len(), 0);
     assert_eq!(marching_cubes_data.cell_data.len(), 0);
@@ -336,7 +336,7 @@ fn test_interpolate_cell_data() {
     }
 
     let marching_cubes_data =
-        interpolate_points_to_cell_data(&sparse_data, &grid, iso_surface_threshold, default_value);
+        interpolate_points_to_cell_data(&grid, &sparse_data.clone().into(), iso_surface_threshold);
 
     assert_eq!(marching_cubes_data.cell_data.len(), 1);
     // Check that the correct number of vertices was created
@@ -346,8 +346,8 @@ fn test_interpolate_cell_data() {
 
     // Check that the correct vertices were marked as being below the iso-surface
     assert_eq!(
-        cell.corner_above_threshold,
-        [false, true, true, true, false, false, true, false]
+        cell.corner_above_threshold.iter().map(|r| r.is_above()).collect::<Vec<_>>(),
+        vec![false, true, true, true, false, false, true, false]
     );
 
     // Check that vertices were instered at the correct edges
