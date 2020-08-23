@@ -29,6 +29,7 @@ impl RelativeToThreshold {
         match self {
             RelativeToThreshold::Below => false,
             RelativeToThreshold::Above => true,
+            // TODO: Replace with error?
             RelativeToThreshold::Indeterminate => panic!(),
         }
     }

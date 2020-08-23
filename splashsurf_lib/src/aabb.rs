@@ -99,7 +99,7 @@ where
         return true;
     }
 
-    /// Returns whether the AABB is degenerate in any dimension
+    /// Returns whether the AABB is degenerate in any dimension, i.e. `aabb.min()[i] == aabb.max()[i]` for any `i`
     pub fn is_degenerate(&self) -> bool {
         for i in 0..D::dim() {
             if self.min[i] == self.max[i] {
@@ -131,8 +131,8 @@ where
         extents[extents.imax()]
     }
 
-    /// Returns the geometric center of the AABB
-    pub fn center(&self) -> VectorN<R, D> {
+    /// Returns the geometric centroid of the AABB (mean of the corner points)
+    pub fn centroid(&self) -> VectorN<R, D> {
         &self.min + (self.extents() / (R::one() + R::one()))
     }
 
@@ -153,14 +153,14 @@ where
         self.max += vector;
     }
 
-    /// Translates the AABB to center it at the coordinate origin
+    /// Translates the AABB to center it at the coordinate origin (moves the centroid to the coordinate origin)
     pub fn center_at_origin(&mut self) {
-        self.translate(&(self.center() * R::one().neg()));
+        self.translate(&(self.centroid() * R::one().neg()));
     }
 
     /// Applies a uniform, local scaling to the AABB (as if it was centered at the origin)
     pub fn scale_uniformly(&mut self, scaling: R) {
-        let center = self.center();
+        let center = self.centroid();
         self.translate(&(&center * R::one().neg()));
         self.min *= scaling;
         self.max *= scaling;
@@ -191,7 +191,7 @@ where
 
     /// Returns the smallest cubical AABB with the same center that encloses this AABB
     pub fn enclosing_cube(&self) -> Self {
-        let center = self.center();
+        let center = self.centroid();
         let half_max_extent = self.max_extent() / (R::one() + R::one());
 
         let mut cube = Self::new(

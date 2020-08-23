@@ -24,11 +24,13 @@ use crate::{AxisAlignedBoundingBox3d, Index, Real};
  *   0          1
  */
 
+/// An index triplet of a point or vertex in a 3D cartesian grid (index along each axis)
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct PointIndex<I: Index> {
     index: [I; 3],
 }
 
+/// An index triplet of a cell in a 3D cartesian grid (index along each axis)
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct CellIndex<I: Index> {
     index: [I; 3],
@@ -59,7 +61,7 @@ pub struct DirectedAxis {
     direction: Direction,
 }
 
-/// Full neighborhood information of a point
+/// Full neighborhood information of a point (denoted as origin point of the neighborhood)
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct Neighborhood<'a, I: Index> {
     origin: &'a PointIndex<I>,
@@ -77,19 +79,43 @@ pub struct NeighborEdge<'a, 'b: 'a, I: Index> {
 }
 
 /// Abbreviated type alias for a uniform cartesian cube grid in 3D
+///
+/// The underlying type is not public because its methods are only useful internally.
 pub type UniformGrid<I, R> = UniformCartesianCubeGrid3d<I, R>;
 
-/// Helper for topology information on a cartesian grid in 3d based on uniform cubes
+/// Helper type for connectivity information on a cartesian grid in 3D based on uniform cubes
+///
+/// This type represents a virtual cartesian grid in 3D based on uniform cubes.
+/// It provides helper functions to access connectivity of points (vertices), edges and cells on
+/// the virtual grid.
+///
+/// **Grid construction** The origin of the grid is placed on the min coordinates of its AABB.
+/// Then, the AABB is filled with uniformly sized cubes. The final size of the grid may be larger than
+/// the AABB, as the last layer of cubes that may not fully fit into the upper extents of the AABB
+/// is still considered part of the grid.
+///
+/// **Connectivity information** The grid then provides helper functions e.g. to find valid neighbors
+/// of points, edges and cells on the grid. These entities can either be indexed using index triplets `(i,j,k)` along
+/// the cartesian axes or using a flattened index `i*n_x + j*n_y + k*n_z` that is used e.g. for lookup
+/// in the [DensityMap](crate::DensityMap). This struct provides helper functions to convert between these representations.
+/// For some functions, strongly typed [PointIndex] and [CellIndex] indices are used, these can be
+/// obtained using the [get_point](UniformCartesianCubeGrid3d::get_point) and [get_cell](UniformCartesianCubeGrid3d::get_cell) functions respectively.
+/// These functions check if the specified indices are in the valid index range of the grid (as computed during construction based
+/// on the extents of the grid).
 #[derive(Clone, PartialEq, Debug)]
 pub struct UniformCartesianCubeGrid3d<I: Index, R: Real> {
+    /// AABB of the grid. Note that currently, the grid may extend beyond the max coordinate of the AABB.
     aabb: AxisAlignedBoundingBox3d<R>,
+    /// The edge length of the cubes in the grid
     cell_size: R,
 
+    /// The number of vertices of the grid in each cartesian direction
     n_points_per_dim: [I; 3],
+    /// The number of cells of the grid in each cartesian direction
     n_cells_per_dim: [I; 3],
 }
 
-/// Error type for the construction of a UniformCartesianCubeGrid3d
+/// Error type for the construction of a [UniformGrid]
 #[rustfmt::skip]
 #[derive(Copy, Clone, Eq, PartialEq, Debug, ThisError)]
 pub enum GridConstructionError<I: Index, R: Real> {
@@ -108,7 +134,7 @@ pub enum GridConstructionError<I: Index, R: Real> {
     /// The index type is too small to index the number of points in each dimension of the domain
     #[error("index type is too small to index number of points per dimension of the domain (max index: {})", I::max_value())]
     IndexTypeTooSmallPointsPerDim,
-    /// The index type is too small to index the total number of points in the whole domain (nx*ny*nz)
+    /// The index type is too small to index the total number of points in the whole domain (nx * ny * nz)
     #[error("index type is too small to index the total number of points in the whole domain ({0}x{1}x{2}, max index: {})", I::max_value())]
     IndexTypeTooSmallTotalPoints(I, I, I),
     /// The real type is too small to store the coordinates of all possible points in the domain
@@ -141,6 +167,7 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
         Self::new(aabb.min(), &n_cells_per_dim, cell_size)
     }
 
+    /// Constructs a new grid extending in positive cartesian axes direction from the min coordinate by the specified number of cubes of the given size
     pub fn new(
         min: &Vector3<R>,
         n_cells_per_dim: &[I; 3],
@@ -195,6 +222,7 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
         &self.n_cells_per_dim
     }
 
+    /// Converts a point index triplet into a strongly typed index, returns `None` if the corresponding point is not part of the grid
     #[inline(always)]
     pub fn get_point(&self, ijk: &[I; 3]) -> Option<PointIndex<I>> {
         if self.point_exists(ijk) {
@@ -204,6 +232,7 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
         }
     }
 
+    /// Converts a cell index triplet into a strongly typed index, returns `None` if the corresponding cell is not part of the grid
     #[inline(always)]
     pub fn get_cell(&self, ijk: &[I; 3]) -> Option<CellIndex<I>> {
         if self.cell_exists(ijk) {
@@ -271,9 +300,9 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
         self.flatten_cell_index_array(cell.index())
     }
 
-    /// Converts a flat point index value back to a point index triplet
+    /// Converts a flat point index value back to a point index triplet, does not check if the point is part of the grid
     #[inline(always)]
-    pub fn unflatten_point_index(&self, point_index: I) -> [I; 3] {
+    fn unflatten_point_index(&self, point_index: I) -> [I; 3] {
         let np = &self.n_points_per_dim;
 
         let i = point_index / (np[1] * np[2]);
@@ -283,15 +312,16 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
         [i, j, k]
     }
 
+    /// Converts a flat point index value back to a strongly typed point index, returns `None` if the point index is not part of the grid
     #[inline(always)]
     pub fn try_unflatten_point_index(&self, point_index: I) -> Option<PointIndex<I>> {
         let point_ijk = self.unflatten_point_index(point_index);
         self.get_point(&point_ijk)
     }
 
-    /// Converts a flat cell index value back to a cell index triplet
+    /// Converts a flat cell index value back to a cell index triplet, does not check if the cell is part of the grid
     #[inline(always)]
-    pub fn unflatten_cell_index(&self, cell_index: I) -> [I; 3] {
+    fn unflatten_cell_index(&self, cell_index: I) -> [I; 3] {
         let nc = &self.n_cells_per_dim;
 
         let i = cell_index / (nc[1] * nc[2]);
@@ -301,13 +331,14 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
         [i, j, k]
     }
 
+    /// Converts a flat cell index value back to a strongly typed cell index, returns `None` if the cell index is not part of the grid
     #[inline(always)]
     pub fn try_unflatten_cell_index(&self, cell_index: I) -> Option<CellIndex<I>> {
         let cell_ijk = self.unflatten_cell_index(cell_index);
         self.get_cell(&cell_ijk)
     }
 
-    /// Returns the coordinates of a grid point
+    /// Returns the real-valued coordinates of a grid point in space
     #[inline(always)]
     pub fn point_coordinates_indices(&self, i: I, j: I, k: I) -> Vector3<R> {
         self.aabb.min()
@@ -318,19 +349,19 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
             )
     }
 
-    /// Returns the coordinates of a grid point
+    /// Returns the real-valued coordinates of a grid point in space
     #[inline(always)]
     pub fn point_coordinates_array(&self, ijk: &[I; 3]) -> Vector3<R> {
         self.point_coordinates_indices(ijk[0], ijk[1], ijk[2])
     }
 
-    /// Returns the coordinates of a grid point
+    /// Returns the real-valued coordinates of a grid point in space
     #[inline(always)]
     pub fn point_coordinates(&self, point: &PointIndex<I>) -> Vector3<R> {
         self.point_coordinates_array(point.index())
     }
 
-    /// Returns the grid cell index triplet of the cell enclosing a given point
+    /// Returns the grid cell index triplet of the cell enclosing a point with the given coordinates in space
     #[inline(always)]
     pub fn enclosing_cell(&self, coord: &Vector3<R>) -> [I; 3] {
         let normalized_coord = (coord - self.aabb.min()) / self.cell_size;
@@ -341,7 +372,7 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
         ]
     }
 
-    /// If part of the grid, returns the neighbor of a point following the given directed axis
+    /// If part of the grid, returns the neighbor of a point following the given directed axis along the grid
     #[inline(always)]
     pub fn get_point_neighbor(
         &self,
@@ -374,6 +405,7 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
         neighbor_ijk
     }
 
+    /// Returns full neighborhood information of a point on the grid
     pub fn get_point_neighborhood<'a>(&self, point: &'a PointIndex<I>) -> Neighborhood<'a, I> {
         let neighbors = [
             self.get_point_neighbor(point, DirectedAxis::from_usize(0)),
@@ -487,7 +519,7 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
         }
     }
 
-    /// Iterator over all 27-1 valid cells that are adjacent to the given cell
+    /// Iterator over all 26 (27-1) valid cells that are adjacent to the given cell
     pub fn cells_adjacent_to_cell<'a>(
         &'a self,
         cell: &'a CellIndex<I>,
@@ -509,6 +541,8 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
     // Helper functions for construction of the SparseGrid struct
 
     fn checked_n_cells_per_dim(n_cells_real: &Vector3<R>) -> Option<[I; 3]> {
+        // TODO: Replace ceil by floor, so that the grid AABB is actually a bounding box of the grid
+        //  Then, if one dimension contains zero cells, return an error
         Some([
             I::one().max(n_cells_real[0].ceil().to_index()?),
             I::one().max(n_cells_real[1].ceil().to_index()?),
@@ -907,8 +941,8 @@ impl<'a, 'b, I: Index> NeighborEdge<'a, 'b, I> {
         self.connectivity
     }
 
-    /// Returns references to the point indices of the edge ordered such that they are in ascending point index order.
-    /// I.e. such that they are connected by along an axis in positive direction
+    /// Returns references to the point indices of the edge, ordered in such a way that they are in ascending point index order.
+    /// That means that the first point index is connected to the second point index with an edge along an axis in positive direction.
     #[inline(always)]
     pub fn ascending_point_order(&self) -> (&PointIndex<I>, &PointIndex<I>) {
         if self.connectivity.direction.is_positive() {

@@ -1,19 +1,29 @@
+//!
+//! Library for surface reconstruction using marching cubes for SPH particle data. Entry point is the [reconstruct_surface] function.
+//!
+
 extern crate nalgebra as na;
 
 mod aabb;
+/// Computation of sparse density maps (evaluation of particle densities and mapping onto sparse grids)
 pub mod density_map;
+/// SPH kernel function implementations
 pub mod kernel;
+/// Triangulation of density maps using marching cubes
 pub mod marching_cubes;
 mod marching_cubes_lut;
+/// Basic mesh types used by the library and implementation of VTK export
 pub mod mesh;
+/// Simple neighborhood search based on spatial hashing
 pub mod neighborhood_search;
 mod numeric_types;
+/// Types related to the virtual background grid used for marching cubes
 mod uniform_grid;
 mod utils;
 
 pub use aabb::{AxisAlignedBoundingBox, AxisAlignedBoundingBox2d, AxisAlignedBoundingBox3d};
 pub use density_map::DensityMap;
-pub use numeric_types::{Index, Real};
+pub use numeric_types::{Index, Real, ThreadSafe};
 pub use uniform_grid::{GridConstructionError, UniformGrid};
 
 use coarse_prof::profile;
@@ -104,7 +114,7 @@ impl<R: Real> Parameters<R> {
     }
 }
 
-/// Data returned by when surface reconstruction was successful
+/// Result data returned when the surface reconstruction was successful
 #[derive(Clone, Debug)]
 pub struct SurfaceReconstruction<I: Index, R: Real> {
     /// The background grid that was used as a basis for generating the density map for marching cubes
@@ -116,19 +126,19 @@ pub struct SurfaceReconstruction<I: Index, R: Real> {
 }
 
 impl<I: Index, R: Real> SurfaceReconstruction<I, R> {
-    /// Returns a reference to the background grid that was used as a basis for generating the density map for marching cubes
-    pub fn grid(&self) -> &UniformGrid<I, R> {
-        &self.grid
+    /// Returns a reference to the actual triangulated surface mesh that is the result of the reconstruction
+    pub fn mesh(&self) -> &TriMesh3d<R> {
+        &self.mesh
     }
 
-    /// Returns a reference to the point-based density map generated from the particles that was used as input to marching cubes
+    /// Returns a reference to the sparse density map (discretized on the vertices of the background grid) that is used as input for marching cubes
     pub fn density_map(&self) -> &DensityMap<I, R> {
         &self.density_map
     }
 
-    /// Returns a reference to the actual mesh that is the result of the surface reconstruction
-    pub fn mesh(&self) -> &TriMesh3d<R> {
-        &self.mesh
+    /// Returns a reference to the virtual background grid that was used as a basis for discretization of the density map for marching cubes, can be used to convert the density map to a hex mesh (using [sparse_density_map_to_hex_mesh](density_map::sparse_density_map_to_hex_mesh))
+    pub fn grid(&self) -> &UniformGrid<I, R> {
+        &self.grid
     }
 }
 
@@ -138,12 +148,14 @@ impl<I: Index, R: Real> From<SurfaceReconstruction<I, R>> for TriMesh3d<R> {
     }
 }
 
-/// Error type returned when surface reconstruction fails
+/// Error type returned when the surface reconstruction fails
 #[non_exhaustive]
 #[derive(Debug, ThisError)]
 pub enum ReconstructionError<I: Index, R: Real> {
+    /// Errors that occur during the implicit construction of the virtual background grid used for the density map and marching cubes
     #[error("grid construction: {0}")]
     GridConstructionError(GridConstructionError<I, R>),
+    /// Any error that is not represented by some other explicit variant
     #[error("unknown error")]
     Unknown(anyhow::Error),
 }
@@ -160,7 +172,7 @@ impl<I: Index, R: Real> From<anyhow::Error> for ReconstructionError<I, R> {
     }
 }
 
-/// Runs a marching cubes surface construction over the given particle positions
+/// Performs a marching cubes surface construction of the fluid represented by the given particle positions
 #[inline(never)]
 pub fn reconstruct_surface<I: Index, R: Real>(
     particle_positions: &[Vector3<R>],
@@ -263,7 +275,8 @@ pub fn reconstruct_surface<I: Index, R: Real>(
     })
 }
 
-pub fn grid_for_reconstruction<I: Index, R: Real>(
+/// Constructs the background grid for marching cubes based on the parameters supplied to the surface reconstruction
+fn grid_for_reconstruction<I: Index, R: Real>(
     particle_positions: &[Vector3<R>],
     particle_radius: R,
     cube_size: R,

@@ -505,6 +505,7 @@ pub fn parallel_generate_sparse_density_map<I: Index, R: Real>(
     sparse_densities.into()
 }
 
+/// Converts a sparse (vertex based) density map to a sparse hexahedral mesh based on the given uniform background grid.
 #[inline(never)]
 pub fn sparse_density_map_to_hex_mesh<I: Index, R: Real>(
     density_map: &DensityMap<I, R>,

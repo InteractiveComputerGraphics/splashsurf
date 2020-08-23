@@ -8,56 +8,6 @@ use crate::{new_map, AxisAlignedBoundingBox3d, HashState, Index, MapType, Parall
 
 // TODO: Replace some unwrap() calls with errors
 
-// Generates a map for spatially hashed indices of all particles (map from cell -> enclosed particles)
-#[inline(never)]
-fn sequential_generate_cell_to_particle_map<I: Index, R: Real>(
-    grid: &UniformGrid<I, R>,
-    particle_positions: &[Vector3<R>],
-) -> MapType<I, Vec<usize>> {
-    profile!("sequential_generate_cell_to_particle_map");
-    let mut particles_per_cell = new_map();
-
-    // Assign all particles to enclosing cells
-    for (particle_i, particle) in particle_positions.iter().enumerate() {
-        let cell_ijk = grid.enclosing_cell(particle);
-        let cell = grid.get_cell(&cell_ijk).unwrap();
-        let flat_cell_index = grid.flatten_cell_index(&cell);
-
-        particles_per_cell
-            .entry(flat_cell_index)
-            .or_insert_with(Vec::new)
-            .push(particle_i);
-    }
-
-    particles_per_cell
-}
-
-#[inline(never)]
-fn parallel_generate_cell_to_particle_map<I: Index, R: Real>(
-    grid: &UniformGrid<I, R>,
-    particle_positions: &[Vector3<R>],
-) -> ParallelMapType<I, Vec<usize>> {
-    profile!("parallel_generate_cell_to_particle_map");
-    let particles_per_cell = ParallelMapType::with_hasher(HashState::default());
-
-    // Assign all particles to enclosing cells
-    particle_positions
-        .par_iter()
-        .enumerate()
-        .for_each(|(particle_i, particle)| {
-            let cell_ijk = grid.enclosing_cell(particle);
-            let cell = grid.get_cell(&cell_ijk).unwrap();
-            let flat_cell_index = grid.flatten_cell_index(&cell);
-
-            particles_per_cell
-                .entry(flat_cell_index)
-                .or_insert_with(Vec::new)
-                .push(particle_i);
-        });
-
-    particles_per_cell
-}
-
 #[inline(never)]
 pub fn search<I: Index, R: Real>(
     domain: &AxisAlignedBoundingBox3d<R>,
@@ -232,39 +182,93 @@ pub fn parallel_search<I: Index, R: Real>(
         );
     }
 
+    // TODO: Consider moving this to a public function
     /*
-    let mut max_neighbors = 0;
-    let mut total_neighbors = 0;
-    let mut nonzero_neighborhoods = 0;
-    let mut neighbor_histogram: Vec<usize> = vec![0; 1];
+    // Code to compute a number of neighbors histogram
+    {
+        let mut max_neighbors = 0;
+        let mut total_neighbors = 0;
+        let mut nonzero_neighborhoods = 0;
+        let mut neighbor_histogram: Vec<usize> = vec![0; 1];
 
-    for neighborhood in neighborhood_list.iter() {
-        if !neighborhood.is_empty() {
-            if neighbor_histogram.len() < neighborhood.len() + 1 {
-                neighbor_histogram.resize(neighborhood.len() + 1, 0);
+        for neighborhood in neighborhood_list.iter() {
+            if !neighborhood.is_empty() {
+                if neighbor_histogram.len() < neighborhood.len() + 1 {
+                    neighbor_histogram.resize(neighborhood.len() + 1, 0);
+                }
+                neighbor_histogram[neighborhood.len()] += 1;
+
+                max_neighbors = max_neighbors.max(neighborhood.len());
+                total_neighbors += neighborhood.len();
+                nonzero_neighborhoods += 1;
+            } else {
+                neighbor_histogram[0] += 1;
             }
-            neighbor_histogram[neighborhood.len()] += 1;
-
-            max_neighbors = max_neighbors.max(neighborhood.len());
-            total_neighbors += neighborhood.len();
-            nonzero_neighborhoods += 1;
-        } else {
-            neighbor_histogram[0] += 1;
         }
-    }
 
-    let avg_neighbors = total_neighbors as f64 / nonzero_neighborhoods as f64;
-    println!(
-        "Max neighbors: {}, Avg neighbors: {:.3}, particles with neighbors: {:.3}%",
-        max_neighbors,
-        avg_neighbors,
-        (nonzero_neighborhoods as f64 / particle_positions.len() as f64) * 100.0
-    );
-    println!("Histogram:");
-    for (i, &count) in neighbor_histogram.iter().enumerate() {
-        println!("{:2} neighbors: {:10}", i, count);
+        let avg_neighbors = total_neighbors as f64 / nonzero_neighborhoods as f64;
+        println!(
+            "Max neighbors: {}, Avg neighbors: {:.3}, particles with neighbors: {:.3}%",
+            max_neighbors,
+            avg_neighbors,
+            (nonzero_neighborhoods as f64 / particle_positions.len() as f64) * 100.0
+        );
+        println!("Histogram:");
+        for (i, &count) in neighbor_histogram.iter().enumerate() {
+            println!("{:2} neighbors: {:10}", i, count);
+        }
     }
     */
 
     neighborhood_list
+}
+
+// Generates a map for spatially hashed indices of all particles (map from cell -> enclosed particles)
+#[inline(never)]
+fn sequential_generate_cell_to_particle_map<I: Index, R: Real>(
+    grid: &UniformGrid<I, R>,
+    particle_positions: &[Vector3<R>],
+) -> MapType<I, Vec<usize>> {
+    profile!("sequential_generate_cell_to_particle_map");
+    let mut particles_per_cell = new_map();
+
+    // Assign all particles to enclosing cells
+    for (particle_i, particle) in particle_positions.iter().enumerate() {
+        let cell_ijk = grid.enclosing_cell(particle);
+        let cell = grid.get_cell(&cell_ijk).unwrap();
+        let flat_cell_index = grid.flatten_cell_index(&cell);
+
+        particles_per_cell
+            .entry(flat_cell_index)
+            .or_insert_with(Vec::new)
+            .push(particle_i);
+    }
+
+    particles_per_cell
+}
+
+#[inline(never)]
+fn parallel_generate_cell_to_particle_map<I: Index, R: Real>(
+    grid: &UniformGrid<I, R>,
+    particle_positions: &[Vector3<R>],
+) -> ParallelMapType<I, Vec<usize>> {
+    profile!("parallel_generate_cell_to_particle_map");
+    let particles_per_cell = ParallelMapType::with_hasher(HashState::default());
+
+    // Assign all particles to enclosing cells
+    particle_positions
+        .par_iter()
+        .enumerate()
+        .for_each(|(particle_i, particle)| {
+            let cell_ijk = grid.enclosing_cell(particle);
+            let cell = grid.get_cell(&cell_ijk).unwrap();
+            let flat_cell_index = grid.flatten_cell_index(&cell);
+
+            particles_per_cell
+                .entry(flat_cell_index)
+                .or_insert_with(Vec::new)
+                .push(particle_i);
+        });
+
+    particles_per_cell
 }

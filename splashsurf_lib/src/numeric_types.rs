@@ -5,9 +5,11 @@ use na::allocator::Allocator;
 use na::{DefaultAllocator, DimName, RealField, VectorN};
 use num::{Bounded, CheckedAdd, CheckedMul, CheckedSub, FromPrimitive, Integer, ToPrimitive};
 
+/// Trait that has to be implemented by [Index] and [Real] types to use them in parallelized algorithms
 pub trait ThreadSafe: Sync + Send + 'static {}
 impl<T> ThreadSafe for T where T: Sync + Send + 'static {}
 
+/// Trait that has to be implemented for types to be used as grid cell indices in the context of the library
 pub trait Index:
     Copy
     + Hash
@@ -22,20 +24,23 @@ pub trait Index:
     + Display
     + ThreadSafe
 {
+    /// Converts the value to the specified [Real] type. If the value cannot be represented by the target type, `None` is returned.
     fn to_real<R: Real>(self) -> Option<R> {
         R::from_f64(self.to_f64()?)
     }
 
+    /// Converts the value to the specified [Real] type, panics if the value cannot be represented by the target type.
     fn to_real_unchecked<R: Real>(self) -> R {
         R::from_f64(self.to_f64().unwrap()).unwrap()
     }
 
-    /// Multiplies the real value by the specified coefficient, panics if the coefficient cannot be converted into the index type
+    /// Multiplies the value by the specified `i32` coefficient. Panics if the coefficient cannot be converted into the target type.
     fn times(self, n: i32) -> Self {
         self.mul(Self::from_i32(n).unwrap())
     }
 }
 
+/// Trait that has to be implemented for types to be used as floating points values in the context of the library (e.g. for coordinates, density values)
 pub trait Real: RealField + FromPrimitive + ToPrimitive + Debug + ThreadSafe {
     fn try_convert<T: Real>(self) -> Option<T> {
         Some(T::from_f64(self.to_f64()?)?)
@@ -55,20 +60,22 @@ pub trait Real: RealField + FromPrimitive + ToPrimitive + Debug + ThreadSafe {
         Some(converted)
     }
 
+    /// Converts the value to the specified [Index] type. If the value cannot be represented by the target type, `None` is returned.
     fn to_index<I: Index>(self) -> Option<I> {
         I::from_f64(self.to_f64()?)
     }
 
+    /// Converts the value to the specified [Index] type, panics if the value cannot be represented by the target type.
     fn to_index_unchecked<I: Index>(self) -> I {
         I::from_f64(self.to_f64().unwrap()).unwrap()
     }
 
-    /// Multiplies the real value by the specified coefficient, panics if the coefficient cannot be converted into the real type
+    /// Multiplies the value by the specified `i32` coefficient. Panics if the coefficient cannot be converted into the target type.
     fn times(self, n: i32) -> Self {
         self.mul(Self::from_i32(n).unwrap())
     }
 
-    /// Multiplies the real value by the specified coefficient, panics if the coefficient cannot be converted into the real type
+    /// Multiplies the value by the specified `f64` coefficient. Panics if the coefficient cannot be converted into the target type.
     fn times_f64(self, x: f64) -> Self {
         self.mul(Self::from_f64(x).unwrap())
     }
