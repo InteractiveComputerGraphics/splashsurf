@@ -8,27 +8,29 @@ use crate::{new_map, AxisAlignedBoundingBox3d, HashState, Index, MapType, Parall
 
 // TODO: Replace some unwrap() calls with errors
 
+/// Performs a neighborhood search (sequentially or in parallel depending on the parameter), returning the indices of all neighboring particles in the given search radius per particle
 #[inline(never)]
 pub fn search<I: Index, R: Real>(
     domain: &AxisAlignedBoundingBox3d<R>,
     particle_positions: &[Vector3<R>],
     search_radius: R,
-    allow_multi_threading: bool,
+    enable_multi_threading: bool,
 ) -> Vec<Vec<usize>> {
-    if allow_multi_threading {
+    if enable_multi_threading {
         parallel_search::<I, R>(domain, particle_positions, search_radius)
     } else {
         sequential_search::<I, R>(domain, particle_positions, search_radius)
     }
 }
 
+/// Performs a sequential neighborhood search, returning the indices of all neighboring particles in the given search radius per particle
 #[inline(never)]
 pub fn sequential_search<I: Index, R: Real>(
     domain: &AxisAlignedBoundingBox3d<R>,
     particle_positions: &[Vector3<R>],
     search_radius: R,
 ) -> Vec<Vec<usize>> {
-    // TODO: Use ArrayStorage from femproto instead of Vec of Vecs
+    // TODO: Use ArrayStorage from femproto instead of Vec of Vecs?
     // FIXME: Replace unwraps?
     profile!("neighborhood_search");
 
@@ -88,6 +90,7 @@ pub fn sequential_search<I: Index, R: Real>(
     neighborhood_list
 }
 
+/// Performs a multi-threaded neighborhood search, returning the indices of all neighboring particles in the given search radius per particle
 #[inline(never)]
 pub fn parallel_search<I: Index, R: Real>(
     domain: &AxisAlignedBoundingBox3d<R>,
@@ -182,45 +185,61 @@ pub fn parallel_search<I: Index, R: Real>(
         );
     }
 
-    // TODO: Consider moving this to a public function
-    /*
-    // Code to compute a number of neighbors histogram
-    {
-        let mut max_neighbors = 0;
-        let mut total_neighbors = 0;
-        let mut nonzero_neighborhoods = 0;
-        let mut neighbor_histogram: Vec<usize> = vec![0; 1];
+    neighborhood_list
+}
 
-        for neighborhood in neighborhood_list.iter() {
-            if !neighborhood.is_empty() {
-                if neighbor_histogram.len() < neighborhood.len() + 1 {
-                    neighbor_histogram.resize(neighborhood.len() + 1, 0);
-                }
-                neighbor_histogram[neighborhood.len()] += 1;
+/// Stats of a neighborhood list
+pub struct NeighborhoodStats {
+    /// A histogram over the count of particle neighbors per particle (e.g. `histogram[0]` -> count of particles without neighbors, `histogram[1]` -> count of particles with one neighbor, etc.)
+    pub histogram: Vec<usize>,
+    /// The size of the largest neighborhood
+    pub max_neighbors: usize,
+    /// Average number of neighbors per particle (excluding particles without neighbors)
+    pub avg_neighbors: f64,
+}
 
-                max_neighbors = max_neighbors.max(neighborhood.len());
-                total_neighbors += neighborhood.len();
-                nonzero_neighborhoods += 1;
-            } else {
-                neighbor_histogram[0] += 1;
+/// Computes stats of the given neighborhood list
+pub fn compute_neigborhood_stats(neighborhood_list: &Vec<Vec<usize>>) -> NeighborhoodStats {
+    let mut max_neighbors = 0;
+    let mut total_neighbors = 0;
+    let mut nonzero_neighborhoods = 0;
+    let mut neighbor_histogram: Vec<usize> = vec![0; 1];
+
+    for neighborhood in neighborhood_list.iter() {
+        if !neighborhood.is_empty() {
+            if neighbor_histogram.len() < neighborhood.len() + 1 {
+                neighbor_histogram.resize(neighborhood.len() + 1, 0);
             }
-        }
+            neighbor_histogram[neighborhood.len()] += 1;
 
-        let avg_neighbors = total_neighbors as f64 / nonzero_neighborhoods as f64;
-        println!(
-            "Max neighbors: {}, Avg neighbors: {:.3}, particles with neighbors: {:.3}%",
-            max_neighbors,
-            avg_neighbors,
-            (nonzero_neighborhoods as f64 / particle_positions.len() as f64) * 100.0
-        );
-        println!("Histogram:");
-        for (i, &count) in neighbor_histogram.iter().enumerate() {
-            println!("{:2} neighbors: {:10}", i, count);
+            max_neighbors = max_neighbors.max(neighborhood.len());
+            total_neighbors += neighborhood.len();
+            nonzero_neighborhoods += 1;
+        } else {
+            neighbor_histogram[0] += 1;
         }
     }
-    */
 
-    neighborhood_list
+    let avg_neighbors = total_neighbors as f64 / nonzero_neighborhoods as f64;
+
+    /*
+    println!(
+        "Max neighbors: {}, Avg neighbors: {:.3}, particles with neighbors: {:.3}%",
+        max_neighbors,
+        avg_neighbors,
+        (nonzero_neighborhoods as f64 / particle_positions.len() as f64) * 100.0
+    );
+    println!("Histogram:");
+    for (i, &count) in neighbor_histogram.iter().enumerate() {
+        println!("{:2} neighbors: {:10}", i, count);
+    }
+     */
+
+    NeighborhoodStats {
+        histogram: neighbor_histogram,
+        max_neighbors,
+        avg_neighbors
+    }
 }
 
 // Generates a map for spatially hashed indices of all particles (map from cell -> enclosed particles)

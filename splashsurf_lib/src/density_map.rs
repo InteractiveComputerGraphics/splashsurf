@@ -15,9 +15,9 @@ pub fn compute_particle_densities<I: Index, R: Real>(
     particle_neighbor_lists: &[Vec<usize>],
     kernel_radius: R,
     particle_rest_mass: R,
-    allow_multi_threading: bool,
+    enable_multi_threading: bool,
 ) -> Vec<R> {
-    if allow_multi_threading {
+    if enable_multi_threading {
         parallel_compute_particle_densities::<I, R>(
             particle_positions,
             particle_neighbor_lists,

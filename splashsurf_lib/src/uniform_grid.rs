@@ -143,7 +143,9 @@ pub enum GridConstructionError<I: Index, R: Real> {
 }
 
 impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
-    /// Construct a new grid from a domain AABB and cell size
+    /// Construct a new grid enclosing the given AABB
+    ///
+    /// The grid will at least contain the AABB but may be larger depending on the cell size.
     pub fn from_aabb(
         aabb: &AxisAlignedBoundingBox3d<R>,
         cell_size: R,

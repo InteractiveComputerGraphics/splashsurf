@@ -1,11 +1,12 @@
-use na::Vector3;
-
 use crate::Real;
 
 const ALPHA: f64 = 3.0 / (2.0 * std::f64::consts::PI);
 const TWO_THIRDS: f64 = 2.0 / 3.0;
 const ONE_SIXTH: f64 = 1.0 / 6.0;
 
+// TODO: Add reference for the kernel function, document formula
+
+/// The cubic kernel function based on the parameter `q`
 #[inline(always)]
 fn cubic_function_f64(q: f64) -> f64 {
     if q < 1.0 {
@@ -18,12 +19,14 @@ fn cubic_function_f64(q: f64) -> f64 {
     }
 }
 
+/// Evaluates the cubic kernel with compact support radius `h` at the radius `r`, `f64` version
 #[inline(always)]
 pub fn cubic_kernel_r_f64(r: f64, h: f64) -> f64 {
     let q = (2.0 * r) / h;
     8.0 * cubic_function_f64(q) / (h * h * h)
 }
 
+/// Evaluates the cubic kernel with compact support radius `h` at the radius `r`, generic version
 #[inline(always)]
 pub fn cubic_kernel_r<R: Real>(r: R, h: R) -> R {
     let r = r.to_f64().unwrap();
@@ -68,22 +71,28 @@ fn test_cubic_kernel_r_integral() {
     }
 }
 
-#[inline(always)]
-pub fn cubic_kernel_f64(xi: Vector3<f64>, xj: Vector3<f64>, h: f64) -> f64 {
-    cubic_kernel_r_f64((xi - xj).norm(), h)
-}
-
-#[inline(always)]
-pub fn cubic_kernel<R: Real>(xi: Vector3<R>, xj: Vector3<R>, h: R) -> R {
-    cubic_kernel_r((xi - xj).norm(), h)
-}
-
+/// Accelerator for efficient evaluation of a precomputed cubic kernel
+///
+/// This structure is used to pre-compute a discrete representation of the cubic kernel function.
+/// In some computations that require many evaluations of the kernel, it is more efficient to evaluate
+/// the kernel using a squared distance to avoid taking the square root.
+/// To produce an appropriate quantization of the kernel for this use case, the compact support
+/// radius of the kernel is divided into `n` segments with quadratically increasing width.
+/// In other terms, on a quadratic scale, the compact support is divided into `n` equally sized segments of width `dr`.
+/// For the actual pre-computation, the exact kernel `k(r)` is evaluated at the midpoint `m_i` of every segment
+/// given by `m_i = sqrt(i * dr)` for `i ∈ [0, n]`.
+/// This results in an array of kernel values `K` that can be evaluated at runtime using a squared radius
+/// `s` by just mapping this radius back to the corresponding segment index `i` followed by a lookup
+/// in the value array, i.e. `k(sqrt(s)) ≈ K[s/dr]` (while taking care of rounding and clamping to the allowed index range).
 pub struct DiscreteSquaredDistanceCubicKernel<R: Real> {
+    /// Precomputed values of the kernel function
     values: Vec<R>,
+    /// The radial resolution of the discretization
     dr: R,
 }
 
 impl<R: Real> DiscreteSquaredDistanceCubicKernel<R> {
+    /// Precomputes the discrete cubic kernel with compact support radius `h`, the squared radius `h * h` is divided into `n` segments for the quantization
     pub fn new(n: usize, h: R) -> Self {
         let mut values = Vec::with_capacity(n);
 
@@ -101,6 +110,7 @@ impl<R: Real> DiscreteSquaredDistanceCubicKernel<R> {
         Self { values, dr }
     }
 
+    /// Evaluates the precomputed kernel function at the specified squared radius, i.e. returns an approximate cubic kernel value at the radius `sqrt(r_squared)`
     #[inline(always)]
     pub fn evaluate(&self, r_squared: R) -> R {
         let normalized = (r_squared / self.dr).round();
@@ -115,6 +125,8 @@ fn test_discrete_kernel() {
     let h = 0.025;
     let kernel = DiscreteSquaredDistanceCubicKernel::new(n, h);
 
+    // Note that this is a different dr as used internally in the DiscreteSquaredDistanceCubicKernel
+    // Here, we want to test the pre-computation on a linear scale
     let dr = h / (n as f64);
     for i in 0..n {
         let r = (i as f64) * dr;

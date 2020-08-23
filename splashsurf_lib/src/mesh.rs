@@ -5,26 +5,37 @@ use vtkio::model::{Attribute, Attributes, CellType, Cells, DataSet};
 
 use crate::Real;
 
+/// A triangle (surface) mesh in 3D
 #[derive(Clone, Debug)]
 pub struct TriMesh3d<R: Real> {
+    /// Coordinates of all vertices of the mesh
     pub vertices: Vec<Vector3<R>>,
+    /// The triangles of the mesh identified by their vertex indices
     pub triangles: Vec<[usize; 3]>,
 }
 
+/// A hexahedral (volumetric) mesh in 3D
 #[derive(Clone, Debug)]
 pub struct HexMesh3d<R: Real> {
+    /// Coordinates of all vertices of the mesh
     pub vertices: Vec<Vector3<R>>,
+    /// The hexahedral cells of the mesh identified by their vertex indices
     pub cells: Vec<[usize; 8]>,
 }
 
+/// A point cloud in 3D
 #[derive(Clone, Debug)]
 pub struct PointCloud3d<R: Real> {
+    /// Coordinates of all points in the point cloud
     pub points: Vec<Vector3<R>>,
 }
 
+/// A mesh with attached vertex or point data
 #[derive(Clone, Debug)]
 pub struct MeshWithPointData<MeshT, DataT> {
+    /// The mesh geometry itself
     pub mesh: MeshT,
+    /// Data attached to each vertex or point of the mesh
     pub data: Vec<DataT>,
 }
 

@@ -170,7 +170,7 @@ impl TryFrom<&CommandlineArgs> for ReconstructionRunnerArgs {
             cube_size,
             iso_surface_threshold: args.surface_threshold,
             domain_aabb,
-            allow_multi_threading: args.parallelize_over_particles,
+            enable_multi_threading: args.parallelize_over_particles,
         };
 
         Ok(ReconstructionRunnerArgs {

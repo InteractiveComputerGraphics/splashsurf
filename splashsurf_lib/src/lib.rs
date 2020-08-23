@@ -83,7 +83,7 @@ pub struct Parameters<R: Real> {
     pub cube_size: R,
     pub iso_surface_threshold: R,
     pub domain_aabb: Option<AxisAlignedBoundingBox3d<R>>,
-    pub allow_multi_threading: bool,
+    pub enable_multi_threading: bool,
 }
 
 macro_rules! map_option {
@@ -109,7 +109,7 @@ impl<R: Real> Parameters<R> {
             cube_size: self.cube_size.try_convert()?,
             iso_surface_threshold: self.iso_surface_threshold.try_convert()?,
             domain_aabb: map_option!(&self.domain_aabb, aabb => aabb.try_convert()?),
-            allow_multi_threading: self.allow_multi_threading,
+            enable_multi_threading: self.enable_multi_threading,
         })
     }
 }
@@ -188,7 +188,7 @@ pub fn reconstruct_surface<I: Index, R: Real>(
         cube_size,
         iso_surface_threshold,
         domain_aabb,
-        allow_multi_threading,
+        enable_multi_threading,
     } = parameters.clone();
 
     let grid = grid_for_reconstruction(
@@ -222,7 +222,7 @@ pub fn reconstruct_surface<I: Index, R: Real>(
             &grid.aabb(),
             particle_positions,
             kernel_radius,
-            allow_multi_threading,
+            enable_multi_threading,
         );
 
         info!("Computing particle densities...");
@@ -232,7 +232,7 @@ pub fn reconstruct_surface<I: Index, R: Real>(
             particle_neighbor_lists.as_slice(),
             kernel_radius,
             particle_rest_mass,
-            allow_multi_threading,
+            enable_multi_threading,
         )
     };
 
@@ -241,7 +241,7 @@ pub fn reconstruct_surface<I: Index, R: Real>(
             &grid.aabb(),
             particle_positions,
             splash_detection_radius,
-            allow_multi_threading,
+            enable_multi_threading,
         );
 
         let mut active_particles = Vec::new();
@@ -262,7 +262,7 @@ pub fn reconstruct_surface<I: Index, R: Real>(
         particle_rest_mass,
         kernel_radius,
         cube_size,
-        allow_multi_threading,
+        enable_multi_threading,
     );
 
     let mesh =
@@ -276,7 +276,7 @@ pub fn reconstruct_surface<I: Index, R: Real>(
 }
 
 /// Constructs the background grid for marching cubes based on the parameters supplied to the surface reconstruction
-fn grid_for_reconstruction<I: Index, R: Real>(
+pub fn grid_for_reconstruction<I: Index, R: Real>(
     particle_positions: &[Vector3<R>],
     particle_radius: R,
     cube_size: R,
