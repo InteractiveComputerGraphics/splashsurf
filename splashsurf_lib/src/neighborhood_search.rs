@@ -8,7 +8,7 @@ use crate::{new_map, AxisAlignedBoundingBox3d, HashState, Index, MapType, Parall
 
 // TODO: Replace some unwrap() calls with errors
 
-/// Performs a neighborhood search (sequentially or in parallel depending on the parameter), returning the indices of all neighboring particles in the given search radius per particle
+/// Performs a neighborhood search, returning the indices of all neighboring particles in the given search radius per particle
 #[inline(never)]
 pub fn search<I: Index, R: Real>(
     domain: &AxisAlignedBoundingBox3d<R>,
@@ -23,7 +23,7 @@ pub fn search<I: Index, R: Real>(
     }
 }
 
-/// Performs a sequential neighborhood search, returning the indices of all neighboring particles in the given search radius per particle
+/// Performs a neighborhood search, returning the indices of all neighboring particles in the given search radius per particle, sequential implementation
 #[inline(never)]
 pub fn sequential_search<I: Index, R: Real>(
     domain: &AxisAlignedBoundingBox3d<R>,
@@ -90,7 +90,7 @@ pub fn sequential_search<I: Index, R: Real>(
     neighborhood_list
 }
 
-/// Performs a multi-threaded neighborhood search, returning the indices of all neighboring particles in the given search radius per particle
+/// Performs a neighborhood search, returning the indices of all neighboring particles in the given search radius per particle, multi-thread implementation
 #[inline(never)]
 pub fn parallel_search<I: Index, R: Real>(
     domain: &AxisAlignedBoundingBox3d<R>,

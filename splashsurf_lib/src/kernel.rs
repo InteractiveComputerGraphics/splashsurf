@@ -80,16 +80,17 @@ fn test_cubic_kernel_r_integral() {
 /// the kernel using a squared distance to avoid taking the square root.
 /// To produce an appropriate quantization of the kernel for this use case, the compact support
 /// radius of the kernel is divided into `n` segments with quadratically increasing width.
-/// In other terms, on a quadratic scale, the compact support is divided into `n` equally sized segments of width `dr`.
-/// For the actual pre-computation, the exact kernel `k(r)` is evaluated at the midpoint `m_i` of every segment
-/// given by `m_i = sqrt(i * dr)` for `i ∈ [0, n]`.
+/// To be more precise, on a quadratic scale, the compact support `[0, h*h]` is divided into `n` equally sized
+/// segments of width `dr`. For the actual pre-computation, the exact kernel `k(r)` is evaluated at the
+/// midpoint `m_i` of every segment given by `m_i = sqrt(i * dr)` for `i ∈ [0, n]`.
 /// This results in an array of kernel values `K` that can be evaluated at runtime using a squared radius
 /// `s` by just mapping this radius back to the corresponding segment index `i` followed by a lookup
-/// in the value array, i.e. `k(sqrt(s)) ≈ K[s/dr]` (while taking care of rounding and clamping to the allowed index range).
+/// in the value array, i.e. `k(sqrt(s)) ≈ K[s/dr]` (while taking care of rounding and clamping to the
+/// allowed index range).
 pub struct DiscreteSquaredDistanceCubicKernel<R: Real> {
     /// Precomputed values of the kernel function
     values: Vec<R>,
-    /// The radial resolution of the discretization
+    /// The radial resolution of the discretization on a quadratic scale
     dr: R,
 }
 
@@ -127,8 +128,7 @@ fn test_discrete_kernel() {
     let h = 0.025;
     let kernel = DiscreteSquaredDistanceCubicKernel::new(n, h);
 
-    // Note that this is a different dr as used internally in the DiscreteSquaredDistanceCubicKernel
-    // Here, we want to test the pre-computation on a linear scale
+    // Test the pre-computated values using a linear stepping
     let dr = h / (n as f64);
     for i in 0..n {
         let r = (i as f64) * dr;

@@ -9,6 +9,7 @@ use crate::mesh::{HexMesh3d, MeshWithPointData};
 use crate::uniform_grid::UniformGrid;
 use crate::{new_map, HashState, Index, MapType, ParallelMapType, Real};
 
+/// Computes the individual densities of particles using a standard SPH sum
 #[inline(never)]
 pub fn compute_particle_densities<I: Index, R: Real>(
     particle_positions: &[Vector3<R>],
@@ -34,6 +35,7 @@ pub fn compute_particle_densities<I: Index, R: Real>(
     }
 }
 
+/// Computes the individual densities of particles using a standard SPH sum, sequential implementation
 #[inline(never)]
 pub fn sequential_compute_particle_densities<I: Index, R: Real>(
     particle_positions: &[Vector3<R>],
@@ -65,6 +67,7 @@ pub fn sequential_compute_particle_densities<I: Index, R: Real>(
     particle_densities
 }
 
+/// Computes the individual densities of particles using a standard SPH sum, multi-threaded implementation
 #[inline(never)]
 pub fn parallel_compute_particle_densities<I: Index, R: Real>(
     particle_positions: &[Vector3<R>],
@@ -95,6 +98,10 @@ pub fn parallel_compute_particle_densities<I: Index, R: Real>(
     particle_densities
 }
 
+/// A sparse density map
+///
+/// The density map contains values for all points of the background grid where the density is not
+/// trivially zero (which is the case when a point is outside of the compact support of any particles).
 #[derive(Clone, Debug)]
 pub enum DensityMap<I: Index, R: Real> {
     Standard(MapType<I, R>),
@@ -158,6 +165,7 @@ impl<I: Index, R: Real> DensityMap<I, R> {
     }
 }
 
+/// Computes a sparse density map for the fluid based on the specified background grid
 #[inline(never)]
 pub fn generate_sparse_density_map<I: Index, R: Real>(
     grid: &UniformGrid<I, R>,
@@ -193,6 +201,7 @@ pub fn generate_sparse_density_map<I: Index, R: Real>(
     }
 }
 
+/// Computes a sparse density map for the fluid based on the specified background grid, sequential implementation
 #[inline(never)]
 pub fn sequential_generate_sparse_density_map<I: Index, R: Real>(
     grid: &UniformGrid<I, R>,
@@ -345,6 +354,7 @@ pub fn sequential_generate_sparse_density_map<I: Index, R: Real>(
     sparse_densities.into()
 }
 
+/// Computes a sparse density map for the fluid based on the specified background grid, multi-threaded implementation
 #[inline(never)]
 pub fn parallel_generate_sparse_density_map<I: Index, R: Real>(
     grid: &UniformGrid<I, R>,
@@ -505,7 +515,7 @@ pub fn parallel_generate_sparse_density_map<I: Index, R: Real>(
     sparse_densities.into()
 }
 
-/// Converts a sparse (vertex based) density map to a sparse hexahedral mesh based on the given uniform background grid.
+/// Converts a sparse density map (based on the implicit background grid) to a sparse hexahedral mesh with explicit coordinates for the cells' vertices.
 #[inline(never)]
 pub fn sparse_density_map_to_hex_mesh<I: Index, R: Real>(
     density_map: &DensityMap<I, R>,
