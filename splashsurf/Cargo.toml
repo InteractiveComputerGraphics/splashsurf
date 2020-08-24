@@ -12,6 +12,7 @@ repository = "https://github.com/w1th0utnam3/splashsurf"
 
 [dependencies]
 splashsurf_lib = { path = "../splashsurf_lib" }
+#splashsurf_lib = "0.1"
 structopt = "0.3"
 log = "0.4"
 fern = "0.6"
