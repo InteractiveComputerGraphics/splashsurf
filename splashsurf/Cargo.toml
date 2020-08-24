@@ -2,7 +2,13 @@
 name = "splashsurf"
 version = "0.1.0"
 authors = ["Fabian Löschner <loeschner@cs.rwth-aachen.de>"]
+license = "MIT"
+description = "Command-line tool for surface reconstruction of SPH particle data"
+readme = "README.md"
 edition = "2018"
+
+homepage = "https://github.com/w1th0utnam3/splashsurf"
+repository = "https://github.com/w1th0utnam3/splashsurf"
 
 [dependencies]
 splashsurf_lib = { path = "../splashsurf_lib" }
