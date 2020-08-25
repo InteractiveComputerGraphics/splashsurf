@@ -1,4 +1,6 @@
 # ![splashsurf logo](logos/logo_small.svg "splashsurf")
+[![On crates.io](https://img.shields.io/crates/v/splashsurf)](https://crates.io/crates/splashsurf)
+
 Surface reconstruction for particle data from SPH simulations, written in Rust.
 
 ## Introduction
