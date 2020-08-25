@@ -655,7 +655,7 @@ dependencies = [
 
 [[package]]
 name = "splashsurf"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -672,7 +672,7 @@ dependencies = [
 
 [[package]]
 name = "splashsurf_lib"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "coarse-prof",
