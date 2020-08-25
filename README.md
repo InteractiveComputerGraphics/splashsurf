@@ -1,15 +1,32 @@
 # ![splashsurf logo](logos/logo_small.svg "splashsurf")
 Surface reconstruction for particle data from SPH simulations, written in Rust.
 
-This is a basic but high-performance implementation of surface reconstruction for SPH using marching cubes.
+## Introduction
+
+This is a basic but high-performance implementation of a marching cubes based surface reconstruction for SPH fluid simulations (e.g performed with [SPlisHSPlasH](https://github.com/InteractiveComputerGraphics/SPlisHSPlasH)).
 The output of this tool is the reconstructed triangle surface mesh of the fluid.
 At the moment it does not compute normals or other additional data.
-As input, it supports particle positions from .vtk files and binary .xyz files. In addition, required parameters are the kernel radius and particle radius (to compute the volume of particles) used for the original SPH simulation as well as the surface threshold.
+As input, it supports particle positions from .vtk files and binary .xyz files (i.e. files containing a binary dump of a particle position array). In addition, required parameters are the kernel radius and particle radius (to compute the volume of particles) used for the original SPH simulation as well as the surface threshold.
 
-The implementation first computes the density of each particles using the typical SPH approach with a cubic kernel. This density is then interpolated onto a sparse grid using spatial hashing in the support radius of each particle. Finally, the marching cubes reconstruction is performed only in those grid cells where the density values cross the surface threshold.
+The implementation first computes the density of each particle using the typical SPH approach with a cubic kernel. 
+This density is then evaluated or mapped onto a sparse grid using spatial hashing in the support radius of each particle.
+This implies that memory is only allocated in areas where the fluid density is non-zero. This is in contrast to a naive approach where the marching cubes background grid is allocated for the whole domain. 
+Finally, the marching cubes reconstruction is performed only in those grid cells where the density values cross the surface threshold. Cells completely in the interior of the fluid are skipped.
 
-Due the use of hash maps in release mode and multi-threading (if enabled), the output of this implementation is not deterministic.
-To help with debugging, the implementation switches to binary trees in debug builds.
+Due the use of hash maps and multi-threading (if enabled), the output of this implementation is not deterministic.
+In the future, flags may be added to switch the internally data structures to use binary trees for debugging.
+
+As shown below, the tool can handle the output of large simulations.
+However, it was not tested with a wide range of parameters and may not be totally robust against corner-cases or extreme parameters.
+If you experience problems, please report them together with your input data.
+
+## Installation
+
+The command-line tool can be built from this repository but is also available on crates.io.
+If you have a [Rust toolchain installed](https://www.rust-lang.org/tools/install) you can install `splashsurf` with the command
+```
+cargo install splashsurf
+```
 
 ## Usage
 
@@ -64,44 +81,44 @@ For example:
 ```
 splashsurf "/home/user/canyon.xyz" --output-dir="/home/user/temp" --particle-radius=0.011 --kernel-radius=4.0 --cube-size=1.5 --surface-threshold=0.6 --mt-particles
 ```
-With these parameters, a scene with 13353401 particles is reconstructed in less than 26.5s on a i7 8700K:
+With these parameters, a scene with 13353401 particles is reconstructed in nearly than 25s on a i9 9900K. The output is a mesh with 6016212 triangles.
 ```
-[2020-05-12T20:22:28.441899+02:00][splashsurf::reconstruction][INFO] Loading dataset from "/home/user/canyon.xyz"...
-[2020-05-12T20:22:28.582334+02:00][splashsurf::reconstruction][INFO] Loaded dataset with 13353401 particle positions.
-[2020-05-12T20:22:28.628091+02:00][splashsurf_lib][INFO] Minimal enclosing bounding box of particles was computed as: AxisAlignedBoundingBox { min: [-25.0060978, -5.0146289, -40.0634613], max: [24.4994926, 18.3062096, 39.7757950] }
-[2020-05-12T20:22:28.628109+02:00][splashsurf_lib][INFO] Using a grid with 6002x2828x9679 points and 6001x2827x9678 cells of edge length 0.0165.
-[2020-05-12T20:22:28.628112+02:00][splashsurf_lib][INFO] The resulting domain size is: AxisAlignedBoundingBox { min: [-49.7588959, -16.6750488, -79.9830933], max: [49.2576065, 29.9704514, 79.7039032] }
-[2020-05-12T20:22:28.628115+02:00][splashsurf_lib][INFO] Starting neighborhood search...
-[2020-05-12T20:22:30.943285+02:00][splashsurf_lib][INFO] Computing particle densities...
-[2020-05-12T20:22:31.967240+02:00][splashsurf_lib::density_map][INFO] Starting construction of sparse density map for 13353401 particles...
-[2020-05-12T20:22:31.986757+02:00][splashsurf_lib::density_map][INFO] To take into account the kernel evaluation radius, the allowed domain of particles was restricted to: AxisAlignedBoundingBox { min: [-49.7093468, -16.6254997, -79.9335403], max: [49.2080574, 29.9209023, 79.6543503] }
-[2020-05-12T20:22:50.536691+02:00][splashsurf_lib::density_map][INFO] Sparse density map with 31519986 point data values was constructed.
-[2020-05-12T20:22:50.536710+02:00][splashsurf_lib::density_map][INFO] Construction of sparse density map done.
-[2020-05-12T20:22:50.556266+02:00][splashsurf_lib::marching_cubes][INFO] Starting interpolation of cell data for marching cubes...
-[2020-05-12T20:22:54.175469+02:00][splashsurf_lib::marching_cubes][INFO] Generated cell data for marching cubes with 3009863 cells and 3011516 vertices.
-[2020-05-12T20:22:54.175481+02:00][splashsurf_lib::marching_cubes][INFO] Interpolation done.
-[2020-05-12T20:22:54.175484+02:00][splashsurf_lib::marching_cubes][INFO] Starting marching cubes triangulation of 3009863 cells...
-[2020-05-12T20:22:54.329789+02:00][splashsurf_lib::marching_cubes][INFO] Generated surface mesh with 6016212 triangles and 3011516 vertices.
-[2020-05-12T20:22:54.329799+02:00][splashsurf_lib::marching_cubes][INFO] Triangulation done.
-[2020-05-12T20:22:54.345902+02:00][splashsurf::reconstruction][INFO] Writing surface mesh to "/home/user/temp/canyon_surface.xyz"...
-[2020-05-12T20:22:54.674636+02:00][splashsurf::reconstruction][INFO] Done.
-[2020-05-12T20:22:54.710916+02:00][splashsurf][INFO] Finished processing all inputs.
-[2020-05-12T20:22:54.710934+02:00][splashsurf][INFO] surface reconstruction cli: 100.00%, 26269.02ms/call @ 0.04Hz
-[2020-05-12T20:22:54.710936+02:00][splashsurf][INFO]   loading particle positions: 0.53%, 140.43ms/call @ 0.04Hz
-[2020-05-12T20:22:54.710938+02:00][splashsurf][INFO]   reconstruct_surface: 98.08%, 25763.55ms/call @ 0.04Hz
-[2020-05-12T20:22:54.710939+02:00][splashsurf][INFO]     compute minimum enclosing aabb: 0.18%, 45.76ms/call @ 0.04Hz
-[2020-05-12T20:22:54.710941+02:00][splashsurf][INFO]     neighborhood_search: 8.99%, 2315.17ms/call @ 0.04Hz
-[2020-05-12T20:22:54.710942+02:00][splashsurf][INFO]       parallel_generate_cell_to_particle_map: 15.43%, 357.13ms/call @ 0.04Hz
-[2020-05-12T20:22:54.710944+02:00][splashsurf][INFO]       get_cell_neighborhoods_par: 2.62%, 60.63ms/call @ 0.04Hz
-[2020-05-12T20:22:54.710945+02:00][splashsurf][INFO]       calculate_particle_neighbors_par: 57.23%, 1325.03ms/call @ 0.04Hz
-[2020-05-12T20:22:54.710947+02:00][splashsurf][INFO]     parallel_compute_particle_densities: 1.20%, 308.73ms/call @ 0.04Hz
-[2020-05-12T20:22:54.710948+02:00][splashsurf][INFO]     parallel_generate_sparse_density_map: 72.15%, 18589.03ms/call @ 0.04Hz
-[2020-05-12T20:22:54.710949+02:00][splashsurf][INFO]     triangulate_density_map: 14.71%, 3789.63ms/call @ 0.04Hz
-[2020-05-12T20:22:54.710951+02:00][splashsurf][INFO]       interpolate_points_to_cell_data: 95.50%, 3619.22ms/call @ 0.04Hz
-[2020-05-12T20:22:54.710952+02:00][splashsurf][INFO]         generate_iso_surface_vertices: 68.66%, 2484.79ms/call @ 0.04Hz
-[2020-05-12T20:22:54.710953+02:00][splashsurf][INFO]         relative_to_threshold_postprocessing: 31.34%, 1134.40ms/call @ 0.04Hz
-[2020-05-12T20:22:54.710955+02:00][splashsurf][INFO]       triangulate: 4.50%, 170.41ms/call @ 0.04Hz
-[2020-05-12T20:22:54.710956+02:00][splashsurf][INFO]   write surface mesh to file: 1.25%, 328.75ms/call @ 0.04Hz
+[2020-08-25T15:52:34.515885+02:00][splashsurf::reconstruction][INFO] Loading dataset from "/local/data/temp/canyon.xyz"...
+[2020-08-25T15:52:34.655354+02:00][splashsurf::reconstruction][INFO] Loaded dataset with 13353401 particle positions.
+[2020-08-25T15:52:34.684734+02:00][splashsurf_lib][INFO] Minimal enclosing bounding box of particles was computed as: AxisAlignedBoundingBox { min: [-25.0060978, -5.0146289, -40.0634613], max: [24.4994926, 18.3062096, 39.7757950] }
+[2020-08-25T15:52:34.684748+02:00][splashsurf_lib][INFO] Using a grid with 6002x2828x9679 points and 6001x2827x9678 cells of edge length 0.0165.
+[2020-08-25T15:52:34.684753+02:00][splashsurf_lib][INFO] The resulting domain size is: AxisAlignedBoundingBox { min: [-49.7588959, -16.6750488, -79.9830933], max: [49.2576065, 29.9704514, 79.7039032] }
+[2020-08-25T15:52:34.684756+02:00][splashsurf_lib][INFO] Starting neighborhood search...
+[2020-08-25T15:52:36.570860+02:00][splashsurf_lib][INFO] Computing particle densities...
+[2020-08-25T15:52:37.645919+02:00][splashsurf_lib::density_map][INFO] Starting construction of sparse density map for 13353401 particles...
+[2020-08-25T15:52:37.653068+02:00][splashsurf_lib::density_map][INFO] To take into account the kernel evaluation radius, the allowed domain of particles was restricted to: AxisAlignedBoundingBox { min: [-49.7093468, -16.6254997, -79.9335403], max: [49.2080574, 29.9209023, 79.6543503] }
+[2020-08-25T15:52:55.559939+02:00][splashsurf_lib::density_map][INFO] Sparse density map with 31519986 point data values was constructed.
+[2020-08-25T15:52:55.559999+02:00][splashsurf_lib::density_map][INFO] Construction of sparse density map done.
+[2020-08-25T15:52:55.560005+02:00][splashsurf_lib::marching_cubes][INFO] Starting interpolation of cell data for marching cubes...
+[2020-08-25T15:52:59.118442+02:00][splashsurf_lib::marching_cubes][INFO] Generated cell data for marching cubes with 3009863 cells and 3011516 vertices.
+[2020-08-25T15:52:59.118470+02:00][splashsurf_lib::marching_cubes][INFO] Interpolation done.
+[2020-08-25T15:52:59.118474+02:00][splashsurf_lib::marching_cubes][INFO] Starting marching cubes triangulation of 3009863 cells...
+[2020-08-25T15:52:59.279570+02:00][splashsurf_lib::marching_cubes][INFO] Generated surface mesh with 6016212 triangles and 3011516 vertices.
+[2020-08-25T15:52:59.279597+02:00][splashsurf_lib::marching_cubes][INFO] Triangulation done.
+[2020-08-25T15:52:59.296979+02:00][splashsurf::reconstruction][INFO] Writing surface mesh to "/home/floeschner/programming/temp/canyon_surface.xyz"...
+[2020-08-25T15:52:59.808101+02:00][splashsurf::reconstruction][INFO] Done.
+[2020-08-25T15:52:59.879069+02:00][splashsurf][INFO] Finished processing all inputs.
+[2020-08-25T15:52:59.879103+02:00][splashsurf][INFO] surface reconstruction cli: 100.00%, 25363.19ms/call @ 0.04Hz
+[2020-08-25T15:52:59.879107+02:00][splashsurf][INFO]   loading particle positions: 0.55%, 139.30ms/call @ 0.04Hz
+[2020-08-25T15:52:59.879109+02:00][splashsurf][INFO]   reconstruct_surface: 97.15%, 24641.60ms/call @ 0.04Hz
+[2020-08-25T15:52:59.879111+02:00][splashsurf][INFO]     compute minimum enclosing aabb: 0.12%, 29.37ms/call @ 0.04Hz
+[2020-08-25T15:52:59.879113+02:00][splashsurf][INFO]     neighborhood_search: 7.65%, 1886.10ms/call @ 0.04Hz
+[2020-08-25T15:52:59.879115+02:00][splashsurf][INFO]       parallel_generate_cell_to_particle_map: 11.52%, 217.26ms/call @ 0.04Hz
+[2020-08-25T15:52:59.879117+02:00][splashsurf][INFO]       get_cell_neighborhoods_par: 2.70%, 50.97ms/call @ 0.04Hz
+[2020-08-25T15:52:59.879119+02:00][splashsurf][INFO]       calculate_particle_neighbors_par: 52.80%, 995.77ms/call @ 0.04Hz
+[2020-08-25T15:52:59.879121+02:00][splashsurf][INFO]     parallel_compute_particle_densities: 1.12%, 275.39ms/call @ 0.04Hz
+[2020-08-25T15:52:59.879144+02:00][splashsurf][INFO]     parallel_generate_sparse_density_map: 72.70%, 17914.09ms/call @ 0.04Hz
+[2020-08-25T15:52:59.879146+02:00][splashsurf][INFO]     triangulate_density_map: 15.17%, 3736.97ms/call @ 0.04Hz
+[2020-08-25T15:52:59.879148+02:00][splashsurf][INFO]       interpolate_points_to_cell_data: 95.22%, 3558.47ms/call @ 0.04Hz
+[2020-08-25T15:52:59.879161+02:00][splashsurf][INFO]         generate_iso_surface_vertices: 69.82%, 2484.44ms/call @ 0.04Hz
+[2020-08-25T15:52:59.879164+02:00][splashsurf][INFO]         relative_to_threshold_postprocessing: 29.70%, 1056.71ms/call @ 0.04Hz
+[2020-08-25T15:52:59.879167+02:00][splashsurf][INFO]       triangulate: 4.78%, 178.50ms/call @ 0.04Hz
+[2020-08-25T15:52:59.879171+02:00][splashsurf][INFO]   write surface mesh to file: 2.02%, 511.21ms/call @ 0.04Hz
 ```
 
 ## License

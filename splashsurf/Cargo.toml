@@ -1,6 +1,6 @@
 [package]
 name = "splashsurf"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Fabian Löschner <loeschner@cs.rwth-aachen.de>"]
 license = "MIT"
 description = "Command-line tool for surface reconstruction of SPH particle data"
@@ -22,4 +22,4 @@ coarse-prof = "0.2"
 vtkio = "0.3"
 nalgebra = "0.21"
 num = "0.3"
-rayon = "1.3"
+rayon = "1.4"
