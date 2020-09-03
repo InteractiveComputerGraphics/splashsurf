@@ -4,6 +4,8 @@ version = "0.1.1"
 authors = ["Fabian Löschner <loeschner@cs.rwth-aachen.de>"]
 license = "MIT"
 description = "Command-line tool for surface reconstruction of SPH particle data"
+keywords = ["sph", "particle", "surface", "reconstruction", "marching-cubes"]
+categories = ["command-line-utilities", "graphics", "science", "simulation", "visualization"]
 readme = "README.md"
 edition = "2018"
 
@@ -19,6 +21,6 @@ chrono = "0.4"
 anyhow = "1.0"
 coarse-prof = "0.2"
 vtkio = "0.3"
-nalgebra = "0.21"
+nalgebra = "0.22"
 num = "0.3"
 rayon = "1.4"

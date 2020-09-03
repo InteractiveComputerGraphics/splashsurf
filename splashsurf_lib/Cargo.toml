@@ -4,6 +4,8 @@ version = "0.1.1"
 authors = ["Fabian Löschner <loeschner@cs.rwth-aachen.de>"]
 license = "MIT"
 description = "Library for surface reconstruction of SPH particle data"
+keywords = ["sph", "particle", "surface", "reconstruction", "marching-cubes"]
+categories = ["graphics", "science", "simulation", "visualization", "rendering"]
 readme = "README.md"
 edition = "2018"
 
@@ -18,7 +20,7 @@ exclude = [
 
 [dependencies]
 log = "0.4"
-nalgebra = "0.21"
+nalgebra = "0.22"
 num = "0.3"
 anyhow = "1.0"
 thiserror = "1.0"
