@@ -3,7 +3,12 @@ use std::io::{BufReader, BufWriter, Write};
 use std::path::Path;
 
 use anyhow::anyhow;
-use na::Vector3;
+use na::{Vector3};
+use ply_rs as ply;
+
+
+use ply_rs::ply::Property;
+
 use vtkio::model::{DataSet, Version, Vtk};
 use vtkio::{export_be, import_be};
 
@@ -109,6 +114,41 @@ pub fn particles_from_xyz<R: Real, P: AsRef<Path>>(
     }
 
     Ok(particles)
+}
+
+pub fn particles_from_ply<R:Real, P:AsRef<Path>>(
+    ply_file: P
+) -> Result<Vec<Vector3<R>>, anyhow::Error> {
+    let mut ply_file = std::fs::File::open(ply_file).unwrap();
+    let parser = ply::parser::Parser::<ply::ply::DefaultElement>::new();
+
+    let ply = parser.read_ply(&mut ply_file);
+
+    assert!(ply.is_ok());
+    let ply = ply.unwrap();
+
+    let elements = ply.payload.get("vertex").unwrap();
+
+    let points: Vec<Vector3<R>> = elements
+        .into_iter()
+        .map(|e| (e.get("x").unwrap(), e.get("y").unwrap(), e.get("z").unwrap()))
+        .map(|point| {
+            let vector: Vector3<R> = match point {
+                (Property::Float(x), Property::Float(y), Property::Float(z)) => 
+                    Vector3::new(
+                        R::from_f32(*x).unwrap(), 
+                        R::from_f32(*y).unwrap(), 
+                        R::from_f32(*z).unwrap()),
+                _ => panic!("Couldnt load point from ply file")
+                // _ => Vector3::new(R::from_f32(0.).unwrap(), R::from_f32(0.).unwrap(), R::from_f32(0.).unwrap())
+
+            };
+            vector
+    
+        })
+        .collect();
+    
+    Ok(points)
 }
 
 #[allow(dead_code)]
