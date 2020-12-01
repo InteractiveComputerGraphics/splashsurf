@@ -2,7 +2,7 @@ use std::iter::Iterator;
 use std::ops::{Add, Sub};
 
 use itertools::iproduct;
-use na::Vector3;
+use nalgebra::Vector3;
 use num::{CheckedAdd, CheckedSub, One};
 use thiserror::Error as ThisError;
 

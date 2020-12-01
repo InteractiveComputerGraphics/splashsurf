@@ -838,7 +838,6 @@ dependencies = [
  "coarse-prof",
  "fern",
  "log",
- "nalgebra",
  "num",
  "ply-rs",
  "rayon",
@@ -849,7 +848,7 @@ dependencies = [
 
 [[package]]
 name = "splashsurf_lib"
-version = "0.1.2"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "coarse-prof",

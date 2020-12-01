@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 
-use na::Vector3;
+use nalgebra::Vector3;
 use vtkio::model::{Attribute, Attributes, CellType, Cells, DataSet};
 
 use crate::Real;

@@ -4,9 +4,9 @@ use std::io::{BufReader, BufWriter, Write};
 use std::path::Path;
 
 use anyhow::{anyhow, Context};
-use na::Vector3;
 use ply_rs as ply;
 use ply_rs::ply::Property;
+use splashsurf_lib::nalgebra::Vector3;
 use vtkio::model::{DataSet, Version, Vtk};
 use vtkio::{export_be, import_be};
 

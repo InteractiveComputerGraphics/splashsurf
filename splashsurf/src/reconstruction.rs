@@ -3,8 +3,8 @@ use std::path::Path;
 use anyhow::{anyhow, Context};
 use coarse_prof::profile;
 use log::info;
-use na::Vector3;
 use splashsurf_lib::mesh::PointCloud3d;
+use splashsurf_lib::nalgebra::Vector3;
 use splashsurf_lib::{density_map, Index, Real};
 
 use crate::io;

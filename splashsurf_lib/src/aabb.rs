@@ -1,8 +1,8 @@
 use std::fmt;
 use std::fmt::Debug;
 
-use na::allocator::Allocator;
-use na::{DefaultAllocator, DimName, VectorN, U2, U3};
+use nalgebra::allocator::Allocator;
+use nalgebra::{DefaultAllocator, DimName, VectorN, U2, U3};
 
 use crate::Real;
 

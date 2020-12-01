@@ -1,8 +1,8 @@
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
 
-use na::allocator::Allocator;
-use na::{DefaultAllocator, DimName, RealField, VectorN};
+use nalgebra::allocator::Allocator;
+use nalgebra::{DefaultAllocator, DimName, RealField, VectorN};
 use num::{Bounded, CheckedAdd, CheckedMul, CheckedSub, FromPrimitive, Integer, ToPrimitive};
 
 /// Trait that has to be implemented by [Index] and [Real] types to use them in parallelized algorithms

@@ -13,7 +13,7 @@ homepage = "https://github.com/w1th0utnam3/splashsurf"
 repository = "https://github.com/w1th0utnam3/splashsurf"
 
 [dependencies]
-splashsurf_lib = { path = "../splashsurf_lib", version = "0.1" }
+splashsurf_lib = { path = "../splashsurf_lib", version = "0.2" }
 structopt = "0.3"
 log = "0.4"
 fern = "0.6"
@@ -21,7 +21,6 @@ chrono = "0.4"
 anyhow = "1.0"
 coarse-prof = "0.2"
 vtkio = "0.3"
-nalgebra = "0.23"
 num = "0.3"
 rayon = "1.5"
 ply-rs = "0.1.3"

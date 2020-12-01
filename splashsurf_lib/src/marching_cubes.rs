@@ -1,6 +1,6 @@
 use coarse_prof::profile;
 use log::info;
-use na::Vector3;
+use nalgebra::Vector3;
 
 use crate::marching_cubes_lut::get_marching_cubes_triangulation;
 use crate::mesh::TriMesh3d;

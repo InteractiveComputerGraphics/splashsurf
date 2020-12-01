@@ -1,4 +1,3 @@
-extern crate nalgebra as na;
 extern crate ply_rs;
 
 mod io;
@@ -11,8 +10,8 @@ use std::path::PathBuf;
 
 use anyhow::{anyhow, Context};
 use log::{error, info};
-use na::Vector3;
 use rayon::prelude::*;
+use splashsurf_lib::nalgebra::Vector3;
 use splashsurf_lib::AxisAlignedBoundingBox3d;
 use structopt::StructOpt;
 

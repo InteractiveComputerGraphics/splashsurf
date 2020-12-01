@@ -1,7 +1,7 @@
 use coarse_prof::profile;
 use dashmap::ReadOnlyView as ReadDashMap;
 use log::{info, warn};
-use na::Vector3;
+use nalgebra::Vector3;
 use rayon::prelude::*;
 
 use crate::kernel::DiscreteSquaredDistanceCubicKernel;

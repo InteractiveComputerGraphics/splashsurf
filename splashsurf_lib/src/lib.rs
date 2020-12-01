@@ -2,7 +2,8 @@
 //! Library for surface reconstruction using marching cubes for SPH particle data. Entry point is the [reconstruct_surface] function.
 //!
 
-extern crate nalgebra as na;
+/// Re-export the version of nalgebra used by this crate
+pub use nalgebra;
 
 mod aabb;
 /// Computation of sparse density maps (evaluation of particle densities and mapping onto sparse grids)
@@ -29,7 +30,7 @@ pub use uniform_grid::{GridConstructionError, UniformGrid};
 use coarse_prof::profile;
 use log::info;
 use mesh::TriMesh3d;
-use na::Vector3;
+use nalgebra::Vector3;
 use thiserror::Error as ThisError;
 
 // TODO: Remove anyhow/thiserror from lib?

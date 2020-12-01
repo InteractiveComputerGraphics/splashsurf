@@ -1,5 +1,5 @@
 use coarse_prof::profile;
-use na::Vector3;
+use nalgebra::Vector3;
 use rayon::prelude::*;
 
 use crate::uniform_grid::UniformGrid;
