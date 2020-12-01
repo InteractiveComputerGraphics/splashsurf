@@ -3,7 +3,7 @@ use std::io::Read;
 use std::io::{BufReader, BufWriter, Write};
 use std::path::Path;
 
-use anyhow::anyhow;
+use anyhow::{anyhow, Context};
 use na::Vector3;
 use vtkio::model::{DataSet, Version, Vtk};
 use vtkio::{export_be, import_be};
@@ -38,7 +38,7 @@ pub fn particles_from_coords<RealOut: Real, RealIn: Real>(
     coords: &Vec<RealIn>,
 ) -> Result<Vec<Vector3<RealOut>>, anyhow::Error> {
     if coords.len() % 3 != 0 {
-        anyhow!("The number of values in the particle data point buffer is not divisable by 3");
+        anyhow!("The number of values in the particle data point buffer is not divisible by 3");
     }
 
     let num_points = coords.len() / 3;
@@ -79,9 +79,7 @@ pub fn particles_from_dataset<R: Real>(
 pub fn particles_from_xyz<R: Real, P: AsRef<Path>>(
     xyz_file: P,
 ) -> Result<Vec<Vector3<R>>, anyhow::Error> {
-    let xyz_file = xyz_file.as_ref();
-
-    let file = File::open(xyz_file)?;
+    let file = File::open(xyz_file).context("Unable to open xyz file for reading")?;
     let mut reader = BufReader::new(file);
 
     let mut buffer = [0u8; 3 * 4];
@@ -114,7 +112,7 @@ pub fn particles_from_xyz<R: Real, P: AsRef<Path>>(
 #[allow(dead_code)]
 pub fn to_binary_f32<R: Real, P: AsRef<Path>>(file: P, values: &[R]) -> Result<(), anyhow::Error> {
     let file = file.as_ref();
-    let file = File::create(file)?;
+    let file = File::create(file).context("Unable to create binary file")?;
     let mut writer = BufWriter::new(file);
 
     for v in values {
