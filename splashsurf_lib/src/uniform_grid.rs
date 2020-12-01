@@ -710,7 +710,7 @@ impl Direction {
     }
 
     /// Adds or subtracts the given step from the value depending on the direction
-    /// ```
+    /// ```ignore
     /// use crate::splashsurf_lib::uniform_grid::Direction;
     /// assert_eq!(Direction::Positive.apply_step(27, 3), 30);
     /// assert_eq!(Direction::Negative.apply_step(27, 3), 24);
@@ -725,7 +725,7 @@ impl Direction {
     }
 
     /// Same as `apply_step` but uses `checked_add` and `checked_sub`, i.e. returns `None` on overflow
-    /// ```
+    /// ```ignore
     /// use crate::splashsurf_lib::uniform_grid::Direction;
     /// assert_eq!(Direction::Negative.checked_apply_step(0 as i32, 10), Some(-10));
     /// assert_eq!(Direction::Negative.checked_apply_step(0 as u32, 10), None);
@@ -744,7 +744,7 @@ impl Direction {
     }
 
     /// Returns whether the direction is positive
-    /// ```
+    /// ```ignore
     /// use crate::splashsurf_lib::uniform_grid::Direction;
     /// assert_eq!(Direction::Positive.is_positive(), true);
     /// assert_eq!(Direction::Negative.is_positive(), false);
@@ -755,7 +755,7 @@ impl Direction {
     }
 
     /// Returns whether the direction is negative
-    /// ```
+    /// ```ignore
     /// use crate::splashsurf_lib::uniform_grid::Direction;
     /// assert_eq!(Direction::Positive.is_negative(), false);
     /// assert_eq!(Direction::Negative.is_negative(), true);
@@ -770,7 +770,7 @@ const ALL_DIRECTIONS: [Direction; 2] = [Direction::Negative, Direction::Positive
 
 impl CartesianAxis3d {
     /// Converts the cartesian axis into the 3D dimension index (X=0, Y=1, Z=2)
-    /// ```
+    /// ```ignore
     /// use crate::splashsurf_lib::uniform_grid::CartesianAxis3d as Axis;
     /// assert_eq!(Axis::X.dim(), 0);
     /// assert_eq!(Axis::Y.dim(), 1);
@@ -782,7 +782,7 @@ impl CartesianAxis3d {
     }
 
     /// Returns the other two axes that are orthogonal to the current axis
-    /// ```
+    /// ```ignore
     /// use crate::splashsurf_lib::uniform_grid::CartesianAxis3d as Axis;
     /// assert_eq!(Axis::X.orthogonal_axes(), [Axis::Y, Axis::Z]);
     /// ```

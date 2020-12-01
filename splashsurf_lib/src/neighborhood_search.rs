@@ -238,7 +238,7 @@ pub fn compute_neigborhood_stats(neighborhood_list: &Vec<Vec<usize>>) -> Neighbo
     NeighborhoodStats {
         histogram: neighbor_histogram,
         max_neighbors,
-        avg_neighbors
+        avg_neighbors,
     }
 }
 

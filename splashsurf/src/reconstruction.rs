@@ -1,6 +1,9 @@
+use std::path::Path;
+
 use anyhow::{anyhow, Context};
 use coarse_prof::profile;
 use log::info;
+use na::Vector3;
 use splashsurf_lib::mesh::PointCloud3d;
 use splashsurf_lib::{density_map, Index, Real};
 
@@ -39,38 +42,12 @@ pub(crate) fn entry_point_generic<I: Index, R: Real>(
 ) -> Result<(), anyhow::Error> {
     profile!("surface reconstruction cli");
 
-    info!(
-        "Loading dataset from \"{}\"...",
-        paths.input_file.to_string_lossy()
-    );
-    let particle_positions = if let Some(extension) = paths.input_file.extension() {
-        profile!("loading particle positions");
-        let extension = extension.to_string_lossy();
-        match extension.to_lowercase().as_str() {
-            "vtk" => {
-                let sph_dataset = io::read_vtk(&paths.input_file)?;
-                io::particles_from_dataset(&sph_dataset)?
-            }
-            "xyz" => io::particles_from_xyz(&paths.input_file)?,
-            "ply" => io::particles_from_ply(&paths.input_file)?,
-            _ => {
-                return Err(anyhow!(
-                    "Unsupported file format extension '{}' of input file '{}'",
-                    extension,
-                    paths.input_file.to_string_lossy()
-                ));
-            }
-        }
-    } else {
-        return Err(anyhow!(
-            "Unable to detect file format of input file '{}'",
-            paths.input_file.to_string_lossy()
-        ));
-    };
-    info!(
-        "Loaded dataset with {} particle positions.",
-        particle_positions.len()
-    );
+    let particle_positions = load_particle_positions(&paths.input_file).with_context(|| {
+        format!(
+            "Failed to load particle positions from file '{}'",
+            paths.input_file.display()
+        )
+    })?;
 
     let reconstruction =
         splashsurf_lib::reconstruct_surface::<I, R>(particle_positions.as_slice(), &params)?;
@@ -142,4 +119,45 @@ pub(crate) fn entry_point_generic<I: Index, R: Real>(
     }
 
     Ok(())
+}
+
+fn load_particle_positions<R: Real, P: AsRef<Path>>(
+    input_file: P,
+) -> Result<Vec<Vector3<R>>, anyhow::Error> {
+    let input_file = input_file.as_ref();
+    info!("Loading dataset from \"{}\"...", input_file.display());
+
+    let particle_positions = if let Some(extension) = input_file.extension() {
+        profile!("loading particle positions");
+
+        let extension = extension
+            .to_str()
+            .ok_or(anyhow!("Invalid extension of particle file",))?;
+
+        match extension.to_lowercase().as_str() {
+            "vtk" => {
+                let sph_dataset = io::read_vtk(&input_file)?;
+                io::particles_from_dataset(&sph_dataset)?
+            }
+            "xyz" => io::particles_from_xyz(&input_file)?,
+            "ply" => io::particles_from_ply(&input_file)?,
+            _ => {
+                return Err(anyhow!(
+                    "Unsupported file format extension '{}' of particle file",
+                    extension
+                ));
+            }
+        }
+    } else {
+        return Err(anyhow!(
+            "Unable to detect file format of particle file (file name has to end with supported extension)",
+        ));
+    };
+
+    info!(
+        "Loaded dataset with {} particle positions.",
+        particle_positions.len()
+    );
+
+    Ok(particle_positions)
 }

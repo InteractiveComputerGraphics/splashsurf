@@ -374,7 +374,10 @@ fn test_interpolate_cell_data() {
 
     // Check that the correct vertices were marked as being below the iso-surface
     assert_eq!(
-        cell.corner_above_threshold.iter().map(|r| r.is_above()).collect::<Vec<_>>(),
+        cell.corner_above_threshold
+            .iter()
+            .map(|r| r.is_above())
+            .collect::<Vec<_>>(),
         vec![false, true, true, true, false, false, true, false]
     );
 
