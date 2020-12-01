@@ -1,4 +1,5 @@
 extern crate nalgebra as na;
+extern crate ply_rs;
 
 mod io;
 mod reconstruction;

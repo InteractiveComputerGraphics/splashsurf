@@ -52,6 +52,7 @@ pub(crate) fn entry_point_generic<I: Index, R: Real>(
                 io::particles_from_dataset(&sph_dataset)?
             }
             "xyz" => io::particles_from_xyz(&paths.input_file)?,
+            "ply" => io::particles_from_ply(&paths.input_file)?,
             _ => {
                 return Err(anyhow!(
                     "Unsupported file format extension '{}' of input file '{}'",
