@@ -77,7 +77,7 @@ OPTIONS:
 
 ARGS:
     <input-file>    Path to the input file where the particle positions are stored (supported formats: VTK, binary
-                    XYZ)
+                    XYZ, ply)
 ```
 For example:
 ```
@@ -122,6 +122,12 @@ With these parameters, a scene with 13353401 particles is reconstructed in nearl
 [2020-08-25T15:52:59.879167+02:00][splashsurf][INFO]       triangulate: 4.78%, 178.50ms/call @ 0.04Hz
 [2020-08-25T15:52:59.879171+02:00][splashsurf][INFO]   write surface mesh to file: 2.02%, 511.21ms/call @ 0.04Hz
 ```
+
+## Input file formats
+
+### Ply
+
+The ply format expects an element definition 'vertex', with element properties of 'x,y,z'
 
 ## License
 
