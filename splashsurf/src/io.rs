@@ -1,4 +1,5 @@
 use std::fs::{create_dir_all, File};
+use std::io::Read;
 use std::io::{BufReader, BufWriter, Write};
 use std::path::Path;
 
@@ -8,7 +9,6 @@ use vtkio::model::{DataSet, Version, Vtk};
 use vtkio::{export_be, import_be};
 
 use splashsurf_lib::Real;
-use std::io::Read;
 
 pub fn write_vtk<P: AsRef<Path>>(
     data: impl Into<DataSet>,
