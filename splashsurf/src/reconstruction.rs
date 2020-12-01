@@ -39,13 +39,15 @@ pub(crate) fn entry_point_generic<I: Index, R: Real>(
 ) -> Result<(), anyhow::Error> {
     profile!("surface reconstruction cli");
 
-    info!(
-        "Loading dataset from \"{}\"...",
-        paths.input_file.to_string_lossy()
-    );
+    info!("Loading dataset from \"{}\"...", paths.input_file.display());
     let particle_positions = if let Some(extension) = paths.input_file.extension() {
         profile!("loading particle positions");
-        let extension = extension.to_string_lossy();
+
+        let extension = extension.to_str().ok_or(anyhow!(
+            "Invalid extension of of input file '{}'",
+            paths.input_file.display()
+        ))?;
+
         match extension.to_lowercase().as_str() {
             "vtk" => {
                 let sph_dataset = io::read_vtk(&paths.input_file)?;
@@ -56,16 +58,17 @@ pub(crate) fn entry_point_generic<I: Index, R: Real>(
                 return Err(anyhow!(
                     "Unsupported file format extension '{}' of input file '{}'",
                     extension,
-                    paths.input_file.to_string_lossy()
+                    paths.input_file.display()
                 ));
             }
         }
     } else {
         return Err(anyhow!(
-            "Unable to detect file format of input file '{}'",
-            paths.input_file.to_string_lossy()
+            "Unable to detect file format of input file '{}' (file name has to end with supported extension)",
+            paths.input_file.display()
         ));
     };
+
     info!(
         "Loaded dataset with {} particle positions.",
         particle_positions.len()
