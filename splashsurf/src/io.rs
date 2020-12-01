@@ -3,7 +3,7 @@ use std::io::{BufReader, BufWriter, Write};
 use std::path::Path;
 
 use anyhow::anyhow;
-use na::{Vector, Vector3};
+use na::{Vector3};
 use ply_rs as ply;
 
 
