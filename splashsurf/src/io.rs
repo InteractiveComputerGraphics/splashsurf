@@ -117,7 +117,7 @@ pub fn particles_from_ply<R: Real, P: AsRef<Path>>(
 ) -> Result<Vec<Vector3<R>>, anyhow::Error> {
     let ply_file = File::open(ply_file).context("Failed to open Ply file")?;
     let mut ply_file = std::io::BufReader::new(ply_file);
-    
+
     let vertex_parser = ply_rs::parser::Parser::<Vec3r>::new();
     let header = vertex_parser.read_header(&mut ply_file).unwrap();
 
@@ -125,32 +125,27 @@ pub fn particles_from_ply<R: Real, P: AsRef<Path>>(
 
     for (_, element) in &header.elements {
         match element.name.as_ref() {
-            "vertex" => { 
+            "vertex" => {
                 particles_ply = vertex_parser
-                                .read_payload_for_element(
-                                    &mut ply_file, 
-                                    &element, 
-                                    &header)
-                                .context("Could not load vertex payload")?;
-            },
+                    .read_payload_for_element(&mut ply_file, &element, &header)
+                    .context("Could not load vertex payload")?;
+            }
             _ => (),
         }
     }
 
     let mut particles = Vec::new();
-    
+
     for particle in particles_ply {
         particles.push(Vector3::new(
-                R::from_f32(particle.0.x).unwrap(),
-                R::from_f32(particle.0.y).unwrap(),
-                R::from_f32(particle.0.z).unwrap(),
-            )
-    )   ;
-    };
+            R::from_f32(particle.0.x).unwrap(),
+            R::from_f32(particle.0.y).unwrap(),
+            R::from_f32(particle.0.z).unwrap(),
+        ));
+    }
 
     Ok(particles)
 }
-
 
 #[allow(dead_code)]
 pub fn to_binary_f32<R: Real, P: AsRef<Path>>(file: P, values: &[R]) -> Result<(), anyhow::Error> {
@@ -172,13 +167,7 @@ struct Vec3r(Vector3<f32>);
 impl ply::PropertyAccess for Vec3r {
     fn new() -> Self {
         Self {
-            0: {
-                Vector3::new(
-                    0.0,
-                    0.0,
-                    0.0,
-                )
-            }
+            0: { Vector3::new(0.0, 0.0, 0.0) },
         }
     }
     fn set_property(&mut self, key: String, property: ply::Property) {
