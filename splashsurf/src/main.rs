@@ -339,8 +339,7 @@ impl TryFrom<&CommandlineArgs> for ReconstrunctionRunnerPathCollection {
             // ...otherwise, generate one based on the input filename
             } else {
                 let input_stem = args.input_file.file_stem().unwrap().to_string_lossy();
-                let input_extension = args.input_file.extension().unwrap().to_string_lossy();
-                format!("{}_{}.{}", input_stem, output_suffix, input_extension).into()
+                format!("{}_{}.vtk", input_stem, output_suffix).into()
             };
 
             Self::try_new(
@@ -379,8 +378,11 @@ impl TryFrom<&CommandlineArgs> for ReconstrunctionRunnerPathCollection {
 
             // Make sure that we have a placeholder '{}' in the filename part of the sequence pattern
             if input_filename.contains("{}") {
-                let output_filename =
-                    input_filename.replace("{}", &format!("{}_{{}}", output_suffix));
+                let input_stem = args.input_file.file_stem().unwrap().to_string_lossy();
+                let output_filename = format!(
+                    "{}.vtk",
+                    input_stem.replace("{}", &format!("{}_{{}}", output_suffix))
+                );
 
                 Self::try_new(
                     true,

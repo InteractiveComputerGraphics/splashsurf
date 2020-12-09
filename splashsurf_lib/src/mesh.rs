@@ -1,7 +1,10 @@
 use std::fmt::Debug;
 
 use nalgebra::Vector3;
-use vtkio::model::{Attribute, Attributes, CellType, Cells, DataSet};
+use vtkio::model::{
+    Attribute, Attributes, CellType, Cells, DataSet, UnstructuredGridPiece, VertexNumbers,
+};
+use vtkio::IOBuffer;
 
 use crate::Real;
 
@@ -41,31 +44,24 @@ pub struct MeshWithPointData<MeshT, DataT> {
 
 impl<'a, MeshT: 'a, DataT> MeshWithPointData<MeshT, DataT>
 where
-    DataSet: From<&'a MeshT>,
+    &'a MeshT: Into<UnstructuredGridPiece>,
     DataT: Real,
 {
-    pub fn to_dataset(&'a self) -> DataSet {
-        let mut mesh_dataset = DataSet::from(&self.mesh);
-
-        if let DataSet::UnstructuredGrid { ref mut data, .. } = &mut mesh_dataset {
-            let attribute = Attribute::Scalars {
-                num_comp: 1,
-                lookup_table: None,
-                data: self.data.clone().into(),
-            };
-
-            data.point.push((format!("density"), attribute));
-        }
-
-        mesh_dataset
+    pub fn to_dataset(&'a self) -> UnstructuredGridPiece {
+        let mut grid_piece: UnstructuredGridPiece = (&self.mesh).into();
+        grid_piece
+            .data
+            .point
+            .push(Attribute::scalars("density", 1).with_data(self.data.clone()));
+        grid_piece
     }
 }
 
-impl<'a, R> From<&'a TriMesh3d<R>> for DataSet
+impl<R> From<&TriMesh3d<R>> for UnstructuredGridPiece
 where
     R: Real,
 {
-    fn from(mesh: &'a TriMesh3d<R>) -> Self {
+    fn from(mesh: &TriMesh3d<R>) -> Self {
         let points = {
             let mut points: Vec<R> = Vec::new();
             points.reserve(mesh.vertices.len() * 3);
@@ -87,19 +83,11 @@ where
 
         let cell_types = vec![CellType::Triangle; mesh.triangles.len()];
 
-        DataSet::UnstructuredGrid {
-            points: points.into(),
-            cells: Cells {
-                num_cells: mesh.triangles.len() as u32,
-                vertices,
-            },
-            cell_types,
-            data: Attributes::new(),
-        }
+        new_unstructured_grid_piece(points, vertices, cell_types)
     }
 }
 
-impl<'a, R> From<&'a HexMesh3d<R>> for DataSet
+impl<'a, R> From<&'a HexMesh3d<R>> for UnstructuredGridPiece
 where
     R: Real,
 {
@@ -125,19 +113,11 @@ where
 
         let cell_types = vec![CellType::Hexahedron; mesh.cells.len()];
 
-        DataSet::UnstructuredGrid {
-            points: points.into(),
-            cells: Cells {
-                num_cells: mesh.cells.len() as u32,
-                vertices,
-            },
-            cell_types,
-            data: Attributes::new(),
-        }
+        new_unstructured_grid_piece(points, vertices, cell_types)
     }
 }
 
-impl<'a, R> From<&'a PointCloud3d<R>> for DataSet
+impl<'a, R> From<&'a PointCloud3d<R>> for UnstructuredGridPiece
 where
     R: Real,
 {
@@ -163,14 +143,42 @@ where
 
         let cell_types = vec![CellType::Vertex; mesh.points.len()];
 
-        DataSet::UnstructuredGrid {
-            points: points.into(),
-            cells: Cells {
-                num_cells: mesh.points.len() as u32,
+        new_unstructured_grid_piece(points, vertices, cell_types)
+    }
+}
+
+impl<R: Real> Into<DataSet> for &TriMesh3d<R> {
+    fn into(self) -> DataSet {
+        DataSet::inline(UnstructuredGridPiece::from(self))
+    }
+}
+
+impl<R: Real> Into<DataSet> for &HexMesh3d<R> {
+    fn into(self) -> DataSet {
+        DataSet::inline(UnstructuredGridPiece::from(self))
+    }
+}
+
+impl<R: Real> Into<DataSet> for &PointCloud3d<R> {
+    fn into(self) -> DataSet {
+        DataSet::inline(UnstructuredGridPiece::from(self))
+    }
+}
+
+fn new_unstructured_grid_piece<B: Into<IOBuffer>>(
+    points: B,
+    vertices: Vec<u32>,
+    cell_types: Vec<CellType>,
+) -> UnstructuredGridPiece {
+    UnstructuredGridPiece {
+        points: points.into(),
+        cells: Cells {
+            cell_verts: VertexNumbers::Legacy {
+                num_cells: cell_types.len() as u32,
                 vertices,
             },
-            cell_types,
-            data: Attributes::new(),
-        }
+            types: cell_types,
+        },
+        data: Attributes::new(),
     }
 }

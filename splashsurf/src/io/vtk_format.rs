@@ -2,11 +2,18 @@ use std::fs::create_dir_all;
 use std::path::Path;
 
 use anyhow::{anyhow, Context};
-use vtkio::model::{DataSet, Version, Vtk};
-use vtkio::{export_be, import_be};
+use vtkio::model::{ByteOrder, DataSet, Version, Vtk};
+use vtkio::{export_be, import_be, IOBuffer};
 
 use splashsurf_lib::nalgebra::Vector3;
 use splashsurf_lib::Real;
+
+pub fn particles_from_vtk<R: Real, P: AsRef<Path>>(
+    vtk_file: P,
+) -> Result<Vec<Vector3<R>>, anyhow::Error> {
+    let sph_dataset = read_vtk(vtk_file)?;
+    particles_from_dataset(sph_dataset)
+}
 
 pub fn write_vtk<P: AsRef<Path>>(
     data: impl Into<DataSet>,
@@ -16,6 +23,7 @@ pub fn write_vtk<P: AsRef<Path>>(
     let vtk_file = Vtk {
         version: Version::new((4, 1)),
         title: title.to_string(),
+        byte_order: ByteOrder::BigEndian,
         data: data.into(),
     };
 
@@ -51,31 +59,29 @@ pub fn particles_from_coords<RealOut: Real, RealIn: Real>(
     Ok(positions)
 }
 
-pub fn particles_from_dataset<R: Real>(
-    dataset: &DataSet,
-) -> Result<Vec<Vector3<R>>, anyhow::Error> {
-    if let DataSet::UnstructuredGrid { points, .. } = dataset {
-        if let Some(coords) = points.clone_into_vec::<f64>() {
-            particles_from_coords(&coords)
-        } else {
-            if let Some(coords) = points.clone_into_vec::<f32>() {
-                particles_from_coords(&coords)
-            } else {
-                Err(anyhow!(
+pub fn particles_from_dataset<R: Real>(dataset: DataSet) -> Result<Vec<Vector3<R>>, anyhow::Error> {
+    if let DataSet::UnstructuredGrid { pieces, .. } = dataset {
+        if let Some(piece) = pieces.into_iter().next() {
+            let points = piece
+                .load_piece_data()
+                .context("Failed to load unstructured grid piece")?
+                .points;
+
+            match points {
+                IOBuffer::F64(coords) => particles_from_coords(&coords),
+                IOBuffer::F32(coords) => particles_from_coords(&coords),
+                _ => Err(anyhow!(
                     "Point coordinate IOBuffer does not contain f32 or f64 values"
-                ))
+                )),
             }
+        } else {
+            Err(anyhow!(
+                "Loaded dataset does not contain an unstructured grid piece"
+            ))
         }
     } else {
         Err(anyhow!(
             "Loaded dataset does not contain an unstructured grid"
         ))
     }
-}
-
-pub fn particles_from_vtk<R: Real, P: AsRef<Path>>(
-    vtk_file: P,
-) -> Result<Vec<Vector3<R>>, anyhow::Error> {
-    let sph_dataset = read_vtk(vtk_file)?;
-    particles_from_dataset(&sph_dataset)
 }
