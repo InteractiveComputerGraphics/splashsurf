@@ -158,9 +158,10 @@ fn main() -> Result<(), anyhow::Error> {
 }
 
 /// All arguments that can be supplied to the surface reconstruction tool converted to useful types
-pub(crate) struct ReconstructionRunnerArgs {
+pub struct ReconstructionRunnerArgs {
     params: splashsurf_lib::Parameters<f64>,
     use_double_precision: bool,
+    io_params: io::FormatParameters,
 }
 
 // Convert raw command line arguments to more useful types
@@ -208,6 +209,7 @@ impl TryFrom<&CommandlineArgs> for ReconstructionRunnerArgs {
         Ok(ReconstructionRunnerArgs {
             params,
             use_double_precision: args.use_double_precision,
+            io_params: io::FormatParameters::default(),
         })
     }
 }

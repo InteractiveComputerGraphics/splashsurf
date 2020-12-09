@@ -20,7 +20,7 @@ pub(crate) fn entry_point(
         type I = i64;
         type R = f64;
 
-        entry_point_generic::<I, R>(paths, &args.params)?;
+        entry_point_generic::<I, R>(paths, &args.params, &args.io_params)?;
     } else {
         type I = i64;
         type R = f32;
@@ -30,6 +30,7 @@ pub(crate) fn entry_point(
             &args.params.try_convert().ok_or(anyhow!(
                 "Unable to convert surface reconstruction parameters from f64 to f32."
             ))?,
+            &args.io_params,
         )?;
     }
 
@@ -39,15 +40,17 @@ pub(crate) fn entry_point(
 pub(crate) fn entry_point_generic<I: Index, R: Real>(
     paths: &ReconstructionRunnerPaths,
     params: &splashsurf_lib::Parameters<R>,
+    io_params: &io::FormatParameters,
 ) -> Result<(), anyhow::Error> {
     profile!("surface reconstruction cli");
 
-    let particle_positions = load_particle_positions(&paths.input_file).with_context(|| {
-        format!(
-            "Failed to load particle positions from file '{}'",
-            paths.input_file.display()
-        )
-    })?;
+    let particle_positions = load_particle_positions(&paths.input_file, &io_params.input)
+        .with_context(|| {
+            format!(
+                "Failed to load particle positions from file '{}'",
+                paths.input_file.display()
+            )
+        })?;
 
     let reconstruction =
         splashsurf_lib::reconstruct_surface::<I, R>(particle_positions.as_slice(), &params)?;
@@ -123,6 +126,7 @@ pub(crate) fn entry_point_generic<I: Index, R: Real>(
 
 fn load_particle_positions<R: Real, P: AsRef<Path>>(
     input_file: P,
+    _format_params: &io::InputFormatParameters,
 ) -> Result<Vec<Vector3<R>>, anyhow::Error> {
     let input_file = input_file.as_ref();
     info!("Loading dataset from \"{}\"...", input_file.display());

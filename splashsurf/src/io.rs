@@ -12,6 +12,33 @@ use vtkio::{export_be, import_be};
 
 use splashsurf_lib::Real;
 
+/// File format parameters for all io
+#[derive(Clone, Debug, Default)]
+pub struct FormatParameters {
+    pub input: InputFormatParameters,
+    pub output: OutputFormatParameters,
+}
+
+/// File format parameters for input files
+#[derive(Clone, Debug)]
+pub struct InputFormatParameters {}
+
+impl Default for InputFormatParameters {
+    fn default() -> Self {
+        Self {}
+    }
+}
+
+/// File format parameters for output files
+#[derive(Clone, Debug)]
+pub struct OutputFormatParameters {}
+
+impl Default for OutputFormatParameters {
+    fn default() -> Self {
+        Self {}
+    }
+}
+
 pub fn write_vtk<P: AsRef<Path>>(
     data: impl Into<DataSet>,
     filename: P,
