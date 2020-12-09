@@ -109,19 +109,24 @@ fn run_splashsurf() -> Result<(), anyhow::Error> {
         .context("Failed processing parameters from command line")?;
 
     if cmd_args.parallelize_over_files {
-        paths.par_iter().for_each(|path| {
-            if let Err(e) = reconstruction::entry_point(path, &args) {
-                log_error(&e);
-                panic!();
-            }
-        });
+        paths.par_iter().try_for_each(|path| {
+            reconstruction::entry_point(path, &args)
+                .with_context(|| {
+                    format!(
+                        "Error while processing input file '{}' from a file sequence",
+                        path.input_file.display()
+                    )
+                })
+                .map_err(|err| {
+                    // Already log the error in case there are multiple errors
+                    log_error(&err);
+                    err
+                })
+        })?;
     } else {
-        paths.iter().for_each(|path| {
-            if let Err(e) = reconstruction::entry_point(path, &args) {
-                log_error(&e);
-                panic!();
-            }
-        });
+        paths
+            .iter()
+            .try_for_each(|path| reconstruction::entry_point(path, &args))?;
     }
 
     info!("Finished processing all inputs.");
@@ -317,7 +322,7 @@ impl ReconstrunctionRunnerPathCollection {
     }
 }
 
-// Convert raw command line arguments to more useful types
+// Convert input file command line arguments to internal representation
 impl TryFrom<&CommandlineArgs> for ReconstrunctionRunnerPathCollection {
     type Error = anyhow::Error;
 
