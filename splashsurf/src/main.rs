@@ -1,15 +1,14 @@
-extern crate ply_rs;
-
 mod io;
 mod reconstruction;
 
 use std::convert::TryFrom;
+use std::env;
 use std::fs;
 use std::panic;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context};
-use log::{error, info};
+use log::{error, info, warn};
 use rayon::prelude::*;
 use splashsurf_lib::nalgebra::Vector3;
 use splashsurf_lib::AxisAlignedBoundingBox3d;
@@ -30,7 +29,7 @@ use structopt::StructOpt;
     about = "Surface reconstruction for particle data from SPH simulations (https://github.com/w1th0utnam3/splashsurf)"
 )]
 struct CommandlineArgs {
-    /// Path to the input file where the particle positions are stored (supported formats: VTK, binary XYZ)
+    /// Path to the input file where the particle positions are stored (supported formats: VTK, binary f32 XYZ, PLY)
     #[structopt(parse(from_os_str))]
     input_file: PathBuf,
     /// Filename for writing the reconstructed surface to disk
@@ -90,31 +89,37 @@ struct CommandlineArgs {
     parallelize_over_particles: bool,
 }
 
-fn main() -> Result<(), anyhow::Error> {
-    // Panic hook for easier debugging
-    panic::set_hook(Box::new(|panic_info| {
-        println!("Panic occurred: {}", panic_info);
-        println!("Break here.");
-    }));
+/// Prints an anyhow error and its full error chain using the log::error macro
+fn log_error(err: &anyhow::Error) {
+    error!("Error occured: {}", err);
+    err.chain()
+        .skip(1)
+        .for_each(|cause| error!("  caused by: {}", cause));
+}
 
-    initialize_logging()?;
+fn run_splashsurf() -> Result<(), anyhow::Error> {
+    initialize_logging().context("Failed to initialize logging")?;
+    log_program_info();
 
     let cmd_args = CommandlineArgs::from_args();
-    let paths = ReconstrunctionRunnerPathCollection::try_from(&cmd_args)?.collect();
-    let args = ReconstructionRunnerArgs::try_from(&cmd_args)?;
+    let paths = ReconstrunctionRunnerPathCollection::try_from(&cmd_args)
+        .context("Failed parsing input file path(s) from command line")?
+        .collect();
+    let args = ReconstructionRunnerArgs::try_from(&cmd_args)
+        .context("Failed processing parameters from command line")?;
 
     if cmd_args.parallelize_over_files {
         paths.par_iter().for_each(|path| {
-            if let Err(e) = reconstruction::entry_point_f64(path, &args) {
-                println!("Error occurred: {:?}", e);
-                panic!()
+            if let Err(e) = reconstruction::entry_point(path, &args) {
+                log_error(&e);
+                panic!();
             }
         });
     } else {
         paths.iter().for_each(|path| {
-            if let Err(e) = reconstruction::entry_point_f64(path, &args) {
-                println!("Error occurred: {:?}", e);
-                panic!()
+            if let Err(e) = reconstruction::entry_point(path, &args) {
+                log_error(&e);
+                panic!();
             }
         });
     }
@@ -127,6 +132,24 @@ fn main() -> Result<(), anyhow::Error> {
         .for_each(|l| info!("{}", l));
 
     Ok(())
+}
+
+fn main() -> Result<(), anyhow::Error> {
+    /*
+    // Panic hook for easier debugging
+    panic::set_hook(Box::new(|panic_info| {
+        println!("Panic occurred: {}", panic_info);
+        println!("Add breakpoint here for debugging.");
+    }));
+    */
+
+    std::process::exit(match run_splashsurf() {
+        Ok(_) => 0,
+        Err(err) => {
+            log_error(&err);
+            1
+        }
+    });
 }
 
 /// All arguments that can be supplied to the surface reconstruction tool converted to useful types
@@ -143,6 +166,10 @@ impl TryFrom<&CommandlineArgs> for ReconstructionRunnerArgs {
         // Convert domain args to aabb
         let domain_aabb = match (&args.domain_min, &args.domain_max) {
             (Some(domain_min), Some(domain_max)) => {
+                // This should already be ensured by StructOpt parsing
+                assert!(domain_min.len() == 3);
+                assert!(domain_max.len() == 3);
+
                 // TODO: Check that domain_min < domain_max
                 let to_na_vec = |v: &Vec<f64>| -> Vector3<f64> { Vector3::new(v[0], v[1], v[2]) };
 
@@ -210,11 +237,11 @@ impl ReconstrunctionRunnerPathCollection {
             // Ensure that output directory exists/create it
             if let Some(output_dir) = output_file.parent() {
                 if !output_dir.exists() {
-                    info!("The output directory '{}' of the output file '{}' does not exist. Trying to create it now...", output_dir.to_string_lossy(), output_file.to_string_lossy());
+                    info!("The output directory '{}' of the output file '{}' does not exist. Trying to create it now...", output_dir.display(), output_file.display());
                     fs::create_dir_all(output_dir).with_context(|| {
                         format!(
-                            "Unable to create output director '{}'",
-                            output_dir.to_string_lossy()
+                            "Unable to create output directory '{}'",
+                            output_dir.display()
                         )
                     })?;
                 }
@@ -240,6 +267,7 @@ impl ReconstrunctionRunnerPathCollection {
         }
     }
 
+    /// Returns an input/output file path struct for each input file (basically one task per input file)
     fn collect(&self) -> Vec<ReconstructionRunnerPaths> {
         if self.is_sequence {
             let input_file = &self.input_file;
@@ -298,8 +326,10 @@ impl TryFrom<&CommandlineArgs> for ReconstrunctionRunnerPathCollection {
 
         // If the input file exists, a single input file should be processed
         if args.input_file.is_file() {
+            // Use the user defined output file name if provided...
             let output_file = if let Some(output_file) = &args.output_file {
                 output_file.clone()
+            // ...otherwise, generate one based on the input filename
             } else {
                 let input_stem = args.input_file.file_stem().unwrap().to_string_lossy();
                 let input_extension = args.input_file.extension().unwrap().to_string_lossy();
@@ -314,28 +344,33 @@ impl TryFrom<&CommandlineArgs> for ReconstrunctionRunnerPathCollection {
                 args.output_dm_points.clone(),
                 args.output_dm_grid.clone(),
             )
-        // Otherwise its possible that a sequence of files should be processed
+        // If the input file does not exist, its possible that a sequence of files should be processed
         } else {
+            warn!("The input file '{}' does not exist. Assuming this is a pattern for a sequence of files.", args.input_file.display());
+
+            // Make sure that the supposed sequence pattern ends with a filename (and not with a path separator)
             let input_filename = match args.input_file.file_name() {
                 Some(input_filename) => input_filename.to_string_lossy(),
                 None => {
                     return Err(anyhow!(
                         "The input file path '{}' does not end with a filename",
-                        args.input_file.to_string_lossy()
+                        args.input_file.display()
                     ))
                 }
             };
 
+            // Make sure that the parent directory of the sequence pattern exists
             if let Some(input_dir) = args.input_file.parent() {
-                if !input_dir.is_dir() {
+                if !input_dir.is_dir() && input_dir != Path::new("") {
                     return Err(anyhow!(
                         "The parent directory '{}' of the input file path '{}' does not exist",
-                        input_dir.to_string_lossy(),
-                        args.input_file.to_string_lossy()
+                        input_dir.display(),
+                        args.input_file.display()
                     ));
                 }
             }
 
+            // Make sure that we have a placeholder '{}' in the filename part of the sequence pattern
             if input_filename.contains("{}") {
                 let output_filename =
                     input_filename.replace("{}", &format!("{}_{{}}", output_suffix));
@@ -350,8 +385,8 @@ impl TryFrom<&CommandlineArgs> for ReconstrunctionRunnerPathCollection {
                 )
             } else {
                 return Err(anyhow!(
-                    "Input file does not exist or invalid pattern in input file path '{}'",
-                    args.input_file.to_string_lossy()
+                    "Input file does not exist or invalid file sequence pattern in input file path '{}'",
+                    args.input_file.display()
                 ));
             }
         }
@@ -429,6 +464,26 @@ fn initialize_logging() -> Result<(), anyhow::Error> {
     }
 
     Ok(())
+}
+
+fn log_program_info() {
+    info!(
+        "{} v{} ({})",
+        env!("CARGO_BIN_NAME"),
+        env!("CARGO_PKG_VERSION"),
+        env!("CARGO_PKG_NAME")
+    );
+
+    let cmd_line: String = {
+        let mut cmd_line = String::new();
+        for arg in env::args() {
+            cmd_line.push_str(&arg);
+            cmd_line.push(' ');
+        }
+        cmd_line.pop();
+        cmd_line
+    };
+    info!("Called with command line: {}", cmd_line);
 }
 
 /// Returns the coarse_prof::write output as a string

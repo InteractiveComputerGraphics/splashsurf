@@ -12,7 +12,7 @@ use crate::{ReconstructionRunnerArgs, ReconstructionRunnerPaths};
 
 // TODO: Detect smallest index type (i.e. check if ok to use i32/u32 as index)
 
-pub(crate) fn entry_point_f64(
+pub(crate) fn entry_point(
     paths: &ReconstructionRunnerPaths,
     args: &ReconstructionRunnerArgs,
 ) -> Result<(), anyhow::Error> {

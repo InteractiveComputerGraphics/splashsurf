@@ -16,7 +16,7 @@ pub fn write_vtk<P: AsRef<Path>>(
     data: impl Into<DataSet>,
     filename: P,
     title: &str,
-) -> Result<(), vtkio::Error> {
+) -> Result<(), anyhow::Error> {
     let vtk_file = Vtk {
         version: Version::new((4, 1)),
         title: title.to_string(),
@@ -24,11 +24,10 @@ pub fn write_vtk<P: AsRef<Path>>(
     };
 
     let filename = filename.as_ref();
-
     if let Some(dir) = filename.parent() {
-        create_dir_all(dir)?;
+        create_dir_all(dir).context("Failed to create parent directory of output file")?;
     }
-    export_be(vtk_file, filename)
+    export_be(vtk_file, filename).context("Error while writing VTK output to file")
 }
 
 pub fn read_vtk<P: AsRef<Path>>(filename: P) -> Result<DataSet, vtkio::Error> {
