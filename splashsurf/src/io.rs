@@ -5,12 +5,11 @@ use std::path::Path;
 use anyhow::{anyhow, Context};
 use coarse_prof::profile;
 use log::info;
-use ply_rs as ply;
-use ply_rs::ply::Property;
 
 use splashsurf_lib::nalgebra::Vector3;
 use splashsurf_lib::Real;
 
+pub mod ply_format;
 pub mod vtk_format;
 pub mod xyz_format;
 
@@ -59,7 +58,7 @@ pub fn load_particle_positions<R: Real, P: AsRef<Path>>(
         match extension.to_lowercase().as_str() {
             "vtk" => vtk_format::particles_from_vtk(&input_file)?,
             "xyz" => xyz_format::particles_from_xyz(&input_file)?,
-            "ply" => particles_from_ply(&input_file)?,
+            "ply" => ply_format::particles_from_ply(&input_file)?,
             _ => {
                 return Err(anyhow!(
                     "Unsupported file format extension \"{}\" of particle file",
@@ -79,49 +78,6 @@ pub fn load_particle_positions<R: Real, P: AsRef<Path>>(
     );
 
     Ok(particle_positions)
-}
-
-pub fn particles_from_ply<R: Real, P: AsRef<Path>>(
-    ply_file: P,
-) -> Result<Vec<Vector3<R>>, anyhow::Error> {
-    let mut ply_file = std::fs::File::open(ply_file).unwrap();
-    let parser = ply::parser::Parser::<ply::ply::DefaultElement>::new();
-
-    let ply = parser
-        .read_ply(&mut ply_file)
-        .context("Failed to read PLY file")?;
-    let elements = ply
-        .payload
-        .get("vertex")
-        .ok_or(anyhow!("PLY file is missing a 'vertex' element"))?;
-
-    let particles = elements
-        .into_iter()
-        .map(|e| {
-            let vertex = (
-                e.get("x").unwrap(),
-                e.get("y").unwrap(),
-                e.get("z").unwrap(),
-            );
-
-            let v = match vertex {
-                (Property::Float(x), Property::Float(y), Property::Float(z)) => Vector3::new(
-                    R::from_f32(*x).unwrap(),
-                    R::from_f32(*y).unwrap(),
-                    R::from_f32(*z).unwrap(),
-                ),
-                _ => {
-                    return Err(anyhow!(
-                        "Vertex properties have wrong PLY data type (expected float)"
-                    ))
-                }
-            };
-
-            Ok(v)
-        })
-        .collect::<Result<Vec<_>, anyhow::Error>>()?;
-
-    Ok(particles)
 }
 
 #[allow(dead_code)]
