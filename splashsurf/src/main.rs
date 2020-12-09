@@ -81,10 +81,10 @@ struct CommandlineArgs {
     /// Optional filename for writing the grid representation of the intermediate density map to disk
     #[structopt(long, parse(from_os_str))]
     output_dm_grid: Option<PathBuf>,
-    /// Whether to enable multi-threading to process multiple input files in parallel, conflicts with --mt-particles
+    /// Flag to enable multi-threading to process multiple input files in parallel, conflicts with --mt-particles
     #[structopt(long = "mt-files", conflicts_with = "parallelize-over-particles")]
     parallelize_over_files: bool,
-    /// Whether to enable multi-threading for a single input file by processing chunks of particles in parallel, conflicts with --mt-files
+    /// Flag to enable multi-threading for a single input file by processing chunks of particles in parallel, conflicts with --mt-files
     #[structopt(long = "mt-particles", conflicts_with = "parallelize-over-files")]
     parallelize_over_particles: bool,
 }

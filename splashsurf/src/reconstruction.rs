@@ -1,10 +1,7 @@
-use std::path::Path;
-
 use anyhow::{anyhow, Context};
 use coarse_prof::profile;
 use log::info;
 use splashsurf_lib::mesh::PointCloud3d;
-use splashsurf_lib::nalgebra::Vector3;
 use splashsurf_lib::{density_map, Index, Real};
 
 use crate::io;
@@ -44,7 +41,7 @@ pub(crate) fn entry_point_generic<I: Index, R: Real>(
 ) -> Result<(), anyhow::Error> {
     profile!("surface reconstruction cli");
 
-    let particle_positions = load_particle_positions(&paths.input_file, &io_params.input)
+    let particle_positions = io::load_particle_positions(&paths.input_file, &io_params.input)
         .with_context(|| {
             format!(
                 "Failed to load particle positions from file '{}'",
@@ -65,7 +62,7 @@ pub(crate) fn entry_point_generic<I: Index, R: Real>(
             "Writing surface mesh to \"{}\"...",
             paths.output_file.to_string_lossy()
         );
-        io::write_vtk(mesh, &paths.output_file, "mesh").with_context(|| {
+        io::vtk_format::write_vtk(mesh, &paths.output_file, "mesh").with_context(|| {
             format!(
                 "Failed to write reconstructed surface to output file '{}'",
                 paths.output_file.to_string_lossy()
@@ -92,7 +89,7 @@ pub(crate) fn entry_point_generic<I: Index, R: Real>(
             output_density_map_points_file.to_string_lossy()
         );
 
-        io::write_vtk(
+        io::vtk_format::write_vtk(
             &point_cloud,
             output_density_map_points_file,
             "density_map_points",
@@ -112,7 +109,7 @@ pub(crate) fn entry_point_generic<I: Index, R: Real>(
             output_density_map_grid_file.to_string_lossy()
         );
 
-        io::write_vtk(
+        io::vtk_format::write_vtk(
             density_mesh.to_dataset(),
             output_density_map_grid_file,
             "density_map",
@@ -122,46 +119,4 @@ pub(crate) fn entry_point_generic<I: Index, R: Real>(
     }
 
     Ok(())
-}
-
-fn load_particle_positions<R: Real, P: AsRef<Path>>(
-    input_file: P,
-    _format_params: &io::InputFormatParameters,
-) -> Result<Vec<Vector3<R>>, anyhow::Error> {
-    let input_file = input_file.as_ref();
-    info!("Loading dataset from \"{}\"...", input_file.display());
-
-    let particle_positions = if let Some(extension) = input_file.extension() {
-        profile!("loading particle positions");
-
-        let extension = extension
-            .to_str()
-            .ok_or(anyhow!("Invalid extension of particle file",))?;
-
-        match extension.to_lowercase().as_str() {
-            "vtk" => {
-                let sph_dataset = io::read_vtk(&input_file)?;
-                io::particles_from_dataset(&sph_dataset)?
-            }
-            "xyz" => io::particles_from_xyz(&input_file)?,
-            "ply" => io::particles_from_ply(&input_file)?,
-            _ => {
-                return Err(anyhow!(
-                    "Unsupported file format extension '{}' of particle file",
-                    extension
-                ));
-            }
-        }
-    } else {
-        return Err(anyhow!(
-            "Unable to detect file format of particle file (file name has to end with supported extension)",
-        ));
-    };
-
-    info!(
-        "Loaded dataset with {} particle positions.",
-        particle_positions.len()
-    );
-
-    Ok(particle_positions)
 }
