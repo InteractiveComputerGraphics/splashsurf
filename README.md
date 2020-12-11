@@ -80,7 +80,7 @@ OPTIONS:
 
 ARGS:
     <input-file>    Path to the input file where the particle positions are stored (supported formats: VTK, binary
-                    XYZ, ply)
+                    XYZ, PLY)
 ```
 For example:
 ```
@@ -127,6 +127,8 @@ With these parameters, a scene with 13353401 particles is reconstructed in nearl
 ```
 
 ## Input file formats
+
+TODO: Document more details about the expected formats of supported file extensions
 
 ### Ply
 

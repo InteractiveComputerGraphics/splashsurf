@@ -1,3 +1,7 @@
+## Version 0.3.0
+
+ - Move `vtkio` convenience trait implementations in `splashsurf_lib` behind a non-default feature flag (flag `vtk-extras`)
+
 ## Version 0.2.0
 
  - Add support for reading PLY files (https://github.com/w1th0utnam3/splashsurf/pull/1)

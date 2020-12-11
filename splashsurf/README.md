@@ -1,5 +1,10 @@
-# ![splashsurf logo](https://raw.githubusercontent.com/w1th0utnam3/splashsurf/master/logos/logo_small.svg "splashsurf")
-Command-line tool for surface reconstruction of SPH particle data
+# ![splashsurf logo](logos/logo_small.svg "splashsurf")
+[![On crates.io](https://img.shields.io/crates/v/splashsurf)](https://crates.io/crates/splashsurf)
+[![On docs.rs](https://docs.rs/splashsurf_lib/badge.svg)](https://docs.rs/splashsurf_lib)
+[![License: MIT](https://img.shields.io/crates/l/splashsurf)](https://github.com/w1th0utnam3/splashsurf/blob/master/LICENSE)
+![Build and test GitHub Actions workflow](https://github.com/w1th0utnam3/splashsurf/workflows/Build%20and%20test/badge.svg)
+
+Surface reconstruction for particle data from SPH simulations, written in Rust.
 
 ## Introduction
 
@@ -75,7 +80,7 @@ OPTIONS:
 
 ARGS:
     <input-file>    Path to the input file where the particle positions are stored (supported formats: VTK, binary
-                    XYZ)
+                    XYZ, PLY)
 ```
 For example:
 ```
@@ -120,6 +125,14 @@ With these parameters, a scene with 13353401 particles is reconstructed in nearl
 [2020-08-25T15:52:59.879167+02:00][splashsurf][INFO]       triangulate: 4.78%, 178.50ms/call @ 0.04Hz
 [2020-08-25T15:52:59.879171+02:00][splashsurf][INFO]   write surface mesh to file: 2.02%, 511.21ms/call @ 0.04Hz
 ```
+
+## Input file formats
+
+TODO: Document more details about the expected formats of supported file extensions
+
+### Ply
+
+The ply format expects an element definition 'vertex', with element properties of 'x,y,z'
 
 ## License
 
