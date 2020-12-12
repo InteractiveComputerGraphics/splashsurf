@@ -1,4 +1,3 @@
-use coarse_prof::profile;
 use log::info;
 use nalgebra::Vector3;
 

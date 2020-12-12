@@ -21,6 +21,7 @@ exclude = [
 [features]
 default = []
 vtk_extras = ["vtkio"]
+profiling = ["coarse-prof"]
 
 [dependencies]
 log = "0.4"
@@ -28,7 +29,7 @@ nalgebra = "0.23"
 num = "0.3"
 anyhow = "1.0"
 thiserror = "1.0"
-coarse-prof = "0.2"
+coarse-prof = { version = "0.2", optional = true }
 itertools = "0.9"
 rayon = "1.5"
 dashmap = "3.11"

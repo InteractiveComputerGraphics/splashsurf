@@ -1,4 +1,3 @@
-use coarse_prof::profile;
 use nalgebra::Vector3;
 use rayon::prelude::*;
 

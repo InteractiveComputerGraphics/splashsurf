@@ -1,4 +1,3 @@
-use coarse_prof::profile;
 use dashmap::ReadOnlyView as ReadDashMap;
 use log::{info, warn};
 use nalgebra::Vector3;

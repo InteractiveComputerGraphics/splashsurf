@@ -5,6 +5,22 @@
 /// Re-export the version of nalgebra used by this crate
 pub use nalgebra;
 
+#[cfg(feature = "profiling")]
+/// Invokes coarse_prof::profile! with the given expression
+macro_rules! profile {
+    ($body:expr) => {
+        coarse_prof::profile!($body);
+    };
+}
+
+#[cfg(not(feature = "profiling"))]
+/// No-op macro if profiling is disabled
+macro_rules! profile {
+    ($body:expr) => {
+        $body
+    };
+}
+
 mod aabb;
 /// Computation of sparse density maps (evaluation of particle densities and mapping onto sparse grids)
 pub mod density_map;
@@ -27,7 +43,6 @@ pub use density_map::DensityMap;
 pub use numeric_types::{Index, Real, ThreadSafe};
 pub use uniform_grid::{GridConstructionError, UniformGrid};
 
-use coarse_prof::profile;
 use log::info;
 use mesh::TriMesh3d;
 use nalgebra::Vector3;
@@ -89,6 +104,7 @@ pub struct Parameters<R: Real> {
     pub enable_multi_threading: bool,
 }
 
+/// Macro version of Option::map that allows using e.g. using the ?-operator in the map expression
 macro_rules! map_option {
     ($some_optional:expr, $value_identifier:ident => $value_transformation:expr) => {
         match $some_optional {
