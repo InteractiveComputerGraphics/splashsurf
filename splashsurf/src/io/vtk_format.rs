@@ -4,8 +4,8 @@ use std::path::Path;
 use anyhow::{anyhow, Context};
 
 use splashsurf_lib::nalgebra::Vector3;
-use splashsurf_lib::Real;
 use splashsurf_lib::vtkio;
+use splashsurf_lib::Real;
 
 use vtkio::model::{ByteOrder, DataSet, Version, Vtk};
 use vtkio::{export_be, import_be, IOBuffer};
