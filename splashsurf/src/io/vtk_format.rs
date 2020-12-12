@@ -2,11 +2,13 @@ use std::fs::create_dir_all;
 use std::path::Path;
 
 use anyhow::{anyhow, Context};
-use vtkio::model::{ByteOrder, DataSet, Version, Vtk};
-use vtkio::{export_be, import_be, IOBuffer};
 
 use splashsurf_lib::nalgebra::Vector3;
 use splashsurf_lib::Real;
+use splashsurf_lib::vtkio;
+
+use vtkio::model::{ByteOrder, DataSet, Version, Vtk};
+use vtkio::{export_be, import_be, IOBuffer};
 
 pub fn particles_from_vtk<R: Real, P: AsRef<Path>>(
     vtk_file: P,

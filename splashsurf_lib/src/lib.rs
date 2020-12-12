@@ -4,6 +4,9 @@
 
 /// Re-export the version of nalgebra used by this crate
 pub use nalgebra;
+/// Re-export the version of vtkio used by this crate, if vtk support is enabled
+#[cfg(feature = "vtk_extras")]
+pub use vtkio;
 
 #[cfg(feature = "profiling")]
 /// Invokes coarse_prof::profile! with the given expression
