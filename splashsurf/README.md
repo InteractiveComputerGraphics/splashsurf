@@ -6,6 +6,18 @@
 
 Surface reconstruction library and CLI for particle data from SPH simulations, written in Rust.
 
+**Contents**
+- [The `splashsurf` CLI](#the-splashsurf-cli)
+  - [Introduction](#introduction)
+  - [Notes](#notes)
+  - [Installation](#installation)
+  - [Usage](#usage)
+    - [Basic usage](#basic-usage)
+    - [Sequences of files](#sequences-of-files)
+  - [Input file formats](#input-file-formats)
+    - [Ply](#ply)
+- [License](#license)
+
 # The `splashsurf` CLI
 
 The following sections mainly focus on the CLI of `splashsurf`. For more information on the library parts, see the [corresponding readme](https://github.com/w1th0utnam3/splashsurf/blob/master/splashsurf_lib/README.md) in the `splashsurf_lib` subfolder.

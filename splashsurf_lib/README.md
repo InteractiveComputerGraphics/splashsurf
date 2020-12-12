@@ -3,8 +3,13 @@ Library for surface reconstruction of SPH particle data
 
 The library is mainly used by the `splashsurf` command-line tool which is [also available](https://crates.io/crates/splashsurf) on crates.io.
 
-This readme is currently a placeholder that will be extended over time. 
-For now, check the [GitHub repository](https://github.com/w1th0utnam3/splashsurf) for more information.
+For more information about the CLI, check out the [readme in the root of the repository](https://github.com/w1th0utnam3/splashsurf).
+
+**Contents**
+- [splashsurf_lib](#splashsurf_lib)
+  - [Usage](#usage)
+  - [Feature flags](#feature-flags)
+  - [The surface reconstruction procedure](#the-surface-reconstruction-procedure)
 
 ## Usage
 
