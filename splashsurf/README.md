@@ -15,7 +15,9 @@ Surface reconstruction library and CLI for particle data from SPH simulations, w
     - [Basic usage](#basic-usage)
     - [Sequences of files](#sequences-of-files)
   - [Input file formats](#input-file-formats)
-    - [Ply](#ply)
+    - [VTK](#vtk)
+    - [PLY](#ply)
+    - [XYZ](#xyz)
 - [License](#license)
 
 # The `splashsurf` CLI
@@ -154,11 +156,17 @@ With these parameters, a scene with 13353401 particles is reconstructed in nearl
 
 ## Input file formats
 
-*TODO: Document more details about the expected format of supported file extensions*
+### VTK
 
-### Ply
+Files with the "`.vtk`" are loaded using [`vtkio`](https://crates.io/crates/vtkio). The VTK file is loaded as a big endian binary file and has to contain an "Unstructured Grid" with either `f32` or `f64` vertex coordinates. Any other data or attributes are ignored. Only the first "Unstructured Grid" is loaded, other entities are ignored.
 
-The ply format expects an element definition 'vertex', with element properties of 'x,y,z'
+### PLY
+
+Files with the "`.ply`" extension are loaded using [`ply-rs`](https://crates.io/crates/ply-rs). The PLY file has to contain an element called "`vertex`" with the properties `x`, `y` and `z` of type `f32`/["`Property::Float`"](https://docs.rs/ply-rs/0.1.3/ply_rs/ply/enum.Property.html#variant.Float). Any other properties or elements are ignored.
+
+### XYZ
+
+Files with the "`.xyz`" extension are interpreted as raw bytes of `f32` values in native endianness of the system. Three consecutive `f32`s represent a (x,y,z) coordinate triplet of a fluid particle. 
 
 # License
 
