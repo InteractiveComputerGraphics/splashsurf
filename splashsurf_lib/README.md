@@ -8,7 +8,14 @@ For now, check the [GitHub repository](https://github.com/w1th0utnam3/splashsurf
 
 ## Usage
 
-*TODO: Describe main "entry points" of the library, parameters, inputs/outputs etc.*
+A reconstruction from particle positions is performed using the top-level `reconstruct_surface` function:
+```rust
+pub fn reconstruct_surface<I: Index, R: Real>(
+    particle_positions: &[Vector3<R>],
+    parameters: &Parameters<R>,
+) -> Result<SurfaceReconstruction<I, R>, ReconstructionError<I, R>>
+```
+See the [documentation of the crate](https://docs.rs/splashsurf_lib/latest/splashsurf_lib/) on docs.rs for more information on the usage.
 
 The library re-exports `nalgebra` to avoid version conflicts for users of the library.
 

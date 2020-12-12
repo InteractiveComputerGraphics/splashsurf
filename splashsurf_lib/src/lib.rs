@@ -55,6 +55,7 @@ use nalgebra::Vector3;
 use thiserror::Error as ThisError;
 
 // TODO: Add documentation of feature flags
+// TODO: Add documentation of the parameter struct
 
 // TODO: Remove anyhow/thiserror from lib?
 // TODO: Write more unit tests (e.g. AABB, UniformGrid, neighborhood search)
