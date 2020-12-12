@@ -20,10 +20,14 @@ As input, it supports particle positions from .vtk files and binary .xyz files (
 The implementation first computes the density of each particle using the typical SPH approach with a cubic kernel. 
 This density is then evaluated or mapped onto a sparse grid using spatial hashing in the support radius of each particle.
 This implies that memory is only allocated in areas where the fluid density is non-zero. This is in contrast to a naive approach where the marching cubes background grid is allocated for the whole domain. 
-Finally, the marching cubes reconstruction is performed only in those grid cells where the density values cross the surface threshold. Cells completely in the interior of the fluid are skipped.
+Finally, the marching cubes reconstruction is performed only in those grid cells where the density values cross the surface threshold. Cells completely in the interior of the fluid are skipped. For more details, please refer to the [readme of the library]((https://github.com/w1th0utnam3/splashsurf/blob/master/splashsurf_lib/README.md)).
+
+## Notes
 
 Due the use of hash maps and multi-threading (if enabled), the output of this implementation is not deterministic.
-In the future, flags may be added to switch the internally data structures to use binary trees for debugging.
+In the future, flags may be added to switch the internal data structures to use binary trees for debugging purposes.
+
+Note that for small numbers of fluid particles (i.e. in the low thousands or less) the multi-threaded implementation may have worse performance due to the worker pool overhead and looks on the map data structures (even though the library uses [`dashmap`](https://crates.io/crates/dashmap) which is more optimized for multi-threaded usage).
 
 As shown below, the tool can handle the output of large simulations.
 However, it was not tested with a wide range of parameters and may not be totally robust against corner-cases or extreme parameters.
@@ -38,6 +42,8 @@ cargo install splashsurf
 ```
 
 ## Usage
+
+### Basic usage
 
 ```
 USAGE:
@@ -130,6 +136,10 @@ With these parameters, a scene with 13353401 particles is reconstructed in nearl
 [2020-08-25T15:52:59.879171+02:00][splashsurf][INFO]   write surface mesh to file: 2.02%, 511.21ms/call @ 0.04Hz
 ```
 
+### Sequences of files
+
+*TODO: Describe syntax to reconstruct a sequence of files*
+
 ## Input file formats
 
 *TODO: Document more details about the expected format of supported file extensions*
@@ -138,7 +148,7 @@ With these parameters, a scene with 13353401 particles is reconstructed in nearl
 
 The ply format expects an element definition 'vertex', with element properties of 'x,y,z'
 
-## License
+# License
 
 For license information of this project, see the LICENSE file.
 The splashsurf logo is based on two graphics ([1](https://www.svgrepo.com/svg/295647/wave), [2](https://www.svgrepo.com/svg/295652/surfboard-surfboard)) published on SVG Repo under a CC0 ("No Rights Reserved") license.

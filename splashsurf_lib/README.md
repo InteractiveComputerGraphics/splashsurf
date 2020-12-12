@@ -23,4 +23,27 @@ For each of the features, `splashsurf_lib` re-exports the corresponding dependen
 
 ## The surface reconstruction procedure
 
-*TODO: Describe the surface reconstruction "algorithm" implemented in this crate*
+Currently, only one method based on a "spatial hashing" strategy is implemented.
+
+**Short summary**: The fluid density is evaluated or mapped onto a sparse grid using spatial hashing in the support radius of each fluid particle. This implies that memory is only allocated in areas where the fluid density is non-zero. This is in contrast to a naive approach where the marching cubes background grid is allocated for the whole domain. Finally, the marching cubes reconstruction is performed only in those grid cells where an edge crosses the surface threshold. Cells completely in the interior of the fluid are skipped in the marching cubes phase.
+
+**Individual steps**:
+ 1. Construct a "virtual background grid" with the desired resolution of the marching cubes algorithm. In the end, the procedure will place a single surface mesh vertex on each edge of this virtual grid, where the fluid surface crosses the edge (or rather, where the fluid density crosses the specified threshold). Virtual means that no storage is actually allocated for this grid yet; only its topology is used implicitly later.
+ 2. Compute the density of each fluid particle
+   - Perform a neighborhood search
+   - Per particle, evaluate an SPH sum over the neighbors to compute its density (based on input parameters of kernel radius and particle rest mass)
+ 3. Optional: filter out (or rather mask as inactive) single particles if the user provided a "splash detection radius". This is done by performing an additional neighborhood search using this splash detection radius instead of the kernel radius.
+ 4. Compute a "sparse density map": a map from the index of a vertex of the virtual background grid to the corresponding fluid density value. The map will only contain entries for vertices where the fluid density is non-zero. Construction of the map:
+    - Iterate over all active particles
+    - For each particle evaluate its kernel at all virtual background vertices that can be influenced by it (i.e. vertices inside its kernel radius)
+    - Add-assign the corresponding density contribution (kernel value times particle density) to the vertex entry in the density map
+ 5. Interpolate the density values at the vertices of each virtual background cell to points on the edges where the edge crosses the fluid surface
+    - Iterate over all vertices in the sparse density map
+    - Skip vertices where the density value is above the threshold to be considered inside of the fluid
+    - For each of the remaining vertices, check if any neighboring vertex (i.e. a vertex that is directly connected with it by an edge of the virtual background grid) is above the threshold
+    - If this is the case, an edge that crosses the fluid surface was found and the position of the surface on the edge can be calculated using linear interpolation
+    - This interpolated position is stored in a new map that maps indices of virtual background cells to structs containing the surface crossing points per edge. Entries are only created for cells with edges that actually cross the surface
+ 6. Triangulate the points on the edges using a marching cubes case table
+    - Iterate over all cells in the cell data map
+    - For each cell, look up the corresponding triangulation in a marching cubes LUT
+    - Emit the required triangles into the final mesh data structure
