@@ -1,10 +1,14 @@
-# ![splashsurf logo](logos/logo_small.svg "splashsurf")
+# ![splashsurf logo](https://raw.githubusercontent.com/w1th0utnam3/splashsurf/master/logos/logo_small.svg "splashsurf")
 [![On crates.io](https://img.shields.io/crates/v/splashsurf)](https://crates.io/crates/splashsurf)
 [![On docs.rs](https://docs.rs/splashsurf_lib/badge.svg)](https://docs.rs/splashsurf_lib)
 [![License: MIT](https://img.shields.io/crates/l/splashsurf)](https://github.com/w1th0utnam3/splashsurf/blob/master/LICENSE)
 ![Build and test GitHub Actions workflow](https://github.com/w1th0utnam3/splashsurf/workflows/Build%20and%20test/badge.svg)
 
-Surface reconstruction for particle data from SPH simulations, written in Rust.
+Surface reconstruction library and CLI for particle data from SPH simulations, written in Rust.
+
+# The `splashsurf` CLI
+
+The following sections mainly focus on the CLI of `splashsurf`. For more information on the library parts, see the [corresponding readme](https://github.com/w1th0utnam3/splashsurf/blob/master/splashsurf_lib/README.md) in the `splashsurf_lib` subfolder.
 
 ## Introduction
 
@@ -128,7 +132,7 @@ With these parameters, a scene with 13353401 particles is reconstructed in nearl
 
 ## Input file formats
 
-TODO: Document more details about the expected formats of supported file extensions
+*TODO: Document more details about the expected format of supported file extensions*
 
 ### Ply
 

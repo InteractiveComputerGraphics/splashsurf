@@ -498,6 +498,6 @@ fn log_program_info() {
 /// Returns the coarse_prof::write output as a string
 fn coarse_prof_write_string() -> Result<String, anyhow::Error> {
     let mut buffer = Vec::new();
-    coarse_prof::write(&mut buffer)?;
+    splashsurf_lib::coarse_prof::write(&mut buffer)?;
     Ok(String::from_utf8_lossy(buffer.as_slice()).into_owned())
 }

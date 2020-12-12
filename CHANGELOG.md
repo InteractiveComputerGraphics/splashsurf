@@ -1,8 +1,9 @@
 ## Version 0.3.0
 
  - Move `vtkio` convenience trait implementations in `splashsurf_lib` behind a non-default feature flag (flag `vtk-extras`). Flag is enabled in the CLI crate.
- - Re-export `vtkio` from lib, use this from CLI 
+ - Re-export `vtkio` from lib if feature is enabled and use this from CLI 
  - Move `coarse_prof` usage in `splashsurf_lib` behind a non-default feature flag (flag `profiling`). Flag is enabled in the CLI crate.
+ - Re-export `coarse_prof` from lib if feature is enabled and use this from CLI 
 
 ## Version 0.2.0
 

@@ -2,6 +2,9 @@
 //! Library for surface reconstruction using marching cubes for SPH particle data. Entry point is the [reconstruct_surface] function.
 //!
 
+/// Re-export the version of coarse_prof used by this crate, if profiling is enabled
+#[cfg(feature = "profiling")]
+pub use coarse_prof;
 /// Re-export the version of nalgebra used by this crate
 pub use nalgebra;
 /// Re-export the version of vtkio used by this crate, if vtk support is enabled

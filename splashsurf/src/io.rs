@@ -3,9 +3,8 @@ use std::io::{BufWriter, Write};
 use std::path::Path;
 
 use anyhow::{anyhow, Context};
-use coarse_prof::profile;
 use log::info;
-
+use splashsurf_lib::coarse_prof::profile;
 use splashsurf_lib::nalgebra::Vector3;
 use splashsurf_lib::Real;
 

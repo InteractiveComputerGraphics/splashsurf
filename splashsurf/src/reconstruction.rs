@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Context};
-use coarse_prof::profile;
 use log::info;
+use splashsurf_lib::coarse_prof::profile;
 use splashsurf_lib::mesh::PointCloud3d;
 use splashsurf_lib::{density_map, Index, Real};
 
