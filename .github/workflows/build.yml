@@ -19,7 +19,7 @@ jobs:
       - name: Check format
         run: cargo fmt -- --check
 
-  build workspace:
+  build_workspace:
 
     runs-on: ubuntu-latest
 
@@ -30,7 +30,7 @@ jobs:
     - name: Run tests
       run: cargo test --verbose
 
-  build lib (all features):
+  build_lib_all_features:
 
     runs-on: ubuntu-latest
 
@@ -41,7 +41,7 @@ jobs:
       - name: Run tests
         run: cargo test --package splashsurf_lib --all-features --verbose
 
-  build lib (no default features):
+  build_lib_no_default_features:
 
     runs-on: ubuntu-latest
 
