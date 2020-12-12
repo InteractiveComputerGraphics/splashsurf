@@ -10,7 +10,16 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
+  check_format:
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+      - name: Check format
+        run: cargo fmt -- --check
+
+  build workspace:
 
     runs-on: ubuntu-latest
 
@@ -21,11 +30,24 @@ jobs:
     - name: Run tests
       run: cargo test --verbose
 
-  check_format:
+  build lib (all features):
 
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v2
-    - name: Check format
-      run: cargo fmt -- --check
+      - uses: actions/checkout@v2
+      - name: Build
+        run: cargo build --package splashsurf_lib --all-features --verbose
+      - name: Run tests
+        run: cargo test --package splashsurf_lib --all-features --verbose
+
+  build lib (no default features):
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+      - name: Build
+        run: cargo build --package splashsurf_lib --no-default-features --verbose
+      - name: Run tests
+        run: cargo test --package splashsurf_lib --no-default-features --verbose
