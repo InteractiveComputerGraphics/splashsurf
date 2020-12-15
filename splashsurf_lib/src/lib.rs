@@ -122,7 +122,7 @@ macro_rules! map_option {
 }
 
 impl<R: Real> Parameters<R> {
-    /// Tries to convert the parameters from one real type to another real type, returns None if conversion fails
+    /// Tries to convert the parameters from one [Real] type to another [Real] type, returns None if conversion fails
     pub fn try_convert<T: Real>(&self) -> Option<Parameters<T>> {
         Some(Parameters {
             particle_radius: self.particle_radius.try_convert()?,

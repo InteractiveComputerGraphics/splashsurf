@@ -158,7 +158,7 @@ where
         self.translate(&(self.centroid() * R::one().neg()));
     }
 
-    /// Applies a uniform, local scaling to the AABB (as if it was centered at the origin)
+    /// Multiplies a uniform, local scaling to the AABB (i.e. multiplying its extents as if it was centered at the origin)
     pub fn scale_uniformly(&mut self, scaling: R) {
         let center = self.centroid();
         self.translate(&(&center * R::one().neg()));
@@ -183,7 +183,7 @@ where
         }
     }
 
-    /// Grows this AABB uniformly in all directions by the given scalar margin
+    /// Grows this AABB uniformly in all directions by the given scalar margin (i.e. adding the margin to min/max extents)
     pub fn grow_uniformly(&mut self, margin: R) {
         self.min = &self.min - &VectorN::repeat(margin);
         self.max = &self.max + &VectorN::repeat(margin);
