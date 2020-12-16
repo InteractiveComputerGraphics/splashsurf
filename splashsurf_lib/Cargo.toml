@@ -35,3 +35,5 @@ rayon = "1.5"
 dashmap = "3.11"
 fxhash = "0.2"
 vtkio = { version = "0.5", optional = true }
+thread_local = "1.0"
+num_cpus = "1.13"

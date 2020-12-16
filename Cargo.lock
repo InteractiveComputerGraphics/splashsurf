@@ -871,8 +871,10 @@ dependencies = [
  "log",
  "nalgebra",
  "num",
+ "num_cpus",
  "rayon",
  "thiserror",
+ "thread_local",
  "vtkio",
 ]
 
@@ -958,6 +960,15 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "thread_local"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d40c6d1b69745a6ec6fb1ca717914848da4b44ae29d9b3080cbee91d72a69b14"
+dependencies = [
+ "lazy_static",
 ]
 
 [[package]]

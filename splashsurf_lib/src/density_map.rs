@@ -1,7 +1,10 @@
+use std::cell::RefCell;
+
 use dashmap::ReadOnlyView as ReadDashMap;
 use log::{info, warn};
 use nalgebra::Vector3;
 use rayon::prelude::*;
+use thread_local::ThreadLocal;
 
 use crate::kernel::DiscreteSquaredDistanceCubicKernel;
 use crate::mesh::{HexMesh3d, MeshWithPointData};
@@ -375,7 +378,8 @@ pub fn parallel_generate_sparse_density_map<I: Index, R: Real>(
         }
     );
 
-    let sparse_densities = ParallelMapType::with_hasher(HashState::default());
+    // Each thread will write to its own local density map
+    let sparse_densities: ThreadLocal<RefCell<MapType<I, R>>> = ThreadLocal::new();
 
     // The number of cells in each direction from a particle that can be affected by a its compact support
     let half_supported_cells_real = (kernel_radius / cube_size).ceil();
@@ -407,12 +411,15 @@ pub fn parallel_generate_sparse_density_map<I: Index, R: Real>(
         );
         warn!("No particles can be found in this domain. Increase the domain of surface reconstruction to avoid this.");
     } else {
+        profile!("generate thread local maps");
+
         info!(
             "To take into account the kernel evaluation radius, the allowed domain of particles was restricted to: {:?}",
             allowed_domain
         );
 
-        let process_particle = |particle_data: (&Vector3<R>, R)| {
+        let process_particle = |sparse_densities: &mut MapType<I, R>,
+                                particle_data: (&Vector3<R>, R)| {
             let (particle, particle_density) = particle_data;
 
             // Skip particles outside of allowed domain
@@ -484,34 +491,96 @@ pub fn parallel_generate_sparse_density_map<I: Index, R: Real>(
             }
         };
 
-        // TODO: Use chunks for sparse indexing below
-        // TODO: Use something like num_cpus * 0.66
-        let chunk_size = particle_positions.len() / 8;
+        let compute_chunk_size = |num_particles: usize| -> usize {
+            let min_chunk_size = 100.max(num_particles);
+            let chunks_per_cpu = 10;
+
+            let num_cpus = num_cpus::get();
+            let num_chunks = chunks_per_cpu * num_cpus;
+            let chunk_size = (num_particles / num_chunks).min(min_chunk_size);
+
+            info!(
+                "Splitting particles into {} chunks (with {} particles each) for density map generation",
+                num_chunks, chunk_size
+            );
+            chunk_size
+        };
+
         match active_particles {
-            None => particle_positions
-                .par_chunks(chunk_size)
-                .zip(particle_densities.par_chunks(chunk_size))
-                .for_each(|(position_chunk, density_chunk)| {
-                    position_chunk
+            // Process particles, when no list of active particles was provided
+            None => {
+                let chunk_size = compute_chunk_size(particle_positions.len());
+                particle_positions
+                    .par_chunks(chunk_size)
+                    .zip(particle_densities.par_chunks(chunk_size))
+                    .for_each(|(position_chunk, density_chunk)| {
+                        // Obtain mutable reference to thread local density map
+                        let map = sparse_densities
+                            .get_or(|| RefCell::new(MapType::with_hasher(HashState::default())));
+                        let mut mut_map = map.borrow_mut();
+
+                        let process_particle_map = |particle_data: (&Vector3<R>, R)| {
+                            process_particle(&mut mut_map, particle_data);
+                        };
+
+                        assert_eq!(position_chunk.len(), density_chunk.len());
+                        position_chunk
+                            .iter()
+                            .zip(density_chunk.iter().copied())
+                            .for_each(process_particle_map);
+                    })
+            }
+            // Process particles, when only a subset is active
+            Some(indices) => {
+                let chunk_size = compute_chunk_size(indices.len());
+                indices.par_chunks(chunk_size).for_each(|index_chunk| {
+                    // Obtain mutable reference to thread local density map
+                    let map = sparse_densities
+                        .get_or(|| RefCell::new(MapType::with_hasher(HashState::default())));
+                    let mut mut_map = map.borrow_mut();
+
+                    let process_particle_map = |particle_data: (&Vector3<R>, R)| {
+                        process_particle(&mut mut_map, particle_data);
+                    };
+
+                    index_chunk
                         .iter()
-                        .zip(density_chunk.iter().copied())
-                        .for_each(process_particle)
-                }),
-            Some(indices) => indices
-                .par_iter()
-                .map(|&i| &particle_positions[i])
-                .zip(indices.par_iter().map(|&i| particle_densities[i]))
-                .for_each(process_particle),
+                        .map(|&i| (&particle_positions[i], particle_densities[i]))
+                        .for_each(process_particle_map);
+                });
+            }
         }
     }
 
-    info!(
-        "Sparse density map with {} point data values was constructed.",
-        sparse_densities.len()
-    );
-    info!("Construction of sparse density map done.");
+    {
+        profile!("merge thread local maps to global map");
 
-    sparse_densities.into()
+        let mut local_density_maps = sparse_densities
+            .into_iter()
+            .map(|m| m.into_inner())
+            .collect::<Vec<_>>();
+
+        info!(
+            "Merging {} thread local density maps to a single global map...",
+            local_density_maps.len()
+        );
+
+        // Merge local density maps in parallel by summing the density contributions
+        let global_density_map = ParallelMapType::with_hasher(HashState::default());
+        local_density_maps.par_iter_mut().for_each(|local_map| {
+            for (idx, density) in local_map.drain() {
+                *global_density_map.entry(idx).or_insert(R::zero()) += density;
+            }
+        });
+
+        info!(
+            "Global sparse density map with {} grid point data values was constructed.",
+            global_density_map.len()
+        );
+        info!("Construction of sparse density map done.");
+
+        global_density_map.into()
+    }
 }
 
 /// Converts a sparse density map (based on the implicit background grid) to a sparse hexahedral mesh with explicit coordinates for the cells' vertices.
