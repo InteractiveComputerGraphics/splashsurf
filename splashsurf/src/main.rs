@@ -108,7 +108,7 @@ fn run_splashsurf() -> Result<(), anyhow::Error> {
     let args = ReconstructionRunnerArgs::try_from(&cmd_args)
         .context("Failed processing parameters from command line")?;
 
-    if cmd_args.parallelize_over_files {
+    let result = if cmd_args.parallelize_over_files {
         paths.par_iter().try_for_each(|path| {
             reconstruction::entry_point(path, &args)
                 .with_context(|| {
@@ -122,21 +122,23 @@ fn run_splashsurf() -> Result<(), anyhow::Error> {
                     log_error(&err);
                     err
                 })
-        })?;
+        })
     } else {
         paths
             .iter()
-            .try_for_each(|path| reconstruction::entry_point(path, &args))?;
-    }
+            .try_for_each(|path| reconstruction::entry_point(path, &args))
+    };
 
-    info!("Finished processing all inputs.");
+    if result.is_ok() {
+        info!("Successfully finished processing all inputs.");
+    }
 
     coarse_prof_write_string()?
         .split("\n")
         .filter(|l| l.len() > 0)
         .for_each(|l| info!("{}", l));
 
-    Ok(())
+    result
 }
 
 fn main() -> Result<(), anyhow::Error> {
