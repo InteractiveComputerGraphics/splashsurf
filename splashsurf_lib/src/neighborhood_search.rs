@@ -104,10 +104,6 @@ pub fn parallel_search<I: Index, R: Real>(
     let grid = UniformGrid::from_aabb(&domain, search_radius).unwrap();
 
     // Map for spatially hashed storage of all particles (map from cell -> enclosed particles)
-    /*
-    let particles_per_cell_map =
-        sequential_generate_cell_to_particle_map::<I, R>(&grid, particle_positions);
-        */
     let particles_per_cell_map =
         parallel_generate_cell_to_particle_map::<I, R>(&grid, particle_positions).into_read_only();
     let particles_per_cell_vec: Vec<(I, Vec<usize>)> = particles_per_cell_map
@@ -188,9 +184,12 @@ pub fn parallel_search<I: Index, R: Real>(
 }
 
 /// Stats of a neighborhood list
+#[derive(Clone, Debug)]
 pub struct NeighborhoodStats {
     /// A histogram over the count of particle neighbors per particle (e.g. `histogram[0]` -> count of particles without neighbors, `histogram[1]` -> count of particles with one neighbor, etc.)
     pub histogram: Vec<usize>,
+    /// Number of particles that have neighbors
+    pub particles_with_neighbors: usize,
     /// The size of the largest neighborhood
     pub max_neighbors: usize,
     /// Average number of neighbors per particle (excluding particles without neighbors)
@@ -201,7 +200,7 @@ pub struct NeighborhoodStats {
 pub fn compute_neigborhood_stats(neighborhood_list: &Vec<Vec<usize>>) -> NeighborhoodStats {
     let mut max_neighbors = 0;
     let mut total_neighbors = 0;
-    let mut nonzero_neighborhoods = 0;
+    let mut particles_with_neighbors = 0;
     let mut neighbor_histogram: Vec<usize> = vec![0; 1];
 
     for neighborhood in neighborhood_list.iter() {
@@ -213,13 +212,13 @@ pub fn compute_neigborhood_stats(neighborhood_list: &Vec<Vec<usize>>) -> Neighbo
 
             max_neighbors = max_neighbors.max(neighborhood.len());
             total_neighbors += neighborhood.len();
-            nonzero_neighborhoods += 1;
+            particles_with_neighbors += 1;
         } else {
             neighbor_histogram[0] += 1;
         }
     }
 
-    let avg_neighbors = total_neighbors as f64 / nonzero_neighborhoods as f64;
+    let avg_neighbors = total_neighbors as f64 / particles_with_neighbors as f64;
 
     /*
     println!(
@@ -236,6 +235,7 @@ pub fn compute_neigborhood_stats(neighborhood_list: &Vec<Vec<usize>>) -> Neighbo
 
     NeighborhoodStats {
         histogram: neighbor_histogram,
+        particles_with_neighbors,
         max_neighbors,
         avg_neighbors,
     }

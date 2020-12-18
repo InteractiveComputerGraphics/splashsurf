@@ -9,7 +9,7 @@ use thread_local::ThreadLocal;
 use crate::kernel::DiscreteSquaredDistanceCubicKernel;
 use crate::mesh::{HexMesh3d, MeshWithPointData};
 use crate::uniform_grid::UniformGrid;
-use crate::{new_map, HashState, Index, MapType, ParallelMapType, Real};
+use crate::{new_map, utils, HashState, Index, MapType, ParallelMapType, Real};
 
 /// Computes the individual densities of particles using a standard SPH sum
 #[inline(never)]
@@ -491,25 +491,13 @@ pub fn parallel_generate_sparse_density_map<I: Index, R: Real>(
             }
         };
 
-        let compute_chunk_size = |num_particles: usize| -> usize {
-            let min_chunk_size = 100.max(num_particles);
-            let chunks_per_cpu = 10;
-
-            let num_cpus = num_cpus::get();
-            let num_chunks = chunks_per_cpu * num_cpus;
-            let chunk_size = (num_particles / num_chunks).min(min_chunk_size);
-
-            info!(
-                "Splitting particles into {} chunks (with {} particles each) for density map generation",
-                num_chunks, chunk_size
-            );
-            chunk_size
-        };
-
         match active_particles {
             // Process particles, when no list of active particles was provided
             None => {
-                let chunk_size = compute_chunk_size(particle_positions.len());
+                let chunk_size = utils::ChunkSize::new(particle_positions.len())
+                    .with_log("particles")
+                    .chunk_size;
+
                 particle_positions
                     .par_chunks(chunk_size)
                     .zip(particle_densities.par_chunks(chunk_size))
@@ -532,7 +520,10 @@ pub fn parallel_generate_sparse_density_map<I: Index, R: Real>(
             }
             // Process particles, when only a subset is active
             Some(indices) => {
-                let chunk_size = compute_chunk_size(indices.len());
+                let chunk_size = utils::ChunkSize::new(indices.len())
+                    .with_log("active particles")
+                    .chunk_size;
+
                 indices.par_chunks(chunk_size).for_each(|index_chunk| {
                     // Obtain mutable reference to thread local density map
                     let map = sparse_densities

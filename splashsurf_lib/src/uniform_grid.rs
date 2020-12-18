@@ -41,6 +41,7 @@ pub type Axis = CartesianAxis3d;
 
 /// Enum for the cartesian coordinate axes in 3D
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[repr(u8)]
 pub enum CartesianAxis3d {
     X = 0,
     Y = 1,
@@ -49,6 +50,7 @@ pub enum CartesianAxis3d {
 
 /// Indicates a direction on a number line or coordinate axis
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[repr(u8)]
 pub enum Direction {
     Negative = 0,
     Positive = 1,
@@ -719,6 +721,16 @@ impl Direction {
         &ALL_DIRECTIONS
     }
 
+    /// Constructs a new positive or negative direction depending on the flag
+    #[inline(always)]
+    pub const fn from_bool(is_positive: bool) -> Self {
+        if is_positive {
+            Direction::Positive
+        } else {
+            Direction::Negative
+        }
+    }
+
     /// Adds or subtracts the given step from the value depending on the direction
     /// ```ignore
     /// use crate::splashsurf_lib::uniform_grid::Direction;
@@ -761,7 +773,10 @@ impl Direction {
     /// ```
     #[inline(always)]
     pub const fn is_positive(&self) -> bool {
-        *self as i32 == 1
+        match self {
+            Direction::Positive => true,
+            Direction::Negative => false,
+        }
     }
 
     /// Returns whether the direction is negative
