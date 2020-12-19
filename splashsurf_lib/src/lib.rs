@@ -40,7 +40,8 @@ pub mod mesh;
 /// Simple neighborhood search based on spatial hashing
 pub mod neighborhood_search;
 mod numeric_types;
-mod octree;
+/// Octree implementation to spatially partition particle sets
+pub mod octree;
 /// Types related to the virtual background grid used for marching cubes
 mod uniform_grid;
 mod utils;
