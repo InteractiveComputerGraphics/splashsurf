@@ -202,37 +202,20 @@ impl<I: Index> Octree<I> {
     /// Returns an iterator that yields all nodes of the octree in depth-first order
     pub fn depth_first_iter(&self) -> impl Iterator<Item = &OctreeNode<I>> {
         let mut queue = Vec::new();
-        let mut visited_parents = Vec::new();
         queue.push(&self.root);
 
         let iter = move || -> Option<&OctreeNode<I>> {
-            while let Some(&next) = queue.last() {
+            if let Some(next_node) = queue.pop() {
                 // Check if the node has children
-                if let Some(children) = next.children() {
-                    // Check if all children of this node were already yielded
-                    if let Some(&last_parent) = visited_parents.last() {
-                        if std::ptr::eq(next, last_parent) {
-                            // We already yielded all children of this node, so it can be yielded itself
-                            let _ = queue.pop();
-                            let _ = visited_parents.pop();
-                            return Some(next);
-                        }
-                    }
-
+                if let Some(children) = next_node.children() {
                     // Enqueue all children
-                    for child in children.iter().rev() {
-                        queue.push(child);
-                    }
-                    visited_parents.push(next);
+                    queue.extend(children.iter().rev().map(std::ops::Deref::deref));
                 }
-                // Leaf reached, remove form queue and yield it
-                else {
-                    let _ = queue.pop();
-                    return Some(next);
-                }
-            }
 
-            None
+                Some(next_node)
+            } else {
+                None
+            }
         };
 
         std::iter::from_fn(iter)
