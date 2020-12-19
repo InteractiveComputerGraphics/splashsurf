@@ -42,6 +42,7 @@ impl<I: Index> Octree<I> {
 
         let mut root = OctreeNode::new_root(grid, particle_positions.len());
         root.subdivide_recursively(grid, particle_positions, particles_per_cell);
+
         Self { root }
     }
 
@@ -73,7 +74,7 @@ impl<I: Index> Octree<I> {
     }
 
     /// Constructs a hex mesh visualizing the cells of the octree, may contain hanging and duplicate vertices as cells are not connected
-    pub fn into_hexmesh<R: Real>(&self, grid: &UniformGrid<I, R>) -> HexMesh3d<R> {
+    pub fn into_hexmesh<R: Real>(&self, grid: &UniformGrid<I, R>, only_non_empty: bool) -> HexMesh3d<R> {
         profile!("convert octree into hexmesh");
 
         let mut mesh = HexMesh3d {
@@ -83,6 +84,10 @@ impl<I: Index> Octree<I> {
 
         for node in self.depth_first_iter() {
             if node.is_leaf() {
+                if only_non_empty && node.particles().map(|p| p.is_empty()).unwrap_or(true) {
+                    continue;
+                }
+
                 let lower_coords = grid.point_coordinates(&node.min_corner);
                 let upper_coords = grid.point_coordinates(&node.max_corner);
 
@@ -115,6 +120,156 @@ impl<I: Index> Octree<I> {
         }
 
         mesh
+    }
+}
+
+impl<I: Index> OctreeNode<I> {
+    pub fn min_corner(&self) -> &PointIndex<I> {
+        &self.min_corner
+    }
+
+    pub fn max_corner(&self) -> &PointIndex<I> {
+        &self.max_corner
+    }
+
+    /// Returns whether this is a leaf node, i.e. it may contain particles and has no child nodes
+    pub fn is_leaf(&self) -> bool {
+        self.body.is_leaf()
+    }
+
+    /// Returns a slice of the particles of this node if it is a leaf node
+    pub fn particles(&self) -> Option<&[usize]> {
+        self.body.particles()
+    }
+
+    /// Retruns a slice of the child nodes if this is not a leaf node
+    pub fn children(&self) -> Option<&[Box<OctreeNode<I>>]> {
+        self.body.children()
+    }
+
+    fn new_root<R: Real>(grid: &UniformGrid<I, R>, n_particles: usize) -> Self {
+        let n_points = grid.points_per_dim();
+        let min_point = [I::zero(), I::zero(), I::zero()];
+        let max_point = [
+            n_points[0] - I::one(),
+            n_points[1] - I::one(),
+            n_points[2] - I::one(),
+        ];
+
+        Self {
+            min_corner: grid
+                .get_point(&min_point)
+                .expect("Cannot get lower corner of grid"),
+            max_corner: grid
+                .get_point(&max_point)
+                .expect("Cannot get upper corner of grid"),
+            body: NodeBody::new_leaf((0..n_particles).collect::<SmallVec<_>>()),
+        }
+    }
+
+    fn new_leaf(
+        min_corner: PointIndex<I>,
+        max_corner: PointIndex<I>,
+        particles: OctreeNodeParticleStorage,
+    ) -> Self {
+        Self {
+            min_corner,
+            max_corner,
+            body: NodeBody::new_leaf(particles),
+        }
+    }
+
+    fn subdivide_recursively<R: Real>(
+        &mut self,
+        grid: &UniformGrid<I, R>,
+        particle_positions: &[Vector3<R>],
+        particles_per_cell: usize,
+    ) {
+        if let Some(particles) = self.body.particles() {
+            // Check if this leaf is already below the limit of particles per cell
+            if particles.len() < particles_per_cell {
+                return;
+            }
+        } else {
+            // Early out if called on a non-leaf node
+            return;
+        }
+
+        // Perform one octree split on the leaf
+        self.subdivide(grid, particle_positions);
+
+        // Continue subdivision in the new child nodes
+        if let Some(children) = self.body.children_mut() {
+            for child_node in children {
+                child_node.subdivide_recursively(grid, particle_positions, particles_per_cell);
+            }
+        }
+    }
+
+    fn subdivide<R: Real>(&mut self, grid: &UniformGrid<I, R>, particle_positions: &[Vector3<R>]) {
+        if !can_split(&self.min_corner, &self.max_corner) {
+            return;
+        }
+
+        // Convert node body from Leaf to Children
+        let new_body = if let NodeBody::Leaf { particles } = &self.body {
+            // Obtain the point used as the octree split/pivot point
+            let split_point = get_split_point(grid, &self.min_corner, &self.max_corner)
+                .expect("Failed to get split point of octree node");
+            let split_coordinates = grid.point_coordinates(&split_point);
+
+            let mut octants = vec![OctantFlags::default(); particles.len()];
+            let mut counters: [usize; 8] = [0, 0, 0, 0, 0, 0, 0, 0];
+
+            // Classify all particles of this leaf into its octants
+            assert_eq!(particles.len(), octants.len());
+            for (particle, octant) in particles.iter().copied().zip(octants.iter_mut()) {
+                let relative_pos = particle_positions[particle] - split_coordinates;
+                *octant = OctantFlags::classify(&relative_pos);
+                counters[Octant::from_flags(*octant) as usize] += 1;
+            }
+
+            // Construct the node for each octant
+            let mut children = SmallVec::with_capacity(8);
+            for (current_octant, octant_particle_count) in OctantFlags::all()
+                .iter()
+                .copied()
+                .zip(counters.iter().copied())
+            {
+                let min_corner = current_octant
+                    .combine_point_index(grid, &self.min_corner, &split_point)
+                    .expect("Failed to get corner point of octree subcell");
+                let max_corner = current_octant
+                    .combine_point_index(grid, &split_point, &self.max_corner)
+                    .expect("Failed to get corner point of octree subcell");
+
+                let mut octant_particles = SmallVec::with_capacity(octant_particle_count);
+                octant_particles.extend(
+                    particles
+                        .iter()
+                        .copied()
+                        .zip(octants.iter())
+                        // Skip particles from other octants
+                        .filter(|(_, &particle_i_octant)| particle_i_octant == current_octant)
+                        .map(|(particle_i, _)| particle_i),
+                );
+                assert_eq!(octant_particles.len(), octant_particle_count);
+
+                let child = Box::new(OctreeNode::new_leaf(
+                    min_corner,
+                    max_corner,
+                    octant_particles,
+                ));
+
+                children.push(child);
+            }
+
+            NodeBody::new_with_children(children)
+        } else {
+            panic!("Cannot subdivide a non-leaf octree node");
+        };
+
+        self.body = new_body;
     }
 }
 
@@ -159,135 +314,6 @@ impl<I: Index> NodeBody<I> {
             NodeBody::Children { children } => Some(children.as_mut_slice()),
             _ => None,
         }
-    }
-}
-
-impl<I: Index> OctreeNode<I> {
-    fn new_root<R: Real>(grid: &UniformGrid<I, R>, n_particles: usize) -> Self {
-        let n_points = grid.points_per_dim();
-        let min_point = [I::zero(), I::zero(), I::zero()];
-        let max_point = [
-            n_points[0] - I::one(),
-            n_points[1] - I::one(),
-            n_points[2] - I::one(),
-        ];
-
-        Self {
-            min_corner: grid
-                .get_point(&min_point)
-                .expect("Cannot get lower corner of grid"),
-            max_corner: grid
-                .get_point(&max_point)
-                .expect("Cannot get upper corner of grid"),
-            body: NodeBody::new_leaf((0..n_particles).collect::<SmallVec<_>>()),
-        }
-    }
-
-    fn new_leaf(
-        min_corner: PointIndex<I>,
-        max_corner: PointIndex<I>,
-        particles: OctreeNodeParticleStorage,
-    ) -> Self {
-        Self {
-            min_corner,
-            max_corner,
-            body: NodeBody::new_leaf(particles),
-        }
-    }
-
-    pub fn is_leaf(&self) -> bool {
-        self.body.is_leaf()
-    }
-
-    pub fn particles(&self) -> Option<&[usize]> {
-        self.body.particles()
-    }
-
-    pub fn children(&self) -> Option<&[Box<OctreeNode<I>>]> {
-        self.body.children()
-    }
-
-    fn subdivide_recursively<R: Real>(
-        &mut self,
-        grid: &UniformGrid<I, R>,
-        particle_positions: &[Vector3<R>],
-        particles_per_cell: usize,
-    ) {
-        if let Some(particles) = self.body.particles() {
-            if particles.len() < particles_per_cell {
-                return;
-            }
-        } else {
-            return;
-        }
-
-        // TODO: Replace recursion using tree visitor?
-        self.subdivide(grid, particle_positions);
-        if let Some(children) = self.body.children_mut() {
-            for child_node in children {
-                child_node.subdivide_recursively(grid, particle_positions, particles_per_cell);
-            }
-        }
-    }
-
-    fn subdivide<R: Real>(&mut self, grid: &UniformGrid<I, R>, particle_positions: &[Vector3<R>]) {
-        if !can_split(&self.min_corner, &self.max_corner) {
-            return;
-        }
-
-        // Convert node body from Leaf to Children
-        let new_body = if let NodeBody::Leaf { particles } = &self.body {
-            let split_point = get_split_point(grid, &self.min_corner, &self.max_corner)
-                .expect("Failed to get split point of octree node");
-            let split_coordinates = grid.point_coordinates(&split_point);
-
-            let particles = particles.clone();
-            let mut octants = vec![OctantFlags::default(); particles.len()];
-            let mut counters: [usize; 8] = [0, 0, 0, 0, 0, 0, 0, 0];
-
-            assert_eq!(particles.len(), octants.len());
-            for (particle, octant) in particles.iter().copied().zip(octants.iter_mut()) {
-                let relative_pos = particle_positions[particle] - split_coordinates;
-                *octant = OctantFlags::classify(&relative_pos);
-                counters[Octant::from_flags(*octant) as usize] += 1;
-            }
-
-            let mut children = SmallVec::with_capacity(8);
-            for (octant_flags, octant_particle_count) in OctantFlags::all()
-                .iter()
-                .copied()
-                .zip(counters.iter().copied())
-            {
-                let min_corner = octant_flags
-                    .combine_point_index(grid, &self.min_corner, &split_point)
-                    .expect("Failed to get corner point of octree subcell");
-                let max_corner = octant_flags
-                    .combine_point_index(grid, &split_point, &self.max_corner)
-                    .expect("Failed to get corner point of octree subcell");
-
-                let mut octant_particles = SmallVec::with_capacity(octant_particle_count);
-                for (i, octant_i) in octants.iter().copied().enumerate() {
-                    if octant_i == octant_flags {
-                        octant_particles.push(i);
-                    }
-                }
-                assert_eq!(octant_particles.len(), octant_particle_count);
-
-                let child = Box::new(OctreeNode::new_leaf(
-                    min_corner,
-                    max_corner,
-                    octant_particles,
-                ));
-
-                children.push(child);
-            }
-
-            NodeBody::new_with_children(children)
-        } else {
-            panic!("Cannot subdivide a non-leaf octree node");
-        };
-
-        self.body = new_body;
     }
 }
 
