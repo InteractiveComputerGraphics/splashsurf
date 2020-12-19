@@ -14,8 +14,8 @@ pub struct Octree<I: Index> {
 /// A single node in an Octree, may be a leaf (containing particles) or a node with further child nodes
 #[derive(Clone, Debug)]
 pub struct OctreeNode<I: Index> {
-    lower_corner: PointIndex<I>,
-    upper_corner: PointIndex<I>,
+    min_corner: PointIndex<I>,
+    max_corner: PointIndex<I>,
     body: NodeBody<I>,
 }
 
@@ -45,6 +45,33 @@ impl<I: Index> Octree<I> {
         Self { root }
     }
 
+    /// Returns a reference to the root node of the octree
+    pub fn root(&self) -> &OctreeNode<I> {
+        &self.root
+    }
+
+    /// Returns an iterator that yields all nodes of the octree in depth-first order
+    pub fn depth_first_iter(&self) -> impl Iterator<Item = &OctreeNode<I>> {
+        let mut queue = Vec::new();
+        queue.push(&self.root);
+
+        let iter = move || -> Option<&OctreeNode<I>> {
+            if let Some(next_node) = queue.pop() {
+                // Check if the node has children
+                if let Some(children) = next_node.children() {
+                    // Enqueue all children
+                    queue.extend(children.iter().rev().map(std::ops::Deref::deref));
+                }
+
+                Some(next_node)
+            } else {
+                None
+            }
+        };
+
+        std::iter::from_fn(iter)
+    }
+
     /// Constructs a hex mesh visualizing the cells of the octree, may contain hanging and duplicate vertices as cells are not connected
     pub fn into_hexmesh<R: Real>(&self, grid: &UniformGrid<I, R>) -> HexMesh3d<R> {
         profile!("convert octree into hexmesh");
@@ -56,8 +83,8 @@ impl<I: Index> Octree<I> {
 
         for node in self.depth_first_iter() {
             if node.is_leaf() {
-                let lower_coords = grid.point_coordinates(&node.lower_corner);
-                let upper_coords = grid.point_coordinates(&node.upper_corner);
+                let lower_coords = grid.point_coordinates(&node.min_corner);
+                let upper_coords = grid.point_coordinates(&node.max_corner);
 
                 let vertices = vec![
                     lower_coords,
@@ -88,28 +115,6 @@ impl<I: Index> Octree<I> {
         }
 
         mesh
-    }
-
-    /// Returns an iterator that yields all nodes of the octree in depth-first order
-    pub fn depth_first_iter(&self) -> impl Iterator<Item = &OctreeNode<I>> {
-        let mut queue = Vec::new();
-        queue.push(&self.root);
-
-        let iter = move || -> Option<&OctreeNode<I>> {
-            if let Some(next_node) = queue.pop() {
-                // Check if the node has children
-                if let Some(children) = next_node.children() {
-                    // Enqueue all children
-                    queue.extend(children.iter().rev().map(std::ops::Deref::deref));
-                }
-
-                Some(next_node)
-            } else {
-                None
-            }
-        };
-
-        std::iter::from_fn(iter)
     }
 }
 
@@ -168,10 +173,10 @@ impl<I: Index> OctreeNode<I> {
         ];
 
         Self {
-            lower_corner: grid
+            min_corner: grid
                 .get_point(&min_point)
                 .expect("Cannot get lower corner of grid"),
-            upper_corner: grid
+            max_corner: grid
                 .get_point(&max_point)
                 .expect("Cannot get upper corner of grid"),
             body: NodeBody::new_leaf((0..n_particles).collect::<SmallVec<_>>()),
@@ -179,13 +184,13 @@ impl<I: Index> OctreeNode<I> {
     }
 
     fn new_leaf(
-        lower_corner: PointIndex<I>,
-        upper_corner: PointIndex<I>,
+        min_corner: PointIndex<I>,
+        max_corner: PointIndex<I>,
         particles: OctreeNodeParticleStorage,
     ) -> Self {
         Self {
-            lower_corner,
-            upper_corner,
+            min_corner,
+            max_corner,
             body: NodeBody::new_leaf(particles),
         }
     }
@@ -226,13 +231,13 @@ impl<I: Index> OctreeNode<I> {
     }
 
     fn subdivide<R: Real>(&mut self, grid: &UniformGrid<I, R>, particle_positions: &[Vector3<R>]) {
-        if !can_split(&self.lower_corner, &self.upper_corner) {
+        if !can_split(&self.min_corner, &self.max_corner) {
             return;
         }
 
         // Convert node body from Leaf to Children
         let new_body = if let NodeBody::Leaf { particles } = &self.body {
-            let split_point = get_split_point(grid, &self.lower_corner, &self.upper_corner)
+            let split_point = get_split_point(grid, &self.min_corner, &self.max_corner)
                 .expect("Failed to get split point of octree node");
             let split_coordinates = grid.point_coordinates(&split_point);
 
@@ -253,11 +258,11 @@ impl<I: Index> OctreeNode<I> {
                 .copied()
                 .zip(counters.iter().copied())
             {
-                let lower_corner = octant_flags
-                    .combine_point_index(grid, &self.lower_corner, &split_point)
+                let min_corner = octant_flags
+                    .combine_point_index(grid, &self.min_corner, &split_point)
                     .expect("Failed to get corner point of octree subcell");
-                let upper_corner = octant_flags
-                    .combine_point_index(grid, &split_point, &self.upper_corner)
+                let max_corner = octant_flags
+                    .combine_point_index(grid, &split_point, &self.max_corner)
                     .expect("Failed to get corner point of octree subcell");
 
                 let mut octant_particles = SmallVec::with_capacity(octant_particle_count);
@@ -269,8 +274,8 @@ impl<I: Index> OctreeNode<I> {
                 assert_eq!(octant_particles.len(), octant_particle_count);
 
                 let child = Box::new(OctreeNode::new_leaf(
-                    lower_corner,
-                    upper_corner,
+                    min_corner,
+                    max_corner,
                     octant_particles,
                 ));
 
