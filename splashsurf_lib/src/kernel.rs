@@ -128,7 +128,7 @@ fn test_discrete_kernel() {
     let h = 0.025;
     let kernel = DiscreteSquaredDistanceCubicKernel::new(n, h);
 
-    // Test the pre-computated values using a linear stepping
+    // Test the pre-computed values using a linear stepping
     let dr = h / (n as f64);
     for i in 0..n {
         let r = (i as f64) * dr;
