@@ -51,9 +51,11 @@ pub use numeric_types::{Index, Real, ThreadSafe};
 pub use uniform_grid::{GridConstructionError, UniformGrid};
 
 use log::info;
-use mesh::TriMesh3d;
 use nalgebra::Vector3;
 use thiserror::Error as ThisError;
+
+use mesh::TriMesh3d;
+use octree::Octree;
 
 // TODO: Add documentation of feature flags
 // TODO: Add documentation of the parameter struct
@@ -110,6 +112,7 @@ pub struct Parameters<R: Real> {
     pub iso_surface_threshold: R,
     pub domain_aabb: Option<AxisAlignedBoundingBox3d<R>>,
     pub enable_multi_threading: bool,
+    pub generate_octree: bool,
 }
 
 /// Macro version of Option::map that allows using e.g. using the ?-operator in the map expression
@@ -137,6 +140,7 @@ impl<R: Real> Parameters<R> {
             iso_surface_threshold: self.iso_surface_threshold.try_convert()?,
             domain_aabb: map_option!(&self.domain_aabb, aabb => aabb.try_convert()?),
             enable_multi_threading: self.enable_multi_threading,
+            generate_octree: self.generate_octree,
         })
     }
 }
@@ -146,6 +150,8 @@ impl<R: Real> Parameters<R> {
 pub struct SurfaceReconstruction<I: Index, R: Real> {
     /// The background grid that was used as a basis for generating the density map for marching cubes
     grid: UniformGrid<I, R>,
+    /// Octree built for domain decomposition
+    octree: Option<Octree<I>>,
     /// The point-based density map generated from the particles that was used as input to marching cubes
     density_map: Option<DensityMap<I, R>>,
     /// The actual mesh that is the result of the surface reconstruction
@@ -177,6 +183,10 @@ impl<I: Index, R: Real> SurfaceReconstruction<I, R> {
     /// Returns a reference to the virtual background grid that was used as a basis for discretization of the density map for marching cubes, can be used to convert the density map to a hex mesh (using [sparse_density_map_to_hex_mesh](density_map::sparse_density_map_to_hex_mesh))
     pub fn grid(&self) -> &UniformGrid<I, R> {
         &self.grid
+    }
+
+    pub fn octree(&self) -> Option<&Octree<I>> {
+        self.octree.as_ref()
     }
 }
 
@@ -238,6 +248,7 @@ pub fn reconstruct_surface_inplace<'a, I: Index, R: Real>(
         iso_surface_threshold,
         domain_aabb,
         enable_multi_threading,
+        generate_octree,
     } = parameters.clone();
 
     surface.grid = grid_for_reconstruction(
@@ -259,6 +270,16 @@ pub fn reconstruct_surface_inplace<'a, I: Index, R: Real>(
         grid.cell_size()
     );
     info!("The resulting domain size is: {:?}", grid.aabb());
+
+    let octree = if generate_octree {
+        Some(Octree::new(
+            &grid,
+            particle_positions,
+            utils::ChunkSize::new(particle_positions.len()).chunk_size,
+        ))
+    } else {
+        None
+    };
 
     let particle_rest_density = rest_density;
     let particle_rest_volume =

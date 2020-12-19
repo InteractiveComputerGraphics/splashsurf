@@ -6,6 +6,7 @@ use splashsurf_lib::{density_map, Index, Real};
 
 use crate::io;
 use crate::{ReconstructionRunnerArgs, ReconstructionRunnerPaths};
+use splashsurf_lib::vtkio::model::UnstructuredGridPiece;
 
 // TODO: Detect smallest index type (i.e. check if ok to use i32/u32 as index)
 
@@ -68,6 +69,22 @@ pub(crate) fn entry_point_generic<I: Index, R: Real>(
             format!(
                 "Failed to write reconstructed surface to output file '{}'",
                 paths.output_file.to_string_lossy()
+            )
+        })?;
+        info!("Done.");
+    }
+
+    if let Some(output_octree_file) = &paths.output_octree_file {
+        info!("Writing octree to \"{}\"...", output_octree_file.display());
+        io::vtk_format::write_vtk(
+            UnstructuredGridPiece::from(&reconstruction.octree().unwrap().into_hexmesh(grid)),
+            output_octree_file,
+            "mesh",
+        )
+        .with_context(|| {
+            format!(
+                "Failed to write octree to output file '{}'",
+                output_octree_file.display()
             )
         })?;
         info!("Done.");

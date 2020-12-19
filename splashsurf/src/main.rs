@@ -81,6 +81,9 @@ struct CommandlineArgs {
     /// Optional filename for writing the grid representation of the intermediate density map to disk
     #[structopt(long, parse(from_os_str))]
     output_dm_grid: Option<PathBuf>,
+    /// Optional filename for writing the octree used to partition the particles to disk
+    #[structopt(long, parse(from_os_str))]
+    output_octree: Option<PathBuf>,
     /// Flag to enable multi-threading to process multiple input files in parallel, conflicts with --mt-particles
     #[structopt(long = "mt-files", conflicts_with = "parallelize-over-particles")]
     parallelize_over_files: bool,
@@ -206,6 +209,7 @@ impl TryFrom<&CommandlineArgs> for ReconstructionRunnerArgs {
             iso_surface_threshold: args.surface_threshold,
             domain_aabb,
             enable_multi_threading: args.parallelize_over_particles,
+            generate_octree: args.output_octree.is_some(),
         };
 
         Ok(ReconstructionRunnerArgs {
@@ -223,6 +227,7 @@ struct ReconstrunctionRunnerPathCollection {
     output_file: PathBuf,
     output_density_map_points_file: Option<PathBuf>,
     output_density_map_grid_file: Option<PathBuf>,
+    output_octree_file: Option<PathBuf>,
 }
 
 impl ReconstrunctionRunnerPathCollection {
@@ -233,12 +238,14 @@ impl ReconstrunctionRunnerPathCollection {
         output_file: P,
         output_density_map_points_file: Option<P>,
         output_density_map_grid_file: Option<P>,
+        output_octree_file: Option<P>,
     ) -> Result<Self, anyhow::Error> {
         let input_file = input_file.into();
         let output_base_path = output_base_path.map(|p| p.into());
         let output_file = output_file.into();
         let output_density_map_points_file = output_density_map_points_file.map(|p| p.into());
         let output_density_map_grid_file = output_density_map_grid_file.map(|p| p.into());
+        let output_octree_file = output_octree_file.map(|p| p.into());
 
         if let Some(output_base_path) = output_base_path {
             let output_file = output_base_path.join(output_file);
@@ -264,6 +271,7 @@ impl ReconstrunctionRunnerPathCollection {
                     .map(|f| output_base_path.join(f)),
                 output_density_map_grid_file: output_density_map_grid_file
                     .map(|f| output_base_path.join(f)),
+                output_octree_file: output_octree_file.map(|f| output_base_path.join(f)),
             })
         } else {
             Ok(Self {
@@ -272,6 +280,7 @@ impl ReconstrunctionRunnerPathCollection {
                 output_file: output_file,
                 output_density_map_points_file,
                 output_density_map_grid_file,
+                output_octree_file,
             })
         }
     }
@@ -301,8 +310,10 @@ impl ReconstrunctionRunnerPathCollection {
                     paths.push(ReconstructionRunnerPaths::new(
                         input_file_i,
                         output_file_i,
-                        self.output_density_map_points_file.clone(),
-                        self.output_density_map_grid_file.clone(),
+                        // Don't write density maps etc. when processing a sequence of files
+                        None,
+                        None,
+                        None,
                     ));
                 } else {
                     break;
@@ -319,6 +330,7 @@ impl ReconstrunctionRunnerPathCollection {
                     self.output_file.clone(),
                     self.output_density_map_points_file.clone(),
                     self.output_density_map_grid_file.clone(),
+                    self.output_octree_file.clone(),
                 );
                 1
             ]
@@ -351,6 +363,7 @@ impl TryFrom<&CommandlineArgs> for ReconstrunctionRunnerPathCollection {
                 output_file,
                 args.output_dm_points.clone(),
                 args.output_dm_grid.clone(),
+                args.output_octree.clone(),
             )
         // If the input file does not exist, its possible that a sequence of files should be processed
         } else {
@@ -393,6 +406,7 @@ impl TryFrom<&CommandlineArgs> for ReconstrunctionRunnerPathCollection {
                     output_filename.into(),
                     args.output_dm_points.clone(),
                     args.output_dm_grid.clone(),
+                    args.output_octree.clone(),
                 )
             } else {
                 return Err(anyhow!(
@@ -411,6 +425,7 @@ pub(crate) struct ReconstructionRunnerPaths {
     pub output_file: PathBuf,
     pub output_density_map_points_file: Option<PathBuf>,
     pub output_density_map_grid_file: Option<PathBuf>,
+    pub output_octree_file: Option<PathBuf>,
 }
 
 impl ReconstructionRunnerPaths {
@@ -419,12 +434,14 @@ impl ReconstructionRunnerPaths {
         output_file: PathBuf,
         output_density_map_points_file: Option<PathBuf>,
         output_density_map_grid_file: Option<PathBuf>,
+        output_octree_file: Option<PathBuf>,
     ) -> Self {
         ReconstructionRunnerPaths {
             input_file,
             output_file,
             output_density_map_points_file,
             output_density_map_grid_file,
+            output_octree_file,
         }
     }
 }
