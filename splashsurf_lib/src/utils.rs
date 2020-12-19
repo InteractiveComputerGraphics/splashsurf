@@ -43,7 +43,10 @@ impl ChunkSize {
     pub(crate) fn log<S: AsRef<str>>(&self, item_name: S) {
         info!(
             "Splitting {} {} into {} chunks (with {} particles each) for density map generation",
-            self.num_items, item_name.as_ref(), self.num_chunks, self.chunk_size
+            self.num_items,
+            item_name.as_ref(),
+            self.num_chunks,
+            self.chunk_size
         );
     }
 

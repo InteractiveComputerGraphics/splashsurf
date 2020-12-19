@@ -1,11 +1,13 @@
 use nalgebra::Vector3;
 
+use crate::mesh::HexMesh3d;
 use crate::uniform_grid::{Direction, PointIndex};
 use crate::{Index, Real, UniformGrid};
 
 #[cfg(test)]
 mod test_octree {
     use super::*;
+    use crate::mesh::HexMesh3d;
 
     mod vtk {
         use super::*;
@@ -16,13 +18,32 @@ mod test_octree {
         use anyhow::{anyhow, Context};
 
         use vtkio::model::{ByteOrder, DataSet, Version, Vtk};
-        use vtkio::{export_be, import_be, IOBuffer};
+        use vtkio::{export_ascii, export_be, import_be, IOBuffer};
 
         pub fn particles_from_vtk<R: Real, P: AsRef<Path>>(
             vtk_file: P,
         ) -> Result<Vec<Vector3<R>>, anyhow::Error> {
             let sph_dataset = read_vtk(vtk_file)?;
             particles_from_dataset(sph_dataset)
+        }
+
+        pub fn write_vtk<P: AsRef<Path>>(
+            data: impl Into<DataSet>,
+            filename: P,
+            title: &str,
+        ) -> Result<(), anyhow::Error> {
+            let vtk_file = Vtk {
+                version: Version::new((4, 1)),
+                title: title.to_string(),
+                byte_order: ByteOrder::BigEndian,
+                data: data.into(),
+            };
+
+            let filename = filename.as_ref();
+            if let Some(dir) = filename.parent() {
+                create_dir_all(dir).context("Failed to create parent directory of output file")?;
+            }
+            export_ascii(vtk_file, filename).context("Error while writing VTK output to file")
         }
 
         pub fn read_vtk<P: AsRef<Path>>(filename: P) -> Result<DataSet, vtkio::Error> {
@@ -103,11 +124,20 @@ mod test_octree {
             }
         }
         assert_eq!(particle_count, particles.len());
+
+        let mesh = octree.into_hexmesh(&grid);
+        use vtkio::model::UnstructuredGridPiece;
+        vtk::write_vtk(
+            UnstructuredGridPiece::from(&mesh),
+            "U:\\octree.vtk",
+            "octree",
+        )
+        .unwrap();
     }
 }
 
 #[derive(Clone, Debug)]
-struct Octree<I: Index> {
+pub struct Octree<I: Index> {
     root: OctreeNode<I>,
 }
 
@@ -117,17 +147,65 @@ impl<I: Index> Octree<I> {
         particle_positions: &[Vector3<R>],
         particles_per_cell: usize,
     ) -> Self {
+        profile!("build octree");
+
         let mut root = OctreeNode::new_root(grid, particle_positions.len());
         root.subdivide_recursively(grid, particle_positions, particles_per_cell);
         Self { root }
     }
 
+    /// Constructs a hex mesh visualizing the cells of the octree, may contain hanging and duplicate vertices as cells are not connected
+    pub fn into_hexmesh<R: Real>(&self, grid: &UniformGrid<I, R>) -> HexMesh3d<R> {
+        profile!("convert octree into hexmesh");
+
+        let mut mesh = HexMesh3d {
+            vertices: Vec::new(),
+            cells: Vec::new(),
+        };
+
+        for node in self.depth_first_iter() {
+            if node.is_leaf() {
+                let lower_coords = grid.point_coordinates(&node.lower_corner);
+                let upper_coords = grid.point_coordinates(&node.upper_corner);
+
+                let vertices = vec![
+                    lower_coords,
+                    Vector3::new(upper_coords[0], lower_coords[1], lower_coords[2]),
+                    Vector3::new(upper_coords[0], upper_coords[1], lower_coords[2]),
+                    Vector3::new(lower_coords[0], upper_coords[1], lower_coords[2]),
+                    Vector3::new(lower_coords[0], lower_coords[1], upper_coords[2]),
+                    Vector3::new(upper_coords[0], lower_coords[1], upper_coords[2]),
+                    upper_coords,
+                    Vector3::new(lower_coords[0], upper_coords[1], upper_coords[2]),
+                ];
+
+                let offset = mesh.vertices.len();
+                let cell = [
+                    offset + 0,
+                    offset + 1,
+                    offset + 2,
+                    offset + 3,
+                    offset + 4,
+                    offset + 5,
+                    offset + 6,
+                    offset + 7,
+                ];
+
+                mesh.vertices.extend(vertices);
+                mesh.cells.push(cell);
+            }
+        }
+
+        mesh
+    }
+
+    /// Returns an iterator that yields all nodes of the octree in depth-first order
     pub fn depth_first_iter(&self) -> impl Iterator<Item = &OctreeNode<I>> {
         let mut queue = Vec::new();
         let mut visited_parents = Vec::new();
         queue.push(&self.root);
 
-        let mut iter = move || -> Option<&OctreeNode<I>> {
+        let iter = move || -> Option<&OctreeNode<I>> {
             while let Some(&next) = queue.last() {
                 // Check if the node has children
                 if let Some(children) = next.children() {
@@ -162,10 +240,10 @@ impl<I: Index> Octree<I> {
 }
 
 #[derive(Clone, Debug)]
-struct OctreeNode<I: Index> {
-    pub lower_corner: PointIndex<I>,
-    pub upper_corner: PointIndex<I>,
-    pub body: NodeBody<I>,
+pub struct OctreeNode<I: Index> {
+    lower_corner: PointIndex<I>,
+    upper_corner: PointIndex<I>,
+    body: NodeBody<I>,
 }
 
 #[derive(Clone, Debug)]
@@ -292,26 +370,16 @@ impl<I: Index> OctreeNode<I> {
                 .expect("Failed to get split point of octree node");
             let split_coordinates = grid.point_coordinates(&split_point);
 
-            println!(
-                "Split point: {:?} (lower: {:?}, upper: {:?})",
-                split_point, self.lower_corner, self.upper_corner
-            );
-
             let particles = particles.clone();
             let mut octants = vec![OctantFlags::default(); particles.len()];
             let mut counters: [usize; 8] = [0, 0, 0, 0, 0, 0, 0, 0];
 
             assert_eq!(particles.len(), octants.len());
             for (particle, octant) in particles.iter().copied().zip(octants.iter_mut()) {
-                let relative_pos = split_coordinates - particle_positions[particle];
+                let relative_pos = particle_positions[particle] - split_coordinates;
                 *octant = OctantFlags::classify(&relative_pos);
                 counters[Octant::from_flags(*octant) as usize] += 1;
             }
-
-            println!(
-                "Subdivision into octants with {:?} particles each",
-                counters
-            );
 
             let mut children = Vec::with_capacity(8);
             for (octant_flags, octant_particle_count) in OctantFlags::all()
@@ -332,6 +400,7 @@ impl<I: Index> OctreeNode<I> {
                         octant_particles.push(i);
                     }
                 }
+                assert_eq!(octant_particles.len(), octant_particle_count);
 
                 let child = Box::new(OctreeNode::new_leaf(
                     lower_corner,
