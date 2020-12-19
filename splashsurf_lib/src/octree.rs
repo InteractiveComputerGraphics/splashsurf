@@ -1,4 +1,5 @@
 use nalgebra::Vector3;
+use smallvec::SmallVec;
 
 use crate::mesh::HexMesh3d;
 use crate::uniform_grid::{Direction, PointIndex};
@@ -18,7 +19,7 @@ mod test_octree {
         use anyhow::{anyhow, Context};
 
         use vtkio::model::{ByteOrder, DataSet, Version, Vtk};
-        use vtkio::{export_ascii, export_be, import_be, IOBuffer};
+        use vtkio::{export_ascii, import_be, IOBuffer};
 
         pub fn particles_from_vtk<R: Real, P: AsRef<Path>>(
             vtk_file: P,
@@ -136,9 +137,31 @@ mod test_octree {
     }
 }
 
+/// Octree representation of a set of particles
 #[derive(Clone, Debug)]
 pub struct Octree<I: Index> {
     root: OctreeNode<I>,
+}
+
+/// A single node in an Octree, may be a leaf (containing particles) or a node with further child nodes
+#[derive(Clone, Debug)]
+pub struct OctreeNode<I: Index> {
+    lower_corner: PointIndex<I>,
+    upper_corner: PointIndex<I>,
+    body: NodeBody<I>,
+}
+
+type OctreeNodeChildrenStorage<I> = SmallVec<[Box<OctreeNode<I>>; 8]>;
+type OctreeNodeParticleStorage = SmallVec<[usize; 8]>;
+
+#[derive(Clone, Debug)]
+enum NodeBody<I: Index> {
+    Children {
+        children: OctreeNodeChildrenStorage<I>,
+    },
+    Leaf {
+        particles: OctreeNodeParticleStorage,
+    },
 }
 
 impl<I: Index> Octree<I> {
@@ -222,25 +245,17 @@ impl<I: Index> Octree<I> {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct OctreeNode<I: Index> {
-    lower_corner: PointIndex<I>,
-    upper_corner: PointIndex<I>,
-    body: NodeBody<I>,
-}
-
-#[derive(Clone, Debug)]
-enum NodeBody<I: Index> {
-    Children { children: Vec<Box<OctreeNode<I>>> },
-    Leaf { particles: Vec<usize> },
-}
-
 impl<I: Index> NodeBody<I> {
-    pub fn new_leaf(indices: Vec<usize>) -> Self {
-        NodeBody::Leaf { particles: indices }
+    pub fn new_leaf<IndexVec: Into<OctreeNodeParticleStorage>>(particles: IndexVec) -> Self {
+        NodeBody::Leaf {
+            particles: particles.into(),
+        }
     }
 
-    pub fn new_with_children(children: Vec<Box<OctreeNode<I>>>) -> Self {
+    pub fn new_with_children<OctreeNodeVec: Into<OctreeNodeChildrenStorage<I>>>(
+        children: OctreeNodeVec,
+    ) -> Self {
+        let children = children.into();
         assert_eq!(children.len(), 8);
         NodeBody::Children { children }
     }
@@ -291,14 +306,14 @@ impl<I: Index> OctreeNode<I> {
             upper_corner: grid
                 .get_point(&max_point)
                 .expect("Cannot get upper corner of grid"),
-            body: NodeBody::new_leaf((0..n_particles).collect()),
+            body: NodeBody::new_leaf((0..n_particles).collect::<SmallVec<_>>()),
         }
     }
 
     fn new_leaf(
         lower_corner: PointIndex<I>,
         upper_corner: PointIndex<I>,
-        particles: Vec<usize>,
+        particles: OctreeNodeParticleStorage,
     ) -> Self {
         Self {
             lower_corner,
@@ -364,7 +379,7 @@ impl<I: Index> OctreeNode<I> {
                 counters[Octant::from_flags(*octant) as usize] += 1;
             }
 
-            let mut children = Vec::with_capacity(8);
+            let mut children = SmallVec::with_capacity(8);
             for (octant_flags, octant_particle_count) in OctantFlags::all()
                 .iter()
                 .copied()
@@ -377,7 +392,7 @@ impl<I: Index> OctreeNode<I> {
                     .combine_point_index(grid, &split_point, &self.upper_corner)
                     .expect("Failed to get corner point of octree subcell");
 
-                let mut octant_particles = Vec::with_capacity(octant_particle_count);
+                let mut octant_particles = SmallVec::with_capacity(octant_particle_count);
                 for (i, octant_i) in octants.iter().copied().enumerate() {
                     if octant_i == octant_flags {
                         octant_particles.push(i);
@@ -477,27 +492,6 @@ impl OctantFlags {
         ];
 
         grid.get_point(&combined_index)
-    }
-
-    /// Combines two vectors by choosing between their components depending on the octant
-    pub fn combine<R: Real>(&self, lower: &Vector3<R>, upper: &Vector3<R>) -> Vector3<R> {
-        Vector3::new(
-            if self.x_axis.is_positive() {
-                upper[0]
-            } else {
-                lower[0]
-            },
-            if self.y_axis.is_positive() {
-                upper[1]
-            } else {
-                lower[1]
-            },
-            if self.z_axis.is_positive() {
-                upper[2]
-            } else {
-                lower[2]
-            },
-        )
     }
 }
 
