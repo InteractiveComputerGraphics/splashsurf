@@ -1,4 +1,5 @@
 use nalgebra::Vector3;
+use rayon::ScopeFifo;
 use smallvec::SmallVec;
 
 use crate::mesh::HexMesh3d;
@@ -41,7 +42,10 @@ impl<I: Index> Octree<I> {
         profile!("build octree");
 
         let mut root = OctreeNode::new_root(grid, particle_positions.len());
-        root.subdivide_recursively(grid, particle_positions, particles_per_cell);
+        //root.subdivide_recursively(grid, particle_positions, particles_per_cell);
+        rayon::scope_fifo(|s| {
+            root.subdivide_recursively_par(s, grid, particle_positions, particles_per_cell);
+        });
 
         Self { root }
     }
@@ -74,7 +78,11 @@ impl<I: Index> Octree<I> {
     }
 
     /// Constructs a hex mesh visualizing the cells of the octree, may contain hanging and duplicate vertices as cells are not connected
-    pub fn into_hexmesh<R: Real>(&self, grid: &UniformGrid<I, R>, only_non_empty: bool) -> HexMesh3d<R> {
+    pub fn into_hexmesh<R: Real>(
+        &self,
+        grid: &UniformGrid<I, R>,
+        only_non_empty: bool,
+    ) -> HexMesh3d<R> {
         profile!("convert octree into hexmesh");
 
         let mut mesh = HexMesh3d {
@@ -198,10 +206,51 @@ impl<I: Index> OctreeNode<I> {
         // Perform one octree split on the leaf
         self.subdivide(grid, particle_positions);
 
-        // Continue subdivision in the new child nodes
+        // TODO: Replace recursion with iteration
+        // TODO: Parallelize using tasks
+
+        // Continue subdivision recursively in the new child nodes
         if let Some(children) = self.body.children_mut() {
             for child_node in children {
                 child_node.subdivide_recursively(grid, particle_positions, particles_per_cell);
+            }
+        }
+    }
+
+    fn subdivide_recursively_par<'scope, R: Real>(
+        &'scope mut self,
+        s: &ScopeFifo<'scope>,
+        grid: &'scope UniformGrid<I, R>,
+        particle_positions: &'scope [Vector3<R>],
+        particles_per_cell: usize,
+    ) {
+        if let Some(particles) = self.body.particles() {
+            // Check if this leaf is already below the limit of particles per cell
+            if particles.len() < particles_per_cell {
+                return;
+            }
+        } else {
+            // Early out if called on a non-leaf node
+            return;
+        }
+
+        // Perform one octree split on the leaf
+        self.subdivide(grid, particle_positions);
+
+        // TODO: Replace recursion with iteration
+        // TODO: Parallelize using tasks
+
+        // Continue subdivision recursively in the new child nodes
+        if let Some(children) = self.body.children_mut() {
+            for child_node in children {
+                s.spawn_fifo(move |s| {
+                    child_node.subdivide_recursively_par(
+                        s,
+                        grid,
+                        particle_positions,
+                        particles_per_cell,
+                    )
+                });
             }
         }
     }
