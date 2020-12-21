@@ -292,7 +292,7 @@ impl<I: Index> OctreeNode<I> {
             assert_eq!(particles.len(), octants.len());
             for (particle, octant) in particles.iter().copied().zip(octants.iter_mut()) {
                 let relative_pos = particle_positions[particle] - split_coordinates;
-                *octant = OctantFlags::classify(&relative_pos).into();
+                *octant = OctantAxisDirections::classify(&relative_pos).into();
                 counters[*octant as usize] += 1;
             }
 
@@ -301,12 +301,12 @@ impl<I: Index> OctreeNode<I> {
             for (current_octant, octant_particle_count) in
                 Octant::all().iter().copied().zip(counters.iter().copied())
             {
-                let current_octant_flags = OctantFlags::from(current_octant);
+                let current_octant_dir = OctantAxisDirections::from(current_octant);
 
-                let min_corner = current_octant_flags
+                let min_corner = current_octant_dir
                     .combine_point_index(grid, &self.min_corner, &split_point)
                     .expect("Failed to get corner point of octree subcell");
-                let max_corner = current_octant_flags
+                let max_corner = current_octant_dir
                     .combine_point_index(grid, &split_point, &self.max_corner)
                     .expect("Failed to get corner point of octree subcell");
 
@@ -367,7 +367,7 @@ impl<I: Index> OctreeNode<I> {
                 .zip(octants.par_iter_mut())
                 .fold_with(counters, |mut counters, (particle, octant)| {
                     let relative_pos = particle_positions[particle] - split_coordinates;
-                    *octant = OctantFlags::classify(&relative_pos).into();
+                    *octant = OctantAxisDirections::classify(&relative_pos).into();
                     counters[*octant as usize] += 1;
                     counters
                 })
@@ -387,12 +387,12 @@ impl<I: Index> OctreeNode<I> {
                 .copied()
                 .zip(counters.par_iter().copied())
                 .map(|(current_octant, octant_particle_count)| {
-                    let current_octant_flags = OctantFlags::from(current_octant);
+                    let current_octant_dir = OctantAxisDirections::from(current_octant);
 
-                    let min_corner = current_octant_flags
+                    let min_corner = current_octant_dir
                         .combine_point_index(grid, &self.min_corner, &split_point)
                         .expect("Failed to get corner point of octree subcell");
-                    let max_corner = current_octant_flags
+                    let max_corner = current_octant_dir
                         .combine_point_index(grid, &split_point, &self.max_corner)
                         .expect("Failed to get corner point of octree subcell");
 
@@ -472,7 +472,7 @@ impl<I: Index> NodeBody<I> {
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
-struct OctantFlags {
+struct OctantAxisDirections {
     x_axis: Direction,
     y_axis: Direction,
     z_axis: Direction,
@@ -491,10 +491,10 @@ enum Octant {
     PosPosPos = 7,
 }
 
-impl OctantFlags {
+impl OctantAxisDirections {
     #[inline(always)]
-    pub const fn all() -> &'static [OctantFlags; 8] {
-        &ALL_OCTANT_FLAGS
+    pub const fn all() -> &'static [OctantAxisDirections; 8] {
+        &ALL_OCTANT_DIRECTIONS
     }
 
     #[inline(always)]
@@ -561,19 +561,9 @@ impl OctantFlags {
     }
 }
 
-impl From<Octant> for OctantFlags {
+impl From<Octant> for OctantAxisDirections {
     fn from(octant: Octant) -> Self {
         Self::from_octant(octant)
-    }
-}
-
-impl Default for OctantFlags {
-    fn default() -> Self {
-        OctantFlags {
-            x_axis: Direction::Negative,
-            y_axis: Direction::Negative,
-            z_axis: Direction::Negative,
-        }
     }
 }
 
@@ -584,13 +574,13 @@ impl Octant {
     }
 
     #[inline(always)]
-    pub const fn from_flags(flags: OctantFlags) -> Self {
+    pub const fn from_directions(directions: OctantAxisDirections) -> Self {
         use Direction::*;
-        let OctantFlags {
+        let OctantAxisDirections {
             x_axis,
             y_axis,
             z_axis,
-        } = flags;
+        } = directions;
         match (x_axis, y_axis, z_axis) {
             (Negative, Negative, Negative) => Octant::NegNegNeg,
             (Positive, Negative, Negative) => Octant::PosNegNeg,
@@ -604,9 +594,9 @@ impl Octant {
     }
 }
 
-impl From<OctantFlags> for Octant {
-    fn from(flags: OctantFlags) -> Self {
-        Self::from_flags(flags)
+impl From<OctantAxisDirections> for Octant {
+    fn from(directions: OctantAxisDirections) -> Self {
+        Self::from_directions(directions)
     }
 }
 
@@ -621,15 +611,15 @@ const ALL_OCTANTS: [Octant; 8] = [
     Octant::PosPosPos,
 ];
 
-const ALL_OCTANT_FLAGS: [OctantFlags; 8] = [
-    OctantFlags::from_octant(Octant::NegNegNeg),
-    OctantFlags::from_octant(Octant::PosNegNeg),
-    OctantFlags::from_octant(Octant::NegPosNeg),
-    OctantFlags::from_octant(Octant::PosPosNeg),
-    OctantFlags::from_octant(Octant::NegNegPos),
-    OctantFlags::from_octant(Octant::PosNegPos),
-    OctantFlags::from_octant(Octant::NegPosPos),
-    OctantFlags::from_octant(Octant::PosPosPos),
+const ALL_OCTANT_DIRECTIONS: [OctantAxisDirections; 8] = [
+    OctantAxisDirections::from_octant(Octant::NegNegNeg),
+    OctantAxisDirections::from_octant(Octant::PosNegNeg),
+    OctantAxisDirections::from_octant(Octant::NegPosNeg),
+    OctantAxisDirections::from_octant(Octant::PosPosNeg),
+    OctantAxisDirections::from_octant(Octant::NegNegPos),
+    OctantAxisDirections::from_octant(Octant::PosNegPos),
+    OctantAxisDirections::from_octant(Octant::NegPosPos),
+    OctantAxisDirections::from_octant(Octant::PosPosPos),
 ];
 
 #[cfg(test)]
@@ -647,15 +637,15 @@ mod test_octant {
     }
 
     #[test]
-    fn test_octant_flags_iter_all_consistency() {
-        assert_eq!(Octant::all().len(), OctantFlags::all().len());
-        for (octant, octant_flags) in Octant::all()
+    fn test_octant_directions_iter_all_consistency() {
+        assert_eq!(Octant::all().len(), OctantAxisDirections::all().len());
+        for (octant, octant_directions) in Octant::all()
             .iter()
             .copied()
-            .zip(OctantFlags::all().iter().copied())
+            .zip(OctantAxisDirections::all().iter().copied())
         {
-            assert_eq!(octant, Octant::from(octant_flags));
-            assert_eq!(octant_flags, OctantFlags::from(octant));
+            assert_eq!(octant, Octant::from(octant_directions));
+            assert_eq!(octant_directions, OctantAxisDirections::from(octant));
         }
     }
 }
