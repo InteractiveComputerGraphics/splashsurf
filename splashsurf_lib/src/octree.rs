@@ -1,4 +1,5 @@
 use nalgebra::Vector3;
+use rayon::prelude::*;
 use rayon::ScopeFifo;
 use smallvec::SmallVec;
 
@@ -235,7 +236,7 @@ impl<I: Index> OctreeNode<I> {
         }
 
         // Perform one octree split on the leaf
-        self.subdivide(grid, particle_positions);
+        self.subdivide_par(grid, particle_positions);
 
         // TODO: Replace recursion with iteration
         // TODO: Parallelize using tasks
@@ -312,6 +313,91 @@ impl<I: Index> OctreeNode<I> {
 
                 children.push(child);
             }
+
+            NodeBody::new_with_children(children)
+        } else {
+            panic!("Cannot subdivide a non-leaf octree node");
+        };
+
+        self.body = new_body;
+    }
+
+    fn subdivide_par<R: Real>(
+        &mut self,
+        grid: &UniformGrid<I, R>,
+        particle_positions: &[Vector3<R>],
+    ) {
+        if !can_split(&self.min_corner, &self.max_corner) {
+            return;
+        }
+
+        // Convert node body from Leaf to Children
+        let new_body = if let NodeBody::Leaf { particles } = &self.body {
+            // Obtain the point used as the octree split/pivot point
+            let split_point = get_split_point(grid, &self.min_corner, &self.max_corner)
+                .expect("Failed to get split point of octree node");
+            let split_coordinates = grid.point_coordinates(&split_point);
+
+            let mut octants = vec![OctantFlags::default(); particles.len()];
+            let counters: [usize; 8] = [0, 0, 0, 0, 0, 0, 0, 0];
+
+            // Classify all particles of this leaf into its octants
+            assert_eq!(particles.len(), octants.len());
+            let counters: [usize; 8] = particles
+                .as_slice()
+                .par_iter()
+                .copied()
+                .zip(octants.par_iter_mut())
+                .fold_with(counters, |mut counters, (particle, octant)| {
+                    let relative_pos = particle_positions[particle] - split_coordinates;
+                    *octant = OctantFlags::classify(&relative_pos);
+                    counters[Octant::from_flags(*octant) as usize] += 1;
+                    counters
+                })
+                .reduce(
+                    || counters.clone(),
+                    |mut counters, c| {
+                        for (c_a, c_b) in counters.iter_mut().zip(c.iter().copied()) {
+                            *c_a += c_b;
+                        }
+                        counters
+                    },
+                );
+
+            // Construct the node for each octant
+            let children = OctantFlags::all()
+                .par_iter()
+                .copied()
+                .zip(counters.par_iter().copied())
+                .map(|(current_octant, octant_particle_count)| {
+                    let min_corner = current_octant
+                        .combine_point_index(grid, &self.min_corner, &split_point)
+                        .expect("Failed to get corner point of octree subcell");
+                    let max_corner = current_octant
+                        .combine_point_index(grid, &split_point, &self.max_corner)
+                        .expect("Failed to get corner point of octree subcell");
+
+                    let mut octant_particles = SmallVec::with_capacity(octant_particle_count);
+                    octant_particles.extend(
+                        particles
+                            .iter()
+                            .copied()
+                            .zip(octants.iter())
+                            // Skip particles from other octants
+                            .filter(|(_, &particle_i_octant)| particle_i_octant == current_octant)
+                            .map(|(particle_i, _)| particle_i),
+                    );
+                    assert_eq!(octant_particles.len(), octant_particle_count);
+
+                    let child = Box::new(OctreeNode::new_leaf(
+                        min_corner,
+                        max_corner,
+                        octant_particles,
+                    ));
+
+                    child
+                })
+                .collect::<Vec<_>>();
 
             NodeBody::new_with_children(children)
         } else {
