@@ -273,11 +273,14 @@ pub fn reconstruct_surface_inplace<'a, I: Index, R: Real>(
     info!("The resulting domain size is: {:?}", grid.aabb());
 
     let octree = if generate_octree {
-        Some(Octree::new(
-            &grid,
-            particle_positions,
-            utils::ChunkSize::new(particle_positions.len()).chunk_size,
-        ))
+        let particles_per_cell = utils::ChunkSize::new(particle_positions.len()).chunk_size;
+        info!(
+            "Building octree with at most {} particles per leaf",
+            particles_per_cell
+        );
+        let mut tree = Octree::new(&grid, particle_positions.len());
+        tree.subdivide_recursively_par(&grid, particle_positions, particles_per_cell);
+        Some(tree)
     } else {
         None
     };

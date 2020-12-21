@@ -35,20 +35,37 @@ enum NodeBody<I: Index> {
 }
 
 impl<I: Index> Octree<I> {
-    pub fn new<R: Real>(
+    /// Creates a new [Octree] with a single leaf node containing all vertices
+    pub fn new<R: Real>(grid: &UniformGrid<I, R>, n_particles: usize) -> Self {
+        Self {
+            root: OctreeNode::new_root(grid, n_particles),
+        }
+    }
+
+    /// Subdivide the octree recursively using the given splitting criterion
+    pub fn subdivide_recursively<R: Real>(
+        &mut self,
         grid: &UniformGrid<I, R>,
         particle_positions: &[Vector3<R>],
         particles_per_cell: usize,
-    ) -> Self {
-        profile!("build octree");
+    ) {
+        profile!("Octree::subdivide_recursively");
+        self.root
+            .subdivide_recursively(grid, particle_positions, particles_per_cell);
+    }
 
-        let mut root = OctreeNode::new_root(grid, particle_positions.len());
-        //root.subdivide_recursively(grid, particle_positions, particles_per_cell);
+    /// Subdivide the octree recursively in parallel using the given splitting criterion
+    pub fn subdivide_recursively_par<R: Real>(
+        &mut self,
+        grid: &UniformGrid<I, R>,
+        particle_positions: &[Vector3<R>],
+        particles_per_cell: usize,
+    ) {
+        profile!("Octree::subdivide_recursively_par");
         rayon::scope_fifo(|s| {
-            root.subdivide_recursively_par(s, grid, particle_positions, particles_per_cell);
+            self.root
+                .subdivide_recursively_par(s, grid, particle_positions, particles_per_cell);
         });
-
-        Self { root }
     }
 
     /// Returns a reference to the root node of the octree
@@ -268,28 +285,28 @@ impl<I: Index> OctreeNode<I> {
                 .expect("Failed to get split point of octree node");
             let split_coordinates = grid.point_coordinates(&split_point);
 
-            let mut octants = vec![OctantFlags::default(); particles.len()];
+            let mut octants = vec![Octant::NegNegNeg; particles.len()];
             let mut counters: [usize; 8] = [0, 0, 0, 0, 0, 0, 0, 0];
 
             // Classify all particles of this leaf into its octants
             assert_eq!(particles.len(), octants.len());
             for (particle, octant) in particles.iter().copied().zip(octants.iter_mut()) {
                 let relative_pos = particle_positions[particle] - split_coordinates;
-                *octant = OctantFlags::classify(&relative_pos);
-                counters[Octant::from_flags(*octant) as usize] += 1;
+                *octant = OctantFlags::classify(&relative_pos).into();
+                counters[*octant as usize] += 1;
             }
 
             // Construct the node for each octant
             let mut children = SmallVec::with_capacity(8);
-            for (current_octant, octant_particle_count) in OctantFlags::all()
-                .iter()
-                .copied()
-                .zip(counters.iter().copied())
+            for (current_octant, octant_particle_count) in
+                Octant::all().iter().copied().zip(counters.iter().copied())
             {
-                let min_corner = current_octant
+                let current_octant_flags = OctantFlags::from(current_octant);
+
+                let min_corner = current_octant_flags
                     .combine_point_index(grid, &self.min_corner, &split_point)
                     .expect("Failed to get corner point of octree subcell");
-                let max_corner = current_octant
+                let max_corner = current_octant_flags
                     .combine_point_index(grid, &split_point, &self.max_corner)
                     .expect("Failed to get corner point of octree subcell");
 
@@ -338,7 +355,7 @@ impl<I: Index> OctreeNode<I> {
                 .expect("Failed to get split point of octree node");
             let split_coordinates = grid.point_coordinates(&split_point);
 
-            let mut octants = vec![OctantFlags::default(); particles.len()];
+            let mut octants = vec![Octant::NegNegNeg; particles.len()];
             let counters: [usize; 8] = [0, 0, 0, 0, 0, 0, 0, 0];
 
             // Classify all particles of this leaf into its octants
@@ -350,8 +367,8 @@ impl<I: Index> OctreeNode<I> {
                 .zip(octants.par_iter_mut())
                 .fold_with(counters, |mut counters, (particle, octant)| {
                     let relative_pos = particle_positions[particle] - split_coordinates;
-                    *octant = OctantFlags::classify(&relative_pos);
-                    counters[Octant::from_flags(*octant) as usize] += 1;
+                    *octant = OctantFlags::classify(&relative_pos).into();
+                    counters[*octant as usize] += 1;
                     counters
                 })
                 .reduce(
@@ -365,15 +382,17 @@ impl<I: Index> OctreeNode<I> {
                 );
 
             // Construct the node for each octant
-            let children = OctantFlags::all()
+            let children = Octant::all()
                 .par_iter()
                 .copied()
                 .zip(counters.par_iter().copied())
                 .map(|(current_octant, octant_particle_count)| {
-                    let min_corner = current_octant
+                    let current_octant_flags = OctantFlags::from(current_octant);
+
+                    let min_corner = current_octant_flags
                         .combine_point_index(grid, &self.min_corner, &split_point)
                         .expect("Failed to get corner point of octree subcell");
-                    let max_corner = current_octant
+                    let max_corner = current_octant_flags
                         .combine_point_index(grid, &split_point, &self.max_corner)
                         .expect("Failed to get corner point of octree subcell");
 
@@ -457,6 +476,19 @@ struct OctantFlags {
     x_axis: Direction,
     y_axis: Direction,
     z_axis: Direction,
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[repr(u8)]
+enum Octant {
+    NegNegNeg = 0,
+    PosNegNeg = 1,
+    NegPosNeg = 2,
+    PosPosNeg = 3,
+    NegNegPos = 4,
+    PosNegPos = 5,
+    NegPosPos = 6,
+    PosPosPos = 7,
 }
 
 impl OctantFlags {
@@ -543,18 +575,6 @@ impl Default for OctantFlags {
             z_axis: Direction::Negative,
         }
     }
-}
-
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
-enum Octant {
-    NegNegNeg = 0,
-    PosNegNeg = 1,
-    NegPosNeg = 2,
-    PosPosNeg = 3,
-    NegNegPos = 4,
-    PosNegPos = 5,
-    NegPosPos = 6,
-    PosPosPos = 7,
 }
 
 impl Octant {
