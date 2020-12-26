@@ -1,3 +1,4 @@
+use bitflags::bitflags;
 use nalgebra::Vector3;
 use rayon::prelude::*;
 use rayon::ScopeFifo;
@@ -425,6 +426,89 @@ impl<I: Index> OctreeNode<I> {
 
         self.body = new_body;
     }
+
+    fn subdivide_with_margin<R: Real>(
+        &mut self,
+        grid: &UniformGrid<I, R>,
+        particle_positions: &[Vector3<R>],
+        margin: R,
+    ) {
+        if !can_split(&self.min_corner, &self.max_corner) {
+            return;
+        }
+
+        // Convert node body from Leaf to Children
+        let new_body = if let NodeBody::Leaf { particles } = &self.body {
+            // Obtain the point used as the octree split/pivot point
+            let split_point = get_split_point(grid, &self.min_corner, &self.max_corner)
+                .expect("Failed to get split point of octree node");
+            let split_coordinates = grid.point_coordinates(&split_point);
+
+            let mut octant_flags = vec![OctantDirectionFlags::empty(); particles.len()];
+            let mut counters: [usize; 8] = [0, 0, 0, 0, 0, 0, 0, 0];
+
+            // Classify all particles of this leaf into its octants
+            assert_eq!(particles.len(), octant_flags.len());
+            for (particle_idx, particle_octant_flags) in
+                particles.iter().copied().zip(octant_flags.iter_mut())
+            {
+                let relative_pos = particle_positions[particle_idx] - split_coordinates;
+                *particle_octant_flags =
+                    OctantDirectionFlags::classify_with_margin(&relative_pos, margin);
+
+                // Increase the counter of each octant that contains the current particle
+                OctantDirectionFlags::all_unique_octants()
+                    .iter()
+                    .zip(counters.iter_mut())
+                    .filter(|(octant, _)| particle_octant_flags.contains(**octant))
+                    .for_each(|(_, counter)| *counter += 1);
+            }
+
+            // Construct the node for each octant
+            let mut children = SmallVec::with_capacity(8);
+            for (&current_octant, &octant_particle_count) in
+                Octant::all().iter().zip(counters.iter())
+            {
+                let current_octant_dir = OctantAxisDirections::from(current_octant);
+                let current_octant_flags = OctantDirectionFlags::from(current_octant);
+
+                let min_corner = current_octant_dir
+                    .combine_point_index(grid, &self.min_corner, &split_point)
+                    .expect("Failed to get corner point of octree subcell");
+                let max_corner = current_octant_dir
+                    .combine_point_index(grid, &split_point, &self.max_corner)
+                    .expect("Failed to get corner point of octree subcell");
+
+                let mut octant_particles = SmallVec::with_capacity(octant_particle_count);
+                octant_particles.extend(
+                    particles
+                        .iter()
+                        .copied()
+                        .zip(octant_flags.iter())
+                        // Skip particles from other octants
+                        .filter(|(_, &particle_i_octant)| {
+                            particle_i_octant.contains(current_octant_flags)
+                        })
+                        .map(|(particle_i, _)| particle_i),
+                );
+                assert_eq!(octant_particles.len(), octant_particle_count);
+
+                let child = Box::new(OctreeNode::new_leaf(
+                    min_corner,
+                    max_corner,
+                    octant_particles,
+                ));
+
+                children.push(child);
+            }
+
+            NodeBody::new_with_children(children)
+        } else {
+            panic!("Cannot subdivide a non-leaf octree node");
+        };
+
+        self.body = new_body;
+    }
 }
 
 impl<I: Index> NodeBody<I> {
@@ -470,6 +554,165 @@ impl<I: Index> NodeBody<I> {
         }
     }
 }
+
+bitflags! {
+    struct OctantDirectionFlags: u8 {
+        const X_NEG = 0b00000001;
+        const X_POS = 0b00000010;
+        const Y_NEG = 0b00000100;
+        const Y_POS = 0b00001000;
+        const Z_NEG = 0b00010000;
+        const Z_POS = 0b00100000;
+
+        const NEG_NEG_NEG = Self::X_NEG.bits | Self::Y_NEG.bits | Self::Z_NEG.bits;
+        const POS_NEG_NEG = Self::X_POS.bits | Self::Y_NEG.bits | Self::Z_NEG.bits;
+        const NEG_POS_NEG = Self::X_NEG.bits | Self::Y_POS.bits | Self::Z_NEG.bits;
+        const POS_POS_NEG = Self::X_POS.bits | Self::Y_POS.bits | Self::Z_NEG.bits;
+        const NEG_NEG_POS = Self::X_NEG.bits | Self::Y_NEG.bits | Self::Z_POS.bits;
+        const POS_NEG_POS = Self::X_POS.bits | Self::Y_NEG.bits | Self::Z_POS.bits;
+        const NEG_POS_POS = Self::X_NEG.bits | Self::Y_POS.bits | Self::Z_POS.bits;
+        const POS_POS_POS = Self::X_POS.bits | Self::Y_POS.bits | Self::Z_POS.bits;
+    }
+}
+
+const ALL_UNIQUE_OCTANT_DIRECTION_FLAGS: [OctantDirectionFlags; 8] = [
+    OctantDirectionFlags::NEG_NEG_NEG,
+    OctantDirectionFlags::POS_NEG_NEG,
+    OctantDirectionFlags::NEG_POS_NEG,
+    OctantDirectionFlags::POS_POS_NEG,
+    OctantDirectionFlags::NEG_NEG_POS,
+    OctantDirectionFlags::POS_NEG_POS,
+    OctantDirectionFlags::NEG_POS_POS,
+    OctantDirectionFlags::POS_POS_POS,
+];
+
+impl OctantDirectionFlags {
+    #[inline(always)]
+    pub const fn all_unique_octants() -> &'static [OctantDirectionFlags] {
+        &ALL_UNIQUE_OCTANT_DIRECTION_FLAGS
+    }
+
+    /// Classifies a point relative to zero into the corresponding octants with a margin
+    #[inline(always)]
+    pub fn classify_with_margin<R: Real>(point: &Vector3<R>, margin: R) -> Self {
+        let mut flags = OctantDirectionFlags::empty();
+        flags.set(OctantDirectionFlags::X_NEG, point.x < margin);
+        flags.set(OctantDirectionFlags::X_POS, point.x > -margin);
+        flags.set(OctantDirectionFlags::Y_NEG, point.y < margin);
+        flags.set(OctantDirectionFlags::Y_POS, point.y > -margin);
+        flags.set(OctantDirectionFlags::Z_NEG, point.z < margin);
+        flags.set(OctantDirectionFlags::Z_POS, point.z > -margin);
+        flags
+    }
+
+    #[inline(always)]
+    pub fn from_octant(octant: Octant) -> Self {
+        match octant {
+            Octant::NegNegNeg => Self::NEG_NEG_NEG,
+            Octant::PosNegNeg => Self::POS_NEG_NEG,
+            Octant::NegPosNeg => Self::NEG_POS_NEG,
+            Octant::PosPosNeg => Self::POS_POS_NEG,
+            Octant::NegNegPos => Self::NEG_NEG_POS,
+            Octant::PosNegPos => Self::POS_NEG_POS,
+            Octant::NegPosPos => Self::NEG_POS_POS,
+            Octant::PosPosPos => Self::POS_POS_POS,
+        }
+    }
+
+    #[inline(always)]
+    pub fn from_directions(directions: OctantAxisDirections) -> Self {
+        let mut flags = OctantDirectionFlags::empty();
+        flags.set(OctantDirectionFlags::X_NEG, directions.x_axis.is_negative());
+        flags.set(OctantDirectionFlags::X_POS, directions.x_axis.is_positive());
+        flags.set(OctantDirectionFlags::Y_NEG, directions.y_axis.is_negative());
+        flags.set(OctantDirectionFlags::Y_POS, directions.y_axis.is_positive());
+        flags.set(OctantDirectionFlags::Z_NEG, directions.z_axis.is_negative());
+        flags.set(OctantDirectionFlags::Z_POS, directions.z_axis.is_positive());
+        flags
+    }
+}
+
+impl From<Octant> for OctantDirectionFlags {
+    fn from(octant: Octant) -> Self {
+        Self::from_octant(octant)
+    }
+}
+
+/*
+bitflags! {
+    struct OctantFlags: u8 {
+        const NEG_NEG_NEG = 0b00000001;
+        const POS_NEG_NEG = 0b00000010;
+        const NEG_POS_NEG = 0b00000100;
+        const POS_POS_NEG = 0b00001000;
+        const NEG_NEG_POS = 0b00010000;
+        const POS_NEG_POS = 0b00100000;
+        const NEG_POS_POS = 0b01000000;
+        const POS_POS_POS = 0b10000000;
+    }
+}
+
+impl OctantFlags {
+    /// Classifies a point relative to zero into the corresponding octants with a margin
+    #[inline(always)]
+    pub fn classify_with_margin<R: Real>(point: &Vector3<R>, margin: R) -> Self {
+        let mut flags = OctantFlags::all();
+        if point[0] > margin {
+            flags.set(OctantFlags::NEG_NEG_NEG, false);
+            flags.set(OctantFlags::NEG_POS_NEG, false);
+            flags.set(OctantFlags::NEG_NEG_POS, false);
+            flags.set(OctantFlags::NEG_POS_POS, false);
+        } else if point[0] < -margin {
+            flags.set(OctantFlags::POS_NEG_NEG, false);
+            flags.set(OctantFlags::POS_POS_NEG, false);
+            flags.set(OctantFlags::POS_NEG_POS, false);
+            flags.set(OctantFlags::POS_POS_POS, false);
+        }
+
+        if point[1] > margin {
+            flags.set(OctantFlags::NEG_NEG_NEG, false);
+            flags.set(OctantFlags::POS_NEG_NEG, false);
+            flags.set(OctantFlags::NEG_NEG_POS, false);
+            flags.set(OctantFlags::POS_NEG_POS, false);
+        } else if point[1] < -margin {
+            flags.set(OctantFlags::NEG_POS_NEG, false);
+            flags.set(OctantFlags::POS_POS_NEG, false);
+            flags.set(OctantFlags::NEG_POS_POS, false);
+            flags.set(OctantFlags::POS_POS_POS, false);
+        }
+
+        if point[2] > margin {
+            flags.set(OctantFlags::NEG_NEG_NEG, false);
+            flags.set(OctantFlags::POS_NEG_NEG, false);
+            flags.set(OctantFlags::NEG_POS_NEG, false);
+            flags.set(OctantFlags::POS_POS_NEG, false);
+        } else if point[2] < -margin {
+            flags.set(OctantFlags::NEG_NEG_POS, false);
+            flags.set(OctantFlags::POS_NEG_POS, false);
+            flags.set(OctantFlags::NEG_POS_POS, false);
+            flags.set(OctantFlags::POS_POS_POS, false);
+        }
+
+        flags
+    }
+
+    #[inline(always)]
+    pub const fn to_flag(octant: Octant) -> OctantFlags {
+        unsafe { OctantFlags::from_bits_unchecked(1 << octant as u8) }
+    }
+}
+
+const ALL_OCTANT_FLAGS: [OctantFlags; 8] = [
+    OctantFlags::NEG_NEG_NEG,
+    OctantFlags::POS_NEG_NEG,
+    OctantFlags::NEG_POS_NEG,
+    OctantFlags::POS_POS_NEG,
+    OctantFlags::NEG_NEG_POS,
+    OctantFlags::POS_NEG_POS,
+    OctantFlags::NEG_POS_POS,
+    OctantFlags::POS_POS_POS,
+];
+*/
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 struct OctantAxisDirections {
@@ -567,6 +810,17 @@ impl From<Octant> for OctantAxisDirections {
     }
 }
 
+const ALL_OCTANT_DIRECTIONS: [OctantAxisDirections; 8] = [
+    OctantAxisDirections::from_octant(Octant::NegNegNeg),
+    OctantAxisDirections::from_octant(Octant::PosNegNeg),
+    OctantAxisDirections::from_octant(Octant::NegPosNeg),
+    OctantAxisDirections::from_octant(Octant::PosPosNeg),
+    OctantAxisDirections::from_octant(Octant::NegNegPos),
+    OctantAxisDirections::from_octant(Octant::PosNegPos),
+    OctantAxisDirections::from_octant(Octant::NegPosPos),
+    OctantAxisDirections::from_octant(Octant::PosPosPos),
+];
+
 impl Octant {
     #[inline(always)]
     pub const fn all() -> &'static [Octant; 8] {
@@ -611,20 +865,10 @@ const ALL_OCTANTS: [Octant; 8] = [
     Octant::PosPosPos,
 ];
 
-const ALL_OCTANT_DIRECTIONS: [OctantAxisDirections; 8] = [
-    OctantAxisDirections::from_octant(Octant::NegNegNeg),
-    OctantAxisDirections::from_octant(Octant::PosNegNeg),
-    OctantAxisDirections::from_octant(Octant::NegPosNeg),
-    OctantAxisDirections::from_octant(Octant::PosPosNeg),
-    OctantAxisDirections::from_octant(Octant::NegNegPos),
-    OctantAxisDirections::from_octant(Octant::PosNegPos),
-    OctantAxisDirections::from_octant(Octant::NegPosPos),
-    OctantAxisDirections::from_octant(Octant::PosPosPos),
-];
-
 #[cfg(test)]
 mod test_octant {
     use super::*;
+    use crate::octree::ALL_OCTANT_FLAGS;
 
     #[test]
     fn test_octant_iter_all_consistency() {
@@ -646,6 +890,18 @@ mod test_octant {
         {
             assert_eq!(octant, Octant::from(octant_directions));
             assert_eq!(octant_directions, OctantAxisDirections::from(octant));
+        }
+    }
+
+    #[test]
+    fn test_octant_flags_iter_all_consistency() {
+        assert_eq!(Octant::all().len(), ALL_OCTANT_FLAGS.len());
+        for (octant, octant_flag) in Octant::all()
+            .iter()
+            .copied()
+            .zip(ALL_OCTANT_FLAGS.iter().copied())
+        {
+            assert_eq!(octant.to_flag(), octant_flag);
         }
     }
 }

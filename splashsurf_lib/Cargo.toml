@@ -38,3 +38,4 @@ vtkio = { version = "0.5", optional = true }
 thread_local = "1.0"
 num_cpus = "1.13"
 smallvec = "1.5"
+bitflags = "1.2"
