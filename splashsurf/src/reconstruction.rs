@@ -53,7 +53,9 @@ pub(crate) fn entry_point_generic<I: Index, R: Real>(
         splashsurf_lib::reconstruct_surface::<I, R>(particle_positions.as_slice(), &params)?;
 
     let grid = reconstruction.grid();
-    let density_map = reconstruction.density_map();
+    let density_map = reconstruction
+        .density_map()
+        .ok_or_else(|| anyhow::anyhow!("No density map was created during reconstruction"))?;
     let mesh = reconstruction.mesh();
 
     {

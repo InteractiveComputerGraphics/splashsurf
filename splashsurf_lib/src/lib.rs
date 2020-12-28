@@ -146,9 +146,21 @@ pub struct SurfaceReconstruction<I: Index, R: Real> {
     /// The background grid that was used as a basis for generating the density map for marching cubes
     grid: UniformGrid<I, R>,
     /// The point-based density map generated from the particles that was used as input to marching cubes
-    density_map: DensityMap<I, R>,
+    density_map: Option<DensityMap<I, R>>,
     /// The actual mesh that is the result of the surface reconstruction
     mesh: TriMesh3d<R>,
+}
+
+impl<I: Index, R: Real> Default for SurfaceReconstruction<I, R> {
+    fn default() -> Self {
+        let grid = UniformGrid::new_zero();
+        let mesh = TriMesh3d::default();
+        Self {
+            grid,
+            density_map: None,
+            mesh,
+        }
+    }
 }
 
 impl<I: Index, R: Real> SurfaceReconstruction<I, R> {
@@ -158,8 +170,8 @@ impl<I: Index, R: Real> SurfaceReconstruction<I, R> {
     }
 
     /// Returns a reference to the sparse density map (discretized on the vertices of the background grid) that is used as input for marching cubes
-    pub fn density_map(&self) -> &DensityMap<I, R> {
-        &self.density_map
+    pub fn density_map(&self) -> Option<&DensityMap<I, R>> {
+        self.density_map.as_ref()
     }
 
     /// Returns a reference to the virtual background grid that was used as a basis for discretization of the density map for marching cubes, can be used to convert the density map to a hex mesh (using [sparse_density_map_to_hex_mesh](density_map::sparse_density_map_to_hex_mesh))
@@ -205,6 +217,17 @@ pub fn reconstruct_surface<I: Index, R: Real>(
     parameters: &Parameters<R>,
 ) -> Result<SurfaceReconstruction<I, R>, ReconstructionError<I, R>> {
     profile!("reconstruct_surface");
+    let mut surface = SurfaceReconstruction::default();
+    reconstruct_surface_inplace(particle_positions, parameters, &mut surface)?;
+    Ok(surface)
+}
+
+pub fn reconstruct_surface_inplace<'a, I: Index, R: Real>(
+    particle_positions: &[Vector3<R>],
+    parameters: &Parameters<R>,
+    surface: &'a mut SurfaceReconstruction<I, R>,
+) -> Result<(), ReconstructionError<I, R>> {
+    profile!("reconstruct_surface_inplace");
 
     let Parameters {
         particle_radius,
@@ -217,12 +240,13 @@ pub fn reconstruct_surface<I: Index, R: Real>(
         enable_multi_threading,
     } = parameters.clone();
 
-    let grid = grid_for_reconstruction(
+    surface.grid = grid_for_reconstruction(
         particle_positions,
         particle_radius,
         cube_size,
         domain_aabb.as_ref(),
     )?;
+    let grid = &surface.grid;
 
     info!(
         "Using a grid with {:?}x{:?}x{:?} points and {:?}x{:?}x{:?} cells of edge length {}.",
@@ -291,14 +315,16 @@ pub fn reconstruct_surface<I: Index, R: Real>(
         enable_multi_threading,
     );
 
-    let mesh =
-        marching_cubes::triangulate_density_map::<I, R>(&grid, &density_map, iso_surface_threshold);
+    marching_cubes::triangulate_density_map::<I, R>(
+        &grid,
+        &density_map,
+        iso_surface_threshold,
+        &mut surface.mesh,
+    );
 
-    Ok(SurfaceReconstruction {
-        grid,
-        density_map,
-        mesh,
-    })
+    surface.density_map = Some(density_map);
+
+    Ok(())
 }
 
 /// Constructs the background grid for marching cubes based on the parameters supplied to the surface reconstruction

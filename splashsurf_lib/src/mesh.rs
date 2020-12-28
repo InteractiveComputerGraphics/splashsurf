@@ -13,8 +13,17 @@ pub struct TriMesh3d<R: Real> {
     pub triangles: Vec<[usize; 3]>,
 }
 
+impl<R: Real> Default for TriMesh3d<R> {
+    fn default() -> Self {
+        Self {
+            vertices: Vec::new(),
+            triangles: Vec::new(),
+        }
+    }
+}
+
 /// A hexahedral (volumetric) mesh in 3D
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct HexMesh3d<R: Real> {
     /// Coordinates of all vertices of the mesh
     pub vertices: Vec<Vector3<R>>,
@@ -23,14 +32,14 @@ pub struct HexMesh3d<R: Real> {
 }
 
 /// A point cloud in 3D
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct PointCloud3d<R: Real> {
     /// Coordinates of all points in the point cloud
     pub points: Vec<Vector3<R>>,
 }
 
 /// A mesh with attached vertex or point data
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct MeshWithPointData<MeshT, DataT> {
     /// The mesh geometry itself
     pub mesh: MeshT,

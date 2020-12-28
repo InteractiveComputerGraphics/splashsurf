@@ -200,6 +200,16 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
         })
     }
 
+    /// Create a new zeroed grid
+    pub(crate) fn new_zero() -> Self {
+        Self {
+            aabb: AxisAlignedBoundingBox3d::new(Vector3::zeros(), Vector3::zeros()),
+            cell_size: R::zero(),
+            n_points_per_dim: [I::zero(); 3],
+            n_cells_per_dim: [I::zero(); 3],
+        }
+    }
+
     /// Returns the bounding box of the grid
     #[inline(always)]
     pub fn aabb(&self) -> &AxisAlignedBoundingBox3d<R> {
