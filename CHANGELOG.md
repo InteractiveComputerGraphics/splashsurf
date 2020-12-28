@@ -1,6 +1,6 @@
 ## Master
 
- - Lib: Allow passing in an existing `SurfaceReconstruction` to reuse allocated memory (currently only memory for the resulting surface mesh is reused)
+ - Lib: Allow passing in an existing `SurfaceReconstruction` to reuse allocated memory (currently only memory for the resulting surface mesh is reused) (https://github.com/w1th0utnam3/splashsurf/pull/7)
  - Lib: Add `Default` trait bound to `Index` and `Real` types
 
 ## Version 0.3.0
