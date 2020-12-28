@@ -5,21 +5,12 @@ use nalgebra::Vector3;
 use crate::Real;
 
 /// A triangle (surface) mesh in 3D
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct TriMesh3d<R: Real> {
     /// Coordinates of all vertices of the mesh
     pub vertices: Vec<Vector3<R>>,
     /// The triangles of the mesh identified by their vertex indices
     pub triangles: Vec<[usize; 3]>,
-}
-
-impl<R: Real> Default for TriMesh3d<R> {
-    fn default() -> Self {
-        Self {
-            vertices: Vec::new(),
-            triangles: Vec::new(),
-        }
-    }
 }
 
 /// A hexahedral (volumetric) mesh in 3D

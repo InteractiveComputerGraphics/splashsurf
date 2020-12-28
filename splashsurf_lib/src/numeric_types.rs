@@ -20,6 +20,7 @@ pub trait Index:
     + CheckedMul
     + FromPrimitive
     + ToPrimitive
+    + Default
     + Debug
     + Display
     + ThreadSafe
@@ -41,7 +42,7 @@ pub trait Index:
 }
 
 /// Trait that has to be implemented for types to be used as floating points values in the context of the library (e.g. for coordinates, density values)
-pub trait Real: RealField + FromPrimitive + ToPrimitive + Debug + ThreadSafe {
+pub trait Real: RealField + FromPrimitive + ToPrimitive + Debug + Default + ThreadSafe {
     fn try_convert<T: Real>(self) -> Option<T> {
         Some(T::from_f64(self.to_f64()?)?)
     }
@@ -92,9 +93,10 @@ impl<T> Index for T where
         + FromPrimitive
         + ToPrimitive
         + Debug
+        + Default
         + Display
         + ThreadSafe
 {
 }
 
-impl<T: RealField + FromPrimitive + ToPrimitive + Debug + ThreadSafe> Real for T {}
+impl<T: RealField + FromPrimitive + ToPrimitive + Debug + Default + ThreadSafe> Real for T {}

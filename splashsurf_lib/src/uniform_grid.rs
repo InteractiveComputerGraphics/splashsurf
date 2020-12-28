@@ -200,7 +200,7 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
         })
     }
 
-    /// Create a new zeroed grid
+    /// Constructs a degenerate grid with zero extents, zero cells and zero points
     pub(crate) fn new_zero() -> Self {
         Self {
             aabb: AxisAlignedBoundingBox3d::new(Vector3::zeros(), Vector3::zeros()),

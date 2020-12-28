@@ -152,13 +152,12 @@ pub struct SurfaceReconstruction<I: Index, R: Real> {
 }
 
 impl<I: Index, R: Real> Default for SurfaceReconstruction<I, R> {
+    /// Returns an empty [SurfaceReconstruction] to pass into the inplace surface reconstruction
     fn default() -> Self {
-        let grid = UniformGrid::new_zero();
-        let mesh = TriMesh3d::default();
         Self {
-            grid,
+            grid: UniformGrid::new_zero(),
             density_map: None,
-            mesh,
+            mesh: TriMesh3d::default(),
         }
     }
 }
