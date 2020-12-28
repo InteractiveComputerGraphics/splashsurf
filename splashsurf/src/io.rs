@@ -8,6 +8,7 @@ use splashsurf_lib::coarse_prof::profile;
 use splashsurf_lib::nalgebra::Vector3;
 use splashsurf_lib::Real;
 
+pub mod bgeo_format;
 pub mod ply_format;
 pub mod vtk_format;
 pub mod xyz_format;
@@ -58,6 +59,7 @@ pub fn load_particle_positions<R: Real, P: AsRef<Path>>(
             "vtk" => vtk_format::particles_from_vtk(&input_file)?,
             "xyz" => xyz_format::particles_from_xyz(&input_file)?,
             "ply" => ply_format::particles_from_ply(&input_file)?,
+            "bgeo" => bgeo_format::particles_from_bgeo(&input_file)?,
             _ => {
                 return Err(anyhow!(
                     "Unsupported file format extension \"{}\" of particle file",

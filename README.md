@@ -16,6 +16,7 @@ Surface reconstruction library and CLI for particle data from SPH simulations, w
     - [Sequences of files](#sequences-of-files)
   - [Input file formats](#input-file-formats)
     - [VTK](#vtk)
+    - [BGEO](#bgeo)
     - [PLY](#ply)
     - [XYZ](#xyz)
   - [Output file formats](#output-file-formats)
@@ -30,7 +31,7 @@ The following sections mainly focus on the CLI of `splashsurf`. For more informa
 This is a basic but high-performance implementation of a marching cubes based surface reconstruction for SPH fluid simulations (e.g performed with [SPlisHSPlasH](https://github.com/InteractiveComputerGraphics/SPlisHSPlasH)).
 The output of this tool is the reconstructed triangle surface mesh of the fluid.
 At the moment it does not compute normals or other additional data.
-As input, it supports particle positions from .vtk files and binary .xyz files (i.e. files containing a binary dump of a particle position array). In addition, required parameters are the kernel radius and particle radius (to compute the volume of particles) used for the original SPH simulation as well as the surface threshold.
+As input, it supports reading particle positions from `.vtk`, `.bgeo`, `.ply` and binary `.xyz` files (i.e. files containing a binary dump of a particle position array). In addition, required parameters are the kernel radius and particle radius (to compute the volume of particles) used for the original SPH simulation as well as the surface threshold.
 
 The implementation first computes the density of each particle using the typical SPH approach with a cubic kernel. 
 This density is then evaluated or mapped onto a sparse grid using spatial hashing in the support radius of each particle.
@@ -105,7 +106,7 @@ OPTIONS:
 
 ARGS:
     <input-file>    Path to the input file where the particle positions are stored (supported formats: VTK, binary
-                    XYZ, PLY)
+                    XYZ, PLY, BGEO)
 ```
 For example:
 ```
@@ -166,6 +167,10 @@ With these parameters, a scene with 13353401 particles is reconstructed in less 
 ### VTK
 
 Files with the "`.vtk`" extension are loaded using [`vtkio`](https://crates.io/crates/vtkio). The VTK file is loaded as a big endian binary file and has to contain an "Unstructured Grid" with either `f32` or `f64` vertex coordinates. Any other data or attributes are ignored. Only the first "Unstructured Grid" is loaded, other entities are ignored.
+
+### BGEO
+
+Files with the "`.bgeo`" extension are loaded using a custom parser. Not that only the "old" `BGEOV` format is supported (which is the format supported by "Partio"). Only points and their implicit position vector attributes are loaded from the file. All other entities (e.g. vertices) and attributes are ignored/discarded. Notably, the parser supports BGEO files written by [SPlisHSPlasH](https://github.com/InteractiveComputerGraphics/SPlisHSPlasH) ("Partio export"). 
 
 ### PLY
 

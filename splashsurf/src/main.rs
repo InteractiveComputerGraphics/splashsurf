@@ -29,7 +29,7 @@ use structopt::StructOpt;
     about = "Surface reconstruction for particle data from SPH simulations (https://github.com/w1th0utnam3/splashsurf)"
 )]
 struct CommandlineArgs {
-    /// Path to the input file where the particle positions are stored (supported formats: VTK, binary f32 XYZ, PLY)
+    /// Path to the input file where the particle positions are stored (supported formats: VTK, binary f32 XYZ, PLY, BGEO)
     #[structopt(parse(from_os_str))]
     input_file: PathBuf,
     /// Filename for writing the reconstructed surface to disk
