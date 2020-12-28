@@ -555,6 +555,7 @@ pub fn parallel_generate_sparse_density_map<I: Index, R: Real>(
     {
         profile!("merge thread local maps to global map");
 
+        /// Collect all thread local maps into a single vec
         let mut local_density_maps = sparse_densities
             .into_iter()
             .map(|m| m.into_inner())
