@@ -24,7 +24,7 @@ Surface reconstruction library and CLI for particle data from SPH simulations, w
 
 # The `splashsurf` CLI
 
-The following sections mainly focus on the CLI of `splashsurf`. For more information on the library, see the [corresponding readme](https://github.com/w1th0utnam3/splashsurf/blob/master/splashsurf_lib/README.md) in the `splashsurf_lib` subfolder.
+The following sections mainly focus on the CLI of `splashsurf`. For more information on the library, see the [corresponding readme](https://github.com/w1th0utnam3/splashsurf/blob/master/splashsurf_lib/README.md) in the `splashsurf_lib` subfolder or the [`splashsurf_lib` crate](https://crates.io/crates/splashsurf_lib) on crates.io.
 
 ## Introduction
 
@@ -170,7 +170,7 @@ Files with the "`.vtk`" extension are loaded using [`vtkio`](https://crates.io/c
 
 ### BGEO
 
-Files with the "`.bgeo`" extension are loaded using a custom parser. Not that only the "old" `BGEOV` format is supported (which is the format supported by "Partio"). Only points and their implicit position vector attributes are loaded from the file. All other entities (e.g. vertices) and attributes are ignored/discarded. Notably, the parser supports BGEO files written by [SPlisHSPlasH](https://github.com/InteractiveComputerGraphics/SPlisHSPlasH) ("Partio export"). 
+Files with the "`.bgeo`" extension are loaded using a custom parser. Note, that only the "old" `BGEOV` format is supported (which is the format supported by "Partio"). Only points and their implicit position vector attributes are loaded from the file. All other entities (e.g. vertices) and other attributes are ignored/discarded. Notably, the parser supports BGEO files written by [SPlisHSPlasH](https://github.com/InteractiveComputerGraphics/SPlisHSPlasH) ("Partio export"). 
 
 ### PLY
 
