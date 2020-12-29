@@ -11,6 +11,8 @@ pub struct TriMesh3d<R: Real> {
     pub vertices: Vec<Vector3<R>>,
     /// The triangles of the mesh identified by their vertex indices
     pub triangles: Vec<[usize; 3]>,
+    /// The normals of this mesh's vertices
+    pub normals: Vec<Vector3<R>>,
 }
 
 /// A hexahedral (volumetric) mesh in 3D

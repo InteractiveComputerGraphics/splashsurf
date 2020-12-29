@@ -246,6 +246,10 @@ pub(crate) fn triangulate<I: Index, R: Real>(
     );
 
     mesh.triangles.clear();
+    mesh.normals.clear();
+    // resize normals to match vertices exactly, with initial zero normal
+    mesh.normals
+        .resize(mesh.vertices.len(), nalgebra::Vector3::zeros());
 
     // Triangulate affected cells
     for (&_flat_cell_index, cell_data) in &cell_data {
@@ -257,6 +261,17 @@ pub(crate) fn triangulate<I: Index, R: Real>(
                 cell_data.iso_surface_vertices[triangle[1] as usize].unwrap(),
                 cell_data.iso_surface_vertices[triangle[2] as usize].unwrap(),
             ];
+            // compute normal of this triangle
+            let p1 = &mesh.vertices[global_triangle[0]];
+            let p2 = &mesh.vertices[global_triangle[1]];
+            let p3 = &mesh.vertices[global_triangle[2]];
+            let normal = (p1 - p2).cross(&(p3 - p2));
+
+            // average normal contribution for the vertices in this triangle
+            for idx in global_triangle.iter() {
+                mesh.normals[*idx] += normal;
+                mesh.normals[*idx].normalize_mut();
+            }
             mesh.triangles.push(global_triangle);
         }
     }
