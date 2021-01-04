@@ -6,7 +6,9 @@ use smallvec::SmallVec;
 
 use crate::mesh::HexMesh3d;
 use crate::uniform_grid::{Direction, PointIndex};
-use crate::{Index, Real, UniformGrid};
+use crate::{AxisAlignedBoundingBox, AxisAlignedBoundingBox3d, Index, Real, UniformGrid};
+
+// TODO: Unify splitting with/without margin using some generic approach
 
 /// Octree representation of a set of particles
 #[derive(Clone, Debug)]
@@ -97,11 +99,7 @@ impl<I: Index> Octree<I> {
     }
 
     /// Constructs a hex mesh visualizing the cells of the octree, may contain hanging and duplicate vertices as cells are not connected
-    pub fn hexmesh<R: Real>(
-        &self,
-        grid: &UniformGrid<I, R>,
-        only_non_empty: bool,
-    ) -> HexMesh3d<R> {
+    pub fn hexmesh<R: Real>(&self, grid: &UniformGrid<I, R>, only_non_empty: bool) -> HexMesh3d<R> {
         profile!("convert octree into hexmesh");
 
         let mut mesh = HexMesh3d {
@@ -151,12 +149,22 @@ impl<I: Index> Octree<I> {
 }
 
 impl<I: Index> OctreeNode<I> {
+    /// Returns the [PointIndex] of the lower corner of the octree node
     pub fn min_corner(&self) -> &PointIndex<I> {
         &self.min_corner
     }
 
+    /// Returns the [PointIndex] of the upper corner of the octree node
     pub fn max_corner(&self) -> &PointIndex<I> {
         &self.max_corner
+    }
+
+    /// Returns the AABB represented by this octree node
+    pub fn aabb<R: Real>(&self, grid: &UniformGrid<I, R>) -> AxisAlignedBoundingBox3d<R> {
+        AxisAlignedBoundingBox::new(
+            grid.point_coordinates(&self.min_corner),
+            grid.point_coordinates(&self.max_corner),
+        )
     }
 
     /// Returns whether this is a leaf node, i.e. it may contain particles and has no child nodes
@@ -206,6 +214,7 @@ impl<I: Index> OctreeNode<I> {
         }
     }
 
+    /// Subdivides this [OctantNode] and all new children until all leaves have at most the specified number of particles
     fn subdivide_recursively<R: Real>(
         &mut self,
         grid: &UniformGrid<I, R>,
@@ -226,7 +235,6 @@ impl<I: Index> OctreeNode<I> {
         self.subdivide(grid, particle_positions);
 
         // TODO: Replace recursion with iteration
-        // TODO: Parallelize using tasks
 
         // Continue subdivision recursively in the new child nodes
         if let Some(children) = self.body.children_mut() {
@@ -236,6 +244,7 @@ impl<I: Index> OctreeNode<I> {
         }
     }
 
+    /// Subdivides this [OctantNode] and all new children in parallel until all leaves have at most the specified number of particles
     fn subdivide_recursively_par<'scope, R: Real>(
         &'scope mut self,
         s: &ScopeFifo<'scope>,
@@ -274,13 +283,50 @@ impl<I: Index> OctreeNode<I> {
         }
     }
 
-    fn subdivide<R: Real>(&mut self, grid: &UniformGrid<I, R>, particle_positions: &[Vector3<R>]) {
-        if !can_split(&self.min_corner, &self.max_corner) {
+    /// Subdivides this [OctantNode] and all new children until all leaves have at most the specified number of particles
+    fn subdivide_recursively_margin<R: Real>(
+        &mut self,
+        grid: &UniformGrid<I, R>,
+        particle_positions: &[Vector3<R>],
+        particles_per_cell: usize,
+        margin: R,
+    ) {
+        if let Some(particles) = self.body.particles() {
+            // Check if this leaf is already below the limit of particles per cell
+            if particles.len() < particles_per_cell {
+                return;
+            }
+        } else {
+            // Early out if called on a non-leaf node
             return;
         }
 
+        // Perform one octree split on the leaf
+        self.subdivide_with_margin(grid, particle_positions, margin);
+
+        // TODO: Replace recursion with iteration
+
+        // Continue subdivision recursively in the new child nodes
+        if let Some(children) = self.body.children_mut() {
+            for child_node in children {
+                child_node.subdivide_recursively_margin(
+                    grid,
+                    particle_positions,
+                    particles_per_cell,
+                    margin,
+                );
+            }
+        }
+    }
+
+    /// Performs a subdivision of this [OctreeNode] by converting its body form a leaf to a body containing its child octants
+    fn subdivide<R: Real>(&mut self, grid: &UniformGrid<I, R>, particle_positions: &[Vector3<R>]) {
         // Convert node body from Leaf to Children
         let new_body = if let NodeBody::Leaf { particles } = &self.body {
+            if !can_split(&self.min_corner, &self.max_corner) {
+                return;
+            }
+
             // Obtain the point used as the octree split/pivot point
             let split_point = get_split_point(grid, &self.min_corner, &self.max_corner)
                 .expect("Failed to get split point of octree node");
@@ -340,17 +386,18 @@ impl<I: Index> OctreeNode<I> {
         self.body = new_body;
     }
 
+    /// Performs a subdivision of this [OctreeNode] in parallel by converting its body form a leaf to a body containing its child octants
     fn subdivide_par<R: Real>(
         &mut self,
         grid: &UniformGrid<I, R>,
         particle_positions: &[Vector3<R>],
     ) {
-        if !can_split(&self.min_corner, &self.max_corner) {
-            return;
-        }
-
         // Convert node body from Leaf to Children
         let new_body = if let NodeBody::Leaf { particles } = &self.body {
+            if !can_split(&self.min_corner, &self.max_corner) {
+                return;
+            }
+
             // Obtain the point used as the octree split/pivot point
             let split_point = get_split_point(grid, &self.min_corner, &self.max_corner)
                 .expect("Failed to get split point of octree node");
@@ -427,18 +474,19 @@ impl<I: Index> OctreeNode<I> {
         self.body = new_body;
     }
 
-    fn subdivide_with_margin<R: Real>(
+    /// Performs a subdivision of this [OctreeNode] while considering a margin with "ghost particles" around each octant
+    pub fn subdivide_with_margin<R: Real>(
         &mut self,
         grid: &UniformGrid<I, R>,
         particle_positions: &[Vector3<R>],
         margin: R,
     ) {
-        if !can_split(&self.min_corner, &self.max_corner) {
-            return;
-        }
-
         // Convert node body from Leaf to Children
         let new_body = if let NodeBody::Leaf { particles } = &self.body {
+            if !can_split(&self.min_corner, &self.max_corner) {
+                return;
+            }
+
             // Obtain the point used as the octree split/pivot point
             let split_point = get_split_point(grid, &self.min_corner, &self.max_corner)
                 .expect("Failed to get split point of octree node");
@@ -592,7 +640,7 @@ impl OctantDirectionFlags {
         &ALL_UNIQUE_OCTANT_DIRECTION_FLAGS
     }
 
-    /// Classifies a point relative to zero into the corresponding octants with a margin
+    /// Classifies a point relative to zero into all octants it belongs by considering a margin around the octants
     #[inline(always)]
     pub fn classify_with_margin<R: Real>(point: &Vector3<R>, margin: R) -> Self {
         let mut flags = OctantDirectionFlags::empty();
@@ -637,82 +685,6 @@ impl From<Octant> for OctantDirectionFlags {
         Self::from_octant(octant)
     }
 }
-
-/*
-bitflags! {
-    struct OctantFlags: u8 {
-        const NEG_NEG_NEG = 0b00000001;
-        const POS_NEG_NEG = 0b00000010;
-        const NEG_POS_NEG = 0b00000100;
-        const POS_POS_NEG = 0b00001000;
-        const NEG_NEG_POS = 0b00010000;
-        const POS_NEG_POS = 0b00100000;
-        const NEG_POS_POS = 0b01000000;
-        const POS_POS_POS = 0b10000000;
-    }
-}
-
-impl OctantFlags {
-    /// Classifies a point relative to zero into the corresponding octants with a margin
-    #[inline(always)]
-    pub fn classify_with_margin<R: Real>(point: &Vector3<R>, margin: R) -> Self {
-        let mut flags = OctantFlags::all();
-        if point[0] > margin {
-            flags.set(OctantFlags::NEG_NEG_NEG, false);
-            flags.set(OctantFlags::NEG_POS_NEG, false);
-            flags.set(OctantFlags::NEG_NEG_POS, false);
-            flags.set(OctantFlags::NEG_POS_POS, false);
-        } else if point[0] < -margin {
-            flags.set(OctantFlags::POS_NEG_NEG, false);
-            flags.set(OctantFlags::POS_POS_NEG, false);
-            flags.set(OctantFlags::POS_NEG_POS, false);
-            flags.set(OctantFlags::POS_POS_POS, false);
-        }
-
-        if point[1] > margin {
-            flags.set(OctantFlags::NEG_NEG_NEG, false);
-            flags.set(OctantFlags::POS_NEG_NEG, false);
-            flags.set(OctantFlags::NEG_NEG_POS, false);
-            flags.set(OctantFlags::POS_NEG_POS, false);
-        } else if point[1] < -margin {
-            flags.set(OctantFlags::NEG_POS_NEG, false);
-            flags.set(OctantFlags::POS_POS_NEG, false);
-            flags.set(OctantFlags::NEG_POS_POS, false);
-            flags.set(OctantFlags::POS_POS_POS, false);
-        }
-
-        if point[2] > margin {
-            flags.set(OctantFlags::NEG_NEG_NEG, false);
-            flags.set(OctantFlags::POS_NEG_NEG, false);
-            flags.set(OctantFlags::NEG_POS_NEG, false);
-            flags.set(OctantFlags::POS_POS_NEG, false);
-        } else if point[2] < -margin {
-            flags.set(OctantFlags::NEG_NEG_POS, false);
-            flags.set(OctantFlags::POS_NEG_POS, false);
-            flags.set(OctantFlags::NEG_POS_POS, false);
-            flags.set(OctantFlags::POS_POS_POS, false);
-        }
-
-        flags
-    }
-
-    #[inline(always)]
-    pub const fn to_flag(octant: Octant) -> OctantFlags {
-        unsafe { OctantFlags::from_bits_unchecked(1 << octant as u8) }
-    }
-}
-
-const ALL_OCTANT_FLAGS: [OctantFlags; 8] = [
-    OctantFlags::NEG_NEG_NEG,
-    OctantFlags::POS_NEG_NEG,
-    OctantFlags::NEG_POS_NEG,
-    OctantFlags::POS_POS_NEG,
-    OctantFlags::NEG_NEG_POS,
-    OctantFlags::POS_NEG_POS,
-    OctantFlags::NEG_POS_POS,
-    OctantFlags::POS_POS_POS,
-];
-*/
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 struct OctantAxisDirections {
@@ -868,7 +840,6 @@ const ALL_OCTANTS: [Octant; 8] = [
 #[cfg(test)]
 mod test_octant {
     use super::*;
-    use crate::octree::ALL_OCTANT_FLAGS;
 
     #[test]
     fn test_octant_iter_all_consistency() {
@@ -892,20 +863,11 @@ mod test_octant {
             assert_eq!(octant_directions, OctantAxisDirections::from(octant));
         }
     }
-
-    #[test]
-    fn test_octant_flags_iter_all_consistency() {
-        assert_eq!(Octant::all().len(), ALL_OCTANT_FLAGS.len());
-        for (octant, octant_flag) in Octant::all()
-            .iter()
-            .copied()
-            .zip(ALL_OCTANT_FLAGS.iter().copied())
-        {
-            assert_eq!(octant.to_flag(), octant_flag);
-        }
-    }
 }
 
+/// Returns whether an [OctreeNode] with the given lower and upper points can be subdivided
+///
+/// An [OctreeNode] can be subdivided if it has an extent of more than one cell in each dimension.
 fn can_split<I: Index>(lower: &PointIndex<I>, upper: &PointIndex<I>) -> bool {
     let lower = lower.index();
     let upper = upper.index();
@@ -915,6 +877,7 @@ fn can_split<I: Index>(lower: &PointIndex<I>, upper: &PointIndex<I>) -> bool {
         && upper[2] - lower[2] > I::one()
 }
 
+/// Returns the [PointIndex] of the octree subdivision point for an [OctreeNode] with the given lower and upper points
 fn get_split_point<I: Index, R: Real>(
     grid: &UniformGrid<I, R>,
     lower: &PointIndex<I>,
