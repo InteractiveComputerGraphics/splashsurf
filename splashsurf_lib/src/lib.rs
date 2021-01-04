@@ -43,7 +43,7 @@ mod numeric_types;
 /// Octree implementation to spatially partition particle sets
 pub mod octree;
 /// Types related to the virtual background grid used for marching cubes
-mod uniform_grid;
+pub mod uniform_grid;
 mod utils;
 
 pub use aabb::{AxisAlignedBoundingBox, AxisAlignedBoundingBox2d, AxisAlignedBoundingBox3d};
@@ -164,6 +164,7 @@ impl<I: Index, R: Real> Default for SurfaceReconstruction<I, R> {
     fn default() -> Self {
         Self {
             grid: UniformGrid::new_zero(),
+            octree: None,
             density_map: None,
             mesh: TriMesh3d::default(),
         }
@@ -186,6 +187,7 @@ impl<I: Index, R: Real> SurfaceReconstruction<I, R> {
         &self.grid
     }
 
+    /// Returns a reference to the octree generated for spatial decomposition of the input particles
     pub fn octree(&self) -> Option<&Octree<I>> {
         self.octree.as_ref()
     }
