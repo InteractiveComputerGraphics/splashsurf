@@ -14,6 +14,26 @@ pub struct TriMesh3d<R: Real> {
 }
 
 impl<R: Real> TriMesh3d<R> {
+    /// Appends the other mesh to this mesh by simply appending all vertices and triangles of the other mesh and adjusting indices accordingly
+    pub fn append(&mut self, other: TriMesh3d<R>) {
+        let TriMesh3d {
+            vertices: mut new_verts,
+            triangles: mut new_tris,
+        } = other;
+
+        let vertex_offset = self.vertices.len();
+        let tri_offset = self.triangles.len();
+
+        self.vertices.append(&mut new_verts);
+        self.triangles.append(&mut new_tris);
+
+        for tri in self.triangles.iter_mut().skip(tri_offset) {
+            tri[0] += vertex_offset;
+            tri[1] += vertex_offset;
+            tri[2] += vertex_offset;
+        }
+    }
+
     /// Same as [Self::vertex_normal_directions_inplace] but assumes that the output is already zeroed
     fn vertex_normal_directions_inplace_assume_zeroed(&self, normal_directions: &mut [Vector3<R>]) {
         assert_eq!(normal_directions.len(), self.vertices.len());

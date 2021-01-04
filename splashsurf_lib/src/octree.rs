@@ -98,6 +98,11 @@ impl<I: Index> Octree<I> {
         std::iter::from_fn(iter)
     }
 
+    /// Returns an iterator that yields all leafs of the octree in depth-first order
+    pub fn leaf_iter(&self) -> impl Iterator<Item = &OctreeNode<I>> {
+        self.depth_first_iter().filter(|n| n.is_leaf())
+    }
+
     /// Constructs a hex mesh visualizing the cells of the octree, may contain hanging and duplicate vertices as cells are not connected
     pub fn hexmesh<R: Real>(&self, grid: &UniformGrid<I, R>, only_non_empty: bool) -> HexMesh3d<R> {
         profile!("convert octree into hexmesh");

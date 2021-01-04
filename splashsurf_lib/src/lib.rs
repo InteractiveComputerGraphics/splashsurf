@@ -354,6 +354,144 @@ pub fn reconstruct_surface_inplace<'a, I: Index, R: Real>(
     Ok(())
 }
 
+#[inline(never)]
+pub fn reconstruct_surface_octree<I: Index, R: Real>(
+    particle_positions: &[Vector3<R>],
+    parameters: &Parameters<R>,
+) -> Result<SurfaceReconstruction<I, R>, ReconstructionError<I, R>> {
+    profile!("reconstruct_surface");
+    let mut surface = SurfaceReconstruction::default();
+    reconstruct_surface_inplace_octree(particle_positions, parameters, &mut surface)?;
+    Ok(surface)
+}
+
+pub fn reconstruct_surface_inplace_octree<'a, I: Index, R: Real>(
+    particle_positions: &[Vector3<R>],
+    parameters: &Parameters<R>,
+    surface: &'a mut SurfaceReconstruction<I, R>,
+) -> Result<(), ReconstructionError<I, R>> {
+    profile!("reconstruct_surface_inplace");
+
+    let Parameters {
+        particle_radius,
+        rest_density,
+        kernel_radius,
+        splash_detection_radius: _,
+        cube_size,
+        iso_surface_threshold,
+        domain_aabb,
+        enable_multi_threading: _,
+        generate_octree,
+    } = parameters.clone();
+
+    surface.grid = grid_for_reconstruction(
+        particle_positions,
+        particle_radius,
+        cube_size,
+        domain_aabb.as_ref(),
+    )?;
+    let grid = &surface.grid;
+
+    info!(
+        "Using a grid with {:?}x{:?}x{:?} points and {:?}x{:?}x{:?} cells of edge length {}.",
+        grid.points_per_dim()[0],
+        grid.points_per_dim()[1],
+        grid.points_per_dim()[2],
+        grid.cells_per_dim()[0],
+        grid.cells_per_dim()[1],
+        grid.cells_per_dim()[2],
+        grid.cell_size()
+    );
+    info!("The resulting domain size is: {:?}", grid.aabb());
+
+    surface.octree = if generate_octree {
+        let particles_per_cell = utils::ChunkSize::new(particle_positions.len()).chunk_size;
+        info!(
+            "Building octree with at most {} particles per leaf",
+            particles_per_cell
+        );
+        let mut tree = Octree::new(&grid, particle_positions.len());
+        tree.subdivide_recursively_par(&grid, particle_positions, particles_per_cell);
+        Some(tree)
+    } else {
+        None
+    };
+
+    let octree = surface.octree.as_ref().expect("No octree generated");
+
+    // Collect the particle lists of all octree leaf nodes
+    let subdomains: Vec<_> = octree.leaf_iter().collect();
+
+    // Loop over all subdomains of the octree
+    subdomains
+        .iter()
+        .copied()
+        .fold(TriMesh3d::default(), |mut global_mesh, octree_subdomain| {
+            let particles = octree_subdomain
+                .particles()
+                .expect("Octree node has to be a leaf");
+            let particle_positions = particles
+                .iter()
+                .copied()
+                .map(|idx| particle_positions[idx])
+                .collect::<Vec<_>>();
+
+            let particle_rest_density = rest_density;
+            let particle_rest_volume =
+                R::from_f64((4.0 / 3.0) * std::f64::consts::PI).unwrap() * particle_radius.powi(3);
+            let particle_rest_mass = particle_rest_volume * particle_rest_density;
+
+            let particle_densities = {
+                info!("Starting neighborhood search...");
+
+                let particle_neighbor_lists = neighborhood_search::search::<I, R>(
+                    &grid.aabb(),
+                    particle_positions.as_slice(),
+                    kernel_radius,
+                    false,
+                );
+
+                info!("Computing particle densities...");
+
+                density_map::compute_particle_densities::<I, R>(
+                    particle_positions.as_slice(),
+                    particle_neighbor_lists.as_slice(),
+                    kernel_radius,
+                    particle_rest_mass,
+                    false,
+                )
+            };
+
+            let density_map = density_map::sequential_generate_sparse_density_map_subdomain::<I, R>(
+                &grid,
+                octree_subdomain.min_corner(),
+                octree_subdomain.max_corner(),
+                particle_positions.as_slice(),
+                particle_densities.as_slice(),
+                None,
+                particle_rest_mass,
+                kernel_radius,
+                cube_size,
+            );
+
+            let mut subdomain_mesh = TriMesh3d::default();
+            marching_cubes::triangulate_density_map::<I, R>(
+                &grid,
+                &density_map,
+                iso_surface_threshold,
+                &mut subdomain_mesh,
+            );
+
+            // Append the subdomain mesh to the global mesh
+            global_mesh.append(subdomain_mesh);
+            global_mesh
+        });
+
+    surface.density_map = None;
+
+    Ok(())
+}
+
 /// Constructs the background grid for marching cubes based on the parameters supplied to the surface reconstruction
 pub fn grid_for_reconstruction<I: Index, R: Real>(
     particle_positions: &[Vector3<R>],
