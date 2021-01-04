@@ -106,7 +106,7 @@ pub type UniformGrid<I, R> = UniformCartesianCubeGrid3d<I, R>;
 /// on the extents of the grid).
 #[derive(Clone, PartialEq, Debug)]
 pub struct UniformCartesianCubeGrid3d<I: Index, R: Real> {
-    /// AABB of the grid. Note that currently, the grid may extend beyond the max coordinate of the AABB.
+    /// AABB of the grid. Note that the grid may extend beyond the max coordinate of the AABB by less than the `cell_size`.
     aabb: AxisAlignedBoundingBox3d<R>,
     /// The edge length of the cubes in the grid
     cell_size: R,

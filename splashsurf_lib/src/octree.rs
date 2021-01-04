@@ -6,7 +6,10 @@ use smallvec::SmallVec;
 
 use crate::mesh::HexMesh3d;
 use crate::uniform_grid::{Direction, PointIndex};
-use crate::{AxisAlignedBoundingBox, AxisAlignedBoundingBox3d, Index, Real, UniformGrid};
+use crate::{
+    AxisAlignedBoundingBox, AxisAlignedBoundingBox3d, GridConstructionError, Index, Real,
+    UniformGrid,
+};
 
 // TODO: Unify splitting with/without margin using some generic approach
 
@@ -34,6 +37,7 @@ enum NodeBody<I: Index> {
     },
     Leaf {
         particles: OctreeNodeParticleStorage,
+        ghost_particle_count: usize,
     },
 }
 
@@ -52,7 +56,7 @@ impl<I: Index> Octree<I> {
         particle_positions: &[Vector3<R>],
         particles_per_cell: usize,
     ) {
-        profile!("Octree::subdivide_recursively");
+        profile!("octree subdivide_recursively");
         self.root
             .subdivide_recursively(grid, particle_positions, particles_per_cell);
     }
@@ -64,11 +68,28 @@ impl<I: Index> Octree<I> {
         particle_positions: &[Vector3<R>],
         particles_per_cell: usize,
     ) {
-        profile!("Octree::subdivide_recursively_par");
+        profile!("octree subdivide_recursively_par");
         rayon::scope_fifo(|s| {
             self.root
                 .subdivide_recursively_par(s, grid, particle_positions, particles_per_cell);
         });
+    }
+
+    /// Subdivide the octree recursively using the given splitting criterion
+    pub fn subdivide_recursively_margin<R: Real>(
+        &mut self,
+        grid: &UniformGrid<I, R>,
+        particle_positions: &[Vector3<R>],
+        particles_per_cell: usize,
+        margin: R,
+    ) {
+        profile!("octree subdivide_recursively_margin");
+        self.root.subdivide_recursively_margin(
+            grid,
+            particle_positions,
+            particles_per_cell,
+            margin,
+        );
     }
 
     /// Returns a reference to the root node of the octree
@@ -172,6 +193,24 @@ impl<I: Index> OctreeNode<I> {
         )
     }
 
+    /// Constructs a [crate::UniformGrid] that represents the domain of this octree node
+    pub fn grid<R: Real>(
+        &self,
+        min: &Vector3<R>,
+        cell_size: R,
+    ) -> Result<UniformGrid<I, R>, GridConstructionError<I, R>> {
+        let min_corner = self.min_corner.index();
+        let max_corner = self.max_corner.index();
+
+        let n_cells_per_dim = [
+            max_corner[0] - min_corner[0],
+            max_corner[1] - min_corner[1],
+            max_corner[2] - min_corner[2],
+        ];
+
+        UniformGrid::new(min, &n_cells_per_dim, cell_size)
+    }
+
     /// Returns whether this is a leaf node, i.e. it may contain particles and has no child nodes
     pub fn is_leaf(&self) -> bool {
         self.body.is_leaf()
@@ -203,7 +242,7 @@ impl<I: Index> OctreeNode<I> {
             max_corner: grid
                 .get_point(&max_point)
                 .expect("Cannot get upper corner of grid"),
-            body: NodeBody::new_leaf((0..n_particles).collect::<SmallVec<_>>()),
+            body: NodeBody::new_leaf((0..n_particles).collect::<SmallVec<_>>(), 0),
         }
     }
 
@@ -211,11 +250,12 @@ impl<I: Index> OctreeNode<I> {
         min_corner: PointIndex<I>,
         max_corner: PointIndex<I>,
         particles: OctreeNodeParticleStorage,
+        ghost_particle_count: usize,
     ) -> Self {
         Self {
             min_corner,
             max_corner,
-            body: NodeBody::new_leaf(particles),
+            body: NodeBody::new_leaf(particles, ghost_particle_count),
         }
     }
 
@@ -296,9 +336,13 @@ impl<I: Index> OctreeNode<I> {
         particles_per_cell: usize,
         margin: R,
     ) {
-        if let Some(particles) = self.body.particles() {
+        if let NodeBody::Leaf {
+            particles,
+            ghost_particle_count,
+        } = &self.body
+        {
             // Check if this leaf is already below the limit of particles per cell
-            if particles.len() < particles_per_cell {
+            if particles.len() - ghost_particle_count < particles_per_cell {
                 return;
             }
         } else {
@@ -327,7 +371,7 @@ impl<I: Index> OctreeNode<I> {
     /// Performs a subdivision of this [OctreeNode] by converting its body form a leaf to a body containing its child octants
     fn subdivide<R: Real>(&mut self, grid: &UniformGrid<I, R>, particle_positions: &[Vector3<R>]) {
         // Convert node body from Leaf to Children
-        let new_body = if let NodeBody::Leaf { particles } = &self.body {
+        let new_body = if let NodeBody::Leaf { particles, .. } = &self.body {
             if !can_split(&self.min_corner, &self.max_corner) {
                 return;
             }
@@ -378,6 +422,7 @@ impl<I: Index> OctreeNode<I> {
                     min_corner,
                     max_corner,
                     octant_particles,
+                    0,
                 ));
 
                 children.push(child);
@@ -398,7 +443,7 @@ impl<I: Index> OctreeNode<I> {
         particle_positions: &[Vector3<R>],
     ) {
         // Convert node body from Leaf to Children
-        let new_body = if let NodeBody::Leaf { particles } = &self.body {
+        let new_body = if let NodeBody::Leaf { particles, .. } = &self.body {
             if !can_split(&self.min_corner, &self.max_corner) {
                 return;
             }
@@ -465,6 +510,7 @@ impl<I: Index> OctreeNode<I> {
                         min_corner,
                         max_corner,
                         octant_particles,
+                        0,
                     ));
 
                     child
@@ -487,7 +533,7 @@ impl<I: Index> OctreeNode<I> {
         margin: R,
     ) {
         // Convert node body from Leaf to Children
-        let new_body = if let NodeBody::Leaf { particles } = &self.body {
+        let new_body = if let NodeBody::Leaf { particles, .. } = &self.body {
             if !can_split(&self.min_corner, &self.max_corner) {
                 return;
             }
@@ -499,6 +545,7 @@ impl<I: Index> OctreeNode<I> {
 
             let mut octant_flags = vec![OctantDirectionFlags::empty(); particles.len()];
             let mut counters: [usize; 8] = [0, 0, 0, 0, 0, 0, 0, 0];
+            let mut non_ghost_counters: [usize; 8] = [0, 0, 0, 0, 0, 0, 0, 0];
 
             // Classify all particles of this leaf into its octants
             assert_eq!(particles.len(), octant_flags.len());
@@ -506,21 +553,35 @@ impl<I: Index> OctreeNode<I> {
                 particles.iter().copied().zip(octant_flags.iter_mut())
             {
                 let relative_pos = particle_positions[particle_idx] - split_coordinates;
-                *particle_octant_flags =
-                    OctantDirectionFlags::classify_with_margin(&relative_pos, margin);
 
-                // Increase the counter of each octant that contains the current particle
-                OctantDirectionFlags::all_unique_octants()
-                    .iter()
-                    .zip(counters.iter_mut())
-                    .filter(|(octant, _)| particle_octant_flags.contains(**octant))
-                    .for_each(|(_, counter)| *counter += 1);
+                // Check what the main octant of the particle is
+                {
+                    let main_octant: Octant = OctantAxisDirections::classify(&relative_pos).into();
+                    non_ghost_counters[main_octant as usize] += 1;
+                }
+
+                // Classify into all octants with margin
+                {
+                    *particle_octant_flags =
+                        OctantDirectionFlags::classify_with_margin(&relative_pos, margin);
+
+                    // Increase the counter of each octant that contains the current particle
+                    OctantDirectionFlags::all_unique_octants()
+                        .iter()
+                        .zip(counters.iter_mut())
+                        .filter(|(octant, _)| particle_octant_flags.contains(**octant))
+                        .for_each(|(_, counter)| {
+                            *counter += 1;
+                        });
+                }
             }
 
             // Construct the node for each octant
             let mut children = SmallVec::with_capacity(8);
-            for (&current_octant, &octant_particle_count) in
-                Octant::all().iter().zip(counters.iter())
+            for (&current_octant, (&octant_particle_count, &octant_non_ghost_count)) in
+                Octant::all()
+                    .iter()
+                    .zip(counters.iter().zip(non_ghost_counters.iter()))
             {
                 let current_octant_dir = OctantAxisDirections::from(current_octant);
                 let current_octant_flags = OctantDirectionFlags::from(current_octant);
@@ -550,6 +611,7 @@ impl<I: Index> OctreeNode<I> {
                     min_corner,
                     max_corner,
                     octant_particles,
+                    octant_particle_count - octant_non_ghost_count,
                 ));
 
                 children.push(child);
@@ -565,9 +627,13 @@ impl<I: Index> OctreeNode<I> {
 }
 
 impl<I: Index> NodeBody<I> {
-    pub fn new_leaf<IndexVec: Into<OctreeNodeParticleStorage>>(particles: IndexVec) -> Self {
+    pub fn new_leaf<IndexVec: Into<OctreeNodeParticleStorage>>(
+        particles: IndexVec,
+        ghost_particle_count: usize,
+    ) -> Self {
         NodeBody::Leaf {
             particles: particles.into(),
+            ghost_particle_count,
         }
     }
 
@@ -588,7 +654,7 @@ impl<I: Index> NodeBody<I> {
 
     pub fn particles(&self) -> Option<&[usize]> {
         match self {
-            NodeBody::Leaf { particles } => Some(particles.as_slice()),
+            NodeBody::Leaf { particles, .. } => Some(particles.as_slice()),
             _ => None,
         }
     }

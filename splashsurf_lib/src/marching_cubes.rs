@@ -155,6 +155,8 @@ pub(crate) fn interpolate_points_to_cell_data<I: Index, R: Real>(
                     // each cell adjacent to the edge crossing the iso-surface.
                     // This includes the above/below iso-surface flags and the interpolated vertex index.
                     for cell in grid.cells_adjacent_to_edge(&neighbor_edge).iter().flatten() {
+                        // TODO: For subdomain marching cubes, we have to ignore cells that are outside of the subdomain
+
                         let flat_cell_index = grid.flatten_cell_index(cell);
 
                         let mut cell_data_entry = cell_data
@@ -184,7 +186,7 @@ pub(crate) fn interpolate_points_to_cell_data<I: Index, R: Real>(
     // Therefore, we have to loop over all corner points of all cells that were collected for marching cubes
     // and check their density value again.
     //
-    // Note, that we would also have this problem if we flipped the default value of corner_above_threshold
+    // Note, that we would also have this problem if we flipped the default/initial value of corner_above_threshold
     // to false. In this case we could also move this into the point data loop (which might increase performance).
     // However, we would have to special case cells without point data, which are currently skipped.
     // Similarly, they have to be treated in a second pass because we don't want to initialize cells only

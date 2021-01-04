@@ -50,13 +50,14 @@ pub(crate) fn entry_point_generic<I: Index, R: Real>(
             )
         })?;
 
-    let reconstruction =
-        splashsurf_lib::reconstruct_surface::<I, R>(particle_positions.as_slice(), &params)?;
+    // Perform the surface reconstruction
+    let reconstruction = if paths.output_octree_file.is_some() {
+        splashsurf_lib::reconstruct_surface_octree::<I, R>(particle_positions.as_slice(), &params)?
+    } else {
+        splashsurf_lib::reconstruct_surface::<I, R>(particle_positions.as_slice(), &params)?
+    };
 
     let grid = reconstruction.grid();
-    let density_map = reconstruction
-        .density_map()
-        .ok_or_else(|| anyhow::anyhow!("No density map was created during reconstruction"))?;
     let mesh = reconstruction.mesh();
 
     {
@@ -92,6 +93,9 @@ pub(crate) fn entry_point_generic<I: Index, R: Real>(
 
     if let Some(output_density_map_points_file) = &paths.output_density_map_points_file {
         info!("Constructing density map point cloud...");
+        let density_map = reconstruction
+            .density_map()
+            .ok_or_else(|| anyhow::anyhow!("No density map was created during reconstruction"))?;
 
         let point_cloud: PointCloud3d<R> = {
             let mut points = Vec::with_capacity(density_map.len());
@@ -119,6 +123,9 @@ pub(crate) fn entry_point_generic<I: Index, R: Real>(
 
     if let Some(output_density_map_grid_file) = &paths.output_density_map_grid_file {
         info!("Constructing density map hex mesh...");
+        let density_map = reconstruction
+            .density_map()
+            .ok_or_else(|| anyhow::anyhow!("No density map was created during reconstruction"))?;
 
         let density_mesh =
             density_map::sparse_density_map_to_hex_mesh(&density_map, &grid, R::zero());

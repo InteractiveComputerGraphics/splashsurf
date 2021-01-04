@@ -362,8 +362,8 @@ pub fn sequential_generate_sparse_density_map<I: Index, R: Real>(
 #[inline(never)]
 pub fn sequential_generate_sparse_density_map_subdomain<I: Index, R: Real>(
     grid: &UniformGrid<I, R>,
-    subdomain_min: &PointIndex<I>,
-    subdomain_max: &PointIndex<I>,
+    subdomain_offset: &PointIndex<I>,
+    subdomain_grid: &UniformGrid<I, R>,
     particle_positions: &[Vector3<R>],
     particle_densities: &[R],
     active_particles: Option<&[usize]>,
@@ -398,6 +398,9 @@ pub fn sequential_generate_sparse_density_map_subdomain<I: Index, R: Real>(
     // Pre-compute the kernel which can be queried using squared distances
     let kernel = DiscreteSquaredDistanceCubicKernel::new(1000, kernel_radius);
 
+    let subdomain_points = subdomain_grid.points_per_dim();
+    let subdomain_offset = subdomain_offset.index();
+
     let allowed_domain = grid.aabb().clone();
     if allowed_domain.is_degenerate() || !allowed_domain.is_consistent() {
         warn!(
@@ -422,31 +425,31 @@ pub fn sequential_generate_sparse_density_map_subdomain<I: Index, R: Real>(
 
             let min_supported_point_ijk = {
                 let cell_ijk = grid.enclosing_cell(particle);
-                let subdomin_min = subdomain_min.index();
-
                 [
-                    (cell_ijk[0] - half_supported_cells).max(subdomin_min[0]),
-                    (cell_ijk[1] - half_supported_cells).max(subdomin_min[1]),
-                    (cell_ijk[2] - half_supported_cells).max(subdomin_min[2]),
+                    (cell_ijk[0] - subdomain_offset[0] - half_supported_cells).max(I::zero()),
+                    (cell_ijk[1] - subdomain_offset[1] - half_supported_cells).max(I::zero()),
+                    (cell_ijk[2] - subdomain_offset[2] - half_supported_cells).max(I::zero()),
                 ]
             };
 
             let max_supported_point_ijk = {
-                let subdomin_max = subdomain_max.index();
                 [
-                    (min_supported_point_ijk[0] + supported_points).min(subdomin_max[0]),
-                    (min_supported_point_ijk[1] + supported_points).min(subdomin_max[1]),
-                    (min_supported_point_ijk[2] + supported_points).min(subdomin_max[2]),
+                    (min_supported_point_ijk[0] + supported_points).min(subdomain_points[0]),
+                    (min_supported_point_ijk[1] + supported_points).min(subdomain_points[1]),
+                    (min_supported_point_ijk[2] + supported_points).min(subdomain_points[2]),
                 ]
             };
 
-            let min_supported_point = grid.point_coordinates_array(&min_supported_point_ijk);
+            let min_supported_point =
+                subdomain_grid.point_coordinates_array(&min_supported_point_ijk);
 
             // TODO: Check performance with just using multiplication
-            let mut dx = particle[0] - min_supported_point[0]
+
+            // dx, dy, dz are the deltas of the supported points seen from the current particle
+            let mut dx = min_supported_point[0] - particle[0]
                 // Subtract cell size because it will be added in the beginning of each loop iteration
                 // this is done to avoid multiplications
-                + grid.cell_size();
+                - grid.cell_size();
 
             // A range loop cannot be used here because the Step trait is unstable
             // but it is required for the Iter impl on Range
@@ -455,26 +458,26 @@ pub fn sequential_generate_sparse_density_map_subdomain<I: Index, R: Real>(
             // Loop over all points that might receive a density contribution from this particle
             let mut i = min_supported_point_ijk[0];
             while i != max_supported_point_ijk[0] {
-                dx -= grid.cell_size();
+                dx += grid.cell_size();
                 let dxdx = dx * dx;
 
-                let mut dy = particle[1] - min_supported_point[1] + grid.cell_size();
+                let mut dy = min_supported_point[1] - particle[1] - grid.cell_size();
                 let mut j = min_supported_point_ijk[1];
                 while j != max_supported_point_ijk[1] {
-                    dy -= grid.cell_size();
+                    dy += grid.cell_size();
                     let dydy = dy * dy;
 
-                    let mut dz = particle[2] - min_supported_point[2] + grid.cell_size();
+                    let mut dz = min_supported_point[2] - particle[2] - grid.cell_size();
                     let mut k = min_supported_point_ijk[2];
                     while k != max_supported_point_ijk[2] {
-                        dz -= grid.cell_size();
+                        dz += grid.cell_size();
                         let dzdz = dz * dz;
 
                         let r_squared = dxdx + dydy + dzdz;
                         if r_squared < kernel_evaluation_radius_sq {
                             let density_contribution = particle_volume * kernel.evaluate(r_squared);
 
-                            let flat_point_index = grid.flatten_point_indices(i, j, k);
+                            let flat_point_index = subdomain_grid.flatten_point_indices(i, j, k);
                             *sparse_densities
                                 .entry(flat_point_index)
                                 .or_insert(R::zero()) += density_contribution;

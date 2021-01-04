@@ -365,6 +365,20 @@ pub fn reconstruct_surface_octree<I: Index, R: Real>(
     Ok(surface)
 }
 
+fn log_grid_info<I: Index, R: Real>(grid: &UniformGrid<I, R>) {
+    info!(
+        "Using a grid with {:?}x{:?}x{:?} points and {:?}x{:?}x{:?} cells of edge length {}.",
+        grid.points_per_dim()[0],
+        grid.points_per_dim()[1],
+        grid.points_per_dim()[2],
+        grid.cells_per_dim()[0],
+        grid.cells_per_dim()[1],
+        grid.cells_per_dim()[2],
+        grid.cell_size()
+    );
+    info!("The resulting domain size is: {:?}", grid.aabb());
+}
+
 pub fn reconstruct_surface_inplace_octree<'a, I: Index, R: Real>(
     particle_positions: &[Vector3<R>],
     parameters: &Parameters<R>,
@@ -391,27 +405,26 @@ pub fn reconstruct_surface_inplace_octree<'a, I: Index, R: Real>(
         domain_aabb.as_ref(),
     )?;
     let grid = &surface.grid;
-
-    info!(
-        "Using a grid with {:?}x{:?}x{:?} points and {:?}x{:?}x{:?} cells of edge length {}.",
-        grid.points_per_dim()[0],
-        grid.points_per_dim()[1],
-        grid.points_per_dim()[2],
-        grid.cells_per_dim()[0],
-        grid.cells_per_dim()[1],
-        grid.cells_per_dim()[2],
-        grid.cell_size()
-    );
-    info!("The resulting domain size is: {:?}", grid.aabb());
+    log_grid_info(grid);
 
     surface.octree = if generate_octree {
-        let particles_per_cell = utils::ChunkSize::new(particle_positions.len()).chunk_size;
+        let particles_per_cell = utils::ChunkSize::new(particle_positions.len())
+            .with_log("particles")
+            .chunk_size;
+
         info!(
             "Building octree with at most {} particles per leaf",
             particles_per_cell
         );
         let mut tree = Octree::new(&grid, particle_positions.len());
-        tree.subdivide_recursively_par(&grid, particle_positions, particles_per_cell);
+        // TODO: Use margin subdivide hear!
+        //tree.subdivide_recursively_par(grid, particle_positions, particles_per_cell);
+        tree.subdivide_recursively_margin(
+            grid,
+            particle_positions,
+            particles_per_cell,
+            kernel_radius,
+        );
         Some(tree)
     } else {
         None
@@ -420,74 +433,103 @@ pub fn reconstruct_surface_inplace_octree<'a, I: Index, R: Real>(
     let octree = surface.octree.as_ref().expect("No octree generated");
 
     // Collect the particle lists of all octree leaf nodes
-    let subdomains: Vec<_> = octree.leaf_iter().collect();
-
-    // Loop over all subdomains of the octree
-    subdomains
-        .iter()
-        .copied()
-        .fold(TriMesh3d::default(), |mut global_mesh, octree_subdomain| {
-            let particles = octree_subdomain
+    let octree_leaves: Vec<_> = octree
+        .leaf_iter()
+        .filter(|octree_leaf| {
+            !octree_leaf
                 .particles()
-                .expect("Octree node has to be a leaf");
-            let particle_positions = particles
-                .iter()
-                .copied()
-                .map(|idx| particle_positions[idx])
-                .collect::<Vec<_>>();
+                .expect("Octree node has to be a leaf")
+                .is_empty()
+        })
+        .collect();
 
-            let particle_rest_density = rest_density;
-            let particle_rest_volume =
-                R::from_f64((4.0 / 3.0) * std::f64::consts::PI).unwrap() * particle_radius.powi(3);
-            let particle_rest_mass = particle_rest_volume * particle_rest_density;
+    info!("Octree has {} leaf nodes", octree_leaves.len());
 
-            let particle_densities = {
-                info!("Starting neighborhood search...");
+    // Perform individual surface reconstructions on all non-empty leaves of the octree
+    let global_mesh =
+        octree_leaves
+            .iter()
+            .copied()
+            .fold(TriMesh3d::default(), |mut global_mesh, octree_leaf| {
+                let particles = octree_leaf
+                    .particles()
+                    .expect("Octree node has to be a leaf");
 
-                let particle_neighbor_lists = neighborhood_search::search::<I, R>(
-                    &grid.aabb(),
-                    particle_positions.as_slice(),
-                    kernel_radius,
-                    false,
+                info!("Processing octree leaf with {} particles", particles.len());
+
+                let leaf_aabb = octree_leaf.aabb(grid);
+                let subdomain_grid = &octree_leaf
+                    .grid(leaf_aabb.min(), grid.cell_size())
+                    .expect("Unable to construct Octree node grid");
+                let subdomain_offset = octree_leaf.min_corner();
+                log_grid_info(subdomain_grid);
+
+                let particle_positions = particles
+                    .iter()
+                    .copied()
+                    .map(|idx| particle_positions[idx])
+                    .collect::<Vec<_>>();
+
+                let particle_rest_density = rest_density;
+                let particle_rest_volume = R::from_f64((4.0 / 3.0) * std::f64::consts::PI).unwrap()
+                    * particle_radius.powi(3);
+                let particle_rest_mass = particle_rest_volume * particle_rest_density;
+
+                let particle_densities = {
+                    info!("Starting neighborhood search...");
+
+                    let particle_neighbor_lists = neighborhood_search::search::<I, R>(
+                        &grid.aabb(),
+                        particle_positions.as_slice(),
+                        kernel_radius,
+                        false,
+                    );
+
+                    info!("Computing particle densities...");
+
+                    density_map::compute_particle_densities::<I, R>(
+                        particle_positions.as_slice(),
+                        particle_neighbor_lists.as_slice(),
+                        kernel_radius,
+                        particle_rest_mass,
+                        false,
+                    )
+                };
+
+                let density_map =
+                    density_map::sequential_generate_sparse_density_map_subdomain::<I, R>(
+                        grid,
+                        subdomain_offset,
+                        subdomain_grid,
+                        particle_positions.as_slice(),
+                        particle_densities.as_slice(),
+                        None,
+                        particle_rest_mass,
+                        kernel_radius,
+                        cube_size,
+                    );
+
+                let mut subdomain_mesh = TriMesh3d::default();
+                marching_cubes::triangulate_density_map::<I, R>(
+                    &subdomain_grid,
+                    &density_map,
+                    iso_surface_threshold,
+                    &mut subdomain_mesh,
                 );
 
-                info!("Computing particle densities...");
+                // Append the subdomain mesh to the global mesh
+                global_mesh.append(subdomain_mesh);
+                global_mesh
+            });
 
-                density_map::compute_particle_densities::<I, R>(
-                    particle_positions.as_slice(),
-                    particle_neighbor_lists.as_slice(),
-                    kernel_radius,
-                    particle_rest_mass,
-                    false,
-                )
-            };
-
-            let density_map = density_map::sequential_generate_sparse_density_map_subdomain::<I, R>(
-                &grid,
-                octree_subdomain.min_corner(),
-                octree_subdomain.max_corner(),
-                particle_positions.as_slice(),
-                particle_densities.as_slice(),
-                None,
-                particle_rest_mass,
-                kernel_radius,
-                cube_size,
-            );
-
-            let mut subdomain_mesh = TriMesh3d::default();
-            marching_cubes::triangulate_density_map::<I, R>(
-                &grid,
-                &density_map,
-                iso_surface_threshold,
-                &mut subdomain_mesh,
-            );
-
-            // Append the subdomain mesh to the global mesh
-            global_mesh.append(subdomain_mesh);
-            global_mesh
-        });
+    info!(
+        "Global mesh has {} triangles and {} vertices.",
+        global_mesh.triangles.len(),
+        global_mesh.vertices.len()
+    );
 
     surface.density_map = None;
+    surface.mesh = global_mesh;
 
     Ok(())
 }
