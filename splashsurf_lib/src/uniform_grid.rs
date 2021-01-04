@@ -85,16 +85,16 @@ pub struct NeighborEdge<'a, 'b: 'a, I: Index> {
 /// The underlying type is not public because its methods are only useful internally.
 pub type UniformGrid<I, R> = UniformCartesianCubeGrid3d<I, R>;
 
-/// Helper type for connectivity information on a cartesian grid in 3D based on uniform cubes
+/// Helper type for connectivity information on a 3D cartesian grid based on uniform cubes
 ///
-/// This type represents a virtual cartesian grid in 3D based on uniform cubes.
+/// This type represents a virtual or implicit three dimensional cartesian grid in based on uniform cubes.
 /// It provides helper functions to access connectivity of points (vertices), edges and cells on
 /// the virtual grid.
 ///
 /// **Grid construction** The origin of the grid is placed on the min coordinates of its AABB.
-/// Then, the AABB is filled with uniformly sized cubes. The final size of the grid may be larger than
-/// the AABB, as the last layer of cubes that may not fully fit into the upper extents of the AABB
-/// is still considered part of the grid.
+/// Then, the supplied AABB is filled with uniformly sized cubes. The final size of the grid may be
+/// larger than the AABB: the last layer of cubes that may not fit entirely within the upper
+/// extents of the AABB is still considered part of the grid.
 ///
 /// **Connectivity information** The grid then provides helper functions e.g. to find valid neighbors
 /// of points, edges and cells on the grid. These entities can either be indexed using index triplets `(i,j,k)` along
@@ -533,7 +533,7 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
         }
     }
 
-    /// Iterator over all 26 (27-1) valid cells that are adjacent to the given cell
+    /// Iterator over all valid (i.e. being part of the grid) cells of the 26 (27-1) cells that are adjacent to the given cell
     pub fn cells_adjacent_to_cell<'a>(
         &'a self,
         cell: &'a CellIndex<I>,

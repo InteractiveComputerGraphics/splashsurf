@@ -78,7 +78,7 @@ pub(crate) fn entry_point_generic<I: Index, R: Real>(
         info!("Writing octree to \"{}\"...", output_octree_file.display());
         io::vtk_format::write_vtk(
             UnstructuredGridPiece::from(
-                &reconstruction.octree().unwrap().into_hexmesh(grid, false),
+                &reconstruction.octree().unwrap().hexmesh(grid, false),
             ),
             output_octree_file,
             "mesh",

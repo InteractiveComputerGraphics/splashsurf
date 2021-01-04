@@ -97,7 +97,7 @@ impl<I: Index> Octree<I> {
     }
 
     /// Constructs a hex mesh visualizing the cells of the octree, may contain hanging and duplicate vertices as cells are not connected
-    pub fn into_hexmesh<R: Real>(
+    pub fn hexmesh<R: Real>(
         &self,
         grid: &UniformGrid<I, R>,
         only_non_empty: bool,
@@ -169,7 +169,7 @@ impl<I: Index> OctreeNode<I> {
         self.body.particles()
     }
 
-    /// Retruns a slice of the child nodes if this is not a leaf node
+    /// Returns a slice of the child nodes if this is not a leaf node
     pub fn children(&self) -> Option<&[Box<OctreeNode<I>>]> {
         self.body.children()
     }

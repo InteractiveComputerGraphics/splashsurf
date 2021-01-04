@@ -274,7 +274,7 @@ pub fn reconstruct_surface_inplace<'a, I: Index, R: Real>(
     );
     info!("The resulting domain size is: {:?}", grid.aabb());
 
-    let octree = if generate_octree {
+    surface.octree = if generate_octree {
         let particles_per_cell = utils::ChunkSize::new(particle_positions.len()).chunk_size;
         info!(
             "Building octree with at most {} particles per leaf",
