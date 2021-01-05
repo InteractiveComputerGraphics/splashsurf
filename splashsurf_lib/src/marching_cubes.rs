@@ -118,7 +118,8 @@ pub(crate) fn interpolate_points_to_cell_data<I: Index, R: Real>(
                 continue;
             }
 
-            let point = grid.try_unflatten_point_index(flat_point_index).unwrap();
+            let point = grid.try_unflatten_point_index(flat_point_index)
+                .expect("Flat point index does not belong to grid. You have to supply the same grid that was used to create the density map.");
             let neighborhood = grid.get_point_neighborhood(&point);
 
             // Iterate over all neighbors of the point to find edges crossing the iso-surface
@@ -155,8 +156,6 @@ pub(crate) fn interpolate_points_to_cell_data<I: Index, R: Real>(
                     // each cell adjacent to the edge crossing the iso-surface.
                     // This includes the above/below iso-surface flags and the interpolated vertex index.
                     for cell in grid.cells_adjacent_to_edge(&neighbor_edge).iter().flatten() {
-                        // TODO: For subdomain marching cubes, we have to ignore cells that are outside of the subdomain
-
                         let flat_cell_index = grid.flatten_cell_index(cell);
 
                         let mut cell_data_entry = cell_data
@@ -254,10 +253,19 @@ pub(crate) fn triangulate<I: Index, R: Real>(
         let triangles = get_marching_cubes_triangulation(&cell_data.are_vertices_above());
 
         for triangle in triangles.iter().flatten() {
+            // Note: If the one of the following expect calls causes a panic, it is probably because
+            //  a cell was added improperly to the marching cubes input, e.g. a cell was added to the
+            //  cell data map that is not part of the domain (such that only those edges of the cell
+            //  that are neighboring to the domain have correct iso surface vertices)
+            //
+            //  If this happens, it's a bug in the cell data map generation.
             let global_triangle = [
-                cell_data.iso_surface_vertices[triangle[0] as usize].unwrap(),
-                cell_data.iso_surface_vertices[triangle[1] as usize].unwrap(),
-                cell_data.iso_surface_vertices[triangle[2] as usize].unwrap(),
+                cell_data.iso_surface_vertices[triangle[0] as usize]
+                    .expect("Missing iso surface vertex. This is a bug."),
+                cell_data.iso_surface_vertices[triangle[1] as usize]
+                    .expect("Missing iso surface vertex. This is a bug."),
+                cell_data.iso_surface_vertices[triangle[2] as usize]
+                    .expect("Missing iso surface vertex. This is a bug."),
             ];
             mesh.triangles.push(global_triangle);
         }

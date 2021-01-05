@@ -60,7 +60,7 @@ use mesh::TriMesh3d;
 use octree::Octree;
 
 // TODO: Add documentation of feature flags
-// TODO: Add documentation of the parameter struct
+// TODO: Feature flag for multi threading
 
 // TODO: Remove anyhow/thiserror from lib?
 // TODO: Write more unit tests (e.g. AABB, UniformGrid, neighborhood search)
@@ -103,18 +103,37 @@ pub(crate) fn new_map<K, V>() -> MapType<K, V> {
 
 pub(crate) type ParallelMapType<K, V> = dashmap::DashMap<K, V, HashState>;
 
+/// Criterion used for spatial decomposition of the particle collection
+#[derive(Clone, Debug)]
+pub enum SpatialDecompositionCriterion {
+    /// Perform octree subdivision until a maximum number of particles is reached per chunk
+    MaxParticleCount,
+}
+
 /// Parameters for the surface reconstruction
 #[derive(Clone, Debug)]
 pub struct Parameters<R: Real> {
+    /// Radius per particle (used to calculate the particle volume)
     pub particle_radius: R,
+    /// Rest density of the fluid
     pub rest_density: R,
+    /// Compact support radius of the kernel, i.e. distance from the particle where kernel reaches zero
     pub kernel_radius: R,
+    /// Particles without neighbors within the splash detection radius are considered "splash" or "free particles".
+    /// They are filtered out and processed separately. Currently they are only skipped during the surface reconstruction.
     pub splash_detection_radius: Option<R>,
+    /// Edge length of the marching cubes implicit background grid
     pub cube_size: R,
+    /// Density threshold value to distinguish between the inside (above threshold) and outside (below threshold) of the fluid
     pub iso_surface_threshold: R,
+    /// Manually restrict the domain to the surface reconstruction.
+    /// If not provided, the smallest AABB enclosing all particles is computed instead.
     pub domain_aabb: Option<AxisAlignedBoundingBox3d<R>>,
+    /// Whether to allow multi threading within the surface reconstruction procedure
     pub enable_multi_threading: bool,
-    pub generate_octree: bool,
+    /// Strategy used for spatial decomposition (octree subdivision) of the particles.
+    /// If not provided, no octree is generated and a global approach is used instead.
+    pub spatial_decomposition: Option<SpatialDecompositionCriterion>,
 }
 
 /// Macro version of Option::map that allows using e.g. using the ?-operator in the map expression
@@ -142,7 +161,7 @@ impl<R: Real> Parameters<R> {
             iso_surface_threshold: self.iso_surface_threshold.try_convert()?,
             domain_aabb: map_option!(&self.domain_aabb, aabb => aabb.try_convert()?),
             enable_multi_threading: self.enable_multi_threading,
-            generate_octree: self.generate_octree,
+            spatial_decomposition: self.spatial_decomposition.clone(),
         })
     }
 }
@@ -178,6 +197,11 @@ impl<I: Index, R: Real> SurfaceReconstruction<I, R> {
         &self.mesh
     }
 
+    /// Returns a reference to the octree generated for spatial decomposition of the input particles
+    pub fn octree(&self) -> Option<&Octree<I>> {
+        self.octree.as_ref()
+    }
+
     /// Returns a reference to the sparse density map (discretized on the vertices of the background grid) that is used as input for marching cubes
     pub fn density_map(&self) -> Option<&DensityMap<I, R>> {
         self.density_map.as_ref()
@@ -187,14 +211,10 @@ impl<I: Index, R: Real> SurfaceReconstruction<I, R> {
     pub fn grid(&self) -> &UniformGrid<I, R> {
         &self.grid
     }
-
-    /// Returns a reference to the octree generated for spatial decomposition of the input particles
-    pub fn octree(&self) -> Option<&Octree<I>> {
-        self.octree.as_ref()
-    }
 }
 
 impl<I: Index, R: Real> From<SurfaceReconstruction<I, R>> for TriMesh3d<R> {
+    /// Extracts the reconstructed mesh
     fn from(result: SurfaceReconstruction<I, R>) -> Self {
         result.mesh
     }
@@ -213,12 +233,14 @@ pub enum ReconstructionError<I: Index, R: Real> {
 }
 
 impl<I: Index, R: Real> From<GridConstructionError<I, R>> for ReconstructionError<I, R> {
+    /// Allows automatic conversion of a [GridConstructionError] to a [ReconstructionError]
     fn from(error: GridConstructionError<I, R>) -> Self {
         ReconstructionError::GridConstructionError(error)
     }
 }
 
 impl<I: Index, R: Real> From<anyhow::Error> for ReconstructionError<I, R> {
+    /// Allows automatic conversion of an anyhow::Error to a [ReconstructionError]
     fn from(error: anyhow::Error) -> Self {
         ReconstructionError::Unknown(error)
     }
@@ -236,6 +258,7 @@ pub fn reconstruct_surface<I: Index, R: Real>(
     Ok(surface)
 }
 
+/// Performs a marching cubes surface construction of the fluid represented by the given particle positions, inplace
 pub fn reconstruct_surface_inplace<'a, I: Index, R: Real>(
     particle_positions: &[Vector3<R>],
     parameters: &Parameters<R>,
@@ -252,7 +275,7 @@ pub fn reconstruct_surface_inplace<'a, I: Index, R: Real>(
         iso_surface_threshold,
         domain_aabb,
         enable_multi_threading,
-        generate_octree,
+        spatial_decomposition: _,
     } = parameters.clone();
 
     surface.grid = grid_for_reconstruction(
@@ -274,19 +297,6 @@ pub fn reconstruct_surface_inplace<'a, I: Index, R: Real>(
         grid.cell_size()
     );
     info!("The resulting domain size is: {:?}", grid.aabb());
-
-    surface.octree = if generate_octree {
-        let particles_per_cell = utils::ChunkSize::new(particle_positions.len()).chunk_size;
-        info!(
-            "Building octree with at most {} particles per leaf",
-            particles_per_cell
-        );
-        let mut tree = Octree::new(&grid, particle_positions.len());
-        tree.subdivide_recursively_par(&grid, particle_positions, particles_per_cell);
-        Some(tree)
-    } else {
-        None
-    };
 
     let particle_rest_density = rest_density;
     let particle_rest_volume =
@@ -396,7 +406,7 @@ pub fn reconstruct_surface_inplace_octree<'a, I: Index, R: Real>(
         iso_surface_threshold,
         domain_aabb,
         enable_multi_threading: _,
-        generate_octree,
+        spatial_decomposition,
     } = parameters.clone();
 
     surface.grid = grid_for_reconstruction(
@@ -408,7 +418,7 @@ pub fn reconstruct_surface_inplace_octree<'a, I: Index, R: Real>(
     let grid = &surface.grid;
     log_grid_info(grid);
 
-    surface.octree = if generate_octree {
+    surface.octree = if spatial_decomposition.is_some() {
         let particles_per_cell = utils::ChunkSize::new(particle_positions.len())
             .with_log("particles")
             .chunk_size;
@@ -418,8 +428,6 @@ pub fn reconstruct_surface_inplace_octree<'a, I: Index, R: Real>(
             particles_per_cell
         );
         let mut tree = Octree::new(&grid, particle_positions.len());
-        // TODO: Use margin subdivide hear!
-        //tree.subdivide_recursively_par(grid, particle_positions, particles_per_cell);
         tree.subdivide_recursively_margin(
             grid,
             particle_positions,
@@ -473,8 +481,8 @@ pub fn reconstruct_surface_inplace_octree<'a, I: Index, R: Real>(
                     .collect::<Vec<_>>();
 
                 let particle_rest_density = rest_density;
-                let particle_rest_volume =
-                    R::from_f64((4.0 / 3.0) * std::f64::consts::PI).unwrap() * particle_radius.powi(3);
+                let particle_rest_volume = R::from_f64((4.0 / 3.0) * std::f64::consts::PI).unwrap()
+                    * particle_radius.powi(3);
                 let particle_rest_mass = particle_rest_volume * particle_rest_density;
 
                 let particle_densities = {
@@ -498,17 +506,18 @@ pub fn reconstruct_surface_inplace_octree<'a, I: Index, R: Real>(
                     )
                 };
 
-                let density_map = density_map::sequential_generate_sparse_density_map_subdomain::<I, R>(
-                    grid,
-                    subdomain_offset,
-                    subdomain_grid,
-                    particle_positions.as_slice(),
-                    particle_densities.as_slice(),
-                    None,
-                    particle_rest_mass,
-                    kernel_radius,
-                    cube_size,
-                );
+                let density_map =
+                    density_map::sequential_generate_sparse_density_map_subdomain::<I, R>(
+                        grid,
+                        subdomain_offset,
+                        subdomain_grid,
+                        particle_positions.as_slice(),
+                        particle_densities.as_slice(),
+                        None,
+                        particle_rest_mass,
+                        kernel_radius,
+                        cube_size,
+                    );
 
                 let mut subdomain_mesh = TriMesh3d::default();
                 marching_cubes::triangulate_density_map::<I, R>(

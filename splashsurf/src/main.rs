@@ -209,7 +209,10 @@ impl TryFrom<&CommandlineArgs> for ReconstructionRunnerArgs {
             iso_surface_threshold: args.surface_threshold,
             domain_aabb,
             enable_multi_threading: args.parallelize_over_particles,
-            generate_octree: args.output_octree.is_some(),
+            spatial_decomposition: args
+                .output_octree
+                .as_ref()
+                .map(|_| splashsurf_lib::SpatialDecompositionCriterion::MaxParticleCount),
         };
 
         Ok(ReconstructionRunnerArgs {
