@@ -53,6 +53,7 @@ pub use uniform_grid::{GridConstructionError, UniformGrid};
 
 use log::info;
 use nalgebra::Vector3;
+use rayon::prelude::*;
 use thiserror::Error as ThisError;
 
 use mesh::TriMesh3d;
@@ -446,11 +447,12 @@ pub fn reconstruct_surface_inplace_octree<'a, I: Index, R: Real>(
     info!("Octree has {} leaf nodes", octree_leaves.len());
 
     // Perform individual surface reconstructions on all non-empty leaves of the octree
-    let global_mesh =
+    let global_mesh = {
+        profile!("parallel domain decomposed surface reconstruction");
         octree_leaves
-            .iter()
+            .par_iter()
             .copied()
-            .fold(TriMesh3d::default(), |mut global_mesh, octree_leaf| {
+            .fold(TriMesh3d::default, |mut global_mesh, octree_leaf| {
                 let particles = octree_leaf
                     .particles()
                     .expect("Octree node has to be a leaf");
@@ -471,8 +473,8 @@ pub fn reconstruct_surface_inplace_octree<'a, I: Index, R: Real>(
                     .collect::<Vec<_>>();
 
                 let particle_rest_density = rest_density;
-                let particle_rest_volume = R::from_f64((4.0 / 3.0) * std::f64::consts::PI).unwrap()
-                    * particle_radius.powi(3);
+                let particle_rest_volume =
+                    R::from_f64((4.0 / 3.0) * std::f64::consts::PI).unwrap() * particle_radius.powi(3);
                 let particle_rest_mass = particle_rest_volume * particle_rest_density;
 
                 let particle_densities = {
@@ -496,18 +498,17 @@ pub fn reconstruct_surface_inplace_octree<'a, I: Index, R: Real>(
                     )
                 };
 
-                let density_map =
-                    density_map::sequential_generate_sparse_density_map_subdomain::<I, R>(
-                        grid,
-                        subdomain_offset,
-                        subdomain_grid,
-                        particle_positions.as_slice(),
-                        particle_densities.as_slice(),
-                        None,
-                        particle_rest_mass,
-                        kernel_radius,
-                        cube_size,
-                    );
+                let density_map = density_map::sequential_generate_sparse_density_map_subdomain::<I, R>(
+                    grid,
+                    subdomain_offset,
+                    subdomain_grid,
+                    particle_positions.as_slice(),
+                    particle_densities.as_slice(),
+                    None,
+                    particle_rest_mass,
+                    kernel_radius,
+                    cube_size,
+                );
 
                 let mut subdomain_mesh = TriMesh3d::default();
                 marching_cubes::triangulate_density_map::<I, R>(
@@ -520,7 +521,12 @@ pub fn reconstruct_surface_inplace_octree<'a, I: Index, R: Real>(
                 // Append the subdomain mesh to the global mesh
                 global_mesh.append(subdomain_mesh);
                 global_mesh
-            });
+            })
+            .reduce(TriMesh3d::default, |mut global_mesh, local_mesh| {
+                global_mesh.append(local_mesh);
+                global_mesh
+            })
+    };
 
     info!(
         "Global mesh has {} triangles and {} vertices.",

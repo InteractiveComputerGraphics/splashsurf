@@ -26,8 +26,8 @@ pub(crate) struct ChunkSize {
 
 impl ChunkSize {
     pub(crate) fn new(num_items: usize) -> Self {
-        let min_chunk_size = 100.max(num_items);
-        let chunks_per_cpu = 10;
+        let min_chunk_size = 500.max(num_items);
+        let chunks_per_cpu = 4;
 
         let num_cpus = num_cpus::get();
         let num_chunks = chunks_per_cpu * num_cpus;
