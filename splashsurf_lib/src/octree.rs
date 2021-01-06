@@ -76,6 +76,51 @@ impl<I: Index> LeafSplitCriterion<I> for MaxNonGhostParticleLeafSplitCriterion {
     }
 }
 
+/// Split criterion that decides based on whether the node's extents are larger than 1 cell in all dimensions
+struct MinimumExtentSplitCriterion<I> {
+    minimum_extent: I,
+}
+
+impl<I: Index> MinimumExtentSplitCriterion<I> {
+    fn new(minimum_extent: I) -> Self {
+        Self { minimum_extent }
+    }
+}
+
+impl<I: Index> LeafSplitCriterion<I> for MinimumExtentSplitCriterion<I> {
+    /// Returns true only if all extents of the octree node are larger than 1 cell
+    fn split_leaf(&self, node: &OctreeNode<I>) -> bool {
+        let lower = node.min_corner.index();
+        let upper = node.max_corner.index();
+
+        upper[0] - lower[0] > self.minimum_extent
+            && upper[1] - lower[1] > self.minimum_extent
+            && upper[2] - lower[2] > self.minimum_extent
+    }
+}
+
+impl<I: Index, A, B> LeafSplitCriterion<I> for (A, B)
+where
+    A: LeafSplitCriterion<I>,
+    B: LeafSplitCriterion<I>,
+{
+    fn split_leaf(&self, node: &OctreeNode<I>) -> bool {
+        self.0.split_leaf(node) && self.1.split_leaf(node)
+    }
+}
+
+fn default_split_criterion<I: Index>(
+    particles_per_cell: usize,
+) -> (
+    MaxNonGhostParticleLeafSplitCriterion,
+    MinimumExtentSplitCriterion<I>,
+) {
+    (
+        MaxNonGhostParticleLeafSplitCriterion::new(particles_per_cell),
+        MinimumExtentSplitCriterion::new(I::one()),
+    )
+}
+
 impl<I: Index> Octree<I> {
     /// Creates a new [Octree] with a single leaf node containing all vertices
     pub fn new<R: Real>(grid: &UniformGrid<I, R>, n_particles: usize) -> Self {
@@ -93,7 +138,7 @@ impl<I: Index> Octree<I> {
     ) {
         profile!("octree subdivide_recursively");
 
-        let split_criterion = MaxNonGhostParticleLeafSplitCriterion::new(particles_per_cell);
+        let split_criterion = default_split_criterion(particles_per_cell);
         self.root
             .subdivide_recursively(grid, particle_positions, &split_criterion);
     }
@@ -107,7 +152,7 @@ impl<I: Index> Octree<I> {
     ) {
         profile!("octree subdivide_recursively_par");
 
-        let split_criterion = MaxNonGhostParticleLeafSplitCriterion::new(particles_per_cell);
+        let split_criterion = default_split_criterion(particles_per_cell);
         rayon::scope_fifo(|s| {
             self.root
                 .subdivide_recursively_par(s, grid, particle_positions, &split_criterion);
@@ -124,7 +169,7 @@ impl<I: Index> Octree<I> {
     ) {
         profile!("octree subdivide_recursively_margin");
 
-        let split_criterion = MaxNonGhostParticleLeafSplitCriterion::new(particles_per_cell);
+        let split_criterion = default_split_criterion(particles_per_cell);
         self.root
             .subdivide_recursively_margin(grid, particle_positions, &split_criterion, margin);
     }
@@ -390,10 +435,6 @@ impl<I: Index> OctreeNode<I> {
     fn subdivide<R: Real>(&mut self, grid: &UniformGrid<I, R>, particle_positions: &[Vector3<R>]) {
         // Convert node body from Leaf to Children
         let new_body = if let NodeBody::Leaf { particles, .. } = &self.body {
-            if !can_split(&self.min_corner, &self.max_corner) {
-                return;
-            }
-
             // Obtain the point used as the octree split/pivot point
             let split_point = get_split_point(grid, &self.min_corner, &self.max_corner)
                 .expect("Failed to get split point of octree node");
@@ -462,10 +503,6 @@ impl<I: Index> OctreeNode<I> {
     ) {
         // Convert node body from Leaf to Children
         let new_body = if let NodeBody::Leaf { particles, .. } = &self.body {
-            if !can_split(&self.min_corner, &self.max_corner) {
-                return;
-            }
-
             // Obtain the point used as the octree split/pivot point
             let split_point = get_split_point(grid, &self.min_corner, &self.max_corner)
                 .expect("Failed to get split point of octree node");
@@ -552,10 +589,6 @@ impl<I: Index> OctreeNode<I> {
     ) {
         // Convert node body from Leaf to Children
         let new_body = if let NodeBody::Leaf { particles, .. } = &self.body {
-            if !can_split(&self.min_corner, &self.max_corner) {
-                return;
-            }
-
             // Obtain the point used as the octree split/pivot point
             let split_point = get_split_point(grid, &self.min_corner, &self.max_corner)
                 .expect("Failed to get split point of octree node");
@@ -690,18 +723,6 @@ impl<I: Index> NodeBody<I> {
             _ => None,
         }
     }
-}
-
-/// Returns whether an [OctreeNode] with the given lower and upper points can be subdivided
-///
-/// An [OctreeNode] can be subdivided if it has an extent of more than one cell in each dimension.
-fn can_split<I: Index>(lower: &PointIndex<I>, upper: &PointIndex<I>) -> bool {
-    let lower = lower.index();
-    let upper = upper.index();
-
-    upper[0] - lower[0] > I::one()
-        && upper[1] - lower[1] > I::one()
-        && upper[2] - lower[2] > I::one()
 }
 
 /// Returns the [PointIndex] of the octree subdivision point for an [OctreeNode] with the given lower and upper points
