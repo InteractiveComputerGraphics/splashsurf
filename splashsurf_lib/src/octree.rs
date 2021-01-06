@@ -757,6 +757,12 @@ impl From<Octant> for OctantDirectionFlags {
     }
 }
 
+impl From<OctantAxisDirections> for OctantDirectionFlags {
+    fn from(directions: OctantAxisDirections) -> Self {
+        Self::from_directions(directions)
+    }
+}
+
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 struct OctantAxisDirections {
     x_axis: Direction,
@@ -778,6 +784,7 @@ enum Octant {
 }
 
 impl OctantAxisDirections {
+    #[allow(dead_code)]
     #[inline(always)]
     pub const fn all() -> &'static [OctantAxisDirections; 8] {
         &ALL_OCTANT_DIRECTIONS
