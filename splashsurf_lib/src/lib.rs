@@ -56,6 +56,7 @@ use nalgebra::Vector3;
 use rayon::prelude::*;
 use thiserror::Error as ThisError;
 
+use crate::uniform_grid::PointIndex;
 use mesh::TriMesh3d;
 use octree::Octree;
 
@@ -262,165 +263,77 @@ pub fn reconstruct_surface<I: Index, R: Real>(
 pub fn reconstruct_surface_inplace<'a, I: Index, R: Real>(
     particle_positions: &[Vector3<R>],
     parameters: &Parameters<R>,
-    surface: &'a mut SurfaceReconstruction<I, R>,
+    output_surface: &'a mut SurfaceReconstruction<I, R>,
 ) -> Result<(), ReconstructionError<I, R>> {
-    profile!("reconstruct_surface_inplace");
-
-    let Parameters {
-        particle_radius,
-        rest_density,
-        kernel_radius,
-        splash_detection_radius,
-        cube_size,
-        iso_surface_threshold,
-        domain_aabb,
-        enable_multi_threading,
-        spatial_decomposition: _,
-    } = parameters.clone();
-
-    surface.grid = grid_for_reconstruction(
+    output_surface.grid = grid_for_reconstruction(
         particle_positions,
-        particle_radius,
-        cube_size,
-        domain_aabb.as_ref(),
+        parameters.particle_radius,
+        parameters.cube_size,
+        parameters.domain_aabb.as_ref(),
     )?;
-    let grid = &surface.grid;
+    let grid = &output_surface.grid;
 
-    info!(
-        "Using a grid with {:?}x{:?}x{:?} points and {:?}x{:?}x{:?} cells of edge length {}.",
-        grid.points_per_dim()[0],
-        grid.points_per_dim()[1],
-        grid.points_per_dim()[2],
-        grid.cells_per_dim()[0],
-        grid.cells_per_dim()[1],
-        grid.cells_per_dim()[2],
-        grid.cell_size()
-    );
-    info!("The resulting domain size is: {:?}", grid.aabb());
+    log_grid_info(grid);
 
-    let particle_rest_density = rest_density;
-    let particle_rest_volume =
-        R::from_f64((4.0 / 3.0) * std::f64::consts::PI).unwrap() * particle_radius.powi(3);
-    let particle_rest_mass = particle_rest_volume * particle_rest_density;
+    if parameters.spatial_decomposition.is_some() {
+        reconstruct_surface_inplace_octree(particle_positions, parameters, output_surface)?
+    } else {
+        profile!("reconstruct_surface_inplace");
 
-    let particle_densities = {
-        info!("Starting neighborhood search...");
-
-        let particle_neighbor_lists = neighborhood_search::search::<I, R>(
-            &grid.aabb(),
+        reconstruct_single_surface(
+            grid,
+            None,
+            None,
             particle_positions,
-            kernel_radius,
-            enable_multi_threading,
+            parameters,
+            &mut output_surface.mesh,
         );
 
-        info!("Computing particle densities...");
+        /*
+        let particle_indices = splash_detection_radius.map(|splash_detection_radius| {
+            let neighborhood_list = neighborhood_search::search::<I, R>(
+                &grid.aabb(),
+                particle_positions,
+                splash_detection_radius,
+                enable_multi_threading,
+            );
 
-        density_map::compute_particle_densities::<I, R>(
-            particle_positions,
-            particle_neighbor_lists.as_slice(),
-            kernel_radius,
-            particle_rest_mass,
-            enable_multi_threading,
-        )
-    };
-
-    let particle_indices = splash_detection_radius.map(|splash_detection_radius| {
-        let neighborhood_list = neighborhood_search::search::<I, R>(
-            &grid.aabb(),
-            particle_positions,
-            splash_detection_radius,
-            enable_multi_threading,
-        );
-
-        let mut active_particles = Vec::new();
-        for (particle_i, neighbors) in neighborhood_list.iter().enumerate() {
-            if !neighbors.is_empty() {
-                active_particles.push(particle_i);
+            let mut active_particles = Vec::new();
+            for (particle_i, neighbors) in neighborhood_list.iter().enumerate() {
+                if !neighbors.is_empty() {
+                    active_particles.push(particle_i);
+                }
             }
-        }
 
-        active_particles
-    });
+            active_particles
+        });
+        */
 
-    let density_map = density_map::generate_sparse_density_map::<I, R>(
-        &grid,
-        None,
-        None,
-        particle_positions,
-        particle_densities.as_slice(),
-        particle_indices.as_ref().map(|is| is.as_slice()),
-        particle_rest_mass,
-        kernel_radius,
-        cube_size,
-        enable_multi_threading,
-    );
-
-    marching_cubes::triangulate_density_map::<I, R>(
-        &grid,
-        &density_map,
-        iso_surface_threshold,
-        &mut surface.mesh,
-    );
-
-    surface.density_map = Some(density_map);
+        // TODO: Set this correctly
+        output_surface.density_map = None;
+    }
 
     Ok(())
 }
 
-#[inline(never)]
-pub fn reconstruct_surface_octree<I: Index, R: Real>(
+fn reconstruct_surface_inplace_octree<'a, I: Index, R: Real>(
     particle_positions: &[Vector3<R>],
     parameters: &Parameters<R>,
-) -> Result<SurfaceReconstruction<I, R>, ReconstructionError<I, R>> {
-    profile!("reconstruct_surface");
-    let mut surface = SurfaceReconstruction::default();
-    reconstruct_surface_inplace_octree(particle_positions, parameters, &mut surface)?;
-    Ok(surface)
-}
-
-fn log_grid_info<I: Index, R: Real>(grid: &UniformGrid<I, R>) {
-    info!(
-        "Using a grid with {:?}x{:?}x{:?} points and {:?}x{:?}x{:?} cells of edge length {}.",
-        grid.points_per_dim()[0],
-        grid.points_per_dim()[1],
-        grid.points_per_dim()[2],
-        grid.cells_per_dim()[0],
-        grid.cells_per_dim()[1],
-        grid.cells_per_dim()[2],
-        grid.cell_size()
-    );
-    info!("The resulting domain size is: {:?}", grid.aabb());
-}
-
-pub fn reconstruct_surface_inplace_octree<'a, I: Index, R: Real>(
-    particle_positions: &[Vector3<R>],
-    parameters: &Parameters<R>,
-    surface: &'a mut SurfaceReconstruction<I, R>,
+    output_surface: &'a mut SurfaceReconstruction<I, R>,
 ) -> Result<(), ReconstructionError<I, R>> {
-    profile!("reconstruct_surface_inplace");
+    profile!("reconstruct_surface_inplace_octree");
 
-    let Parameters {
-        particle_radius,
-        rest_density,
-        kernel_radius,
-        splash_detection_radius: _,
-        cube_size,
-        iso_surface_threshold,
-        domain_aabb,
-        enable_multi_threading: _,
-        spatial_decomposition,
-    } = parameters.clone();
+    // Disable multi-threading in sub-tasks for now
+    let parameters = &{
+        let mut p = parameters.clone();
+        p.enable_multi_threading = false;
+        p
+    };
 
-    surface.grid = grid_for_reconstruction(
-        particle_positions,
-        particle_radius,
-        cube_size,
-        domain_aabb.as_ref(),
-    )?;
-    let grid = &surface.grid;
-    log_grid_info(grid);
+    // The grid was already generated by the calling public function
+    let grid = &output_surface.grid;
 
-    surface.octree = if spatial_decomposition.is_some() {
+    output_surface.octree = if parameters.spatial_decomposition.is_some() {
         let particles_per_cell = utils::ChunkSize::new(particle_positions.len())
             .with_log("particles")
             .chunk_size;
@@ -434,14 +347,14 @@ pub fn reconstruct_surface_inplace_octree<'a, I: Index, R: Real>(
             grid,
             particle_positions,
             particles_per_cell,
-            kernel_radius,
+            parameters.kernel_radius,
         );
         Some(tree)
     } else {
-        None
+        panic!("Called octree-based surface reconstruction without decomposition criterion");
     };
 
-    let octree = surface.octree.as_ref().expect("No octree generated");
+    let octree = output_surface.octree.as_ref().expect("No octree generated");
 
     // Collect the particle lists of all octree leaf nodes
     let octree_leaves: Vec<_> = octree
@@ -469,6 +382,7 @@ pub fn reconstruct_surface_inplace_octree<'a, I: Index, R: Real>(
 
                 info!("Processing octree leaf with {} particles", particles.len());
 
+                // Generate grid for the subdomain of this octree leaf
                 let leaf_aabb = octree_leaf.aabb(grid);
                 let subdomain_grid = &octree_leaf
                     .grid(leaf_aabb.min(), grid.cell_size())
@@ -476,56 +390,20 @@ pub fn reconstruct_surface_inplace_octree<'a, I: Index, R: Real>(
                 let subdomain_offset = octree_leaf.min_corner();
                 log_grid_info(subdomain_grid);
 
+                // TODO: Use thread_local workspace for this
                 let particle_positions = particles
                     .iter()
                     .copied()
                     .map(|idx| particle_positions[idx])
                     .collect::<Vec<_>>();
 
-                let particle_rest_density = rest_density;
-                let particle_rest_volume = R::from_f64((4.0 / 3.0) * std::f64::consts::PI).unwrap()
-                    * particle_radius.powi(3);
-                let particle_rest_mass = particle_rest_volume * particle_rest_density;
-
-                let particle_densities = {
-                    info!("Starting neighborhood search...");
-
-                    let particle_neighbor_lists = neighborhood_search::search::<I, R>(
-                        &grid.aabb(),
-                        particle_positions.as_slice(),
-                        kernel_radius,
-                        false,
-                    );
-
-                    info!("Computing particle densities...");
-
-                    density_map::compute_particle_densities::<I, R>(
-                        particle_positions.as_slice(),
-                        particle_neighbor_lists.as_slice(),
-                        kernel_radius,
-                        particle_rest_mass,
-                        false,
-                    )
-                };
-
-                let density_map = density_map::generate_sparse_density_map(
+                let mut subdomain_mesh = TriMesh3d::default();
+                reconstruct_single_surface(
                     grid,
                     Some(subdomain_offset),
                     Some(subdomain_grid),
                     particle_positions.as_slice(),
-                    particle_densities.as_slice(),
-                    None,
-                    particle_rest_mass,
-                    kernel_radius,
-                    cube_size,
-                    false,
-                );
-
-                let mut subdomain_mesh = TriMesh3d::default();
-                marching_cubes::triangulate_density_map::<I, R>(
-                    &subdomain_grid,
-                    &density_map,
-                    iso_surface_threshold,
+                    parameters,
                     &mut subdomain_mesh,
                 );
 
@@ -545,10 +423,81 @@ pub fn reconstruct_surface_inplace_octree<'a, I: Index, R: Real>(
         global_mesh.vertices.len()
     );
 
-    surface.density_map = None;
-    surface.mesh = global_mesh;
+    output_surface.density_map = None;
+    output_surface.mesh = global_mesh;
 
     Ok(())
+}
+
+fn reconstruct_single_surface<'a, I: Index, R: Real>(
+    grid: &UniformGrid<I, R>,
+    subdomain_offset: Option<&PointIndex<I>>,
+    subdomain_grid: Option<&UniformGrid<I, R>>,
+    particle_positions: &[Vector3<R>],
+    parameters: &Parameters<R>,
+    output_mesh: &'a mut TriMesh3d<R>,
+) {
+    let particle_rest_density = parameters.rest_density;
+    let particle_rest_volume = R::from_f64((4.0 / 3.0) * std::f64::consts::PI).unwrap()
+        * parameters.particle_radius.powi(3);
+    let particle_rest_mass = particle_rest_volume * particle_rest_density;
+
+    let particle_densities = {
+        info!("Starting neighborhood search...");
+
+        let particle_neighbor_lists = neighborhood_search::search::<I, R>(
+            &grid.aabb(),
+            particle_positions,
+            parameters.kernel_radius,
+            parameters.enable_multi_threading,
+        );
+
+        info!("Computing particle densities...");
+
+        density_map::compute_particle_densities::<I, R>(
+            particle_positions,
+            particle_neighbor_lists.as_slice(),
+            parameters.kernel_radius,
+            particle_rest_mass,
+            parameters.enable_multi_threading,
+        )
+    };
+
+    // TODO: Use thread_local workspace for this
+    let density_map = density_map::generate_sparse_density_map(
+        grid,
+        subdomain_offset,
+        subdomain_grid,
+        particle_positions,
+        particle_densities.as_slice(),
+        None,
+        particle_rest_mass,
+        parameters.kernel_radius,
+        parameters.cube_size,
+        parameters.enable_multi_threading,
+    );
+
+    marching_cubes::triangulate_density_map::<I, R>(
+        subdomain_grid.unwrap_or(grid),
+        &density_map,
+        parameters.iso_surface_threshold,
+        output_mesh,
+    );
+}
+
+/// Logs the information about the given grid
+fn log_grid_info<I: Index, R: Real>(grid: &UniformGrid<I, R>) {
+    info!(
+        "Using a grid with {:?}x{:?}x{:?} points and {:?}x{:?}x{:?} cells of edge length {}.",
+        grid.points_per_dim()[0],
+        grid.points_per_dim()[1],
+        grid.points_per_dim()[2],
+        grid.cells_per_dim()[0],
+        grid.cells_per_dim()[1],
+        grid.cells_per_dim()[2],
+        grid.cell_size()
+    );
+    info!("The resulting domain size is: {:?}", grid.aabb());
 }
 
 /// Constructs the background grid for marching cubes based on the parameters supplied to the surface reconstruction

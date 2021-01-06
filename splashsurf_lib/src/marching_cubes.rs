@@ -12,6 +12,7 @@ pub fn triangulate_density_map<I: Index, R: Real>(
     mesh: &mut TriMesh3d<R>,
 ) {
     profile!("triangulate_density_map");
+    mesh.clear();
     let marching_cubes_data =
         interpolate_points_to_cell_data::<I, R>(&grid, &density_map, iso_surface_threshold, mesh);
     triangulate::<I, R>(marching_cubes_data, mesh)

@@ -14,6 +14,12 @@ pub struct TriMesh3d<R: Real> {
 }
 
 impl<R: Real> TriMesh3d<R> {
+    /// Clears the vertex and triangle storage, preserves allocated memory
+    pub fn clear(&mut self) {
+        self.vertices.clear();
+        self.triangles.clear();
+    }
+
     /// Appends the other mesh to this mesh by simply appending all vertices and triangles of the other mesh and adjusting indices accordingly
     pub fn append(&mut self, other: TriMesh3d<R>) {
         let TriMesh3d {

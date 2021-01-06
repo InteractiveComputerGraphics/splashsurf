@@ -51,11 +51,8 @@ pub(crate) fn entry_point_generic<I: Index, R: Real>(
         })?;
 
     // Perform the surface reconstruction
-    let reconstruction = if paths.output_octree_file.is_some() {
-        splashsurf_lib::reconstruct_surface_octree::<I, R>(particle_positions.as_slice(), &params)?
-    } else {
-        splashsurf_lib::reconstruct_surface::<I, R>(particle_positions.as_slice(), &params)?
-    };
+    let reconstruction =
+        splashsurf_lib::reconstruct_surface::<I, R>(particle_positions.as_slice(), &params)?;
 
     let grid = reconstruction.grid();
     let mesh = reconstruction.mesh();
