@@ -344,6 +344,8 @@ pub fn reconstruct_surface_inplace<'a, I: Index, R: Real>(
 
     let density_map = density_map::generate_sparse_density_map::<I, R>(
         &grid,
+        None,
+        None,
         particle_positions,
         particle_densities.as_slice(),
         particle_indices.as_ref().map(|is| is.as_slice()),
@@ -506,18 +508,18 @@ pub fn reconstruct_surface_inplace_octree<'a, I: Index, R: Real>(
                     )
                 };
 
-                let density_map =
-                    density_map::sequential_generate_sparse_density_map_subdomain::<I, R>(
-                        grid,
-                        subdomain_offset,
-                        subdomain_grid,
-                        particle_positions.as_slice(),
-                        particle_densities.as_slice(),
-                        None,
-                        particle_rest_mass,
-                        kernel_radius,
-                        cube_size,
-                    );
+                let density_map = density_map::generate_sparse_density_map(
+                    grid,
+                    Some(subdomain_offset),
+                    Some(subdomain_grid),
+                    particle_positions.as_slice(),
+                    particle_densities.as_slice(),
+                    None,
+                    particle_rest_mass,
+                    kernel_radius,
+                    cube_size,
+                    false,
+                );
 
                 let mut subdomain_mesh = TriMesh3d::default();
                 marching_cubes::triangulate_density_map::<I, R>(
