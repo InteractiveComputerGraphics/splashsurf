@@ -1,12 +1,16 @@
-use bitflags::bitflags;
 use nalgebra::Vector3;
 use rayon::prelude::*;
 use rayon::ScopeFifo;
 use smallvec::SmallVec;
 
 use crate::mesh::HexMesh3d;
-use crate::uniform_grid::{Direction, PointIndex};
-use crate::{AxisAlignedBoundingBox, AxisAlignedBoundingBox3d, GridConstructionError, Index, Real, UniformGrid, ThreadSafe};
+use crate::uniform_grid::{PointIndex, UniformGrid};
+use crate::{
+    AxisAlignedBoundingBox, AxisAlignedBoundingBox3d, GridConstructionError, Index, Real,
+    ThreadSafe,
+};
+
+use octant_helper::{Octant, OctantAxisDirections, OctantDirectionFlags};
 
 // TODO: Unify splitting with/without margin using some generic approach
 
@@ -121,12 +125,8 @@ impl<I: Index> Octree<I> {
         profile!("octree subdivide_recursively_margin");
 
         let split_criterion = MaxNonGhostParticleLeafSplitCriterion::new(particles_per_cell);
-        self.root.subdivide_recursively_margin(
-            grid,
-            particle_positions,
-            &split_criterion,
-            margin,
-        );
+        self.root
+            .subdivide_recursively_margin(grid, particle_positions, &split_criterion, margin);
     }
 
     /// Returns a reference to the root node of the octree
@@ -692,275 +692,6 @@ impl<I: Index> NodeBody<I> {
     }
 }
 
-bitflags! {
-    struct OctantDirectionFlags: u8 {
-        const X_NEG = 0b00000001;
-        const X_POS = 0b00000010;
-        const Y_NEG = 0b00000100;
-        const Y_POS = 0b00001000;
-        const Z_NEG = 0b00010000;
-        const Z_POS = 0b00100000;
-
-        const NEG_NEG_NEG = Self::X_NEG.bits | Self::Y_NEG.bits | Self::Z_NEG.bits;
-        const POS_NEG_NEG = Self::X_POS.bits | Self::Y_NEG.bits | Self::Z_NEG.bits;
-        const NEG_POS_NEG = Self::X_NEG.bits | Self::Y_POS.bits | Self::Z_NEG.bits;
-        const POS_POS_NEG = Self::X_POS.bits | Self::Y_POS.bits | Self::Z_NEG.bits;
-        const NEG_NEG_POS = Self::X_NEG.bits | Self::Y_NEG.bits | Self::Z_POS.bits;
-        const POS_NEG_POS = Self::X_POS.bits | Self::Y_NEG.bits | Self::Z_POS.bits;
-        const NEG_POS_POS = Self::X_NEG.bits | Self::Y_POS.bits | Self::Z_POS.bits;
-        const POS_POS_POS = Self::X_POS.bits | Self::Y_POS.bits | Self::Z_POS.bits;
-    }
-}
-
-const ALL_UNIQUE_OCTANT_DIRECTION_FLAGS: [OctantDirectionFlags; 8] = [
-    OctantDirectionFlags::NEG_NEG_NEG,
-    OctantDirectionFlags::POS_NEG_NEG,
-    OctantDirectionFlags::NEG_POS_NEG,
-    OctantDirectionFlags::POS_POS_NEG,
-    OctantDirectionFlags::NEG_NEG_POS,
-    OctantDirectionFlags::POS_NEG_POS,
-    OctantDirectionFlags::NEG_POS_POS,
-    OctantDirectionFlags::POS_POS_POS,
-];
-
-impl OctantDirectionFlags {
-    #[inline(always)]
-    pub const fn all_unique_octants() -> &'static [OctantDirectionFlags] {
-        &ALL_UNIQUE_OCTANT_DIRECTION_FLAGS
-    }
-
-    /// Classifies a point relative to zero into all octants it belongs by considering a margin around the octants
-    #[inline(always)]
-    pub fn classify_with_margin<R: Real>(point: &Vector3<R>, margin: R) -> Self {
-        let mut flags = OctantDirectionFlags::empty();
-        flags.set(OctantDirectionFlags::X_NEG, point.x < margin);
-        flags.set(OctantDirectionFlags::X_POS, point.x > -margin);
-        flags.set(OctantDirectionFlags::Y_NEG, point.y < margin);
-        flags.set(OctantDirectionFlags::Y_POS, point.y > -margin);
-        flags.set(OctantDirectionFlags::Z_NEG, point.z < margin);
-        flags.set(OctantDirectionFlags::Z_POS, point.z > -margin);
-        flags
-    }
-
-    #[inline(always)]
-    pub fn from_octant(octant: Octant) -> Self {
-        match octant {
-            Octant::NegNegNeg => Self::NEG_NEG_NEG,
-            Octant::PosNegNeg => Self::POS_NEG_NEG,
-            Octant::NegPosNeg => Self::NEG_POS_NEG,
-            Octant::PosPosNeg => Self::POS_POS_NEG,
-            Octant::NegNegPos => Self::NEG_NEG_POS,
-            Octant::PosNegPos => Self::POS_NEG_POS,
-            Octant::NegPosPos => Self::NEG_POS_POS,
-            Octant::PosPosPos => Self::POS_POS_POS,
-        }
-    }
-
-    #[inline(always)]
-    pub fn from_directions(directions: OctantAxisDirections) -> Self {
-        let mut flags = OctantDirectionFlags::empty();
-        flags.set(OctantDirectionFlags::X_NEG, directions.x_axis.is_negative());
-        flags.set(OctantDirectionFlags::X_POS, directions.x_axis.is_positive());
-        flags.set(OctantDirectionFlags::Y_NEG, directions.y_axis.is_negative());
-        flags.set(OctantDirectionFlags::Y_POS, directions.y_axis.is_positive());
-        flags.set(OctantDirectionFlags::Z_NEG, directions.z_axis.is_negative());
-        flags.set(OctantDirectionFlags::Z_POS, directions.z_axis.is_positive());
-        flags
-    }
-}
-
-impl From<Octant> for OctantDirectionFlags {
-    fn from(octant: Octant) -> Self {
-        Self::from_octant(octant)
-    }
-}
-
-impl From<OctantAxisDirections> for OctantDirectionFlags {
-    fn from(directions: OctantAxisDirections) -> Self {
-        Self::from_directions(directions)
-    }
-}
-
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
-struct OctantAxisDirections {
-    x_axis: Direction,
-    y_axis: Direction,
-    z_axis: Direction,
-}
-
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
-#[repr(u8)]
-enum Octant {
-    NegNegNeg = 0,
-    PosNegNeg = 1,
-    NegPosNeg = 2,
-    PosPosNeg = 3,
-    NegNegPos = 4,
-    PosNegPos = 5,
-    NegPosPos = 6,
-    PosPosPos = 7,
-}
-
-impl OctantAxisDirections {
-    #[allow(dead_code)]
-    #[inline(always)]
-    pub const fn all() -> &'static [OctantAxisDirections; 8] {
-        &ALL_OCTANT_DIRECTIONS
-    }
-
-    #[inline(always)]
-    pub const fn from_bool(x_positive: bool, y_positive: bool, z_positive: bool) -> Self {
-        Self {
-            x_axis: Direction::from_bool(x_positive),
-            y_axis: Direction::from_bool(y_positive),
-            z_axis: Direction::from_bool(z_positive),
-        }
-    }
-
-    pub const fn from_octant(octant: Octant) -> Self {
-        match octant {
-            Octant::NegNegNeg => Self::from_bool(false, false, false),
-            Octant::PosNegNeg => Self::from_bool(true, false, false),
-            Octant::NegPosNeg => Self::from_bool(false, true, false),
-            Octant::PosPosNeg => Self::from_bool(true, true, false),
-            Octant::NegNegPos => Self::from_bool(false, false, true),
-            Octant::PosNegPos => Self::from_bool(true, false, true),
-            Octant::NegPosPos => Self::from_bool(false, true, true),
-            Octant::PosPosPos => Self::from_bool(true, true, true),
-        }
-    }
-
-    /// Classifies a point relative to zero into the corresponding octant
-    #[inline(always)]
-    pub fn classify<R: Real>(point: &Vector3<R>) -> Self {
-        Self::from_bool(
-            point[0].is_positive(),
-            point[1].is_positive(),
-            point[2].is_positive(),
-        )
-    }
-
-    /// Combines two vectors by choosing between their components depending on the octant
-    pub fn combine_point_index<I: Index, R: Real>(
-        &self,
-        grid: &UniformGrid<I, R>,
-        lower: &PointIndex<I>,
-        upper: &PointIndex<I>,
-    ) -> Option<PointIndex<I>> {
-        let lower = lower.index();
-        let upper = upper.index();
-
-        let combined_index = [
-            if self.x_axis.is_positive() {
-                upper[0]
-            } else {
-                lower[0]
-            },
-            if self.y_axis.is_positive() {
-                upper[1]
-            } else {
-                lower[1]
-            },
-            if self.z_axis.is_positive() {
-                upper[2]
-            } else {
-                lower[2]
-            },
-        ];
-
-        grid.get_point(&combined_index)
-    }
-}
-
-impl From<Octant> for OctantAxisDirections {
-    fn from(octant: Octant) -> Self {
-        Self::from_octant(octant)
-    }
-}
-
-const ALL_OCTANT_DIRECTIONS: [OctantAxisDirections; 8] = [
-    OctantAxisDirections::from_octant(Octant::NegNegNeg),
-    OctantAxisDirections::from_octant(Octant::PosNegNeg),
-    OctantAxisDirections::from_octant(Octant::NegPosNeg),
-    OctantAxisDirections::from_octant(Octant::PosPosNeg),
-    OctantAxisDirections::from_octant(Octant::NegNegPos),
-    OctantAxisDirections::from_octant(Octant::PosNegPos),
-    OctantAxisDirections::from_octant(Octant::NegPosPos),
-    OctantAxisDirections::from_octant(Octant::PosPosPos),
-];
-
-impl Octant {
-    #[inline(always)]
-    pub const fn all() -> &'static [Octant; 8] {
-        &ALL_OCTANTS
-    }
-
-    #[inline(always)]
-    pub const fn from_directions(directions: OctantAxisDirections) -> Self {
-        use Direction::*;
-        let OctantAxisDirections {
-            x_axis,
-            y_axis,
-            z_axis,
-        } = directions;
-        match (x_axis, y_axis, z_axis) {
-            (Negative, Negative, Negative) => Octant::NegNegNeg,
-            (Positive, Negative, Negative) => Octant::PosNegNeg,
-            (Negative, Positive, Negative) => Octant::NegPosNeg,
-            (Positive, Positive, Negative) => Octant::PosPosNeg,
-            (Negative, Negative, Positive) => Octant::NegNegPos,
-            (Positive, Negative, Positive) => Octant::PosNegPos,
-            (Negative, Positive, Positive) => Octant::NegPosPos,
-            (Positive, Positive, Positive) => Octant::PosPosPos,
-        }
-    }
-}
-
-impl From<OctantAxisDirections> for Octant {
-    fn from(directions: OctantAxisDirections) -> Self {
-        Self::from_directions(directions)
-    }
-}
-
-const ALL_OCTANTS: [Octant; 8] = [
-    Octant::NegNegNeg,
-    Octant::PosNegNeg,
-    Octant::NegPosNeg,
-    Octant::PosPosNeg,
-    Octant::NegNegPos,
-    Octant::PosNegPos,
-    Octant::NegPosPos,
-    Octant::PosPosPos,
-];
-
-#[cfg(test)]
-mod test_octant {
-    use super::*;
-
-    #[test]
-    fn test_octant_iter_all_consistency() {
-        for (i, octant) in Octant::all().iter().copied().enumerate() {
-            assert_eq!(octant as usize, i);
-            assert_eq!(octant, unsafe {
-                std::mem::transmute::<u8, Octant>(i as u8)
-            });
-        }
-    }
-
-    #[test]
-    fn test_octant_directions_iter_all_consistency() {
-        assert_eq!(Octant::all().len(), OctantAxisDirections::all().len());
-        for (octant, octant_directions) in Octant::all()
-            .iter()
-            .copied()
-            .zip(OctantAxisDirections::all().iter().copied())
-        {
-            assert_eq!(octant, Octant::from(octant_directions));
-            assert_eq!(octant_directions, OctantAxisDirections::from(octant));
-        }
-    }
-}
-
 /// Returns whether an [OctreeNode] with the given lower and upper points can be subdivided
 ///
 /// An [OctreeNode] can be subdivided if it has an extent of more than one cell in each dimension.
@@ -991,4 +722,281 @@ fn get_split_point<I: Index, R: Real>(
     ];
 
     grid.get_point(&mid_indices)
+}
+
+mod octant_helper {
+    use bitflags::bitflags;
+    use nalgebra::Vector3;
+
+    use crate::uniform_grid::{Direction, PointIndex, UniformGrid};
+    use crate::{Index, Real};
+
+    bitflags! {
+        pub struct OctantDirectionFlags: u8 {
+            const X_NEG = 0b00000001;
+            const X_POS = 0b00000010;
+            const Y_NEG = 0b00000100;
+            const Y_POS = 0b00001000;
+            const Z_NEG = 0b00010000;
+            const Z_POS = 0b00100000;
+
+            const NEG_NEG_NEG = Self::X_NEG.bits | Self::Y_NEG.bits | Self::Z_NEG.bits;
+            const POS_NEG_NEG = Self::X_POS.bits | Self::Y_NEG.bits | Self::Z_NEG.bits;
+            const NEG_POS_NEG = Self::X_NEG.bits | Self::Y_POS.bits | Self::Z_NEG.bits;
+            const POS_POS_NEG = Self::X_POS.bits | Self::Y_POS.bits | Self::Z_NEG.bits;
+            const NEG_NEG_POS = Self::X_NEG.bits | Self::Y_NEG.bits | Self::Z_POS.bits;
+            const POS_NEG_POS = Self::X_POS.bits | Self::Y_NEG.bits | Self::Z_POS.bits;
+            const NEG_POS_POS = Self::X_NEG.bits | Self::Y_POS.bits | Self::Z_POS.bits;
+            const POS_POS_POS = Self::X_POS.bits | Self::Y_POS.bits | Self::Z_POS.bits;
+        }
+    }
+
+    const ALL_UNIQUE_OCTANT_DIRECTION_FLAGS: [OctantDirectionFlags; 8] = [
+        OctantDirectionFlags::NEG_NEG_NEG,
+        OctantDirectionFlags::POS_NEG_NEG,
+        OctantDirectionFlags::NEG_POS_NEG,
+        OctantDirectionFlags::POS_POS_NEG,
+        OctantDirectionFlags::NEG_NEG_POS,
+        OctantDirectionFlags::POS_NEG_POS,
+        OctantDirectionFlags::NEG_POS_POS,
+        OctantDirectionFlags::POS_POS_POS,
+    ];
+
+    impl OctantDirectionFlags {
+        #[inline(always)]
+        pub const fn all_unique_octants() -> &'static [OctantDirectionFlags] {
+            &ALL_UNIQUE_OCTANT_DIRECTION_FLAGS
+        }
+
+        /// Classifies a point relative to zero into all octants it belongs by considering a margin around the octants
+        #[inline(always)]
+        pub fn classify_with_margin<R: Real>(point: &Vector3<R>, margin: R) -> Self {
+            let mut flags = OctantDirectionFlags::empty();
+            flags.set(OctantDirectionFlags::X_NEG, point.x < margin);
+            flags.set(OctantDirectionFlags::X_POS, point.x > -margin);
+            flags.set(OctantDirectionFlags::Y_NEG, point.y < margin);
+            flags.set(OctantDirectionFlags::Y_POS, point.y > -margin);
+            flags.set(OctantDirectionFlags::Z_NEG, point.z < margin);
+            flags.set(OctantDirectionFlags::Z_POS, point.z > -margin);
+            flags
+        }
+
+        #[inline(always)]
+        pub fn from_octant(octant: Octant) -> Self {
+            match octant {
+                Octant::NegNegNeg => Self::NEG_NEG_NEG,
+                Octant::PosNegNeg => Self::POS_NEG_NEG,
+                Octant::NegPosNeg => Self::NEG_POS_NEG,
+                Octant::PosPosNeg => Self::POS_POS_NEG,
+                Octant::NegNegPos => Self::NEG_NEG_POS,
+                Octant::PosNegPos => Self::POS_NEG_POS,
+                Octant::NegPosPos => Self::NEG_POS_POS,
+                Octant::PosPosPos => Self::POS_POS_POS,
+            }
+        }
+
+        #[inline(always)]
+        pub fn from_directions(directions: OctantAxisDirections) -> Self {
+            let mut flags = OctantDirectionFlags::empty();
+            flags.set(OctantDirectionFlags::X_NEG, directions.x_axis.is_negative());
+            flags.set(OctantDirectionFlags::X_POS, directions.x_axis.is_positive());
+            flags.set(OctantDirectionFlags::Y_NEG, directions.y_axis.is_negative());
+            flags.set(OctantDirectionFlags::Y_POS, directions.y_axis.is_positive());
+            flags.set(OctantDirectionFlags::Z_NEG, directions.z_axis.is_negative());
+            flags.set(OctantDirectionFlags::Z_POS, directions.z_axis.is_positive());
+            flags
+        }
+    }
+
+    impl From<Octant> for OctantDirectionFlags {
+        fn from(octant: Octant) -> Self {
+            Self::from_octant(octant)
+        }
+    }
+
+    impl From<OctantAxisDirections> for OctantDirectionFlags {
+        fn from(directions: OctantAxisDirections) -> Self {
+            Self::from_directions(directions)
+        }
+    }
+
+    #[derive(Copy, Clone, Eq, PartialEq, Debug)]
+    pub struct OctantAxisDirections {
+        x_axis: Direction,
+        y_axis: Direction,
+        z_axis: Direction,
+    }
+
+    #[derive(Copy, Clone, Eq, PartialEq, Debug)]
+    #[repr(u8)]
+    pub enum Octant {
+        NegNegNeg = 0,
+        PosNegNeg = 1,
+        NegPosNeg = 2,
+        PosPosNeg = 3,
+        NegNegPos = 4,
+        PosNegPos = 5,
+        NegPosPos = 6,
+        PosPosPos = 7,
+    }
+
+    impl OctantAxisDirections {
+        #[allow(dead_code)]
+        #[inline(always)]
+        pub const fn all() -> &'static [OctantAxisDirections; 8] {
+            &ALL_OCTANT_DIRECTIONS
+        }
+
+        #[inline(always)]
+        pub const fn from_bool(x_positive: bool, y_positive: bool, z_positive: bool) -> Self {
+            Self {
+                x_axis: Direction::from_bool(x_positive),
+                y_axis: Direction::from_bool(y_positive),
+                z_axis: Direction::from_bool(z_positive),
+            }
+        }
+
+        pub const fn from_octant(octant: Octant) -> Self {
+            match octant {
+                Octant::NegNegNeg => Self::from_bool(false, false, false),
+                Octant::PosNegNeg => Self::from_bool(true, false, false),
+                Octant::NegPosNeg => Self::from_bool(false, true, false),
+                Octant::PosPosNeg => Self::from_bool(true, true, false),
+                Octant::NegNegPos => Self::from_bool(false, false, true),
+                Octant::PosNegPos => Self::from_bool(true, false, true),
+                Octant::NegPosPos => Self::from_bool(false, true, true),
+                Octant::PosPosPos => Self::from_bool(true, true, true),
+            }
+        }
+
+        /// Classifies a point relative to zero into the corresponding octant
+        #[inline(always)]
+        pub fn classify<R: Real>(point: &Vector3<R>) -> Self {
+            Self::from_bool(
+                point[0].is_positive(),
+                point[1].is_positive(),
+                point[2].is_positive(),
+            )
+        }
+
+        /// Combines two vectors by choosing between their components depending on the octant
+        pub fn combine_point_index<I: Index, R: Real>(
+            &self,
+            grid: &UniformGrid<I, R>,
+            lower: &PointIndex<I>,
+            upper: &PointIndex<I>,
+        ) -> Option<PointIndex<I>> {
+            let lower = lower.index();
+            let upper = upper.index();
+
+            let combined_index = [
+                if self.x_axis.is_positive() {
+                    upper[0]
+                } else {
+                    lower[0]
+                },
+                if self.y_axis.is_positive() {
+                    upper[1]
+                } else {
+                    lower[1]
+                },
+                if self.z_axis.is_positive() {
+                    upper[2]
+                } else {
+                    lower[2]
+                },
+            ];
+
+            grid.get_point(&combined_index)
+        }
+    }
+
+    impl From<Octant> for OctantAxisDirections {
+        fn from(octant: Octant) -> Self {
+            Self::from_octant(octant)
+        }
+    }
+
+    const ALL_OCTANT_DIRECTIONS: [OctantAxisDirections; 8] = [
+        OctantAxisDirections::from_octant(Octant::NegNegNeg),
+        OctantAxisDirections::from_octant(Octant::PosNegNeg),
+        OctantAxisDirections::from_octant(Octant::NegPosNeg),
+        OctantAxisDirections::from_octant(Octant::PosPosNeg),
+        OctantAxisDirections::from_octant(Octant::NegNegPos),
+        OctantAxisDirections::from_octant(Octant::PosNegPos),
+        OctantAxisDirections::from_octant(Octant::NegPosPos),
+        OctantAxisDirections::from_octant(Octant::PosPosPos),
+    ];
+
+    impl Octant {
+        #[inline(always)]
+        pub const fn all() -> &'static [Octant; 8] {
+            &ALL_OCTANTS
+        }
+
+        #[inline(always)]
+        pub const fn from_directions(directions: OctantAxisDirections) -> Self {
+            use Direction::*;
+            let OctantAxisDirections {
+                x_axis,
+                y_axis,
+                z_axis,
+            } = directions;
+            match (x_axis, y_axis, z_axis) {
+                (Negative, Negative, Negative) => Octant::NegNegNeg,
+                (Positive, Negative, Negative) => Octant::PosNegNeg,
+                (Negative, Positive, Negative) => Octant::NegPosNeg,
+                (Positive, Positive, Negative) => Octant::PosPosNeg,
+                (Negative, Negative, Positive) => Octant::NegNegPos,
+                (Positive, Negative, Positive) => Octant::PosNegPos,
+                (Negative, Positive, Positive) => Octant::NegPosPos,
+                (Positive, Positive, Positive) => Octant::PosPosPos,
+            }
+        }
+    }
+
+    impl From<OctantAxisDirections> for Octant {
+        fn from(directions: OctantAxisDirections) -> Self {
+            Self::from_directions(directions)
+        }
+    }
+
+    const ALL_OCTANTS: [Octant; 8] = [
+        Octant::NegNegNeg,
+        Octant::PosNegNeg,
+        Octant::NegPosNeg,
+        Octant::PosPosNeg,
+        Octant::NegNegPos,
+        Octant::PosNegPos,
+        Octant::NegPosPos,
+        Octant::PosPosPos,
+    ];
+
+    #[cfg(test)]
+    mod test_octant {
+        use super::*;
+
+        #[test]
+        fn test_octant_iter_all_consistency() {
+            for (i, octant) in Octant::all().iter().copied().enumerate() {
+                assert_eq!(octant as usize, i);
+                assert_eq!(octant, unsafe {
+                    std::mem::transmute::<u8, Octant>(i as u8)
+                });
+            }
+        }
+
+        #[test]
+        fn test_octant_directions_iter_all_consistency() {
+            assert_eq!(Octant::all().len(), OctantAxisDirections::all().len());
+            for (octant, octant_directions) in Octant::all()
+                .iter()
+                .copied()
+                .zip(OctantAxisDirections::all().iter().copied())
+            {
+                assert_eq!(octant, Octant::from(octant_directions));
+                assert_eq!(octant_directions, OctantAxisDirections::from(octant));
+            }
+        }
+    }
 }
