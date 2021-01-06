@@ -6,10 +6,7 @@ use smallvec::SmallVec;
 
 use crate::mesh::HexMesh3d;
 use crate::uniform_grid::{Direction, PointIndex};
-use crate::{
-    AxisAlignedBoundingBox, AxisAlignedBoundingBox3d, GridConstructionError, Index, Real,
-    UniformGrid,
-};
+use crate::{AxisAlignedBoundingBox, AxisAlignedBoundingBox3d, GridConstructionError, Index, Real, UniformGrid, ThreadSafe};
 
 // TODO: Unify splitting with/without margin using some generic approach
 
@@ -41,6 +38,40 @@ enum NodeBody<I: Index> {
     },
 }
 
+/// Trait that is used by an octree to decide whether an octree node should be further split or subdivided
+trait LeafSplitCriterion<I: Index> {
+    /// Returns whether the specified node should be split
+    fn split_leaf(&self, node: &OctreeNode<I>) -> bool;
+}
+
+/// Split criterion that decides based on whether the number of non-ghost particles in a node is above a limit
+struct MaxNonGhostParticleLeafSplitCriterion {
+    max_particles: usize,
+}
+
+impl MaxNonGhostParticleLeafSplitCriterion {
+    fn new(max_particles: usize) -> Self {
+        Self { max_particles }
+    }
+}
+
+impl<I: Index> LeafSplitCriterion<I> for MaxNonGhostParticleLeafSplitCriterion {
+    /// Returns true if the number of non-ghost particles in a node is above a limit
+    fn split_leaf(&self, node: &OctreeNode<I>) -> bool {
+        if let NodeBody::Leaf {
+            particles,
+            ghost_particle_count,
+        } = &node.body
+        {
+            // Check if this leaf is already below the limit of particles per cell
+            return particles.len() - *ghost_particle_count > self.max_particles;
+        } else {
+            // Early out if called on a non-leaf node
+            return false;
+        }
+    }
+}
+
 impl<I: Index> Octree<I> {
     /// Creates a new [Octree] with a single leaf node containing all vertices
     pub fn new<R: Real>(grid: &UniformGrid<I, R>, n_particles: usize) -> Self {
@@ -57,8 +88,10 @@ impl<I: Index> Octree<I> {
         particles_per_cell: usize,
     ) {
         profile!("octree subdivide_recursively");
+
+        let split_criterion = MaxNonGhostParticleLeafSplitCriterion::new(particles_per_cell);
         self.root
-            .subdivide_recursively(grid, particle_positions, particles_per_cell);
+            .subdivide_recursively(grid, particle_positions, &split_criterion);
     }
 
     /// Subdivide the octree recursively in parallel using the given splitting criterion
@@ -69,9 +102,11 @@ impl<I: Index> Octree<I> {
         particles_per_cell: usize,
     ) {
         profile!("octree subdivide_recursively_par");
+
+        let split_criterion = MaxNonGhostParticleLeafSplitCriterion::new(particles_per_cell);
         rayon::scope_fifo(|s| {
             self.root
-                .subdivide_recursively_par(s, grid, particle_positions, particles_per_cell);
+                .subdivide_recursively_par(s, grid, particle_positions, &split_criterion);
         });
     }
 
@@ -84,10 +119,12 @@ impl<I: Index> Octree<I> {
         margin: R,
     ) {
         profile!("octree subdivide_recursively_margin");
+
+        let split_criterion = MaxNonGhostParticleLeafSplitCriterion::new(particles_per_cell);
         self.root.subdivide_recursively_margin(
             grid,
             particle_positions,
-            particles_per_cell,
+            &split_criterion,
             margin,
         );
     }
@@ -260,19 +297,14 @@ impl<I: Index> OctreeNode<I> {
     }
 
     /// Subdivides this [OctantNode] and all new children until all leaves have at most the specified number of particles
-    fn subdivide_recursively<R: Real>(
+    fn subdivide_recursively<R: Real, S: LeafSplitCriterion<I>>(
         &mut self,
         grid: &UniformGrid<I, R>,
         particle_positions: &[Vector3<R>],
-        particles_per_cell: usize,
+        split_criterion: &S,
     ) {
-        if let Some(particles) = self.body.particles() {
-            // Check if this leaf is already below the limit of particles per cell
-            if particles.len() < particles_per_cell {
-                return;
-            }
-        } else {
-            // Early out if called on a non-leaf node
+        // Stop recursion if split criterion is not fulfilled
+        if !split_criterion.split_leaf(self) {
             return;
         }
 
@@ -284,26 +316,21 @@ impl<I: Index> OctreeNode<I> {
         // Continue subdivision recursively in the new child nodes
         if let Some(children) = self.body.children_mut() {
             for child_node in children {
-                child_node.subdivide_recursively(grid, particle_positions, particles_per_cell);
+                child_node.subdivide_recursively(grid, particle_positions, split_criterion);
             }
         }
     }
 
     /// Subdivides this [OctantNode] and all new children in parallel until all leaves have at most the specified number of particles
-    fn subdivide_recursively_par<'scope, R: Real>(
+    fn subdivide_recursively_par<'scope, R: Real, S: LeafSplitCriterion<I> + ThreadSafe>(
         &'scope mut self,
         s: &ScopeFifo<'scope>,
         grid: &'scope UniformGrid<I, R>,
         particle_positions: &'scope [Vector3<R>],
-        particles_per_cell: usize,
+        split_criterion: &'scope S,
     ) {
-        if let Some(particles) = self.body.particles() {
-            // Check if this leaf is already below the limit of particles per cell
-            if particles.len() < particles_per_cell {
-                return;
-            }
-        } else {
-            // Early out if called on a non-leaf node
+        // Stop recursion if split criterion is not fulfilled
+        if !split_criterion.split_leaf(self) {
             return;
         }
 
@@ -321,32 +348,23 @@ impl<I: Index> OctreeNode<I> {
                         s,
                         grid,
                         particle_positions,
-                        particles_per_cell,
+                        split_criterion,
                     )
                 });
             }
         }
     }
 
-    /// Subdivides this [OctantNode] and all new children until all leaves have at most the specified number of particles
-    fn subdivide_recursively_margin<R: Real>(
+    /// Subdivides this [OctreeNode] and all new children until all leaves have at most the specified number of particles
+    fn subdivide_recursively_margin<R: Real, S: LeafSplitCriterion<I>>(
         &mut self,
         grid: &UniformGrid<I, R>,
         particle_positions: &[Vector3<R>],
-        particles_per_cell: usize,
+        split_criterion: &S,
         margin: R,
     ) {
-        if let NodeBody::Leaf {
-            particles,
-            ghost_particle_count,
-        } = &self.body
-        {
-            // Check if this leaf is already below the limit of particles per cell
-            if particles.len() - ghost_particle_count < particles_per_cell {
-                return;
-            }
-        } else {
-            // Early out if called on a non-leaf node
+        // Stop recursion if split criterion is not fulfilled
+        if !split_criterion.split_leaf(self) {
             return;
         }
 
@@ -361,7 +379,7 @@ impl<I: Index> OctreeNode<I> {
                 child_node.subdivide_recursively_margin(
                     grid,
                     particle_positions,
-                    particles_per_cell,
+                    split_criterion,
                     margin,
                 );
             }
