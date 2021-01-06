@@ -121,6 +121,183 @@ fn default_split_criterion<I: Index>(
     )
 }
 
+trait OctantClassifier<R: Real> {
+    fn classify_particles(
+        &mut self,
+        split_coordinates: &Vector3<R>,
+        particle_positions: &[Vector3<R>],
+        particles: &[usize],
+    );
+
+    fn classify_particles_par(
+        &mut self,
+        split_coordinates: &Vector3<R>,
+        particle_positions: &[Vector3<R>],
+        particles: &[usize],
+    );
+
+    fn octant_particles(&self, octant: Octant, particles: &[usize]) -> OctreeNodeParticleStorage;
+    fn octant_ghost_particles_count(&self, octant: Octant) -> usize;
+}
+
+struct MarginClassifier<R: Real> {
+    margin: R,
+
+    particle_octant_flags: Vec<OctantDirectionFlags>,
+    counters: [usize; 8],
+    non_ghost_counters: [usize; 8],
+}
+
+impl<R: Real> MarginClassifier<R> {
+    fn new(margin: R) -> Self {
+        Self {
+            margin,
+            particle_octant_flags: Vec::new(),
+            counters: [0, 0, 0, 0, 0, 0, 0, 0],
+            non_ghost_counters: [0, 0, 0, 0, 0, 0, 0, 0],
+        }
+    }
+}
+
+impl<R: Real> OctantClassifier<R> for MarginClassifier<R> {
+    fn classify_particles(
+        &mut self,
+        split_coordinates: &Vector3<R>,
+        particle_positions: &[Vector3<R>],
+        particles: &[usize],
+    ) {
+        self.particle_octant_flags.clear();
+        self.particle_octant_flags
+            .resize(particles.len(), OctantDirectionFlags::empty());
+
+        // Initial values for the fold
+        let zeros = || ([0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0]);
+
+        let margin = self.margin;
+        let (counters, non_ghost_counters) = particles
+            .iter()
+            .copied()
+            .zip(self.particle_octant_flags.iter_mut())
+            .fold(
+                zeros(),
+                |(mut counters, mut non_ghost_counters), (particle_idx, particle_octant_flags)| {
+                    let relative_pos = particle_positions[particle_idx] - split_coordinates;
+
+                    // Check what the main octant of the particle is (to count ghost particles)
+                    {
+                        let main_octant: Octant =
+                            OctantAxisDirections::classify(&relative_pos).into();
+                        non_ghost_counters[main_octant as usize] += 1;
+                    }
+
+                    // Classify into all octants with margin
+                    {
+                        *particle_octant_flags =
+                            OctantDirectionFlags::classify_with_margin(&relative_pos, margin);
+
+                        // Increase the counter of each octant that contains the current particle
+                        OctantDirectionFlags::all_unique_octants()
+                            .iter()
+                            .zip(counters.iter_mut())
+                            .filter(|(octant, _)| particle_octant_flags.contains(**octant))
+                            .for_each(|(_, counter)| {
+                                *counter += 1;
+                            });
+                    }
+
+                    (counters, non_ghost_counters)
+                },
+            );
+
+        self.counters = counters;
+        self.non_ghost_counters = non_ghost_counters;
+    }
+
+    fn classify_particles_par(
+        &mut self,
+        split_coordinates: &Vector3<R>,
+        particle_positions: &[Vector3<R>],
+        particles: &[usize],
+    ) {
+        self.particle_octant_flags.clear();
+        self.particle_octant_flags
+            .resize(particles.len(), OctantDirectionFlags::empty());
+
+        // Initial values for the fold
+        let zeros = || ([0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0]);
+
+        let margin = self.margin;
+        let (counters, non_ghost_counters) = particles
+            .par_iter()
+            .copied()
+            .zip(self.particle_octant_flags.par_iter_mut())
+            .fold(
+                zeros,
+                |(mut counters, mut non_ghost_counters), (particle_idx, particle_octant_flags)| {
+                    let relative_pos = particle_positions[particle_idx] - split_coordinates;
+
+                    // Check what the main octant of the particle is (to count ghost particles)
+                    {
+                        let main_octant: Octant =
+                            OctantAxisDirections::classify(&relative_pos).into();
+                        non_ghost_counters[main_octant as usize] += 1;
+                    }
+
+                    // Classify particle into all octants with margin
+                    {
+                        *particle_octant_flags =
+                            OctantDirectionFlags::classify_with_margin(&relative_pos, margin);
+
+                        // Increase the counter of each octant that contains the current particle
+                        OctantDirectionFlags::all_unique_octants()
+                            .iter()
+                            .zip(counters.iter_mut())
+                            .filter(|(octant, _)| particle_octant_flags.contains(**octant))
+                            .for_each(|(_, counter)| {
+                                *counter += 1;
+                            });
+                    }
+
+                    (counters, non_ghost_counters)
+                },
+            )
+            // Sum up all counter arrays
+            .reduce(
+                zeros,
+                |(mut counters_acc, mut non_ghost_counters_acc), (counters, non_ghost_counters)| {
+                    for i in 0..8 {
+                        counters_acc[i] += counters[i];
+                        non_ghost_counters_acc[i] += non_ghost_counters[i];
+                    }
+                    (counters_acc, non_ghost_counters_acc)
+                },
+            );
+
+        self.counters = counters;
+        self.non_ghost_counters = non_ghost_counters;
+    }
+
+    fn octant_particles(&self, octant: Octant, particles: &[usize]) -> OctreeNodeParticleStorage {
+        let mut octant_particles = SmallVec::with_capacity(self.counters[octant as usize]);
+        let current_octant_flags = OctantDirectionFlags::from(octant);
+
+        octant_particles.extend(
+            particles
+                .iter()
+                .copied()
+                .zip(self.particle_octant_flags.iter())
+                // Skip particles from other octants
+                .filter(|(_, &particle_i_octant)| particle_i_octant.contains(current_octant_flags))
+                .map(|(particle_i, _)| particle_i),
+        );
+        octant_particles
+    }
+
+    fn octant_ghost_particles_count(&self, octant: Octant) -> usize {
+        self.counters[octant as usize] - self.non_ghost_counters[octant as usize]
+    }
+}
+
 impl<I: Index> Octree<I> {
     /// Creates a new [Octree] with a single leaf node containing all vertices
     pub fn new<R: Real>(grid: &UniformGrid<I, R>, n_particles: usize) -> Self {
@@ -169,9 +346,22 @@ impl<I: Index> Octree<I> {
     ) {
         profile!("octree subdivide_recursively_margin");
 
+        /*
         let split_criterion = default_split_criterion(particles_per_cell);
         self.root
             .subdivide_recursively_margin(grid, particle_positions, &split_criterion, margin);
+         */
+
+        let split_criterion = default_split_criterion(particles_per_cell);
+        rayon::scope_fifo(|s| {
+            self.root.subdivide_recursively_margin_par(
+                s,
+                grid,
+                particle_positions,
+                &split_criterion,
+                margin,
+            );
+        });
     }
 
     /// Returns a reference to the root node of the octree
@@ -414,7 +604,8 @@ impl<I: Index> OctreeNode<I> {
         }
 
         // Perform one octree split on the leaf
-        self.subdivide_with_margin(grid, particle_positions, margin);
+        //self.subdivide_with_margin(grid, particle_positions, margin);
+        self.subdivide_generic_par(grid, particle_positions, MarginClassifier::new(margin));
 
         // TODO: Replace recursion with iteration
 
@@ -427,6 +618,43 @@ impl<I: Index> OctreeNode<I> {
                     split_criterion,
                     margin,
                 );
+            }
+        }
+    }
+
+    fn subdivide_recursively_margin_par<'scope, R: Real, S: LeafSplitCriterion<I> + ThreadSafe>(
+        &'scope mut self,
+        s: &ScopeFifo<'scope>,
+        grid: &'scope UniformGrid<I, R>,
+        particle_positions: &'scope [Vector3<R>],
+        split_criterion: &'scope S,
+        margin: R,
+    ) {
+        // Stop recursion if split criterion is not fulfilled
+        if !split_criterion.split_leaf(self) {
+            return;
+        }
+
+        // Perform one octree split on the leaf
+        //self.subdivide_with_margin(grid, particle_positions, margin);
+        //self.subdivide_with_margin_par(grid, particle_positions, margin);
+        //self.subdivide_generic(grid, particle_positions, MarginClassifier::new(margin));
+        self.subdivide_generic_par(grid, particle_positions, MarginClassifier::new(margin));
+
+        // TODO: Replace recursion with iteration
+
+        // Continue subdivision recursively in the new child nodes
+        if let Some(children) = self.body.children_mut() {
+            for child_node in children {
+                s.spawn_fifo(move |s| {
+                    child_node.subdivide_recursively_margin_par(
+                        s,
+                        grid,
+                        particle_positions,
+                        split_criterion,
+                        margin,
+                    );
+                });
             }
         }
     }
@@ -535,7 +763,8 @@ impl<I: Index> OctreeNode<I> {
                 );
 
             // Construct the node for each octant
-            let children = Octant::all()
+            let mut children = Vec::with_capacity(8);
+            Octant::all()
                 .par_iter()
                 .copied()
                 .zip(counters.par_iter().copied())
@@ -570,7 +799,7 @@ impl<I: Index> OctreeNode<I> {
 
                     child
                 })
-                .collect::<Vec<_>>();
+                .collect_into_vec(&mut children);
 
             NodeBody::new_with_children(children)
         } else {
@@ -605,7 +834,7 @@ impl<I: Index> OctreeNode<I> {
             {
                 let relative_pos = particle_positions[particle_idx] - split_coordinates;
 
-                // Check what the main octant of the particle is
+                // Check what the main octant of the particle is (to count ghost particles)
                 {
                     let main_octant: Octant = OctantAxisDirections::classify(&relative_pos).into();
                     non_ghost_counters[main_octant as usize] += 1;
@@ -667,6 +896,236 @@ impl<I: Index> OctreeNode<I> {
 
                 children.push(child);
             }
+
+            NodeBody::new_with_children(children)
+        } else {
+            panic!("Cannot subdivide a non-leaf octree node");
+        };
+
+        self.body = new_body;
+    }
+
+    pub fn subdivide_with_margin_par<R: Real>(
+        &mut self,
+        grid: &UniformGrid<I, R>,
+        particle_positions: &[Vector3<R>],
+        margin: R,
+    ) {
+        // Convert node body from Leaf to Children
+        let new_body = if let NodeBody::Leaf { particles, .. } = &self.body {
+            // Obtain the point used as the octree split/pivot point
+            let split_point = get_split_point(grid, &self.min_corner, &self.max_corner)
+                .expect("Failed to get split point of octree node");
+            let split_coordinates = grid.point_coordinates(&split_point);
+
+            let mut octant_flags = vec![OctantDirectionFlags::empty(); particles.len()];
+
+            // Initial values for the fold
+            let zeros = || ([0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0]);
+
+            // Classify all particles of this leaf into its octants
+            assert_eq!(particles.len(), octant_flags.len());
+            let (counters, non_ghost_counters) = particles
+                .par_iter()
+                .copied()
+                .zip(octant_flags.par_iter_mut())
+                .fold(
+                    zeros,
+                    |(mut counters, mut non_ghost_counters),
+                     (particle_idx, particle_octant_flags)| {
+                        let relative_pos = particle_positions[particle_idx] - split_coordinates;
+
+                        // Check what the main octant of the particle is (to count ghost particles)
+                        {
+                            let main_octant: Octant =
+                                OctantAxisDirections::classify(&relative_pos).into();
+                            non_ghost_counters[main_octant as usize] += 1;
+                        }
+
+                        // Classify into all octants with margin
+                        {
+                            *particle_octant_flags =
+                                OctantDirectionFlags::classify_with_margin(&relative_pos, margin);
+
+                            // Increase the counter of each octant that contains the current particle
+                            OctantDirectionFlags::all_unique_octants()
+                                .iter()
+                                .zip(counters.iter_mut())
+                                .filter(|(octant, _)| particle_octant_flags.contains(**octant))
+                                .for_each(|(_, counter)| {
+                                    *counter += 1;
+                                });
+                        }
+
+                        (counters, non_ghost_counters)
+                    },
+                ) // Sum up all counter arrays
+                .reduce(
+                    zeros,
+                    |(mut counters_acc, mut non_ghost_counters_acc),
+                     (counters, non_ghost_counters)| {
+                        for i in 0..8 {
+                            counters_acc[i] += counters[i];
+                            non_ghost_counters_acc[i] += non_ghost_counters[i];
+                        }
+                        (counters_acc, non_ghost_counters_acc)
+                    },
+                );
+
+            // Construct the node for each octant
+            let mut children = Vec::with_capacity(8);
+            Octant::all()
+                .par_iter()
+                .copied()
+                .zip(
+                    counters
+                        .par_iter()
+                        .copied()
+                        .zip(non_ghost_counters.par_iter().copied()),
+                )
+                .map(
+                    |(current_octant, (octant_particle_count, octant_non_ghost_count))| {
+                        let current_octant_dir = OctantAxisDirections::from(current_octant);
+                        let current_octant_flags = OctantDirectionFlags::from(current_octant);
+
+                        let min_corner = current_octant_dir
+                            .combine_point_index(grid, &self.min_corner, &split_point)
+                            .expect("Failed to get corner point of octree subcell");
+                        let max_corner = current_octant_dir
+                            .combine_point_index(grid, &split_point, &self.max_corner)
+                            .expect("Failed to get corner point of octree subcell");
+
+                        let mut octant_particles = SmallVec::with_capacity(octant_particle_count);
+                        octant_particles.extend(
+                            particles
+                                .iter()
+                                .copied()
+                                .zip(octant_flags.iter())
+                                // Skip particles from other octants
+                                .filter(|(_, &particle_i_octant)| {
+                                    particle_i_octant.contains(current_octant_flags)
+                                })
+                                .map(|(particle_i, _)| particle_i),
+                        );
+                        assert_eq!(octant_particles.len(), octant_particle_count);
+
+                        let child = Box::new(OctreeNode::new_leaf(
+                            min_corner,
+                            max_corner,
+                            octant_particles,
+                            octant_particle_count - octant_non_ghost_count,
+                        ));
+
+                        child
+                    },
+                )
+                .collect_into_vec(&mut children);
+
+            NodeBody::new_with_children(children)
+        } else {
+            panic!("Cannot subdivide a non-leaf octree node");
+        };
+
+        self.body = new_body;
+    }
+
+    fn subdivide_generic<R: Real, Oc: OctantClassifier<R>>(
+        &mut self,
+        grid: &UniformGrid<I, R>,
+        particle_positions: &[Vector3<R>],
+        mut classifier: Oc,
+    ) {
+        // Convert node body from Leaf to Children
+        let new_body = if let NodeBody::Leaf { particles, .. } = &self.body {
+            // Obtain the point used as the octree split/pivot point
+            let split_point = get_split_point(grid, &self.min_corner, &self.max_corner)
+                .expect("Failed to get split point of octree node");
+            let split_coordinate = grid.point_coordinates(&split_point);
+
+            // Classify all particles of this leaf into its octants
+            classifier.classify_particles(&split_coordinate, particle_positions, particles);
+
+            // Construct the octree node for each octant
+            let mut children = SmallVec::with_capacity(8);
+            Octant::all()
+                .iter()
+                .map(|&current_octant| {
+                    let current_octant_dir = OctantAxisDirections::from(current_octant);
+
+                    let min_corner = current_octant_dir
+                        .combine_point_index(grid, &self.min_corner, &split_point)
+                        .expect("Failed to get corner point of octree subcell");
+                    let max_corner = current_octant_dir
+                        .combine_point_index(grid, &split_point, &self.max_corner)
+                        .expect("Failed to get corner point of octree subcell");
+
+                    let octant_particles = classifier.octant_particles(current_octant, particles);
+                    let ghost_particle_count =
+                        classifier.octant_ghost_particles_count(current_octant);
+
+                    let child = Box::new(OctreeNode::new_leaf(
+                        min_corner,
+                        max_corner,
+                        octant_particles,
+                        ghost_particle_count,
+                    ));
+
+                    child
+                })
+                .for_each(|child| children.push(child));
+
+            NodeBody::new_with_children(children)
+        } else {
+            panic!("Cannot subdivide a non-leaf octree node");
+        };
+
+        self.body = new_body;
+    }
+
+    fn subdivide_generic_par<R: Real, Oc: OctantClassifier<R> + ThreadSafe>(
+        &mut self,
+        grid: &UniformGrid<I, R>,
+        particle_positions: &[Vector3<R>],
+        mut classifier: Oc,
+    ) {
+        // Convert node body from Leaf to Children
+        let new_body = if let NodeBody::Leaf { particles, .. } = &self.body {
+            // Obtain the point used as the octree split/pivot point
+            let split_point = get_split_point(grid, &self.min_corner, &self.max_corner)
+                .expect("Failed to get split point of octree node");
+            let split_coordinate = grid.point_coordinates(&split_point);
+
+            // Classify all particles of this leaf into its octants
+            classifier.classify_particles_par(&split_coordinate, particle_positions, particles);
+
+            // Construct the octree node node for each octant
+            let mut children = Vec::with_capacity(8);
+            Octant::all()
+                .par_iter()
+                .map(|&current_octant| {
+                    let current_octant_dir = OctantAxisDirections::from(current_octant);
+
+                    let min_corner = current_octant_dir
+                        .combine_point_index(grid, &self.min_corner, &split_point)
+                        .expect("Failed to get corner point of octree subcell");
+                    let max_corner = current_octant_dir
+                        .combine_point_index(grid, &split_point, &self.max_corner)
+                        .expect("Failed to get corner point of octree subcell");
+
+                    let octant_particles = classifier.octant_particles(current_octant, particles);
+                    let ghost_particle_count =
+                        classifier.octant_ghost_particles_count(current_octant);
+
+                    let child = Box::new(OctreeNode::new_leaf(
+                        min_corner,
+                        max_corner,
+                        octant_particles,
+                        ghost_particle_count,
+                    ));
+
+                    child
+                })
+                .collect_into_vec(&mut children);
 
             NodeBody::new_with_children(children)
         } else {
