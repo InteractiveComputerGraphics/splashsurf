@@ -1,6 +1,8 @@
 mod benches;
 
-use benches::bench_octree::bench_octree;
 use criterion::criterion_main;
 
-criterion_main!(bench_octree);
+use benches::bench_octree::bench_octree;
+use benches::bench_full::bench_full;
+
+criterion_main!(bench_octree, bench_full);
