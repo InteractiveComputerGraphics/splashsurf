@@ -175,6 +175,19 @@ impl<I: Index> Octree<I> {
             .subdivide_recursively_margin(grid, particle_positions, &split_criterion, margin);
          */
 
+        self.subdivide_recursively_margin_par(grid, particle_positions, particles_per_cell, margin);
+    }
+
+    /// Subdivide the octree recursively using the given splitting criterion
+    pub fn subdivide_recursively_margin_par<R: Real>(
+        &mut self,
+        grid: &UniformGrid<I, R>,
+        particle_positions: &[Vector3<R>],
+        particles_per_cell: usize,
+        margin: R,
+    ) {
+        profile!("octree subdivide_recursively_margin_par");
+
         let split_criterion = default_split_criterion(particles_per_cell);
         rayon::scope_fifo(|s| {
             self.root.subdivide_recursively_margin_par(

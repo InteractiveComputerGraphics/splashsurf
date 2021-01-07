@@ -39,3 +39,10 @@ thread_local = "1.0"
 num_cpus = "1.13"
 smallvec = { version = "1.6", features = ["union"] }
 bitflags = "1.2"
+
+[dev-dependencies]
+criterion = "0.3"
+
+[[bench]]
+name = "splashsurf_lib_benches"
+harness = false
