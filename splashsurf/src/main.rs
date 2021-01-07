@@ -210,9 +210,7 @@ impl TryFrom<&CommandlineArgs> for ReconstructionRunnerArgs {
             None
         } else {
             let subdivision_criterion = if let Some(max_particles) = args.octree_max_particles {
-                splashsurf_lib::SubdivisionCriterion::MaxParticleCount(
-                    max_particles,
-                )
+                splashsurf_lib::SubdivisionCriterion::MaxParticleCount(max_particles)
             } else {
                 splashsurf_lib::SubdivisionCriterion::MaxParticleCountAuto
             };

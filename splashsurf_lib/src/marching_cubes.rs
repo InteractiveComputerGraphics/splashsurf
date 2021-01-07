@@ -1,4 +1,5 @@
 use log::info;
+use nalgebra::Vector3;
 
 use crate::marching_cubes_lut::get_marching_cubes_triangulation;
 use crate::mesh::TriMesh3d;
@@ -9,12 +10,35 @@ pub fn triangulate_density_map<I: Index, R: Real>(
     grid: &UniformGrid<I, R>,
     density_map: &DensityMap<I, R>,
     iso_surface_threshold: R,
+) -> TriMesh3d<R> {
+    profile!("triangulate_density_map");
+
+    let mut mesh = TriMesh3d::default();
+    let marching_cubes_data = interpolate_points_to_cell_data::<I, R>(
+        &grid,
+        &density_map,
+        iso_surface_threshold,
+        &mut mesh.vertices,
+    );
+    triangulate::<I, R>(marching_cubes_data, &mut mesh);
+    mesh
+}
+
+/// Performs a marching cubes triangulation of a density map on the given background grid, appends triangles to the given mesh
+pub fn triangulate_density_map_append<I: Index, R: Real>(
+    grid: &UniformGrid<I, R>,
+    density_map: &DensityMap<I, R>,
+    iso_surface_threshold: R,
     mesh: &mut TriMesh3d<R>,
 ) {
-    profile!("triangulate_density_map");
-    mesh.clear();
-    let marching_cubes_data =
-        interpolate_points_to_cell_data::<I, R>(&grid, &density_map, iso_surface_threshold, mesh);
+    profile!("triangulate_density_map_append");
+
+    let marching_cubes_data = interpolate_points_to_cell_data::<I, R>(
+        &grid,
+        &density_map,
+        iso_surface_threshold,
+        &mut mesh.vertices,
+    );
     triangulate::<I, R>(marching_cubes_data, mesh)
 }
 
@@ -81,16 +105,17 @@ pub(crate) struct MarchingCubesInput<I: Index> {
 
 /// Generates input data for performing the actual marching cubes triangulation
 ///
-/// The returned data is a list of interpolated iso-surfaces vertices and a map of all cells that
-/// have to be visited by marching cubes. For each cell, it is stored whether the corner vertices
-/// are above/below the iso-surface threshold and the indices of the interpolated vertices for each
-/// edge that crosses the iso-surface.
+/// The returned data is a map of all cells that have to be visited by marching cubes.
+/// For each cell, it is stored whether the corner vertices are above/below the iso-surface
+/// threshold and the indices of the interpolated vertices for each edge that crosses the iso-surface.
+///
+/// The interpolated vertices are appended to the given vertex vector.
 #[inline(never)]
 pub(crate) fn interpolate_points_to_cell_data<I: Index, R: Real>(
     grid: &UniformGrid<I, R>,
     density_map: &DensityMap<I, R>,
     iso_surface_threshold: R,
-    mesh: &mut TriMesh3d<R>,
+    vertices: &mut Vec<Vector3<R>>,
 ) -> MarchingCubesInput<I> {
     profile!("interpolate_points_to_cell_data");
 
@@ -99,9 +124,6 @@ pub(crate) fn interpolate_points_to_cell_data<I: Index, R: Real>(
 
     // Map from flat cell index to all data that is required per cell for the marching cubes triangulation
     let mut cell_data: MapType<I, CellData> = new_map();
-    // Storage for vertices that are created on edges crossing the iso-surface
-    let vertices = &mut mesh.vertices;
-    vertices.clear();
 
     // Generate iso-surface vertices and identify affected cells & edges
     {
@@ -232,7 +254,7 @@ pub(crate) fn interpolate_points_to_cell_data<I: Index, R: Real>(
     MarchingCubesInput { cell_data }
 }
 
-/// Converts the marching cubes input cell data into a triangle surface mesh
+/// Converts the marching cubes input cell data into a triangle surface mesh, appends triangles to existing mesh
 #[inline(never)]
 pub(crate) fn triangulate<I: Index, R: Real>(
     input: MarchingCubesInput<I>,
@@ -246,8 +268,6 @@ pub(crate) fn triangulate<I: Index, R: Real>(
         "Starting marching cubes triangulation of {} cells...",
         cell_data.len()
     );
-
-    mesh.triangles.clear();
 
     // Triangulate affected cells
     for (&_flat_cell_index, cell_data) in &cell_data {
@@ -350,7 +370,7 @@ fn test_interpolate_cell_data() {
         &grid,
         &sparse_data.clone().into(),
         iso_surface_threshold,
-        &mut trimesh,
+        &mut trimesh.vertices,
     );
 
     assert_eq!(trimesh.vertices.len(), 0);
@@ -375,7 +395,7 @@ fn test_interpolate_cell_data() {
         &grid,
         &sparse_data.clone().into(),
         iso_surface_threshold,
-        &mut trimesh,
+        &mut trimesh.vertices,
     );
 
     assert_eq!(marching_cubes_data.cell_data.len(), 1);

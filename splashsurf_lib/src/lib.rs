@@ -283,6 +283,10 @@ pub fn reconstruct_surface_inplace<'a, I: Index, R: Real>(
     parameters: &Parameters<R>,
     output_surface: &'a mut SurfaceReconstruction<I, R>,
 ) -> Result<(), ReconstructionError<I, R>> {
+    // Clear the existing mesh
+    output_surface.mesh.clear();
+
+    // Initialize grid for the reconstruction
     output_surface.grid = grid_for_reconstruction(
         particle_positions,
         parameters.particle_radius,
@@ -290,7 +294,6 @@ pub fn reconstruct_surface_inplace<'a, I: Index, R: Real>(
         parameters.domain_aabb.as_ref(),
     )?;
     let grid = &output_surface.grid;
-
     log_grid_info(grid);
 
     if parameters.spatial_decomposition.is_some() {
@@ -415,18 +418,14 @@ fn reconstruct_surface_inplace_octree<'a, I: Index, R: Real>(
                 .map(|idx| particle_positions[idx])
                 .collect::<Vec<_>>();
 
-            let mut subdomain_mesh = TriMesh3d::default();
             reconstruct_single_surface(
                 grid,
                 Some(subdomain_offset),
                 Some(subdomain_grid),
                 particle_positions.as_slice(),
                 parameters,
-                &mut subdomain_mesh,
+                &mut *tl_mesh,
             );
-
-            // Append the subdomain mesh to the thread local mesh
-            tl_mesh.append(subdomain_mesh);
         });
 
         tl_meshes
@@ -497,7 +496,7 @@ fn reconstruct_single_surface<'a, I: Index, R: Real>(
         parameters.enable_multi_threading,
     );
 
-    marching_cubes::triangulate_density_map::<I, R>(
+    marching_cubes::triangulate_density_map_append::<I, R>(
         subdomain_grid.unwrap_or(grid),
         &density_map,
         parameters.iso_surface_threshold,

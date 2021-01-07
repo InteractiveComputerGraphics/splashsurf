@@ -1,6 +1,8 @@
 use criterion::{criterion_group, Criterion};
 use nalgebra::Vector3;
-use splashsurf_lib::{reconstruct_surface, Parameters, SpatialDecompositionParameters, SubdivisionCriterion};
+use splashsurf_lib::{
+    reconstruct_surface, Parameters, SpatialDecompositionParameters, SubdivisionCriterion,
+};
 use std::time::Duration;
 
 use super::io::particles_from_xyz;
@@ -24,8 +26,8 @@ pub fn surface_reconstruction(c: &mut Criterion) {
         enable_multi_threading: true,
         spatial_decomposition: Some(SpatialDecompositionParameters {
             subdivision_criterion: SubdivisionCriterion::MaxParticleCountAuto,
-            ghost_particle_safety_factor: Some(1.0)
-        })
+            ghost_particle_safety_factor: Some(1.0),
+        }),
     };
 
     let mut group = c.benchmark_group("full surface reconstruction");
@@ -34,7 +36,9 @@ pub fn surface_reconstruction(c: &mut Criterion) {
     group.measurement_time(Duration::from_secs(30));
 
     group.bench_function("reconstruct_surface", move |b| {
-        b.iter(|| reconstruct_surface::<i64, _>(particle_positions.as_slice(), &parameters).unwrap())
+        b.iter(|| {
+            reconstruct_surface::<i64, _>(particle_positions.as_slice(), &parameters).unwrap()
+        })
     });
 
     group.finish();
