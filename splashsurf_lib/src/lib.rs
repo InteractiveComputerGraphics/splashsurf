@@ -55,7 +55,9 @@ pub use uniform_grid::{GridConstructionError, UniformGrid};
 use log::info;
 use nalgebra::Vector3;
 use rayon::prelude::*;
+use std::cell::RefCell;
 use thiserror::Error as ThisError;
+use thread_local::ThreadLocal;
 
 use crate::uniform_grid::PointIndex;
 use mesh::TriMesh3d;
@@ -384,48 +386,53 @@ fn reconstruct_surface_inplace_octree<'a, I: Index, R: Real>(
 
     // Perform individual surface reconstructions on all non-empty leaves of the octree
     let global_mesh = {
+        let tl_meshes = ThreadLocal::new();
+
         profile!("parallel domain decomposed surface reconstruction");
-        octree_leaves
-            .par_iter()
-            .copied()
-            .fold(TriMesh3d::default, |mut global_mesh, octree_leaf| {
-                let particles = octree_leaf
-                    .particles()
-                    .expect("Octree node has to be a leaf");
+        octree_leaves.par_iter().copied().for_each(|octree_leaf| {
+            let mut tl_mesh = tl_meshes
+                .get_or(|| RefCell::new(TriMesh3d::default()))
+                .borrow_mut();
 
-                info!("Processing octree leaf with {} particles", particles.len());
+            let particles = octree_leaf
+                .particles()
+                .expect("Octree node has to be a leaf");
 
-                // Generate grid for the subdomain of this octree leaf
-                let leaf_aabb = octree_leaf.aabb(grid);
-                let subdomain_grid = &octree_leaf
-                    .grid(leaf_aabb.min(), grid.cell_size())
-                    .expect("Unable to construct Octree node grid");
-                let subdomain_offset = octree_leaf.min_corner();
-                log_grid_info(subdomain_grid);
+            info!("Processing octree leaf with {} particles", particles.len());
 
-                // TODO: Use thread_local workspace for this
-                let particle_positions = particles
-                    .iter()
-                    .copied()
-                    .map(|idx| particle_positions[idx])
-                    .collect::<Vec<_>>();
+            // Generate grid for the subdomain of this octree leaf
+            let leaf_aabb = octree_leaf.aabb(grid);
+            let subdomain_grid = &octree_leaf
+                .grid(leaf_aabb.min(), grid.cell_size())
+                .expect("Unable to construct Octree node grid");
+            let subdomain_offset = octree_leaf.min_corner();
+            log_grid_info(subdomain_grid);
 
-                let mut subdomain_mesh = TriMesh3d::default();
-                reconstruct_single_surface(
-                    grid,
-                    Some(subdomain_offset),
-                    Some(subdomain_grid),
-                    particle_positions.as_slice(),
-                    parameters,
-                    &mut subdomain_mesh,
-                );
+            // TODO: Use thread_local workspace for this
+            let particle_positions = particles
+                .iter()
+                .copied()
+                .map(|idx| particle_positions[idx])
+                .collect::<Vec<_>>();
 
-                // Append the subdomain mesh to the global mesh
-                global_mesh.append(subdomain_mesh);
-                global_mesh
-            })
-            .reduce(TriMesh3d::default, |mut global_mesh, local_mesh| {
-                global_mesh.append(local_mesh);
+            let mut subdomain_mesh = TriMesh3d::default();
+            reconstruct_single_surface(
+                grid,
+                Some(subdomain_offset),
+                Some(subdomain_grid),
+                particle_positions.as_slice(),
+                parameters,
+                &mut subdomain_mesh,
+            );
+
+            // Append the subdomain mesh to the thread local mesh
+            tl_mesh.append(subdomain_mesh);
+        });
+
+        tl_meshes
+            .into_iter()
+            .fold(TriMesh3d::default(), |mut global_mesh, local_mesh| {
+                global_mesh.append(local_mesh.into_inner());
                 global_mesh
             })
     };

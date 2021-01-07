@@ -31,7 +31,7 @@ pub fn surface_reconstruction(c: &mut Criterion) {
     let mut group = c.benchmark_group("full surface reconstruction");
     group.sample_size(10);
     group.warm_up_time(Duration::from_secs(5));
-    group.measurement_time(Duration::from_secs(35));
+    group.measurement_time(Duration::from_secs(30));
 
     group.bench_function("reconstruct_surface", move |b| {
         b.iter(|| reconstruct_surface::<i64, _>(particle_positions.as_slice(), &parameters).unwrap())
