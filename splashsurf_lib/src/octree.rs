@@ -121,6 +121,7 @@ fn default_split_criterion<I: Index>(
     )
 }
 
+/*
 trait OctantClassifier<R: Real> {
     fn classify_particles(
         &mut self,
@@ -297,6 +298,7 @@ impl<R: Real> OctantClassifier<R> for MarginClassifier<R> {
         self.counters[octant as usize] - self.non_ghost_counters[octant as usize]
     }
 }
+*/
 
 impl<I: Index> Octree<I> {
     /// Creates a new [Octree] with a single leaf node containing all vertices
@@ -604,8 +606,8 @@ impl<I: Index> OctreeNode<I> {
         }
 
         // Perform one octree split on the leaf
-        //self.subdivide_with_margin(grid, particle_positions, margin);
-        self.subdivide_generic_par(grid, particle_positions, MarginClassifier::new(margin));
+        self.subdivide_with_margin(grid, particle_positions, margin);
+        //self.subdivide_generic_par(grid, particle_positions, MarginClassifier::new(margin));
 
         // TODO: Replace recursion with iteration
 
@@ -637,9 +639,9 @@ impl<I: Index> OctreeNode<I> {
 
         // Perform one octree split on the leaf
         //self.subdivide_with_margin(grid, particle_positions, margin);
-        //self.subdivide_with_margin_par(grid, particle_positions, margin);
+        self.subdivide_with_margin_par(grid, particle_positions, margin);
         //self.subdivide_generic(grid, particle_positions, MarginClassifier::new(margin));
-        self.subdivide_generic_par(grid, particle_positions, MarginClassifier::new(margin));
+        //self.subdivide_generic_par(grid, particle_positions, MarginClassifier::new(margin));
 
         // TODO: Replace recursion with iteration
 
@@ -972,19 +974,13 @@ impl<I: Index> OctreeNode<I> {
                     },
                 );
 
-            // Construct the node for each octant
+            // Construct the octree node for each octant
             let mut children = Vec::with_capacity(8);
             Octant::all()
                 .par_iter()
-                .copied()
-                .zip(
-                    counters
-                        .par_iter()
-                        .copied()
-                        .zip(non_ghost_counters.par_iter().copied()),
-                )
+                .zip(counters.par_iter().zip(non_ghost_counters.par_iter()))
                 .map(
-                    |(current_octant, (octant_particle_count, octant_non_ghost_count))| {
+                    |(&current_octant, (&octant_particle_count, &octant_non_ghost_count))| {
                         let current_octant_dir = OctantAxisDirections::from(current_octant);
                         let current_octant_flags = OctantDirectionFlags::from(current_octant);
 
@@ -1029,6 +1025,7 @@ impl<I: Index> OctreeNode<I> {
         self.body = new_body;
     }
 
+    /*
     fn subdivide_generic<R: Real, Oc: OctantClassifier<R>>(
         &mut self,
         grid: &UniformGrid<I, R>,
@@ -1134,6 +1131,7 @@ impl<I: Index> OctreeNode<I> {
 
         self.body = new_body;
     }
+     */
 }
 
 impl<I: Index> NodeBody<I> {
