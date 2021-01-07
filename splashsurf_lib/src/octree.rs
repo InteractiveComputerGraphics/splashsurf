@@ -406,7 +406,7 @@ impl<I: Index> OctreeNode<I> {
         }
 
         // Perform one octree split on the leaf
-        if self.body.particles().expect("Node is not a leaf").len() < parallel_policy.min_chunk_size
+        if self.body.particles().expect("Node is not a leaf").len() < parallel_policy.min_task_size
         {
             self.subdivide_with_margin(grid, particle_positions, margin);
         } else {

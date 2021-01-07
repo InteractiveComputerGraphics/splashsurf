@@ -19,17 +19,15 @@ unsafe impl<T> Sync for SendSyncWrapper<T> {}
 unsafe impl<T> Send for SendSyncWrapper<T> {}
 
 pub struct ParallelPolicy {
-    pub min_chunk_size: usize,
-    pub chunks_per_cpu: usize,
-    pub count_logical_cpus: bool,
+    pub min_task_size: usize,
+    pub tasks_per_thread: usize,
 }
 
 impl Default for ParallelPolicy {
     fn default() -> Self {
         Self {
-            min_chunk_size: 64,
-            chunks_per_cpu: 8,
-            count_logical_cpus: true,
+            min_task_size: 256,
+            tasks_per_thread: 8,
         }
     }
 }
@@ -42,17 +40,22 @@ pub(crate) struct ChunkSize {
 
 impl ChunkSize {
     pub(crate) fn new(parallel_policy: &ParallelPolicy, num_items: usize) -> Self {
-        let min_chunk_size = parallel_policy.min_chunk_size.max(num_items);
-        let chunks_per_cpu = parallel_policy.chunks_per_cpu;
+        let num_threads = rayon::current_num_threads();
+        let equal_distribution = num_items / num_threads;
 
-        let num_cpus = if parallel_policy.count_logical_cpus {
-            num_cpus::get()
+        let chunk_size = if parallel_policy.min_task_size > equal_distribution {
+            equal_distribution
         } else {
-            num_cpus::get_physical()
-        };
+            let num_tasks = parallel_policy.tasks_per_thread * num_threads;
+            let task_size = (num_items / num_tasks).max(parallel_policy.min_task_size);
+            task_size
+        }.max(16);
 
-        let num_chunks = chunks_per_cpu * num_cpus;
-        let chunk_size = (num_items / num_chunks).min(min_chunk_size);
+        let num_chunks = if num_items % chunk_size == 0 {
+            num_items / chunk_size
+        } else {
+            num_items / chunk_size + 1
+        };
 
         Self {
             num_items,

@@ -1088,7 +1088,6 @@ dependencies = [
  "log",
  "nalgebra",
  "num",
- "num_cpus",
  "rayon",
  "smallvec",
  "thiserror",
