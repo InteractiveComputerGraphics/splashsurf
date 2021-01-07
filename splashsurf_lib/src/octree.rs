@@ -2,17 +2,18 @@ use nalgebra::Vector3;
 use rayon::prelude::*;
 use rayon::ScopeFifo;
 use smallvec::SmallVec;
+use std::cell::RefCell;
+use thread_local::ThreadLocal;
 
 use crate::mesh::HexMesh3d;
 use crate::uniform_grid::{PointIndex, UniformGrid};
+use crate::utils::ChunkSize;
 use crate::{
     AxisAlignedBoundingBox, AxisAlignedBoundingBox3d, GridConstructionError, Index, Real,
     ThreadSafe,
 };
 
 use octant_helper::{Octant, OctantAxisDirections, OctantDirectionFlags};
-
-// TODO: Unify splitting with/without margin using some generic approach
 
 /// Octree representation of a set of particles
 #[derive(Clone, Debug)]
@@ -756,60 +757,75 @@ impl<I: Index> OctreeNode<I> {
 
             let mut octant_flags = vec![OctantDirectionFlags::empty(); particles.len()];
 
-            // Initial values for the fold
+            // Initial values for the thread local counters
             let zeros = || ([0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0]);
+            let zeros_cell = || RefCell::new(zeros());
+
+            let tl_counters = ThreadLocal::new();
+            let chunk_size = ChunkSize::new(particles.len()).chunk_size;
 
             // Classify all particles of this leaf into its octants
             assert_eq!(particles.len(), octant_flags.len());
-            let (counters, non_ghost_counters) = particles
-                .par_iter()
-                .copied()
-                .zip(octant_flags.par_iter_mut())
-                .fold(
-                    zeros,
-                    |(mut counters, mut non_ghost_counters),
-                     (particle_idx, particle_octant_flags)| {
-                        let relative_pos = particle_positions[particle_idx] - split_coordinates;
+            particles
+                .par_chunks(chunk_size)
+                .zip(octant_flags.par_chunks_mut(chunk_size))
+                .for_each(|(idx_chunk, flags_chunk)| {
+                    // Obtain references to the thread-local counters
+                    let mut counters_borrow_mut = tl_counters.get_or(zeros_cell).borrow_mut();
+                    let counters_ref_mut = &mut *counters_borrow_mut;
+                    let (counters, non_ghost_counters) =
+                        (&mut counters_ref_mut.0, &mut counters_ref_mut.1);
 
-                        // Check what the main octant of the particle is (to count ghost particles)
-                        {
-                            let main_octant: Octant =
-                                OctantAxisDirections::classify(&relative_pos).into();
-                            non_ghost_counters[main_octant as usize] += 1;
-                        }
+                    idx_chunk
+                        .iter()
+                        .copied()
+                        .zip(flags_chunk.iter_mut())
+                        .for_each(|(particle_idx, particle_octant_flags)| {
+                            let relative_pos = particle_positions[particle_idx] - split_coordinates;
 
-                        // Classify into all octants with margin
-                        {
-                            *particle_octant_flags =
-                                OctantDirectionFlags::classify_with_margin(&relative_pos, margin);
+                            // Check what the main octant of the particle is (to count ghost particles)
+                            {
+                                let main_octant: Octant =
+                                    OctantAxisDirections::classify(&relative_pos).into();
+                                non_ghost_counters[main_octant as usize] += 1;
+                            }
 
-                            // Increase the counter of each octant that contains the current particle
-                            OctantDirectionFlags::all_unique_octants()
-                                .iter()
-                                .zip(counters.iter_mut())
-                                .filter(|(octant, _)| particle_octant_flags.contains(**octant))
-                                .for_each(|(_, counter)| {
-                                    *counter += 1;
-                                });
-                        }
+                            // Classify into all octants with margin
+                            {
+                                *particle_octant_flags = OctantDirectionFlags::classify_with_margin(
+                                    &relative_pos,
+                                    margin,
+                                );
 
-                        (counters, non_ghost_counters)
-                    },
-                ) // Sum up all counter arrays
-                .reduce(
-                    zeros,
-                    |(mut counters_acc, mut non_ghost_counters_acc),
-                     (counters, non_ghost_counters)| {
-                        for i in 0..8 {
-                            counters_acc[i] += counters[i];
-                            non_ghost_counters_acc[i] += non_ghost_counters[i];
-                        }
-                        (counters_acc, non_ghost_counters_acc)
-                    },
-                );
+                                // Increase the counter of each octant that contains the current particle
+                                OctantDirectionFlags::all_unique_octants()
+                                    .iter()
+                                    .zip(counters.iter_mut())
+                                    .filter(|(octant, _)| particle_octant_flags.contains(**octant))
+                                    .for_each(|(_, counter)| {
+                                        *counter += 1;
+                                    });
+                            }
+                        })
+                });
 
-            // Construct the octree node for each octant
+            // Sum up all thread local counter arrays
+            let (counters, non_ghost_counters) = tl_counters.into_iter().fold(
+                zeros(),
+                |(mut counters_acc, mut non_ghost_counters_acc), counter_cell| {
+                    let (counters, non_ghost_counters) = counter_cell.into_inner();
+                    for i in 0..8 {
+                        counters_acc[i] += counters[i];
+                        non_ghost_counters_acc[i] += non_ghost_counters[i];
+                    }
+                    (counters_acc, non_ghost_counters_acc)
+                },
+            );
+
+            // TODO: Would be nice to collect directly into a SmallVec but that doesn't seem to be possible
+            //  (at least without some unsafe magic with uninit)
             let mut children = Vec::with_capacity(8);
+            // Construct the octree node for each octant
             Octant::all()
                 .par_iter()
                 .zip(counters.par_iter().zip(non_ghost_counters.par_iter()))
