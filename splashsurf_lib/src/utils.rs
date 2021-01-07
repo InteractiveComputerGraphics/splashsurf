@@ -27,8 +27,8 @@ pub struct ParallelPolicy {
 impl Default for ParallelPolicy {
     fn default() -> Self {
         Self {
-            min_chunk_size: 16,
-            chunks_per_cpu: 4,
+            min_chunk_size: 64,
+            chunks_per_cpu: 8,
             count_logical_cpus: true,
         }
     }
@@ -61,18 +61,23 @@ impl ChunkSize {
         }
     }
 
-    pub(crate) fn log<S: AsRef<str>>(&self, item_name: S) {
+    pub(crate) fn log<S1: AsRef<str>, S2: AsRef<str>>(&self, item_name: S1, purpose: S2) {
         info!(
-            "Splitting {} {} into {} chunks (with {} particles each) for density map generation",
+            "Splitting {} {} into {} chunks (with {} particles each) for {}",
             self.num_items,
             item_name.as_ref(),
             self.num_chunks,
-            self.chunk_size
+            self.chunk_size,
+            purpose.as_ref(),
         );
     }
 
-    pub(crate) fn with_log<S: AsRef<str>>(self, item_name: S) -> Self {
-        self.log(item_name);
+    pub(crate) fn with_log<S1: AsRef<str>, S2: AsRef<str>>(
+        self,
+        item_name: S1,
+        purpose: S2,
+    ) -> Self {
+        self.log(item_name, purpose);
         self
     }
 }

@@ -338,7 +338,7 @@ fn reconstruct_surface_inplace_octree<'a, I: Index, R: Real>(
     output_surface.octree = if parameters.spatial_decomposition.is_some() {
         let particles_per_cell =
             ChunkSize::new(&ParallelPolicy::default(), particle_positions.len())
-                .with_log("particles")
+                .with_log("particles", "octree generation")
                 .chunk_size;
 
         info!(

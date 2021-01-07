@@ -360,7 +360,7 @@ pub fn parallel_generate_sparse_density_map<I: Index, R: Real>(
             None => {
                 let chunk_size =
                     ChunkSize::new(&ParallelPolicy::default(), particle_positions.len())
-                        .with_log("particles")
+                        .with_log("particles", "density map generation")
                         .chunk_size;
 
                 particle_positions
@@ -392,7 +392,7 @@ pub fn parallel_generate_sparse_density_map<I: Index, R: Real>(
             // Process particles, when only a subset is active
             Some(indices) => {
                 let chunk_size = ChunkSize::new(&ParallelPolicy::default(), indices.len())
-                    .with_log("active particles")
+                    .with_log("active particles", "density map generation")
                     .chunk_size;
 
                 indices.par_chunks(chunk_size).for_each(|index_chunk| {
