@@ -41,16 +41,23 @@ pub(crate) struct ChunkSize {
 impl ChunkSize {
     pub(crate) fn new(parallel_policy: &ParallelPolicy, num_items: usize) -> Self {
         let num_threads = rayon::current_num_threads();
+
+        // Chunks size for 1 chunk per thread
         let equal_distribution = num_items / num_threads;
 
         let chunk_size = if parallel_policy.min_task_size > equal_distribution {
+            // Ensure that at every thread gets some data
             equal_distribution
         } else {
+            // Ensure that there are the desired amount of tasks/chunks per thread
             let num_tasks = parallel_policy.tasks_per_thread * num_threads;
             let task_size = (num_items / num_tasks).max(parallel_policy.min_task_size);
             task_size
-        }.max(16);
+        }
+            // Ensure that we don't have less than a minimum number of items per thread
+            .max(16);
 
+        // Compute the number of chunks needed
         let num_chunks = if num_items % chunk_size == 0 {
             num_items / chunk_size
         } else {
