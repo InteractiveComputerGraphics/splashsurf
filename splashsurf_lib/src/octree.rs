@@ -132,6 +132,30 @@ impl<I: Index> Octree<I> {
         }
     }
 
+    /// Create a new octree and perform subdivision with the specified margin
+    pub fn new_subdivided<R: Real>(
+        grid: &UniformGrid<I, R>,
+        particle_positions: &[Vector3<R>],
+        particles_per_cell: usize,
+        margin: R,
+        enable_multi_threading: bool,
+    ) -> Self {
+        let mut tree = Octree::new(&grid, particle_positions.len());
+
+        if enable_multi_threading {
+            tree.subdivide_recursively_margin_par(
+                grid,
+                particle_positions,
+                particles_per_cell,
+                margin,
+            );
+        } else {
+            tree.subdivide_recursively_margin(grid, particle_positions, particles_per_cell, margin);
+        }
+
+        tree
+    }
+
     /// Subdivide the octree recursively using the given splitting criterion and a margin to add ghost particles
     pub fn subdivide_recursively_margin<R: Real>(
         &mut self,
@@ -142,13 +166,9 @@ impl<I: Index> Octree<I> {
     ) {
         profile!("octree subdivide_recursively_margin");
 
-        /*
         let split_criterion = default_split_criterion(particles_per_cell);
         self.root
             .subdivide_recursively_margin(grid, particle_positions, &split_criterion, margin);
-         */
-
-        self.subdivide_recursively_margin_par(grid, particle_positions, particles_per_cell, margin);
     }
 
     /// Subdivide the octree recursively and in parallel using the given splitting criterion and a margin to add ghost particles
