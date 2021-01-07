@@ -16,6 +16,7 @@ documentation = "https://docs.rs/splashsurf_lib"
 # Ignore the tests (especially the test mesh files) for publishing
 exclude = [
     "tests/*",
+    "benches/*",
 ]
 
 [features]
