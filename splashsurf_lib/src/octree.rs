@@ -7,7 +7,7 @@ use thread_local::ThreadLocal;
 
 use crate::mesh::HexMesh3d;
 use crate::uniform_grid::{PointIndex, UniformGrid};
-use crate::utils::ChunkSize;
+use crate::utils::{ChunkSize, ParallelPolicy};
 use crate::{
     AxisAlignedBoundingBox, AxisAlignedBoundingBox3d, GridConstructionError, Index, Real,
     ThreadSafe,
@@ -154,9 +154,15 @@ impl<I: Index> Octree<I> {
         profile!("octree subdivide_recursively_par");
 
         let split_criterion = default_split_criterion(particles_per_cell);
+        let parallel_policy = ParallelPolicy::default();
         rayon::scope_fifo(|s| {
-            self.root
-                .subdivide_recursively_par(s, grid, particle_positions, &split_criterion);
+            self.root.subdivide_recursively_par(
+                s,
+                grid,
+                particle_positions,
+                &split_criterion,
+                &parallel_policy,
+            );
         });
     }
 
@@ -190,6 +196,7 @@ impl<I: Index> Octree<I> {
         profile!("octree subdivide_recursively_margin_par");
 
         let split_criterion = default_split_criterion(particles_per_cell);
+        let parallel_policy = ParallelPolicy::default();
         rayon::scope_fifo(|s| {
             self.root.subdivide_recursively_margin_par(
                 s,
@@ -197,6 +204,7 @@ impl<I: Index> Octree<I> {
                 particle_positions,
                 &split_criterion,
                 margin,
+                &parallel_policy,
             );
         });
     }
@@ -383,8 +391,6 @@ impl<I: Index> OctreeNode<I> {
         // Perform one octree split on the leaf
         self.subdivide(grid, particle_positions);
 
-        // TODO: Replace recursion with iteration
-
         // Continue subdivision recursively in the new child nodes
         if let Some(children) = self.body.children_mut() {
             for child_node in children {
@@ -400,6 +406,7 @@ impl<I: Index> OctreeNode<I> {
         grid: &'scope UniformGrid<I, R>,
         particle_positions: &'scope [Vector3<R>],
         split_criterion: &'scope S,
+        parallel_policy: &'scope ParallelPolicy,
     ) {
         // Stop recursion if split criterion is not fulfilled
         if !split_criterion.split_leaf(self) {
@@ -407,10 +414,12 @@ impl<I: Index> OctreeNode<I> {
         }
 
         // Perform one octree split on the leaf
-        self.subdivide_par(grid, particle_positions);
-
-        // TODO: Replace recursion with iteration
-        // TODO: Parallelize using tasks
+        if self.body.particles().expect("Node is not a leaf").len() < parallel_policy.min_chunk_size
+        {
+            self.subdivide(grid, particle_positions);
+        } else {
+            self.subdivide_par(grid, particle_positions);
+        }
 
         // Continue subdivision recursively in the new child nodes
         if let Some(children) = self.body.children_mut() {
@@ -421,6 +430,7 @@ impl<I: Index> OctreeNode<I> {
                         grid,
                         particle_positions,
                         split_criterion,
+                        parallel_policy,
                     )
                 });
             }
@@ -442,9 +452,6 @@ impl<I: Index> OctreeNode<I> {
 
         // Perform one octree split on the leaf
         self.subdivide_with_margin(grid, particle_positions, margin);
-        //self.subdivide_generic_par(grid, particle_positions, MarginClassifier::new(margin));
-
-        // TODO: Replace recursion with iteration
 
         // Continue subdivision recursively in the new child nodes
         if let Some(children) = self.body.children_mut() {
@@ -466,6 +473,7 @@ impl<I: Index> OctreeNode<I> {
         particle_positions: &'scope [Vector3<R>],
         split_criterion: &'scope S,
         margin: R,
+        parallel_policy: &'scope ParallelPolicy,
     ) {
         // Stop recursion if split criterion is not fulfilled
         if !split_criterion.split_leaf(self) {
@@ -473,12 +481,12 @@ impl<I: Index> OctreeNode<I> {
         }
 
         // Perform one octree split on the leaf
-        //self.subdivide_with_margin(grid, particle_positions, margin);
-        self.subdivide_with_margin_par(grid, particle_positions, margin);
-        //self.subdivide_generic(grid, particle_positions, MarginClassifier::new(margin));
-        //self.subdivide_generic_par(grid, particle_positions, MarginClassifier::new(margin));
-
-        // TODO: Replace recursion with iteration
+        if self.body.particles().expect("Node is not a leaf").len() < parallel_policy.min_chunk_size
+        {
+            self.subdivide_with_margin(grid, particle_positions, margin);
+        } else {
+            self.subdivide_with_margin_par(grid, particle_positions, margin, parallel_policy);
+        }
 
         // Continue subdivision recursively in the new child nodes
         if let Some(children) = self.body.children_mut() {
@@ -490,6 +498,7 @@ impl<I: Index> OctreeNode<I> {
                         particle_positions,
                         split_criterion,
                         margin,
+                        parallel_policy,
                     );
                 });
             }
@@ -747,6 +756,7 @@ impl<I: Index> OctreeNode<I> {
         grid: &UniformGrid<I, R>,
         particle_positions: &[Vector3<R>],
         margin: R,
+        parallel_policy: &ParallelPolicy,
     ) {
         // Convert node body from Leaf to Children
         let new_body = if let NodeBody::Leaf { particles, .. } = &self.body {
@@ -762,7 +772,7 @@ impl<I: Index> OctreeNode<I> {
             let zeros_cell = || RefCell::new(zeros());
 
             let tl_counters = ThreadLocal::new();
-            let chunk_size = ChunkSize::new(particles.len()).chunk_size;
+            let chunk_size = ChunkSize::new(parallel_policy, particles.len()).chunk_size;
 
             // Classify all particles of this leaf into its octants
             assert_eq!(particles.len(), octant_flags.len());

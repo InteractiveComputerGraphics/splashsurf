@@ -18,6 +18,22 @@ impl<T> SendSyncWrapper<T> {
 unsafe impl<T> Sync for SendSyncWrapper<T> {}
 unsafe impl<T> Send for SendSyncWrapper<T> {}
 
+pub struct ParallelPolicy {
+    pub min_chunk_size: usize,
+    pub chunks_per_cpu: usize,
+    pub count_logical_cpus: bool,
+}
+
+impl Default for ParallelPolicy {
+    fn default() -> Self {
+        Self {
+            min_chunk_size: 16,
+            chunks_per_cpu: 4,
+            count_logical_cpus: true,
+        }
+    }
+}
+
 pub(crate) struct ChunkSize {
     pub num_items: usize,
     pub num_chunks: usize,
@@ -25,11 +41,16 @@ pub(crate) struct ChunkSize {
 }
 
 impl ChunkSize {
-    pub(crate) fn new(num_items: usize) -> Self {
-        let min_chunk_size = 500.max(num_items);
-        let chunks_per_cpu = 4;
+    pub(crate) fn new(parallel_policy: &ParallelPolicy, num_items: usize) -> Self {
+        let min_chunk_size = parallel_policy.min_chunk_size.max(num_items);
+        let chunks_per_cpu = parallel_policy.chunks_per_cpu;
 
-        let num_cpus = num_cpus::get();
+        let num_cpus = if parallel_policy.count_logical_cpus {
+            num_cpus::get()
+        } else {
+            num_cpus::get_physical()
+        };
+
         let num_chunks = chunks_per_cpu * num_cpus;
         let chunk_size = (num_items / num_chunks).min(min_chunk_size);
 

@@ -57,6 +57,7 @@ use rayon::prelude::*;
 use thiserror::Error as ThisError;
 
 use crate::uniform_grid::PointIndex;
+use crate::utils::{ChunkSize, ParallelPolicy};
 use mesh::TriMesh3d;
 use octree::Octree;
 
@@ -118,12 +119,12 @@ pub struct Parameters<R: Real> {
     pub particle_radius: R,
     /// Rest density of the fluid
     pub rest_density: R,
-    /// Compact support radius of the kernel, i.e. distance from the particle where kernel reaches zero
+    /// Compact support radius of the kernel, i.e. distance from the particle where kernel reaches zero (in distance units, not relative to particle radius)
     pub kernel_radius: R,
     /// Particles without neighbors within the splash detection radius are considered "splash" or "free particles".
     /// They are filtered out and processed separately. Currently they are only skipped during the surface reconstruction.
     pub splash_detection_radius: Option<R>,
-    /// Edge length of the marching cubes implicit background grid
+    /// Edge length of the marching cubes implicit background grid (in distance units, not relative to particle radius)
     pub cube_size: R,
     /// Density threshold value to distinguish between the inside (above threshold) and outside (below threshold) of the fluid
     pub iso_surface_threshold: R,
@@ -316,6 +317,7 @@ pub fn reconstruct_surface_inplace<'a, I: Index, R: Real>(
     Ok(())
 }
 
+/// Called from general surface reconstruction function if spatial decomposition has to be performed
 fn reconstruct_surface_inplace_octree<'a, I: Index, R: Real>(
     particle_positions: &[Vector3<R>],
     parameters: &Parameters<R>,
@@ -334,9 +336,10 @@ fn reconstruct_surface_inplace_octree<'a, I: Index, R: Real>(
     let grid = &output_surface.grid;
 
     output_surface.octree = if parameters.spatial_decomposition.is_some() {
-        let particles_per_cell = utils::ChunkSize::new(particle_positions.len())
-            .with_log("particles")
-            .chunk_size;
+        let particles_per_cell =
+            ChunkSize::new(&ParallelPolicy::default(), particle_positions.len())
+                .with_log("particles")
+                .chunk_size;
 
         info!(
             "Building octree with at most {} particles per leaf",

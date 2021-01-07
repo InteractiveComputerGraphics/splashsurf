@@ -9,9 +9,8 @@ use thread_local::ThreadLocal;
 use crate::kernel::DiscreteSquaredDistanceCubicKernel;
 use crate::mesh::{HexMesh3d, MeshWithPointData};
 use crate::uniform_grid::{PointIndex, UniformGrid};
-use crate::{
-    new_map, utils, AxisAlignedBoundingBox3d, HashState, Index, MapType, ParallelMapType, Real,
-};
+use crate::utils::{ChunkSize, ParallelPolicy};
+use crate::{new_map, AxisAlignedBoundingBox3d, HashState, Index, MapType, ParallelMapType, Real};
 
 /// Computes the individual densities of particles using a standard SPH sum
 #[inline(never)]
@@ -359,9 +358,10 @@ pub fn parallel_generate_sparse_density_map<I: Index, R: Real>(
         match active_particles {
             // Process particles, when no list of active particles was provided
             None => {
-                let chunk_size = utils::ChunkSize::new(particle_positions.len())
-                    .with_log("particles")
-                    .chunk_size;
+                let chunk_size =
+                    ChunkSize::new(&ParallelPolicy::default(), particle_positions.len())
+                        .with_log("particles")
+                        .chunk_size;
 
                 particle_positions
                     .par_chunks(chunk_size)
@@ -391,7 +391,7 @@ pub fn parallel_generate_sparse_density_map<I: Index, R: Real>(
             }
             // Process particles, when only a subset is active
             Some(indices) => {
-                let chunk_size = utils::ChunkSize::new(indices.len())
+                let chunk_size = ChunkSize::new(&ParallelPolicy::default(), indices.len())
                     .with_log("active particles")
                     .chunk_size;
 
