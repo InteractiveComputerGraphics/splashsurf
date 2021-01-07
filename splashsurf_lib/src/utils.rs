@@ -54,8 +54,8 @@ impl ChunkSize {
             let task_size = (num_items / num_tasks).max(parallel_policy.min_task_size);
             task_size
         }
-            // Ensure that we don't have less than a minimum number of items per thread
-            .max(16);
+        // Ensure that we don't have less than a minimum number of items per thread
+        .max(16);
 
         // Compute the number of chunks needed
         let num_chunks = if num_items % chunk_size == 0 {

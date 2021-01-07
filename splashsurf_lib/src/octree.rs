@@ -1,3 +1,4 @@
+use log::info;
 use nalgebra::Vector3;
 use rayon::prelude::*;
 use rayon::ScopeFifo;
@@ -16,6 +17,15 @@ use crate::{
 use octant_helper::{Octant, OctantAxisDirections, OctantDirectionFlags};
 
 // TODO: Make margin an Option
+
+/// Criterion used for the subdivision of the spatial decomposition of the particle collection
+#[derive(Clone, Debug)]
+pub enum SpatialDecompositionCriterion {
+    /// Perform octree subdivision until an upper limit of particles is reached per chunk, automatically chosen based on number of threads
+    MaxParticleCountAutomatic,
+    /// Perform octree subdivision until an upper limit of particles is reached per chunk, based on the given fixed number of particles
+    MaxParticleCountAbsolute(usize),
+}
 
 /// Octree representation of a set of particles
 #[derive(Clone, Debug)]
@@ -113,11 +123,26 @@ where
 }
 
 fn default_split_criterion<I: Index>(
-    particles_per_cell: usize,
+    subdivision_criterion: SpatialDecompositionCriterion,
+    num_particles: usize,
 ) -> (
     MaxNonGhostParticleLeafSplitCriterion,
     MinimumExtentSplitCriterion<I>,
 ) {
+    let particles_per_cell = match subdivision_criterion {
+        SpatialDecompositionCriterion::MaxParticleCountAbsolute(count) => count,
+        SpatialDecompositionCriterion::MaxParticleCountAutomatic => {
+            ChunkSize::new(&ParallelPolicy::default(), num_particles)
+                .with_log("particles", "octree generation")
+                .chunk_size
+        }
+    };
+
+    info!(
+        "Building octree with at most {} particles per leaf",
+        num_particles
+    );
+
     (
         MaxNonGhostParticleLeafSplitCriterion::new(particles_per_cell),
         MinimumExtentSplitCriterion::new(I::one()),
@@ -136,7 +161,7 @@ impl<I: Index> Octree<I> {
     pub fn new_subdivided<R: Real>(
         grid: &UniformGrid<I, R>,
         particle_positions: &[Vector3<R>],
-        particles_per_cell: usize,
+        subdivision_criterion: SpatialDecompositionCriterion,
         margin: R,
         enable_multi_threading: bool,
     ) -> Self {
@@ -146,11 +171,16 @@ impl<I: Index> Octree<I> {
             tree.subdivide_recursively_margin_par(
                 grid,
                 particle_positions,
-                particles_per_cell,
+                subdivision_criterion,
                 margin,
             );
         } else {
-            tree.subdivide_recursively_margin(grid, particle_positions, particles_per_cell, margin);
+            tree.subdivide_recursively_margin(
+                grid,
+                particle_positions,
+                subdivision_criterion,
+                margin,
+            );
         }
 
         tree
@@ -161,12 +191,14 @@ impl<I: Index> Octree<I> {
         &mut self,
         grid: &UniformGrid<I, R>,
         particle_positions: &[Vector3<R>],
-        particles_per_cell: usize,
+        subdivision_criterion: SpatialDecompositionCriterion,
         margin: R,
     ) {
         profile!("octree subdivide_recursively_margin");
 
-        let split_criterion = default_split_criterion(particles_per_cell);
+        let split_criterion =
+            default_split_criterion(subdivision_criterion, particle_positions.len());
+
         self.root
             .subdivide_recursively_margin(grid, particle_positions, &split_criterion, margin);
     }
@@ -176,12 +208,14 @@ impl<I: Index> Octree<I> {
         &mut self,
         grid: &UniformGrid<I, R>,
         particle_positions: &[Vector3<R>],
-        particles_per_cell: usize,
+        subdivision_criterion: SpatialDecompositionCriterion,
         margin: R,
     ) {
         profile!("octree subdivide_recursively_margin_par");
 
-        let split_criterion = default_split_criterion(particles_per_cell);
+        let split_criterion =
+            default_split_criterion(subdivision_criterion, particle_positions.len());
+
         let parallel_policy = ParallelPolicy::default();
         rayon::scope_fifo(|s| {
             self.root.subdivide_recursively_margin_par(
