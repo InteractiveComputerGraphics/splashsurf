@@ -15,6 +15,8 @@ use crate::{
 
 use octant_helper::{Octant, OctantAxisDirections, OctantDirectionFlags};
 
+// TODO: Make margin an Option
+
 /// Octree representation of a set of particles
 #[derive(Clone, Debug)]
 pub struct Octree<I: Index> {
@@ -130,43 +132,7 @@ impl<I: Index> Octree<I> {
         }
     }
 
-    /// Subdivide the octree recursively using the given splitting criterion
-    pub fn subdivide_recursively<R: Real>(
-        &mut self,
-        grid: &UniformGrid<I, R>,
-        particle_positions: &[Vector3<R>],
-        particles_per_cell: usize,
-    ) {
-        profile!("octree subdivide_recursively");
-
-        let split_criterion = default_split_criterion(particles_per_cell);
-        self.root
-            .subdivide_recursively(grid, particle_positions, &split_criterion);
-    }
-
-    /// Subdivide the octree recursively in parallel using the given splitting criterion
-    pub fn subdivide_recursively_par<R: Real>(
-        &mut self,
-        grid: &UniformGrid<I, R>,
-        particle_positions: &[Vector3<R>],
-        particles_per_cell: usize,
-    ) {
-        profile!("octree subdivide_recursively_par");
-
-        let split_criterion = default_split_criterion(particles_per_cell);
-        let parallel_policy = ParallelPolicy::default();
-        rayon::scope_fifo(|s| {
-            self.root.subdivide_recursively_par(
-                s,
-                grid,
-                particle_positions,
-                &split_criterion,
-                &parallel_policy,
-            );
-        });
-    }
-
-    /// Subdivide the octree recursively using the given splitting criterion
+    /// Subdivide the octree recursively using the given splitting criterion and a margin to add ghost particles
     pub fn subdivide_recursively_margin<R: Real>(
         &mut self,
         grid: &UniformGrid<I, R>,
@@ -185,7 +151,7 @@ impl<I: Index> Octree<I> {
         self.subdivide_recursively_margin_par(grid, particle_positions, particles_per_cell, margin);
     }
 
-    /// Subdivide the octree recursively using the given splitting criterion
+    /// Subdivide the octree recursively and in parallel using the given splitting criterion and a margin to add ghost particles
     pub fn subdivide_recursively_margin_par<R: Real>(
         &mut self,
         grid: &UniformGrid<I, R>,
@@ -376,67 +342,6 @@ impl<I: Index> OctreeNode<I> {
         }
     }
 
-    /// Subdivides this [OctantNode] and all new children until all leaves have at most the specified number of particles
-    fn subdivide_recursively<R: Real, S: LeafSplitCriterion<I>>(
-        &mut self,
-        grid: &UniformGrid<I, R>,
-        particle_positions: &[Vector3<R>],
-        split_criterion: &S,
-    ) {
-        // Stop recursion if split criterion is not fulfilled
-        if !split_criterion.split_leaf(self) {
-            return;
-        }
-
-        // Perform one octree split on the leaf
-        self.subdivide(grid, particle_positions);
-
-        // Continue subdivision recursively in the new child nodes
-        if let Some(children) = self.body.children_mut() {
-            for child_node in children {
-                child_node.subdivide_recursively(grid, particle_positions, split_criterion);
-            }
-        }
-    }
-
-    /// Subdivides this [OctantNode] and all new children in parallel until all leaves have at most the specified number of particles
-    fn subdivide_recursively_par<'scope, R: Real, S: LeafSplitCriterion<I> + ThreadSafe>(
-        &'scope mut self,
-        s: &ScopeFifo<'scope>,
-        grid: &'scope UniformGrid<I, R>,
-        particle_positions: &'scope [Vector3<R>],
-        split_criterion: &'scope S,
-        parallel_policy: &'scope ParallelPolicy,
-    ) {
-        // Stop recursion if split criterion is not fulfilled
-        if !split_criterion.split_leaf(self) {
-            return;
-        }
-
-        // Perform one octree split on the leaf
-        if self.body.particles().expect("Node is not a leaf").len() < parallel_policy.min_chunk_size
-        {
-            self.subdivide(grid, particle_positions);
-        } else {
-            self.subdivide_par(grid, particle_positions);
-        }
-
-        // Continue subdivision recursively in the new child nodes
-        if let Some(children) = self.body.children_mut() {
-            for child_node in children {
-                s.spawn_fifo(move |s| {
-                    child_node.subdivide_recursively_par(
-                        s,
-                        grid,
-                        particle_positions,
-                        split_criterion,
-                        parallel_policy,
-                    )
-                });
-            }
-        }
-    }
-
     /// Subdivides this [OctreeNode] and all new children until all leaves have at most the specified number of particles
     fn subdivide_recursively_margin<R: Real, S: LeafSplitCriterion<I>>(
         &mut self,
@@ -503,156 +408,6 @@ impl<I: Index> OctreeNode<I> {
                 });
             }
         }
-    }
-
-    /// Performs a subdivision of this [OctreeNode] by converting its body form a leaf to a body containing its child octants
-    fn subdivide<R: Real>(&mut self, grid: &UniformGrid<I, R>, particle_positions: &[Vector3<R>]) {
-        // Convert node body from Leaf to Children
-        let new_body = if let NodeBody::Leaf { particles, .. } = &self.body {
-            // Obtain the point used as the octree split/pivot point
-            let split_point = get_split_point(grid, &self.min_corner, &self.max_corner)
-                .expect("Failed to get split point of octree node");
-            let split_coordinates = grid.point_coordinates(&split_point);
-
-            let mut octants = vec![Octant::NegNegNeg; particles.len()];
-            let mut counters: [usize; 8] = [0, 0, 0, 0, 0, 0, 0, 0];
-
-            // Classify all particles of this leaf into its octants
-            assert_eq!(particles.len(), octants.len());
-            for (particle, octant) in particles.iter().copied().zip(octants.iter_mut()) {
-                let relative_pos = particle_positions[particle] - split_coordinates;
-                *octant = OctantAxisDirections::classify(&relative_pos).into();
-                counters[*octant as usize] += 1;
-            }
-
-            // Construct the node for each octant
-            let mut children = SmallVec::with_capacity(8);
-            for (current_octant, octant_particle_count) in
-                Octant::all().iter().copied().zip(counters.iter().copied())
-            {
-                let current_octant_dir = OctantAxisDirections::from(current_octant);
-
-                let min_corner = current_octant_dir
-                    .combine_point_index(grid, &self.min_corner, &split_point)
-                    .expect("Failed to get corner point of octree subcell");
-                let max_corner = current_octant_dir
-                    .combine_point_index(grid, &split_point, &self.max_corner)
-                    .expect("Failed to get corner point of octree subcell");
-
-                let mut octant_particles = SmallVec::with_capacity(octant_particle_count);
-                octant_particles.extend(
-                    particles
-                        .iter()
-                        .copied()
-                        .zip(octants.iter())
-                        // Skip particles from other octants
-                        .filter(|(_, &particle_i_octant)| particle_i_octant == current_octant)
-                        .map(|(particle_i, _)| particle_i),
-                );
-                assert_eq!(octant_particles.len(), octant_particle_count);
-
-                let child = Box::new(OctreeNode::new_leaf(
-                    min_corner,
-                    max_corner,
-                    octant_particles,
-                    0,
-                ));
-
-                children.push(child);
-            }
-
-            NodeBody::new_with_children(children)
-        } else {
-            panic!("Cannot subdivide a non-leaf octree node");
-        };
-
-        self.body = new_body;
-    }
-
-    /// Performs a subdivision of this [OctreeNode] in parallel by converting its body form a leaf to a body containing its child octants
-    fn subdivide_par<R: Real>(
-        &mut self,
-        grid: &UniformGrid<I, R>,
-        particle_positions: &[Vector3<R>],
-    ) {
-        // Convert node body from Leaf to Children
-        let new_body = if let NodeBody::Leaf { particles, .. } = &self.body {
-            // Obtain the point used as the octree split/pivot point
-            let split_point = get_split_point(grid, &self.min_corner, &self.max_corner)
-                .expect("Failed to get split point of octree node");
-            let split_coordinates = grid.point_coordinates(&split_point);
-
-            let mut octants = vec![Octant::NegNegNeg; particles.len()];
-            let counters: [usize; 8] = [0, 0, 0, 0, 0, 0, 0, 0];
-
-            // Classify all particles of this leaf into its octants
-            assert_eq!(particles.len(), octants.len());
-            let counters: [usize; 8] = particles
-                .as_slice()
-                .par_iter()
-                .copied()
-                .zip(octants.par_iter_mut())
-                .fold_with(counters, |mut counters, (particle, octant)| {
-                    let relative_pos = particle_positions[particle] - split_coordinates;
-                    *octant = OctantAxisDirections::classify(&relative_pos).into();
-                    counters[*octant as usize] += 1;
-                    counters
-                })
-                .reduce(
-                    || counters.clone(),
-                    |mut counters, c| {
-                        for (c_a, c_b) in counters.iter_mut().zip(c.iter().copied()) {
-                            *c_a += c_b;
-                        }
-                        counters
-                    },
-                );
-
-            // Construct the node for each octant
-            let mut children = Vec::with_capacity(8);
-            Octant::all()
-                .par_iter()
-                .copied()
-                .zip(counters.par_iter().copied())
-                .map(|(current_octant, octant_particle_count)| {
-                    let current_octant_dir = OctantAxisDirections::from(current_octant);
-
-                    let min_corner = current_octant_dir
-                        .combine_point_index(grid, &self.min_corner, &split_point)
-                        .expect("Failed to get corner point of octree subcell");
-                    let max_corner = current_octant_dir
-                        .combine_point_index(grid, &split_point, &self.max_corner)
-                        .expect("Failed to get corner point of octree subcell");
-
-                    let mut octant_particles = SmallVec::with_capacity(octant_particle_count);
-                    octant_particles.extend(
-                        particles
-                            .iter()
-                            .copied()
-                            .zip(octants.iter())
-                            // Skip particles from other octants
-                            .filter(|(_, &particle_i_octant)| particle_i_octant == current_octant)
-                            .map(|(particle_i, _)| particle_i),
-                    );
-                    assert_eq!(octant_particles.len(), octant_particle_count);
-
-                    let child = Box::new(OctreeNode::new_leaf(
-                        min_corner,
-                        max_corner,
-                        octant_particles,
-                        0,
-                    ));
-
-                    child
-                })
-                .collect_into_vec(&mut children);
-
-            NodeBody::new_with_children(children)
-        } else {
-            panic!("Cannot subdivide a non-leaf octree node");
-        };
-
-        self.body = new_body;
     }
 
     /// Performs a subdivision of this [OctreeNode] while considering a margin with "ghost particles" around each octant
