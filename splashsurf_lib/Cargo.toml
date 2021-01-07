@@ -25,7 +25,7 @@ profiling = ["coarse-prof"]
 
 [dependencies]
 log = "0.4"
-nalgebra = "0.23"
+nalgebra = "0.24"
 num = "0.3"
 anyhow = "1.0"
 thiserror = "1.0"
@@ -37,5 +37,5 @@ fxhash = "0.2"
 vtkio = { version = "0.5", optional = true }
 thread_local = "1.0"
 num_cpus = "1.13"
-smallvec = "1.5"
+smallvec = { version = "1.6", features = ["union"] }
 bitflags = "1.2"
