@@ -49,7 +49,7 @@ mod utils;
 pub use aabb::{AxisAlignedBoundingBox, AxisAlignedBoundingBox2d, AxisAlignedBoundingBox3d};
 pub use density_map::DensityMap;
 pub use numeric_types::{Index, Real, ThreadSafe};
-pub use octree::SpatialDecompositionCriterion;
+pub use octree::SubdivisionCriterion;
 pub use uniform_grid::{GridConstructionError, UniformGrid};
 
 use log::info;
@@ -119,7 +119,7 @@ macro_rules! map_option {
 #[derive(Clone, Debug)]
 pub struct SpatialDecompositionParameters<R: Real> {
     /// Criterion used for subdivision of the octree cells
-    pub subdivision_criterion: SpatialDecompositionCriterion,
+    pub subdivision_criterion: SubdivisionCriterion,
     /// Safety factor applied to the kernel radius when it's used as a margin to collect ghost particles in the leaf nodes
     pub ghost_particle_safety_factor: Option<R>,
 }

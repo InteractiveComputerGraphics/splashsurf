@@ -210,16 +210,18 @@ impl TryFrom<&CommandlineArgs> for ReconstructionRunnerArgs {
             None
         } else {
             let subdivision_criterion = if let Some(max_particles) = args.octree_max_particles {
-                splashsurf_lib::SpatialDecompositionCriterion::MaxParticleCountAbsolute(max_particles)
+                splashsurf_lib::SubdivisionCriterion::MaxParticleCount(
+                    max_particles,
+                )
             } else {
-                splashsurf_lib::SpatialDecompositionCriterion::MaxParticleCountAutomatic
+                splashsurf_lib::SubdivisionCriterion::MaxParticleCountAuto
             };
 
             let ghost_particle_safety_factor = args.octree_ghost_margin_factor;
 
             Some(splashsurf_lib::SpatialDecompositionParameters {
                 subdivision_criterion,
-                ghost_particle_safety_factor
+                ghost_particle_safety_factor,
             })
         };
 

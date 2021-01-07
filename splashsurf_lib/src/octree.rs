@@ -20,11 +20,11 @@ use octant_helper::{Octant, OctantAxisDirections, OctantDirectionFlags};
 
 /// Criterion used for the subdivision of the spatial decomposition of the particle collection
 #[derive(Clone, Debug)]
-pub enum SpatialDecompositionCriterion {
+pub enum SubdivisionCriterion {
     /// Perform octree subdivision until an upper limit of particles is reached per chunk, automatically chosen based on number of threads
-    MaxParticleCountAutomatic,
+    MaxParticleCountAuto,
     /// Perform octree subdivision until an upper limit of particles is reached per chunk, based on the given fixed number of particles
-    MaxParticleCountAbsolute(usize),
+    MaxParticleCount(usize),
 }
 
 /// Octree representation of a set of particles
@@ -123,15 +123,15 @@ where
 }
 
 fn default_split_criterion<I: Index>(
-    subdivision_criterion: SpatialDecompositionCriterion,
+    subdivision_criterion: SubdivisionCriterion,
     num_particles: usize,
 ) -> (
     MaxNonGhostParticleLeafSplitCriterion,
     MinimumExtentSplitCriterion<I>,
 ) {
     let particles_per_cell = match subdivision_criterion {
-        SpatialDecompositionCriterion::MaxParticleCountAbsolute(count) => count,
-        SpatialDecompositionCriterion::MaxParticleCountAutomatic => {
+        SubdivisionCriterion::MaxParticleCount(count) => count,
+        SubdivisionCriterion::MaxParticleCountAuto => {
             ChunkSize::new(&ParallelPolicy::default(), num_particles)
                 .with_log("particles", "octree generation")
                 .chunk_size
@@ -161,7 +161,7 @@ impl<I: Index> Octree<I> {
     pub fn new_subdivided<R: Real>(
         grid: &UniformGrid<I, R>,
         particle_positions: &[Vector3<R>],
-        subdivision_criterion: SpatialDecompositionCriterion,
+        subdivision_criterion: SubdivisionCriterion,
         margin: R,
         enable_multi_threading: bool,
     ) -> Self {
@@ -191,7 +191,7 @@ impl<I: Index> Octree<I> {
         &mut self,
         grid: &UniformGrid<I, R>,
         particle_positions: &[Vector3<R>],
-        subdivision_criterion: SpatialDecompositionCriterion,
+        subdivision_criterion: SubdivisionCriterion,
         margin: R,
     ) {
         profile!("octree subdivide_recursively_margin");
@@ -208,7 +208,7 @@ impl<I: Index> Octree<I> {
         &mut self,
         grid: &UniformGrid<I, R>,
         particle_positions: &[Vector3<R>],
-        subdivision_criterion: SpatialDecompositionCriterion,
+        subdivision_criterion: SubdivisionCriterion,
         margin: R,
     ) {
         profile!("octree subdivide_recursively_margin_par");
