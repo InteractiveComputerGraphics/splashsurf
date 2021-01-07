@@ -165,6 +165,7 @@ impl<I: Index, R: Real> From<ParallelMapType<I, R>> for DensityMap<I, R> {
 }
 
 impl<I: Index, R: Real> DensityMap<I, R> {
+    /// Converts the contained map into a vector of tuples of (flat_point_index, density)
     pub fn to_vec(&self) -> Vec<(I, R)> {
         match self {
             DensityMap::Standard(map) => map.iter().map(|(&i, &r)| (i, r)).collect(),
@@ -172,6 +173,7 @@ impl<I: Index, R: Real> DensityMap<I, R> {
         }
     }
 
+    /// Returns the number of density entries
     pub fn len(&self) -> usize {
         match self {
             DensityMap::Standard(map) => map.len(),
@@ -179,11 +181,23 @@ impl<I: Index, R: Real> DensityMap<I, R> {
         }
     }
 
+    /// Returns the density value at the specified flat point index
     pub fn get(&self, flat_point_index: I) -> Option<R> {
         match self {
             DensityMap::Standard(map) => map.get(&flat_point_index).copied(),
             DensityMap::DashMap(map) => map.get(&flat_point_index).copied(),
         }
+    }
+
+    /// Returns a mutable reference to the contained standard map, replaces itself if not of standard type
+    fn standard_or_insert_mut(&mut self) -> &mut MapType<I, R> {
+        match self {
+            DensityMap::Standard(map) => return map,
+            _ => {}
+        }
+
+        *self = new_map().into();
+        self.standard_or_insert_mut()
     }
 
     pub fn iter<'a>(&'a self) -> impl Iterator<Item = (I, R)> + 'a {
@@ -222,7 +236,8 @@ pub fn generate_sparse_density_map<I: Index, R: Real>(
     kernel_radius: R,
     cube_size: R,
     allow_threading: bool,
-) -> DensityMap<I, R> {
+    density_map: &mut DensityMap<I, R>,
+) {
     info!(
         "Starting construction of sparse density map for {} particles...",
         if let Some(active_particles) = active_particles {
@@ -232,11 +247,9 @@ pub fn generate_sparse_density_map<I: Index, R: Real>(
         }
     );
 
-    let density_map = if let (Some(subdomain_offset), Some(subdomain_grid)) =
-        (subdomain_offset, subdomain_grid)
-    {
+    if let (Some(subdomain_offset), Some(subdomain_grid)) = (subdomain_offset, subdomain_grid) {
         if allow_threading {
-            panic!("Multi threading not implemented for density map with subdomain")
+            panic!("Multi threading not implemented for density map with subdomain");
         } else {
             sequential_generate_sparse_density_map_subdomain(
                 grid,
@@ -248,11 +261,12 @@ pub fn generate_sparse_density_map<I: Index, R: Real>(
                 particle_rest_mass,
                 kernel_radius,
                 cube_size,
-            )
+                density_map,
+            );
         }
     } else {
         if allow_threading {
-            parallel_generate_sparse_density_map(
+            *density_map = parallel_generate_sparse_density_map(
                 grid,
                 particle_positions,
                 particle_densities,
@@ -260,9 +274,9 @@ pub fn generate_sparse_density_map<I: Index, R: Real>(
                 particle_rest_mass,
                 kernel_radius,
                 cube_size,
-            )
+            );
         } else {
-            sequential_generate_sparse_density_map(
+            *density_map = sequential_generate_sparse_density_map(
                 grid,
                 particle_positions,
                 particle_densities,
@@ -270,7 +284,7 @@ pub fn generate_sparse_density_map<I: Index, R: Real>(
                 particle_rest_mass,
                 kernel_radius,
                 cube_size,
-            )
+            );
         }
     };
 
@@ -279,8 +293,6 @@ pub fn generate_sparse_density_map<I: Index, R: Real>(
         density_map.len()
     );
     info!("Construction of sparse density map done.");
-
-    density_map
 }
 
 /// Computes a sparse density map for the fluid based on the specified background grid, sequential implementation
@@ -338,10 +350,12 @@ pub fn sequential_generate_sparse_density_map_subdomain<I: Index, R: Real>(
     particle_rest_mass: R,
     kernel_radius: R,
     cube_size: R,
-) -> DensityMap<I, R> {
+    density_map: &mut DensityMap<I, R>,
+) {
     profile!("sequential_generate_sparse_density_map_subdomain");
 
-    let mut sparse_densities = new_map();
+    let mut sparse_densities = density_map.standard_or_insert_mut();
+    sparse_densities.clear();
 
     if let Some(processor) =
         SparseDensityMapGenerator::new(&grid, kernel_radius, cube_size, particle_rest_mass)
@@ -370,8 +384,6 @@ pub fn sequential_generate_sparse_density_map_subdomain<I: Index, R: Real>(
                 .for_each(process_particle),
         }
     }
-
-    sparse_densities.into()
 }
 
 /// Computes a sparse density map for the fluid based on the specified background grid, multi-threaded implementation

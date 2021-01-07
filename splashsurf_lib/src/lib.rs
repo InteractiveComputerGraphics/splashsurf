@@ -533,9 +533,8 @@ fn reconstruct_single_surface<'a, I: Index, R: Real>(
         parameters.enable_multi_threading,
         &mut workspace.particle_densities,
     );
-
-    // TODO: Use thread_local workspace for this
-    let density_map = density_map::generate_sparse_density_map(
+    
+    density_map::generate_sparse_density_map(
         grid,
         subdomain_offset,
         subdomain_grid,
@@ -546,11 +545,12 @@ fn reconstruct_single_surface<'a, I: Index, R: Real>(
         parameters.kernel_radius,
         parameters.cube_size,
         parameters.enable_multi_threading,
+        &mut workspace.density_map
     );
 
     marching_cubes::triangulate_density_map_append::<I, R>(
         subdomain_grid.unwrap_or(grid),
-        &density_map,
+        &workspace.density_map,
         parameters.iso_surface_threshold,
         output_mesh,
     );
