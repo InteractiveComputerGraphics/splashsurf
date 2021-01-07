@@ -21,12 +21,14 @@ pub fn compute_particle_densities<I: Index, R: Real>(
     particle_rest_mass: R,
     enable_multi_threading: bool,
 ) -> Vec<R> {
+    let mut densities = Vec::new();
     if enable_multi_threading {
         parallel_compute_particle_densities::<I, R>(
             particle_positions,
             particle_neighbor_lists,
             kernel_radius,
             particle_rest_mass,
+            &mut densities,
         )
     } else {
         sequential_compute_particle_densities::<I, R>(
@@ -34,8 +36,44 @@ pub fn compute_particle_densities<I: Index, R: Real>(
             particle_neighbor_lists,
             kernel_radius,
             particle_rest_mass,
+            &mut densities,
         )
     }
+    densities
+}
+
+/// Computes the individual densities of particles inplace using a standard SPH sum
+#[inline(never)]
+pub fn compute_particle_densities_inplace<I: Index, R: Real>(
+    particle_positions: &[Vector3<R>],
+    particle_neighbor_lists: &[Vec<usize>],
+    kernel_radius: R,
+    particle_rest_mass: R,
+    enable_multi_threading: bool,
+    densities: &mut Vec<R>,
+) {
+    if enable_multi_threading {
+        parallel_compute_particle_densities::<I, R>(
+            particle_positions,
+            particle_neighbor_lists,
+            kernel_radius,
+            particle_rest_mass,
+            densities,
+        )
+    } else {
+        sequential_compute_particle_densities::<I, R>(
+            particle_positions,
+            particle_neighbor_lists,
+            kernel_radius,
+            particle_rest_mass,
+            densities,
+        )
+    }
+}
+
+fn init_density_storage<R: Real>(densities: &mut Vec<R>, new_len: usize) {
+    // Ensure that length is correct
+    densities.resize(new_len, R::zero());
 }
 
 /// Computes the individual densities of particles using a standard SPH sum, sequential implementation
@@ -45,10 +83,11 @@ pub fn sequential_compute_particle_densities<I: Index, R: Real>(
     particle_neighbor_lists: &[Vec<usize>],
     kernel_radius: R,
     particle_rest_mass: R,
-) -> Vec<R> {
+    particle_densities: &mut Vec<R>,
+) {
     profile!("sequential_compute_particle_densities");
 
-    let mut particle_densities = vec![R::zero(); particle_positions.len()];
+    init_density_storage(particle_densities, particle_positions.len());
 
     // Pre-compute the kernel which can be queried using squared distances
     let kernel = DiscreteSquaredDistanceCubicKernel::new(1000, kernel_radius);
@@ -66,8 +105,6 @@ pub fn sequential_compute_particle_densities<I: Index, R: Real>(
         particle_i_density *= particle_rest_mass;
         particle_densities[i] = particle_i_density;
     }
-
-    particle_densities
 }
 
 /// Computes the individual densities of particles using a standard SPH sum, multi-threaded implementation
@@ -77,28 +114,32 @@ pub fn parallel_compute_particle_densities<I: Index, R: Real>(
     particle_neighbor_lists: &[Vec<usize>],
     kernel_radius: R,
     particle_rest_mass: R,
-) -> Vec<R> {
+    particle_densities: &mut Vec<R>,
+) {
     profile!("parallel_compute_particle_densities");
+
+    init_density_storage(particle_densities, particle_positions.len());
 
     // Pre-compute the kernel which can be queried using squared distances
     let kernel = DiscreteSquaredDistanceCubicKernel::new(1000, kernel_radius);
 
-    let particle_densities = particle_positions
+    particle_positions
         .par_iter()
         .zip_eq(particle_neighbor_lists.par_iter())
-        .map(|(particle_i_position, particle_i_neighbors)| {
-            let mut particle_i_density = kernel.evaluate(R::zero());
-            for particle_j_position in particle_i_neighbors.iter().map(|&j| &particle_positions[j])
-            {
-                let r_squared = (particle_j_position - particle_i_position).norm_squared();
-                particle_i_density += kernel.evaluate(r_squared);
-            }
-            particle_i_density *= particle_rest_mass;
-            particle_i_density
-        })
-        .collect();
-
-    particle_densities
+        .zip_eq(particle_densities.par_iter_mut())
+        .for_each(
+            |((particle_i_position, particle_i_neighbors), particle_i_density)| {
+                let mut density = kernel.evaluate(R::zero());
+                for particle_j_position in
+                    particle_i_neighbors.iter().map(|&j| &particle_positions[j])
+                {
+                    let r_squared = (particle_j_position - particle_i_position).norm_squared();
+                    density += kernel.evaluate(r_squared);
+                }
+                density *= particle_rest_mass;
+                *particle_i_density = density;
+            },
+        );
 }
 
 /// A sparse density map

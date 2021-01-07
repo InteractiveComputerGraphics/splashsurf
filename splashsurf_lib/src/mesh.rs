@@ -188,8 +188,7 @@ pub mod vtk_helper {
     {
         fn from(mesh: &TriMesh3d<R>) -> Self {
             let points = {
-                let mut points: Vec<R> = Vec::new();
-                points.reserve(mesh.vertices.len() * 3);
+                let mut points: Vec<R> = Vec::with_capacity(mesh.vertices.len() * 3);
                 for v in mesh.vertices.iter() {
                     points.extend(v.as_slice());
                 }
@@ -197,8 +196,7 @@ pub mod vtk_helper {
             };
 
             let vertices = {
-                let mut vertices = Vec::new();
-                vertices.reserve(mesh.triangles.len() * (3 + 1));
+                let mut vertices = Vec::with_capacity(mesh.triangles.len() * (3 + 1));
                 for triangle in mesh.triangles.iter() {
                     vertices.push(3);
                     vertices.extend(triangle.iter().copied().map(|i| i as u32));
@@ -218,8 +216,7 @@ pub mod vtk_helper {
     {
         fn from(mesh: &'a HexMesh3d<R>) -> Self {
             let points = {
-                let mut points: Vec<R> = Vec::new();
-                points.reserve(mesh.vertices.len() * 3);
+                let mut points: Vec<R> = Vec::with_capacity(mesh.vertices.len() * 3);
                 for v in mesh.vertices.iter() {
                     points.extend(v.as_slice());
                 }
@@ -227,8 +224,7 @@ pub mod vtk_helper {
             };
 
             let vertices = {
-                let mut vertices = Vec::new();
-                vertices.reserve(mesh.cells.len() * (8 + 1));
+                let mut vertices = Vec::with_capacity(mesh.cells.len() * (8 + 1));
                 for cell in mesh.cells.iter() {
                     vertices.push(8);
                     vertices.extend(cell.iter().copied().map(|i| i as u32));
@@ -248,8 +244,7 @@ pub mod vtk_helper {
     {
         fn from(mesh: &'a PointCloud3d<R>) -> Self {
             let points = {
-                let mut points: Vec<R> = Vec::new();
-                points.reserve(mesh.points.len() * 3);
+                let mut points: Vec<R> = Vec::with_capacity(mesh.points.len() * 3);
                 for v in mesh.points.iter() {
                     points.extend(v.as_slice());
                 }
@@ -257,8 +252,7 @@ pub mod vtk_helper {
             };
 
             let vertices = {
-                let mut vertices = Vec::new();
-                vertices.reserve(mesh.points.len() * (1 + 1));
+                let mut vertices = Vec::with_capacity(mesh.points.len() * (1 + 1));
                 for (i, _) in mesh.points.iter().enumerate() {
                     vertices.push(1 as u32);
                     vertices.push(i as u32);

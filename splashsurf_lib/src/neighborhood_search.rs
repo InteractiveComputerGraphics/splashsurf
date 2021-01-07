@@ -15,11 +15,78 @@ pub fn search<I: Index, R: Real>(
     search_radius: R,
     enable_multi_threading: bool,
 ) -> Vec<Vec<usize>> {
+    let mut particle_neighbor_lists = Vec::new();
     if enable_multi_threading {
-        parallel_search::<I, R>(domain, particle_positions, search_radius)
+        parallel_search::<I, R>(
+            domain,
+            particle_positions,
+            search_radius,
+            &mut particle_neighbor_lists,
+        )
     } else {
-        sequential_search::<I, R>(domain, particle_positions, search_radius)
+        sequential_search::<I, R>(
+            domain,
+            particle_positions,
+            search_radius,
+            &mut particle_neighbor_lists,
+        )
     }
+    particle_neighbor_lists
+}
+
+/// Performs a neighborhood search inplace, stores the indices of all neighboring particles in the given search radius per particle in the given vector
+#[inline(never)]
+pub fn search_inplace<I: Index, R: Real>(
+    domain: &AxisAlignedBoundingBox3d<R>,
+    particle_positions: &[Vector3<R>],
+    search_radius: R,
+    enable_multi_threading: bool,
+    particle_neighbor_lists: &mut Vec<Vec<usize>>,
+) {
+    if enable_multi_threading {
+        parallel_search::<I, R>(
+            domain,
+            particle_positions,
+            search_radius,
+            particle_neighbor_lists,
+        )
+    } else {
+        sequential_search::<I, R>(
+            domain,
+            particle_positions,
+            search_radius,
+            particle_neighbor_lists,
+        )
+    }
+}
+
+fn init_neighborhood_list(neighborhood_list: &mut Vec<Vec<usize>>, new_len: usize) {
+    let old_len = neighborhood_list.len();
+    if old_len != new_len {
+        // Reset all neighbor lists that won't be truncated
+        for particle_list in neighborhood_list.iter_mut().take(old_len.min(new_len)) {
+            particle_list.clear();
+        }
+    }
+
+    // Ensure that length is correct
+    neighborhood_list.resize_with(new_len, || Vec::with_capacity(15));
+}
+
+fn init_neighborhood_list_par(neighborhood_list: &mut Vec<Vec<usize>>, new_len: usize) {
+    let old_len = neighborhood_list.len();
+    if old_len != new_len {
+        // Reset all neighbor lists that won't be truncated
+        neighborhood_list
+            .par_iter_mut()
+            .take(old_len.min(new_len))
+            .for_each(|particle_list| {
+                particle_list.clear();
+            });
+    }
+
+    // Ensure that length is correct
+    neighborhood_list.resize_with(new_len, || Vec::with_capacity(15));
 }
 
 /// Performs a neighborhood search, returning the indices of all neighboring particles in the given search radius per particle, sequential implementation
@@ -28,7 +95,8 @@ pub fn sequential_search<I: Index, R: Real>(
     domain: &AxisAlignedBoundingBox3d<R>,
     particle_positions: &[Vector3<R>],
     search_radius: R,
-) -> Vec<Vec<usize>> {
+    neighborhood_list: &mut Vec<Vec<usize>>,
+) {
     // TODO: Use ArrayStorage from femproto instead of Vec of Vecs?
     // FIXME: Replace unwraps?
     profile!("neighborhood_search");
@@ -42,7 +110,7 @@ pub fn sequential_search<I: Index, R: Real>(
         sequential_generate_cell_to_particle_map::<I, R>(&grid, particle_positions);
 
     // Build neighborhood lists cell by cell
-    let mut neighborhood_list = vec![Vec::new(); particle_positions.len()];
+    init_neighborhood_list(neighborhood_list, particle_positions.len());
     {
         profile!("calculate_particle_neighbors_seq");
         for (&flat_cell_index, particles) in &particles_per_cell {
@@ -85,8 +153,6 @@ pub fn sequential_search<I: Index, R: Real>(
             }
         }
     }
-
-    neighborhood_list
 }
 
 /// Performs a neighborhood search, returning the indices of all neighboring particles in the given search radius per particle, multi-thread implementation
@@ -95,7 +161,8 @@ pub fn parallel_search<I: Index, R: Real>(
     domain: &AxisAlignedBoundingBox3d<R>,
     particle_positions: &[Vector3<R>],
     search_radius: R,
-) -> Vec<Vec<usize>> {
+    neighborhood_list: &mut Vec<Vec<usize>>,
+) {
     profile!("neighborhood_search");
 
     let search_radius_squared = search_radius * search_radius;
@@ -133,7 +200,7 @@ pub fn parallel_search<I: Index, R: Real>(
     };
 
     // TODO: Compute the default capacity of neighborhood lists from rest volume of particles
-    let mut neighborhood_list = vec![Vec::with_capacity(15); particle_positions.len()];
+    init_neighborhood_list_par(neighborhood_list, particle_positions.len());
     // We are ok with making the ptr Send+Sync because we are only going to write into disjoint fields of the Vec
     let neighborhood_list_mut_ptr = unsafe { SendSyncWrapper::new(neighborhood_list.as_mut_ptr()) };
 
@@ -179,8 +246,6 @@ pub fn parallel_search<I: Index, R: Real>(
             },
         );
     }
-
-    neighborhood_list
 }
 
 /// Stats of a neighborhood list

@@ -301,7 +301,9 @@ pub fn reconstruct_surface_inplace<'a, I: Index, R: Real>(
     } else {
         profile!("reconstruct_surface_inplace");
 
+        let mut workspace = SingleReconstructionWorkspace::new();
         reconstruct_single_surface(
+            &mut workspace,
             grid,
             None,
             None,
@@ -390,11 +392,16 @@ fn reconstruct_surface_inplace_octree<'a, I: Index, R: Real>(
     // Perform individual surface reconstructions on all non-empty leaves of the octree
     let global_mesh = {
         let tl_meshes = ThreadLocal::new();
+        let tl_workspaces = ThreadLocal::new();
 
         profile!("parallel domain decomposed surface reconstruction");
         octree_leaves.par_iter().copied().for_each(|octree_leaf| {
             let mut tl_mesh = tl_meshes
                 .get_or(|| RefCell::new(TriMesh3d::default()))
+                .borrow_mut();
+
+            let mut tl_workspace = tl_workspaces
+                .get_or(|| RefCell::new(SingleReconstructionWorkspace::new()))
                 .borrow_mut();
 
             let particles = octree_leaf
@@ -419,6 +426,7 @@ fn reconstruct_surface_inplace_octree<'a, I: Index, R: Real>(
                 .collect::<Vec<_>>();
 
             reconstruct_single_surface(
+                &mut *tl_workspace,
                 grid,
                 Some(subdomain_offset),
                 Some(subdomain_grid),
@@ -448,7 +456,42 @@ fn reconstruct_surface_inplace_octree<'a, I: Index, R: Real>(
     Ok(())
 }
 
+struct SingleReconstructionWorkspace<I: Index, R: Real> {
+    particle_neighbor_lists: Vec<Vec<usize>>,
+    particle_densities: Vec<R>,
+    density_map: DensityMap<I, R>,
+}
+
+impl<I: Index, R: Real> SingleReconstructionWorkspace<I, R> {
+    fn new() -> Self {
+        Self {
+            particle_neighbor_lists: Vec::new(),
+            particle_densities: Vec::new(),
+            density_map: new_map().into(),
+        }
+    }
+
+    fn clear(&mut self) {
+        self.particle_neighbor_lists.clear();
+        self.particle_densities.clear();
+        //
+    }
+
+    fn reserve(&mut self, total_capacity: usize) {
+        if total_capacity > self.particle_densities.capacity() {
+            self.particle_densities
+                .reserve(total_capacity - self.particle_densities.capacity());
+        }
+
+        if total_capacity > self.particle_neighbor_lists.capacity() {
+            self.particle_neighbor_lists
+                .reserve(total_capacity - self.particle_neighbor_lists.capacity());
+        }
+    }
+}
+
 fn reconstruct_single_surface<'a, I: Index, R: Real>(
+    workspace: &mut SingleReconstructionWorkspace<I, R>,
     grid: &UniformGrid<I, R>,
     subdomain_offset: Option<&PointIndex<I>>,
     subdomain_grid: Option<&UniformGrid<I, R>>,
@@ -456,31 +499,32 @@ fn reconstruct_single_surface<'a, I: Index, R: Real>(
     parameters: &Parameters<R>,
     output_mesh: &'a mut TriMesh3d<R>,
 ) {
+    workspace.clear();
+    workspace.reserve(particle_positions.len());
+
     let particle_rest_density = parameters.rest_density;
     let particle_rest_volume = R::from_f64((4.0 / 3.0) * std::f64::consts::PI).unwrap()
         * parameters.particle_radius.powi(3);
     let particle_rest_mass = particle_rest_volume * particle_rest_density;
 
-    let particle_densities = {
-        info!("Starting neighborhood search...");
+    info!("Starting neighborhood search...");
+    neighborhood_search::search_inplace::<I, R>(
+        &grid.aabb(),
+        particle_positions,
+        parameters.kernel_radius,
+        parameters.enable_multi_threading,
+        &mut workspace.particle_neighbor_lists,
+    );
 
-        let particle_neighbor_lists = neighborhood_search::search::<I, R>(
-            &grid.aabb(),
-            particle_positions,
-            parameters.kernel_radius,
-            parameters.enable_multi_threading,
-        );
-
-        info!("Computing particle densities...");
-
-        density_map::compute_particle_densities::<I, R>(
-            particle_positions,
-            particle_neighbor_lists.as_slice(),
-            parameters.kernel_radius,
-            particle_rest_mass,
-            parameters.enable_multi_threading,
-        )
-    };
+    info!("Computing particle densities...");
+    density_map::compute_particle_densities_inplace::<I, R>(
+        particle_positions,
+        workspace.particle_neighbor_lists.as_slice(),
+        parameters.kernel_radius,
+        particle_rest_mass,
+        parameters.enable_multi_threading,
+        &mut workspace.particle_densities,
+    );
 
     // TODO: Use thread_local workspace for this
     let density_map = density_map::generate_sparse_density_map(
@@ -488,7 +532,7 @@ fn reconstruct_single_surface<'a, I: Index, R: Real>(
         subdomain_offset,
         subdomain_grid,
         particle_positions,
-        particle_densities.as_slice(),
+        workspace.particle_densities.as_slice(),
         None,
         particle_rest_mass,
         parameters.kernel_radius,
