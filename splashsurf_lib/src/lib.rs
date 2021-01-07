@@ -120,7 +120,7 @@ macro_rules! map_option {
 pub struct SpatialDecompositionParameters<R: Real> {
     /// Criterion used for subdivision of the octree cells
     pub subdivision_criterion: SpatialDecompositionCriterion,
-    /// Factor applied to the kernel radius that is used for the width of the ghost particle region around each subdomain (default: 1.2)
+    /// Safety factor applied to the kernel radius when it's used as a margin to collect ghost particles in the leaf nodes
     pub ghost_particle_safety_factor: Option<R>,
 }
 
@@ -347,7 +347,7 @@ fn reconstruct_surface_inplace_octree<'a, I: Index, R: Real>(
         if let Some(decomposition_parameters) = &parameters.spatial_decomposition {
             let margin_factor = decomposition_parameters
                 .ghost_particle_safety_factor
-                .unwrap_or(R::from_f64(1.2).unwrap());
+                .unwrap_or(R::one());
 
             Some(Octree::new_subdivided(
                 &grid,

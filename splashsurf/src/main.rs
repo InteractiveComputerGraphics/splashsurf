@@ -75,6 +75,13 @@ struct CommandlineArgs {
         requires = "domain-min"
     )]
     domain_max: Option<Vec<f64>>,
+    /// Whether to disable spatial decomposition using an octree and use a global approach instead
+    #[structopt(long)]
+    no_octree: bool,
+    /// The maximum number of particles for leaf nodes of the octree, default is to compute it based on number of threads and particles
+    octree_max_particles: Option<usize>,
+    /// Safety factor applied to the kernel radius when it's used as a margin to collect ghost particles in the leaf nodes
+    octree_ghost_margin_factor: Option<f64>,
     /// Optional filename for writing the point cloud representation of the intermediate density map to disk
     #[structopt(long, parse(from_os_str))]
     output_dm_points: Option<PathBuf>,
@@ -199,6 +206,23 @@ impl TryFrom<&CommandlineArgs> for ReconstructionRunnerArgs {
             .map(|r| args.particle_radius * r);
         let cube_size = args.particle_radius * args.cube_size;
 
+        let spatial_decomposition = if args.no_octree {
+            None
+        } else {
+            let subdivision_criterion = if let Some(max_particles) = args.octree_max_particles {
+                splashsurf_lib::SpatialDecompositionCriterion::MaxParticleCountAbsolute(max_particles)
+            } else {
+                splashsurf_lib::SpatialDecompositionCriterion::MaxParticleCountAutomatic
+            };
+
+            let ghost_particle_safety_factor = args.octree_ghost_margin_factor;
+
+            Some(splashsurf_lib::SpatialDecompositionParameters {
+                subdivision_criterion,
+                ghost_particle_safety_factor
+            })
+        };
+
         // Assemble all parameters for the surface reconstruction
         let params = splashsurf_lib::Parameters {
             particle_radius: args.particle_radius,
@@ -209,13 +233,7 @@ impl TryFrom<&CommandlineArgs> for ReconstructionRunnerArgs {
             iso_surface_threshold: args.surface_threshold,
             domain_aabb,
             enable_multi_threading: args.parallelize_over_particles,
-            spatial_decomposition: args.output_octree.as_ref().map(|_| {
-                splashsurf_lib::SpatialDecompositionParameters {
-                    subdivision_criterion:
-                        splashsurf_lib::SpatialDecompositionCriterion::MaxParticleCountAutomatic,
-                    ghost_particle_safety_factor: None,
-                }
-            }),
+            spatial_decomposition,
         };
 
         Ok(ReconstructionRunnerArgs {
