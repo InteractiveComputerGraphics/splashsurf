@@ -341,7 +341,7 @@ pub fn reconstruct_surface_inplace<'a, I: Index, R: Real>(
 
 /// Called from general surface reconstruction function if spatial decomposition has to be performed
 fn reconstruct_surface_inplace_octree<'a, I: Index, R: Real>(
-    particle_positions: &[Vector3<R>],
+    global_particle_positions: &[Vector3<R>],
     parameters: &Parameters<R>,
     output_surface: &'a mut SurfaceReconstruction<I, R>,
 ) -> Result<(), ReconstructionError<I, R>> {
@@ -358,7 +358,7 @@ fn reconstruct_surface_inplace_octree<'a, I: Index, R: Real>(
 
             Some(Octree::new_subdivided(
                 &grid,
-                particle_positions,
+                global_particle_positions,
                 decomposition_parameters.subdivision_criterion.clone(),
                 parameters.kernel_radius * margin_factor,
                 parameters.enable_multi_threading,
@@ -396,17 +396,21 @@ fn reconstruct_surface_inplace_octree<'a, I: Index, R: Real>(
 
         profile!("parallel domain decomposed surface reconstruction");
         octree_leaves.par_iter().copied().for_each(|octree_leaf| {
+            let particles = octree_leaf
+                .particles()
+                .expect("Octree node has to be a leaf");
+
             let mut tl_mesh = tl_meshes
                 .get_or(|| RefCell::new(TriMesh3d::default()))
                 .borrow_mut();
 
             let mut tl_workspace = tl_workspaces
-                .get_or(|| RefCell::new(SingleReconstructionWorkspace::new()))
+                .get_or(|| {
+                    RefCell::new(SingleReconstructionWorkspace::with_capacity(
+                        particles.len(),
+                    ))
+                })
                 .borrow_mut();
-
-            let particles = octree_leaf
-                .particles()
-                .expect("Octree node has to be a leaf");
 
             info!("Processing octree leaf with {} particles", particles.len());
 
@@ -418,12 +422,23 @@ fn reconstruct_surface_inplace_octree<'a, I: Index, R: Real>(
             let subdomain_offset = octree_leaf.min_corner();
             log_grid_info(subdomain_grid);
 
-            // TODO: Use thread_local workspace for this
-            let particle_positions = particles
-                .iter()
-                .copied()
-                .map(|idx| particle_positions[idx])
-                .collect::<Vec<_>>();
+            // Take particle position storage from workspace and fill it with positions of the leaf
+            let particle_positions = {
+                let mut leaf_particle_positions =
+                    std::mem::take(&mut tl_workspace.particle_positions);
+                leaf_particle_positions.clear();
+                utils::reserve_total(&mut leaf_particle_positions, particles.len());
+
+                // Extract the particle positions of the leaf
+                leaf_particle_positions.extend(
+                    particles
+                        .iter()
+                        .copied()
+                        .map(|idx| global_particle_positions[idx]),
+                );
+
+                leaf_particle_positions
+            };
 
             reconstruct_single_surface(
                 &mut *tl_workspace,
@@ -434,6 +449,9 @@ fn reconstruct_surface_inplace_octree<'a, I: Index, R: Real>(
                 parameters,
                 &mut *tl_mesh,
             );
+
+            // Put back the particle position storage
+            tl_workspace.particle_positions = particle_positions;
         });
 
         tl_meshes
@@ -457,6 +475,7 @@ fn reconstruct_surface_inplace_octree<'a, I: Index, R: Real>(
 }
 
 struct SingleReconstructionWorkspace<I: Index, R: Real> {
+    particle_positions: Vec<Vector3<R>>,
     particle_neighbor_lists: Vec<Vec<usize>>,
     particle_densities: Vec<R>,
     density_map: DensityMap<I, R>,
@@ -465,27 +484,19 @@ struct SingleReconstructionWorkspace<I: Index, R: Real> {
 impl<I: Index, R: Real> SingleReconstructionWorkspace<I, R> {
     fn new() -> Self {
         Self {
+            particle_positions: Vec::new(),
             particle_neighbor_lists: Vec::new(),
             particle_densities: Vec::new(),
             density_map: new_map().into(),
         }
     }
 
-    fn clear(&mut self) {
-        self.particle_neighbor_lists.clear();
-        self.particle_densities.clear();
-        //
-    }
-
-    fn reserve(&mut self, total_capacity: usize) {
-        if total_capacity > self.particle_densities.capacity() {
-            self.particle_densities
-                .reserve(total_capacity - self.particle_densities.capacity());
-        }
-
-        if total_capacity > self.particle_neighbor_lists.capacity() {
-            self.particle_neighbor_lists
-                .reserve(total_capacity - self.particle_neighbor_lists.capacity());
+    fn with_capacity(capacity: usize) -> Self {
+        Self {
+            particle_positions: Vec::with_capacity(capacity),
+            particle_neighbor_lists: Vec::with_capacity(capacity),
+            particle_densities: Vec::with_capacity(capacity),
+            density_map: new_map().into(),
         }
     }
 }
@@ -499,9 +510,6 @@ fn reconstruct_single_surface<'a, I: Index, R: Real>(
     parameters: &Parameters<R>,
     output_mesh: &'a mut TriMesh3d<R>,
 ) {
-    workspace.clear();
-    workspace.reserve(particle_positions.len());
-
     let particle_rest_density = parameters.rest_density;
     let particle_rest_volume = R::from_f64((4.0 / 3.0) * std::f64::consts::PI).unwrap()
         * parameters.particle_radius.powi(3);

@@ -1,7 +1,7 @@
 use log::info;
 
 /// Wrapper type to make any type Send + Sync
-pub struct SendSyncWrapper<T>(T);
+pub(crate) struct SendSyncWrapper<T>(T);
 
 impl<T> SendSyncWrapper<T> {
     #[inline(always)]
@@ -17,6 +17,12 @@ impl<T> SendSyncWrapper<T> {
 
 unsafe impl<T> Sync for SendSyncWrapper<T> {}
 unsafe impl<T> Send for SendSyncWrapper<T> {}
+
+pub(crate) fn reserve_total<T>(vec: &mut Vec<T>, total_capacity: usize) {
+    if total_capacity > vec.capacity() {
+        vec.reserve(total_capacity - vec.capacity());
+    }
+}
 
 pub struct ParallelPolicy {
     pub min_task_size: usize,
