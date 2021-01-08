@@ -3,8 +3,9 @@ use std::fmt::Debug;
 
 use nalgebra::allocator::Allocator;
 use nalgebra::{DefaultAllocator, DimName, VectorN, U2, U3};
+use rayon::prelude::*;
 
-use crate::Real;
+use crate::{Real, ThreadSafe};
 
 /// Type representing an axis aligned bounding box in arbitrary dimensions
 #[derive(Clone, PartialEq)]
@@ -20,6 +21,41 @@ where
 pub type AxisAlignedBoundingBox2d<R> = AxisAlignedBoundingBox<R, U2>;
 /// Convenience type alias for an AABB in three dimensions
 pub type AxisAlignedBoundingBox3d<R> = AxisAlignedBoundingBox<R, U3>;
+
+impl<R, D> AxisAlignedBoundingBox<R, D>
+where
+    R: Real,
+    D: DimName,
+    DefaultAllocator: Allocator<R, D>,
+    VectorN<R, D>: ThreadSafe,
+{
+    /// Constructs the smallest AABB fitting around all the given points, parallel version
+    pub fn from_points_par(points: &[VectorN<R, D>]) -> Self {
+        if points.is_empty() {
+            Self::zeros()
+        } else if points.len() == 1 {
+            Self::from_point(points[0].clone())
+        } else {
+            let initial_aabb = Self::from_point(points[0].clone());
+            points[1..]
+                .par_iter()
+                .fold(
+                    || initial_aabb.clone(),
+                    |mut aabb, next_point| {
+                        aabb.join_with_point(next_point);
+                        aabb
+                    },
+                )
+                .reduce(
+                    || initial_aabb.clone(),
+                    |mut final_aabb, aabb| {
+                        final_aabb.join(&aabb);
+                        final_aabb
+                    },
+                )
+        }
+    }
+}
 
 impl<R, D> AxisAlignedBoundingBox<R, D>
 where

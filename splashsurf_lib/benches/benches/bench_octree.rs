@@ -20,6 +20,7 @@ pub fn subdivide_recursively_benchmark(c: &mut Criterion) {
         particle_radius,
         cube_size,
         None,
+        true,
     )
     .unwrap();
 

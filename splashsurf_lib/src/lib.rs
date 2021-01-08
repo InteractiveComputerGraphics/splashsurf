@@ -296,6 +296,7 @@ pub fn reconstruct_surface_inplace<'a, I: Index, R: Real>(
         parameters.particle_radius,
         parameters.cube_size,
         parameters.domain_aabb.as_ref(),
+        parameters.enable_multi_threading,
     )?;
     let grid = &output_surface.grid;
     log_grid_info(grid);
@@ -583,6 +584,7 @@ pub fn grid_for_reconstruction<I: Index, R: Real>(
     particle_radius: R,
     cube_size: R,
     domain_aabb: Option<&AxisAlignedBoundingBox3d<R>>,
+    enable_multi_threading: bool,
 ) -> Result<UniformGrid<I, R>, ReconstructionError<I, R>> {
     let domain_aabb = if let Some(domain_aabb) = domain_aabb {
         domain_aabb.clone()
@@ -590,7 +592,11 @@ pub fn grid_for_reconstruction<I: Index, R: Real>(
         profile!("compute minimum enclosing aabb");
 
         let mut domain_aabb = {
-            let mut aabb = AxisAlignedBoundingBox3d::from_points(particle_positions);
+            let mut aabb = if enable_multi_threading {
+                AxisAlignedBoundingBox3d::from_points_par(particle_positions)
+            } else {
+                AxisAlignedBoundingBox3d::from_points(particle_positions)
+            };
             aabb.grow_uniformly(particle_radius);
             aabb
         };
