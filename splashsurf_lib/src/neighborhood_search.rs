@@ -113,18 +113,20 @@ pub fn sequential_search<I: Index, R: Real>(
     init_neighborhood_list(neighborhood_list, particle_positions.len());
     {
         profile!("calculate_particle_neighbors_seq");
+        let mut potential_neighbor_particle_vecs = Vec::new();
         for (&flat_cell_index, particles) in &particles_per_cell {
             let current_cell = grid.try_unflatten_cell_index(flat_cell_index).unwrap();
 
             // Collect references to the particle lists of all existing adjacent cells and the cell itself
-            let potential_neighbor_particle_vecs: Vec<&Vec<usize>> = grid
-                .cells_adjacent_to_cell(&current_cell)
-                .chain(std::iter::once(current_cell))
-                .filter_map(|c| {
-                    let flat_cell_index = grid.flatten_cell_index(&c);
-                    particles_per_cell.get(&flat_cell_index)
-                })
-                .collect();
+            potential_neighbor_particle_vecs.clear();
+            potential_neighbor_particle_vecs.extend(
+                grid.cells_adjacent_to_cell(&current_cell)
+                    .chain(std::iter::once(current_cell))
+                    .filter_map(|c| {
+                        let flat_cell_index = grid.flatten_cell_index(&c);
+                        particles_per_cell.get(&flat_cell_index)
+                    }),
+            );
 
             // Returns an iterator over all particles of all adjacent cells and the cell itself
             let potential_neighbor_particle_iter = || {
@@ -315,6 +317,11 @@ fn sequential_generate_cell_to_particle_map<I: Index, R: Real>(
     profile!("sequential_generate_cell_to_particle_map");
     let mut particles_per_cell = new_map();
 
+    // Compute average particle density for initial cell capacity
+    let cell_dims = grid.cells_per_dim();
+    let n_cells = cell_dims[0] * cell_dims[1] * cell_dims[2];
+    let avg_density = particle_positions.len() / n_cells.to_usize().unwrap_or(1);
+
     // Assign all particles to enclosing cells
     for (particle_i, particle) in particle_positions.iter().enumerate() {
         let cell_ijk = grid.enclosing_cell(particle);
@@ -323,7 +330,7 @@ fn sequential_generate_cell_to_particle_map<I: Index, R: Real>(
 
         particles_per_cell
             .entry(flat_cell_index)
-            .or_insert_with(Vec::new)
+            .or_insert_with(|| Vec::with_capacity(avg_density))
             .push(particle_i);
     }
 
