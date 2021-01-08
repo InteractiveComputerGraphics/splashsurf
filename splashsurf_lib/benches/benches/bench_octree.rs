@@ -4,7 +4,7 @@ use splashsurf_lib::octree::Octree;
 use splashsurf_lib::{grid_for_reconstruction, SubdivisionCriterion, UniformGrid};
 use std::time::Duration;
 
-use super::io::particles_from_xyz;
+use super::io::xyz::particles_from_xyz;
 
 pub fn subdivide_recursively_benchmark(c: &mut Criterion) {
     let particle_positions: &Vec<Vector3<f32>> =
@@ -24,9 +24,9 @@ pub fn subdivide_recursively_benchmark(c: &mut Criterion) {
     .unwrap();
 
     let mut group = c.benchmark_group("octree subdivision");
-    group.sample_size(50);
+    group.sample_size(80);
     group.warm_up_time(Duration::from_secs(5));
-    group.measurement_time(Duration::from_secs(30));
+    group.measurement_time(Duration::from_secs(25));
 
     let get_tree = || Octree::new(&grid, particle_positions.len());
 
