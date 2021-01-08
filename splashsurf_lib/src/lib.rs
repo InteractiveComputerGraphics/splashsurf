@@ -51,9 +51,7 @@ pub(crate) mod workspace;
 use log::info;
 use nalgebra::Vector3;
 use rayon::prelude::*;
-use std::cell::RefCell;
 use thiserror::Error as ThisError;
-use thread_local::ThreadLocal;
 
 use mesh::TriMesh3d;
 use octree::Octree;
@@ -403,20 +401,14 @@ fn reconstruct_surface_inplace_octree<'a, I: Index, R: Real>(
     };
 
     // Perform individual surface reconstructions on all non-empty leaves of the octree
-    let global_mesh = {
+    {
         let tl_workspaces = &output_surface.workspace;
-        // TODO: Move this to the workspace
-        let tl_meshes = ThreadLocal::new();
 
         profile!("parallel domain decomposed surface reconstruction");
         octree_leaves.par_iter().copied().for_each(|octree_leaf| {
             let particles = octree_leaf
                 .particles()
                 .expect("Octree node has to be a leaf");
-
-            let mut tl_mesh = tl_meshes
-                .get_or(|| RefCell::new(TriMesh3d::default()))
-                .borrow_mut();
 
             let mut tl_workspace = tl_workspaces
                 .get_local_with_capacity(particles.len())
@@ -450,6 +442,11 @@ fn reconstruct_surface_inplace_octree<'a, I: Index, R: Real>(
                 leaf_particle_positions
             };
 
+            // Take and clear the thread local mesh
+            let mut tl_mesh =
+                std::mem::take(&mut tl_workspace.mesh);
+            tl_mesh.clear();
+
             reconstruct_single_surface_append(
                 &mut *tl_workspace,
                 grid,
@@ -457,29 +454,36 @@ fn reconstruct_surface_inplace_octree<'a, I: Index, R: Real>(
                 Some(subdomain_grid),
                 particle_positions.as_slice(),
                 parameters,
-                &mut *tl_mesh,
+                &mut tl_mesh,
             );
 
-            // Put back the particle position storage
+            // Put back the particle position and mesh storage
             tl_workspace.particle_positions = particle_positions;
+            tl_workspace.mesh = tl_mesh;
         });
-
-        // Clear the current mesh
-        output_surface.mesh.clear();
-        // Append all thread local meshes to the global mesh
-        tl_meshes
-            .into_iter()
-            .fold(&mut output_surface.mesh, |global_mesh, local_mesh| {
-                global_mesh.append(&mut *local_mesh.borrow_mut());
-                global_mesh
-            })
     };
 
-    info!(
-        "Global mesh has {} triangles and {} vertices.",
-        global_mesh.triangles.len(),
-        global_mesh.vertices.len()
-    );
+    // Append local meshes to global mesh
+    {
+        let tl_workspaces = &mut output_surface.workspace;
+
+        // Clear the current global mesh
+        output_surface.mesh.clear();
+        // Append all thread local meshes to the global mesh
+        tl_workspaces.local_workspaces_mut().iter_mut().fold(
+            &mut output_surface.mesh,
+            |global_mesh, local_mesh| {
+                global_mesh.append(&mut local_mesh.borrow_mut().mesh);
+                global_mesh
+            },
+        );
+
+        info!(
+            "Global mesh has {} triangles and {} vertices.",
+            output_surface.mesh.triangles.len(),
+            output_surface.mesh.vertices.len()
+        );
+    }
 
     output_surface.density_map = None;
 

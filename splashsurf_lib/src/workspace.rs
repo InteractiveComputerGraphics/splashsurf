@@ -5,6 +5,7 @@ use std::fmt::Debug;
 use thread_local::ThreadLocal;
 
 use crate::{new_map, DensityMap, Index, Real};
+use crate::mesh::TriMesh3d;
 
 /// Collection of all thread local workspaces used to reduce allocations on subsequent surface reconstructions
 #[derive(Default)]
@@ -20,6 +21,11 @@ impl<I: Index, R: Real> ReconstructionWorkspace<I, R> {
     ) -> &RefCell<LocalReconstructionWorkspace<I, R>> {
         self.local_workspaces
             .get_or(|| RefCell::new(LocalReconstructionWorkspace::with_capacity(capacity)))
+    }
+
+    /// Returns a mutable reference to the thread local workspaces
+    pub fn local_workspaces_mut(&mut self) -> &mut ThreadLocal<RefCell<LocalReconstructionWorkspace<I, R>>> {
+        &mut self.local_workspaces
     }
 }
 
@@ -45,6 +51,8 @@ pub struct LocalReconstructionWorkspace<I: Index, R: Real> {
     pub particle_neighbor_lists: Vec<Vec<usize>>,
     /// Storage for per particle densities
     pub particle_densities: Vec<R>,
+    /// Storage for the mesh
+    pub mesh: TriMesh3d<R>,
     /// Storage for the density map
     pub density_map: DensityMap<I, R>,
 }
@@ -60,9 +68,10 @@ impl<I: Index, R: Real> LocalReconstructionWorkspace<I, R> {
     /// Constructs a workspace without allocating additional memory
     pub fn new() -> Self {
         Self {
-            particle_positions: Vec::new(),
-            particle_neighbor_lists: Vec::new(),
-            particle_densities: Vec::new(),
+            particle_positions:Default::default(),
+            particle_neighbor_lists: Default::default(),
+            particle_densities: Default::default(),
+            mesh: Default::default(),
             density_map: new_map().into(),
         }
     }
@@ -73,6 +82,7 @@ impl<I: Index, R: Real> LocalReconstructionWorkspace<I, R> {
             particle_positions: Vec::with_capacity(capacity),
             particle_neighbor_lists: Vec::with_capacity(capacity),
             particle_densities: Vec::with_capacity(capacity),
+            mesh: Default::default(),
             density_map: new_map().into(),
         }
     }
