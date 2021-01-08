@@ -545,7 +545,7 @@ impl<I: Index, R: Real> SparseDensityMapGenerator<I, R> {
                 "The allowed domain of particles for a subdomain is inconsistent/degenerate: {:?}",
                 allowed_domain
             );
-            warn!("No particles can be found in this domain. Increase the domain of surface reconstruction to avoid this.");
+            warn!("No particles can be found in this domain. Increase the domain of the surface reconstruction to avoid this.");
             None
         } else {
             Some(Self {

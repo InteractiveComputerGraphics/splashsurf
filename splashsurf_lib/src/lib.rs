@@ -45,12 +45,8 @@ pub mod octree;
 /// Types related to the virtual background grid used for marching cubes
 pub mod uniform_grid;
 mod utils;
-
-pub use aabb::{AxisAlignedBoundingBox, AxisAlignedBoundingBox2d, AxisAlignedBoundingBox3d};
-pub use density_map::DensityMap;
-pub use numeric_types::{Index, Real, ThreadSafe};
-pub use octree::SubdivisionCriterion;
-pub use uniform_grid::{GridConstructionError, UniformGrid};
+/// Workspace for reusing allocated memory between multiple reconstructions
+pub(crate) mod workspace;
 
 use log::info;
 use nalgebra::Vector3;
@@ -59,9 +55,16 @@ use std::cell::RefCell;
 use thiserror::Error as ThisError;
 use thread_local::ThreadLocal;
 
-use crate::uniform_grid::PointIndex;
 use mesh::TriMesh3d;
 use octree::Octree;
+use uniform_grid::PointIndex;
+use workspace::{LocalReconstructionWorkspace, ReconstructionWorkspace};
+
+pub use aabb::{AxisAlignedBoundingBox, AxisAlignedBoundingBox2d, AxisAlignedBoundingBox3d};
+pub use density_map::DensityMap;
+pub use numeric_types::{Index, Real, ThreadSafe};
+pub use octree::SubdivisionCriterion;
+pub use uniform_grid::{GridConstructionError, UniformGrid};
 
 // TODO: Add documentation of feature flags
 // TODO: Feature flag for multi threading
@@ -188,14 +191,16 @@ impl<R: Real> Parameters<R> {
 /// Result data returned when the surface reconstruction was successful
 #[derive(Clone, Debug)]
 pub struct SurfaceReconstruction<I: Index, R: Real> {
-    /// The background grid that was used as a basis for generating the density map for marching cubes
+    /// Background grid that was used as a basis for generating the density map for marching cubes
     grid: UniformGrid<I, R>,
     /// Octree built for domain decomposition
     octree: Option<Octree<I>>,
-    /// The point-based density map generated from the particles that was used as input to marching cubes
+    /// Point-based density map generated from the particles that was used as input to marching cubes
     density_map: Option<DensityMap<I, R>>,
-    /// The actual mesh that is the result of the surface reconstruction
+    /// Surface mesh that is the result of the surface reconstruction
     mesh: TriMesh3d<R>,
+    /// Workspace with allocated memory for subsequent surface reconstructions
+    workspace: ReconstructionWorkspace<I, R>,
 }
 
 impl<I: Index, R: Real> Default for SurfaceReconstruction<I, R> {
@@ -206,6 +211,7 @@ impl<I: Index, R: Real> Default for SurfaceReconstruction<I, R> {
             octree: None,
             density_map: None,
             mesh: TriMesh3d::default(),
+            workspace: ReconstructionWorkspace::default(),
         }
     }
 }
@@ -301,9 +307,13 @@ pub fn reconstruct_surface_inplace<'a, I: Index, R: Real>(
     } else {
         profile!("reconstruct_surface_inplace");
 
-        let mut workspace = SingleReconstructionWorkspace::new();
+        let mut workspace = output_surface
+            .workspace
+            .get_local_with_capacity(particle_positions.len())
+            .borrow_mut();
+
         reconstruct_single_surface(
-            &mut workspace,
+            &mut *workspace,
             grid,
             None,
             None,
@@ -392,7 +402,7 @@ fn reconstruct_surface_inplace_octree<'a, I: Index, R: Real>(
     // Perform individual surface reconstructions on all non-empty leaves of the octree
     let global_mesh = {
         let tl_meshes = ThreadLocal::new();
-        let tl_workspaces = ThreadLocal::new();
+        let tl_workspaces = &output_surface.workspace;
 
         profile!("parallel domain decomposed surface reconstruction");
         octree_leaves.par_iter().copied().for_each(|octree_leaf| {
@@ -405,11 +415,7 @@ fn reconstruct_surface_inplace_octree<'a, I: Index, R: Real>(
                 .borrow_mut();
 
             let mut tl_workspace = tl_workspaces
-                .get_or(|| {
-                    RefCell::new(SingleReconstructionWorkspace::with_capacity(
-                        particles.len(),
-                    ))
-                })
+                .get_local_with_capacity(particles.len())
                 .borrow_mut();
 
             info!("Processing octree leaf with {} particles", particles.len());
@@ -474,35 +480,8 @@ fn reconstruct_surface_inplace_octree<'a, I: Index, R: Real>(
     Ok(())
 }
 
-struct SingleReconstructionWorkspace<I: Index, R: Real> {
-    particle_positions: Vec<Vector3<R>>,
-    particle_neighbor_lists: Vec<Vec<usize>>,
-    particle_densities: Vec<R>,
-    density_map: DensityMap<I, R>,
-}
-
-impl<I: Index, R: Real> SingleReconstructionWorkspace<I, R> {
-    fn new() -> Self {
-        Self {
-            particle_positions: Vec::new(),
-            particle_neighbor_lists: Vec::new(),
-            particle_densities: Vec::new(),
-            density_map: new_map().into(),
-        }
-    }
-
-    fn with_capacity(capacity: usize) -> Self {
-        Self {
-            particle_positions: Vec::with_capacity(capacity),
-            particle_neighbor_lists: Vec::with_capacity(capacity),
-            particle_densities: Vec::with_capacity(capacity),
-            density_map: new_map().into(),
-        }
-    }
-}
-
 fn reconstruct_single_surface<'a, I: Index, R: Real>(
-    workspace: &mut SingleReconstructionWorkspace<I, R>,
+    workspace: &mut LocalReconstructionWorkspace<I, R>,
     grid: &UniformGrid<I, R>,
     subdomain_offset: Option<&PointIndex<I>>,
     subdomain_grid: Option<&UniformGrid<I, R>>,
@@ -533,7 +512,7 @@ fn reconstruct_single_surface<'a, I: Index, R: Real>(
         parameters.enable_multi_threading,
         &mut workspace.particle_densities,
     );
-    
+
     density_map::generate_sparse_density_map(
         grid,
         subdomain_offset,
@@ -545,7 +524,7 @@ fn reconstruct_single_surface<'a, I: Index, R: Real>(
         parameters.kernel_radius,
         parameters.cube_size,
         parameters.enable_multi_threading,
-        &mut workspace.density_map
+        &mut workspace.density_map,
     );
 
     marching_cubes::triangulate_density_map_append::<I, R>(

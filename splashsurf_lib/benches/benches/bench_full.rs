@@ -1,6 +1,9 @@
 use criterion::{criterion_group, Criterion};
 use nalgebra::Vector3;
-use splashsurf_lib::{reconstruct_surface, Parameters, SpatialDecompositionParameters, SubdivisionCriterion, SurfaceReconstruction, reconstruct_surface_inplace};
+use splashsurf_lib::{
+    reconstruct_surface, reconstruct_surface_inplace, Parameters, SpatialDecompositionParameters,
+    SubdivisionCriterion, SurfaceReconstruction,
+};
 use std::time::Duration;
 
 use super::io::vtk::particles_from_vtk;
@@ -173,7 +176,12 @@ pub fn surface_reconstruction_double_dam_break_inplace(c: &mut Criterion) {
     let mut reconstruction = SurfaceReconstruction::default();
     group.bench_function("surface_reconstruction_double_dam_break_inplace", |b| {
         b.iter(|| {
-            reconstruct_surface_inplace::<i64, _>(particle_positions.as_slice(), &parameters, &mut reconstruction).unwrap()
+            reconstruct_surface_inplace::<i64, _>(
+                particle_positions.as_slice(),
+                &parameters,
+                &mut reconstruction,
+            )
+            .unwrap()
         })
     });
 
@@ -184,7 +192,7 @@ pub fn surface_reconstruction_double_dam_break_inplace(c: &mut Criterion) {
         "../out/reconstruct_surface_double_dam_break.vtk",
         "mesh",
     )
-        .unwrap();
+    .unwrap();
 }
 
 criterion_group!(

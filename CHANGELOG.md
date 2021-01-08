@@ -1,4 +1,14 @@
 ## Master
+ - Lib: Implement localized reconstruction approach using octree spatial decomposition, the leaves of the octree are processed in parallel. Note: there is currently no procedure to stitch the resulting mesh. The resulting mesh will be a collection of local triangle meshes.
+ - CLI: Add flags to control octree usage
+ - Lib: Introduce thread local "workspaces" to reuse allocated memory. The workspace will be stored in the `SurfaceReconstruction` result object and can be reused to reduce allocations in subsequent surface reconstructions.
+ - Lib: Add benchmarks with Criterion 
+ - Updated dependencies
+
+**Release blockers:**
+ - Don't make octree approach default until we have stitching?  
+ - Reimplement proper splash detection
+ - Reimplement density map output for global surface reconstruction
 
  - CLI: Support for reading uncompressed BGEO files (previously only compressed BGEO files were supported)
  - Lib: Add functions to approximate the vertex normals and vertex normal directions based on are-weighted averages of the adjacent triangles 
@@ -8,7 +18,7 @@
  - CLI: Add support for reading BGEO files
  - Lib: Allow passing in an existing `SurfaceReconstruction` to reuse allocated memory (currently only memory for the resulting surface mesh is reused) (https://github.com/w1th0utnam3/splashsurf/pull/7)
  - Lib: Add `Default` trait bound to `Index` and `Real` types
- - Update dependencies
+ - Updated dependencies
 
 ## Version 0.3.0
 
