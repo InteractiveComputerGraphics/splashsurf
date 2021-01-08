@@ -524,6 +524,9 @@ fn reconstruct_single_surface_append<'a, I: Index, R: Real>(
         &mut workspace.particle_densities,
     );
 
+    // Create a new density map, reusing memory with the workspace is bad for cache efficiency
+    // Alternatively one could reuse memory with a custom caching allocator
+    let mut density_map = new_map().into();
     density_map::generate_sparse_density_map(
         grid,
         subdomain_offset,
@@ -535,12 +538,12 @@ fn reconstruct_single_surface_append<'a, I: Index, R: Real>(
         parameters.kernel_radius,
         parameters.cube_size,
         parameters.enable_multi_threading,
-        &mut workspace.density_map,
+        &mut density_map,
     );
 
     marching_cubes::triangulate_density_map_append::<I, R>(
         subdomain_grid.unwrap_or(grid),
-        &workspace.density_map,
+        &density_map,
         parameters.iso_surface_threshold,
         output_mesh,
     );
