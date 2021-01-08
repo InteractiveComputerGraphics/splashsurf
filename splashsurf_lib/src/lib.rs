@@ -400,6 +400,21 @@ fn reconstruct_surface_inplace_octree<'a, I: Index, R: Real>(
         p
     };
 
+    // Clear all local meshes
+    {
+        let tl_workspaces = &mut output_surface.workspace;
+
+        // Clear the current global mesh
+        output_surface.mesh.clear();
+        // Append all thread local meshes to the global mesh
+        tl_workspaces
+            .local_workspaces_mut()
+            .iter_mut()
+            .for_each(|local_workspace| {
+                local_workspace.borrow_mut().mesh.clear();
+            });
+    }
+
     // Perform individual surface reconstructions on all non-empty leaves of the octree
     {
         let tl_workspaces = &output_surface.workspace;
@@ -443,9 +458,7 @@ fn reconstruct_surface_inplace_octree<'a, I: Index, R: Real>(
             };
 
             // Take and clear the thread local mesh
-            let mut tl_mesh =
-                std::mem::take(&mut tl_workspace.mesh);
-            tl_mesh.clear();
+            let mut tl_mesh = std::mem::take(&mut tl_workspace.mesh);
 
             reconstruct_single_surface_append(
                 &mut *tl_workspace,
@@ -472,8 +485,8 @@ fn reconstruct_surface_inplace_octree<'a, I: Index, R: Real>(
         // Append all thread local meshes to the global mesh
         tl_workspaces.local_workspaces_mut().iter_mut().fold(
             &mut output_surface.mesh,
-            |global_mesh, local_mesh| {
-                global_mesh.append(&mut local_mesh.borrow_mut().mesh);
+            |global_mesh, local_workspace| {
+                global_mesh.append(&mut local_workspace.borrow_mut().mesh);
                 global_mesh
             },
         );

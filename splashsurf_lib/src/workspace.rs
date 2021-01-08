@@ -4,8 +4,8 @@ use std::fmt;
 use std::fmt::Debug;
 use thread_local::ThreadLocal;
 
-use crate::{new_map, DensityMap, Index, Real};
 use crate::mesh::TriMesh3d;
+use crate::{new_map, DensityMap, Index, Real};
 
 /// Collection of all thread local workspaces used to reduce allocations on subsequent surface reconstructions
 #[derive(Default)]
@@ -24,7 +24,9 @@ impl<I: Index, R: Real> ReconstructionWorkspace<I, R> {
     }
 
     /// Returns a mutable reference to the thread local workspaces
-    pub fn local_workspaces_mut(&mut self) -> &mut ThreadLocal<RefCell<LocalReconstructionWorkspace<I, R>>> {
+    pub fn local_workspaces_mut(
+        &mut self,
+    ) -> &mut ThreadLocal<RefCell<LocalReconstructionWorkspace<I, R>>> {
         &mut self.local_workspaces
     }
 }
@@ -68,7 +70,7 @@ impl<I: Index, R: Real> LocalReconstructionWorkspace<I, R> {
     /// Constructs a workspace without allocating additional memory
     pub fn new() -> Self {
         Self {
-            particle_positions:Default::default(),
+            particle_positions: Default::default(),
             particle_neighbor_lists: Default::default(),
             particle_densities: Default::default(),
             mesh: Default::default(),
