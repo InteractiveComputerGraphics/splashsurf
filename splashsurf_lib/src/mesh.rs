@@ -21,17 +21,17 @@ impl<R: Real> TriMesh3d<R> {
     }
 
     /// Appends the other mesh to this mesh by simply appending all vertices and triangles of the other mesh and adjusting indices accordingly
-    pub fn append(&mut self, other: TriMesh3d<R>) {
+    pub fn append(&mut self, other: &mut TriMesh3d<R>) {
         let TriMesh3d {
-            vertices: mut new_verts,
-            triangles: mut new_tris,
+            vertices: ref mut new_verts,
+            triangles: ref mut new_tris,
         } = other;
 
         let vertex_offset = self.vertices.len();
         let tri_offset = self.triangles.len();
 
-        self.vertices.append(&mut new_verts);
-        self.triangles.append(&mut new_tris);
+        self.vertices.append(new_verts);
+        self.triangles.append(new_tris);
 
         for tri in self.triangles.iter_mut().skip(tri_offset) {
             tri[0] += vertex_offset;

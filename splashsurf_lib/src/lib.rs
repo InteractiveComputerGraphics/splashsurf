@@ -312,7 +312,10 @@ pub fn reconstruct_surface_inplace<'a, I: Index, R: Real>(
             .get_local_with_capacity(particle_positions.len())
             .borrow_mut();
 
-        reconstruct_single_surface(
+        // Clear the current mesh, as reconstruction will be appended to output
+        output_surface.mesh.clear();
+        // Perform global reconstruction without octree
+        reconstruct_single_surface_append(
             &mut *workspace,
             grid,
             None,
@@ -401,8 +404,9 @@ fn reconstruct_surface_inplace_octree<'a, I: Index, R: Real>(
 
     // Perform individual surface reconstructions on all non-empty leaves of the octree
     let global_mesh = {
-        let tl_meshes = ThreadLocal::new();
         let tl_workspaces = &output_surface.workspace;
+        // TODO: Move this to the workspace
+        let tl_meshes = ThreadLocal::new();
 
         profile!("parallel domain decomposed surface reconstruction");
         octree_leaves.par_iter().copied().for_each(|octree_leaf| {
@@ -446,7 +450,7 @@ fn reconstruct_surface_inplace_octree<'a, I: Index, R: Real>(
                 leaf_particle_positions
             };
 
-            reconstruct_single_surface(
+            reconstruct_single_surface_append(
                 &mut *tl_workspace,
                 grid,
                 Some(subdomain_offset),
@@ -460,10 +464,13 @@ fn reconstruct_surface_inplace_octree<'a, I: Index, R: Real>(
             tl_workspace.particle_positions = particle_positions;
         });
 
+        // Clear the current mesh
+        output_surface.mesh.clear();
+        // Append all thread local meshes to the global mesh
         tl_meshes
             .into_iter()
-            .fold(TriMesh3d::default(), |mut global_mesh, local_mesh| {
-                global_mesh.append(local_mesh.into_inner());
+            .fold(&mut output_surface.mesh, |global_mesh, local_mesh| {
+                global_mesh.append(&mut *local_mesh.borrow_mut());
                 global_mesh
             })
     };
@@ -475,12 +482,12 @@ fn reconstruct_surface_inplace_octree<'a, I: Index, R: Real>(
     );
 
     output_surface.density_map = None;
-    output_surface.mesh = global_mesh;
 
     Ok(())
 }
 
-fn reconstruct_single_surface<'a, I: Index, R: Real>(
+/// Reconstruct a surface, appends triangulation to the given mesh
+fn reconstruct_single_surface_append<'a, I: Index, R: Real>(
     workspace: &mut LocalReconstructionWorkspace<I, R>,
     grid: &UniformGrid<I, R>,
     subdomain_offset: Option<&PointIndex<I>>,
