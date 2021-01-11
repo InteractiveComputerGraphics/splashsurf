@@ -3,7 +3,7 @@ use nalgebra::Vector3;
 
 use crate::marching_cubes_lut::get_marching_cubes_triangulation;
 use crate::mesh::TriMesh3d;
-use crate::uniform_grid::GridBoundaryFaceFlags;
+use crate::uniform_grid::{CellIndex, DirectedAxis, GridBoundaryFaceFlags};
 use crate::{new_map, DensityMap, Index, MapType, Real, UniformGrid};
 
 /// Performs a marching cubes triangulation of a density map on the given background grid
@@ -255,11 +255,14 @@ pub(crate) fn interpolate_points_to_cell_data<I: Index, R: Real>(
     MarchingCubesInput { cell_data }
 }
 
-pub(crate) fn get_stitching_data<I: Index, R: Real>(
+/// Collects the indices of all vertex indices that are on the boundary of the grid, with the respective boundary direction and cell index
+#[inline(never)]
+pub(crate) fn collect_boundary_vertices<I: Index, R: Real>(
     grid: &UniformGrid<I, R>,
     input: MarchingCubesInput<I>,
-) {
-    //let mut boundary_vertices = Vec::new();
+) -> Vec<(DirectedAxis, CellIndex<I>, usize)> {
+    let mut boundary_vertices = Vec::new();
+
     for (&flat_cell_index, cell_data) in &input.cell_data {
         let cell_index = grid
             .try_unflatten_cell_index(flat_cell_index)
@@ -269,21 +272,30 @@ pub(crate) fn get_stitching_data<I: Index, R: Real>(
         let cell_grid_face = GridBoundaryFaceFlags::classify_cell(grid, &cell_index);
         // Skip cells that are not part of any grid boundary
         if !cell_grid_face.is_empty() {
+            // Loop over all iso-surface vertices (located on the cell edges)
             for (local_edge_index, vertex_index) in cell_data
                 .iso_surface_vertices
                 .iter()
                 .copied()
                 // Enumerate to get the local edge index
                 .enumerate()
-                // Skip local edges without an iso-surface vertex
+                // Skip local edges without an interpolated iso-surface vertex
                 .filter_map(|(i, vert)| vert.map(|vert| (i, vert)))
             {
+                // Check which grid bounday faces this edge is part of
                 let edge_grid_face = cell_grid_face.classify_local_edge(local_edge_index);
                 // Skip edges that are not on a boundary face of the grid
-                if !edge_grid_face.is_empty() {}
+                if !edge_grid_face.is_empty() {
+                    // Store the vertex id with each face it touches (might touch one or two boundaries)
+                    for face in edge_grid_face.iter_individual() {
+                        boundary_vertices.push((face, cell_index, vertex_index))
+                    }
+                }
             }
         }
     }
+
+    boundary_vertices
 }
 
 /// Converts the marching cubes input cell data into a triangle surface mesh, appends triangles to existing mesh

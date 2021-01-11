@@ -82,7 +82,7 @@ pub struct NeighborEdge<'a, 'b: 'a, I: Index> {
 }
 
 bitflags! {
-    /// Flags naming the outer faces of a grid cell or an entire grid
+    /// Flags naming the outer faces of a grid cell or an entire grid, can be used to select multiple faces at once
     struct FaceFlags: u8 {
         const X_NEG = 0b00000001;
         const X_POS = 0b00000010;
@@ -93,48 +93,12 @@ bitflags! {
     }
 }
 
+/// Represents an assignment of e.g. a cell to the outer faces of a grid it touches
+#[derive(Copy, Clone, Debug)]
 pub struct GridBoundaryFaceFlags(FaceFlags);
-pub struct CellBoundaryFaceFlags(FaceFlags);
-
-impl GridBoundaryFaceFlags {
-    pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
-    }
-
-    /// Classifies a cell to zero or more boundary faces of the grid
-    #[rustfmt::skip]
-    pub fn classify_cell<I: Index, R: Real>(
-        grid: &UniformGrid<I, R>,
-        cell_index: &CellIndex<I>,
-    ) -> Self {
-        let mut boundary = FaceFlags::empty();
-        boundary.set(FaceFlags::X_NEG, cell_index.index[0] == I::zero());
-        boundary.set(FaceFlags::Y_NEG, cell_index.index[1] == I::zero());
-        boundary.set(FaceFlags::Z_NEG, cell_index.index[2] == I::zero());
-        boundary.set(FaceFlags::X_POS, cell_index.index[0] + I::one() == grid.n_cells_per_dim[0]);
-        boundary.set(FaceFlags::Y_POS, cell_index.index[1] + I::one() == grid.n_cells_per_dim[1]);
-        boundary.set(FaceFlags::Z_POS, cell_index.index[2] + I::one() == grid.n_cells_per_dim[2]);
-        Self(boundary)
-    }
-
-    pub fn classify_local_edge(&self, local_edge_index: usize) -> Self {
-        assert!(local_edge_index < 12);
-        Self(self.0 & CellBoundaryFaceFlags::classify_cell_local_edge(local_edge_index).0)
-    }
-
-    /*
-    pub fn iter_individual() -> impl Iterator<Item = DirectedAxis> {
-
-    }*/
-}
-
-impl CellBoundaryFaceFlags {
-    /// Classifies the local edge index in a cell to zero or more faces of the cell
-    pub fn classify_cell_local_edge(local_edge_index: usize) -> Self {
-        assert!(local_edge_index < 12);
-        Self(CELL_LOCAL_EDGE_TO_FACE_FLAGS[local_edge_index])
-    }
-}
+/// Represents an assignment of e.g. an edge to the outer faces of a cell it touches
+#[derive(Copy, Clone, Debug)]
+struct CellBoundaryFaceFlags(FaceFlags);
 
 /// Abbreviated type alias for a uniform cartesian cube grid in 3D
 ///
@@ -797,6 +761,66 @@ fn test_cube_local_edge_consistency() {
         }
     }
 }
+
+impl GridBoundaryFaceFlags {
+    /// Returns whether none of the face flag bits is set, i.e. it does not correspond to any face
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// Classifies the cell with the given index to zero or more boundary faces of the grid
+    #[rustfmt::skip]
+    pub fn classify_cell<I: Index, R: Real>(
+        grid: &UniformGrid<I, R>,
+        cell_index: &CellIndex<I>,
+    ) -> Self {
+        let mut boundary = FaceFlags::empty();
+        boundary.set(FaceFlags::X_NEG, cell_index.index[0] == I::zero());
+        boundary.set(FaceFlags::Y_NEG, cell_index.index[1] == I::zero());
+        boundary.set(FaceFlags::Z_NEG, cell_index.index[2] == I::zero());
+        boundary.set(FaceFlags::X_POS, cell_index.index[0] + I::one() == grid.n_cells_per_dim[0]);
+        boundary.set(FaceFlags::Y_POS, cell_index.index[1] + I::one() == grid.n_cells_per_dim[1]);
+        boundary.set(FaceFlags::Z_POS, cell_index.index[2] + I::one() == grid.n_cells_per_dim[2]);
+        Self(boundary)
+    }
+
+    /// Bitwise-or combination with the face flags of a local edge of a cell
+    ///
+    /// If the current face flags correspond to the boundary faces of a grid touched by a cell, this bitwise or
+    /// corresponds to the grid boundaries that are touched by the given edge of that cell.
+    pub fn classify_local_edge(&self, local_edge_index: usize) -> Self {
+        assert!(local_edge_index < 12);
+        Self(self.0 & CellBoundaryFaceFlags::classify_cell_local_edge(local_edge_index).0)
+    }
+
+    /// Iterator over all individual active boundary faces
+    pub fn iter_individual(&self) -> impl Iterator<Item = DirectedAxis> {
+        let current = self.0;
+        FACE_FLAGS_TO_DIRECTED_AXIS
+            .iter()
+            .copied()
+            .filter(move |(flags, _)| current.contains(*flags))
+            .map(|(_, axis)| axis)
+    }
+}
+
+impl CellBoundaryFaceFlags {
+    /// Classifies the local edge index in a cell to zero or more faces of the cell
+    pub fn classify_cell_local_edge(local_edge_index: usize) -> Self {
+        assert!(local_edge_index < 12);
+        Self(CELL_LOCAL_EDGE_TO_FACE_FLAGS[local_edge_index])
+    }
+}
+
+#[rustfmt::skip]
+const FACE_FLAGS_TO_DIRECTED_AXIS: [(FaceFlags, DirectedAxis); 6] = [
+    (FaceFlags::X_NEG, DirectedAxis::new(Axis::X, Direction::Negative)),
+    (FaceFlags::Y_NEG, DirectedAxis::new(Axis::Y, Direction::Negative)),
+    (FaceFlags::Z_NEG, DirectedAxis::new(Axis::Z, Direction::Negative)),
+    (FaceFlags::X_POS, DirectedAxis::new(Axis::X, Direction::Positive)),
+    (FaceFlags::Y_POS, DirectedAxis::new(Axis::Y, Direction::Positive)),
+    (FaceFlags::Z_POS, DirectedAxis::new(Axis::Z, Direction::Positive)),
+];
 
 /// Classifies a local edge index in a cell to the corresponding boundary of the cell (or face of the cell)
 const CELL_LOCAL_EDGE_TO_FACE_FLAGS: [FaceFlags; 12] = [

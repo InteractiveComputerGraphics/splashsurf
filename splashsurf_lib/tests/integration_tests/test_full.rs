@@ -1,7 +1,7 @@
 use nalgebra::Vector3;
-use splashsurf_lib::{Parameters, reconstruct_surface};
+use splashsurf_lib::{reconstruct_surface, Parameters};
 
-use super::io::vtk::{write_vtk, particles_from_vtk};
+use super::io::vtk::{particles_from_vtk, write_vtk};
 
 #[test]
 pub fn surface_reconstruction_bunny() {
@@ -24,7 +24,8 @@ pub fn surface_reconstruction_bunny() {
         spatial_decomposition: None,
     };
 
-    let reconstruction = reconstruct_surface::<i64, _>(particle_positions.as_slice(), &parameters).unwrap();
+    let reconstruction =
+        reconstruct_surface::<i64, _>(particle_positions.as_slice(), &parameters).unwrap();
 
     // TODO: Compare with a solution file
     // TODO: Test with a fixed grid?
