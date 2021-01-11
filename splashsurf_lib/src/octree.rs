@@ -889,9 +889,9 @@ mod octant_helper {
         #[inline(always)]
         pub const fn from_bool(x_positive: bool, y_positive: bool, z_positive: bool) -> Self {
             Self {
-                x_axis: Direction::from_bool(x_positive),
-                y_axis: Direction::from_bool(y_positive),
-                z_axis: Direction::from_bool(z_positive),
+                x_axis: Direction::new_positive(x_positive),
+                y_axis: Direction::new_positive(y_positive),
+                z_axis: Direction::new_positive(z_positive),
             }
         }
 

@@ -40,9 +40,8 @@ pub struct CellIndex<I: Index> {
 /// Abbreviated type alias for cartesian coordinate axes in 3D
 pub type Axis = CartesianAxis3d;
 
-/// Enum for the cartesian coordinate axes in 3D
+/// The cartesian coordinate axes in 3D
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
-#[repr(u8)]
 pub enum CartesianAxis3d {
     X = 0,
     Y = 1,
@@ -51,7 +50,6 @@ pub enum CartesianAxis3d {
 
 /// Indicates a direction on a number line or coordinate axis
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
-#[repr(u8)]
 pub enum Direction {
     Negative = 0,
     Positive = 1,
@@ -67,7 +65,9 @@ pub struct DirectedAxis {
 /// Full neighborhood information of a point (denoted as origin point of the neighborhood)
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct Neighborhood<'a, I: Index> {
+    /// The reference or origin point of the neighborhood
     origin: &'a PointIndex<I>,
+    /// Indices of neighboring points in all six grid directions
     neighbors: [Option<PointIndex<I>>; 6],
 }
 
@@ -82,7 +82,8 @@ pub struct NeighborEdge<'a, 'b: 'a, I: Index> {
 }
 
 bitflags! {
-    pub struct GridBoundary: u8 {
+    /// Flags naming the outer faces of a grid cell or an entire grid
+    struct FaceFlags: u8 {
         const X_NEG = 0b00000001;
         const X_POS = 0b00000010;
         const Y_NEG = 0b00000100;
@@ -92,35 +93,46 @@ bitflags! {
     }
 }
 
-impl GridBoundary {
+pub struct GridBoundaryFaceFlags(FaceFlags);
+pub struct CellBoundaryFaceFlags(FaceFlags);
+
+impl GridBoundaryFaceFlags {
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// Classifies a cell to zero or more boundary faces of the grid
     #[rustfmt::skip]
     pub fn classify_cell<I: Index, R: Real>(
         grid: &UniformGrid<I, R>,
         cell_index: &CellIndex<I>,
     ) -> Self {
-        let mut boundary = GridBoundary::empty();
-        boundary.set(GridBoundary::X_NEG, cell_index.index[0] == I::zero());
-        boundary.set(GridBoundary::Y_NEG, cell_index.index[1] == I::zero());
-        boundary.set(GridBoundary::Z_NEG, cell_index.index[2] == I::zero());
-        boundary.set(GridBoundary::X_POS, cell_index.index[0] + I::one() == grid.n_cells_per_dim[0]);
-        boundary.set(GridBoundary::Y_POS, cell_index.index[1] + I::one() == grid.n_cells_per_dim[1]);
-        boundary.set(GridBoundary::Z_POS, cell_index.index[2] + I::one() == grid.n_cells_per_dim[2]);
-        boundary
+        let mut boundary = FaceFlags::empty();
+        boundary.set(FaceFlags::X_NEG, cell_index.index[0] == I::zero());
+        boundary.set(FaceFlags::Y_NEG, cell_index.index[1] == I::zero());
+        boundary.set(FaceFlags::Z_NEG, cell_index.index[2] == I::zero());
+        boundary.set(FaceFlags::X_POS, cell_index.index[0] + I::one() == grid.n_cells_per_dim[0]);
+        boundary.set(FaceFlags::Y_POS, cell_index.index[1] + I::one() == grid.n_cells_per_dim[1]);
+        boundary.set(FaceFlags::Z_POS, cell_index.index[2] + I::one() == grid.n_cells_per_dim[2]);
+        Self(boundary)
     }
 
-    #[rustfmt::skip]
-    pub fn classify_edge<I: Index, R: Real>(
-        grid: &UniformGrid<I, R>,
-        cell_index: &CellIndex<I>,
-    ) -> Self {
-        let mut boundary = GridBoundary::empty();
-        boundary.set(GridBoundary::X_NEG, cell_index.index[0] == I::zero());
-        boundary.set(GridBoundary::Y_NEG, cell_index.index[1] == I::zero());
-        boundary.set(GridBoundary::Z_NEG, cell_index.index[2] == I::zero());
-        boundary.set(GridBoundary::X_POS, cell_index.index[0] + I::one() == grid.n_cells_per_dim[0]);
-        boundary.set(GridBoundary::Y_POS, cell_index.index[1] + I::one() == grid.n_cells_per_dim[1]);
-        boundary.set(GridBoundary::Z_POS, cell_index.index[2] + I::one() == grid.n_cells_per_dim[2]);
-        boundary
+    pub fn classify_local_edge(&self, local_edge_index: usize) -> Self {
+        assert!(local_edge_index < 12);
+        Self(self.0 & CellBoundaryFaceFlags::classify_cell_local_edge(local_edge_index).0)
+    }
+
+    /*
+    pub fn iter_individual() -> impl Iterator<Item = DirectedAxis> {
+
+    }*/
+}
+
+impl CellBoundaryFaceFlags {
+    /// Classifies the local edge index in a cell to zero or more faces of the cell
+    pub fn classify_cell_local_edge(local_edge_index: usize) -> Self {
+        assert!(local_edge_index < 12);
+        Self(CELL_LOCAL_EDGE_TO_FACE_FLAGS[local_edge_index])
     }
 }
 
@@ -320,6 +332,7 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
                 && cell_min_point_ijk[2] >= I::zero())
     }
 
+    /// Returns whether the cell with the given index is a cell on the boundary of the grid
     pub fn is_boundary_cell(&self, cell_index: &CellIndex<I>) -> bool {
         (cell_index.index[0] == I::zero()
             || cell_index.index[1] == I::zero()
@@ -592,7 +605,7 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
         cell: &'a CellIndex<I>,
     ) -> impl Iterator<Item = CellIndex<I>> + 'a {
         let index = cell.index();
-        let steps = Direction::all();
+        let steps = Direction::all_possible();
         iproduct!(steps.iter(), steps.iter(), steps.iter()).filter_map(
             move |(step_x, step_y, step_z)| {
                 let neighbor_cell_ijk = [
@@ -766,6 +779,7 @@ const LOCAL_EDGES_PARALLEL_TO_Y_AXIS: [usize; 4] = [3, 1, 5, 7];
 /// All local edges of a cell that are parallel to the z-axis in CCW ordering
 const LOCAL_EDGES_PARALLEL_TO_Z_AXIS: [usize; 4] = [8, 9, 10, 11];
 
+/// Stores per dimension which local edges of a cell are parallel to an axis of this dimension
 const CELL_LOCAL_EDGES: [[usize; 4]; 3] = [
     LOCAL_EDGES_PARALLEL_TO_X_AXIS,
     LOCAL_EDGES_PARALLEL_TO_Y_AXIS,
@@ -784,14 +798,42 @@ fn test_cube_local_edge_consistency() {
     }
 }
 
+/// Classifies a local edge index in a cell to the corresponding boundary of the cell (or face of the cell)
+const CELL_LOCAL_EDGE_TO_FACE_FLAGS: [FaceFlags; 12] = [
+    FaceFlags::from_bits_truncate(FaceFlags::Y_NEG.bits | FaceFlags::Z_NEG.bits),
+    FaceFlags::from_bits_truncate(FaceFlags::X_POS.bits | FaceFlags::Z_NEG.bits),
+    FaceFlags::from_bits_truncate(FaceFlags::Y_POS.bits | FaceFlags::Z_NEG.bits),
+    FaceFlags::from_bits_truncate(FaceFlags::X_NEG.bits | FaceFlags::Z_NEG.bits),
+    FaceFlags::from_bits_truncate(FaceFlags::Y_NEG.bits | FaceFlags::Z_POS.bits),
+    FaceFlags::from_bits_truncate(FaceFlags::X_POS.bits | FaceFlags::Z_POS.bits),
+    FaceFlags::from_bits_truncate(FaceFlags::Y_POS.bits | FaceFlags::Z_POS.bits),
+    FaceFlags::from_bits_truncate(FaceFlags::X_NEG.bits | FaceFlags::Z_POS.bits),
+    FaceFlags::from_bits_truncate(FaceFlags::X_NEG.bits | FaceFlags::Y_NEG.bits),
+    FaceFlags::from_bits_truncate(FaceFlags::X_POS.bits | FaceFlags::Y_NEG.bits),
+    FaceFlags::from_bits_truncate(FaceFlags::X_POS.bits | FaceFlags::Y_POS.bits),
+    FaceFlags::from_bits_truncate(FaceFlags::X_NEG.bits | FaceFlags::Y_POS.bits),
+];
+
 impl Direction {
-    pub fn all() -> &'static [Direction; 2] {
+    /// Returns a reference to an array containing all possible directions
+    /// ```
+    /// use crate::splashsurf_lib::uniform_grid::Direction;
+    /// assert!(Direction::all_possible().iter().any(|d| d.is_positive()));
+    /// assert!(Direction::all_possible().iter().any(|d| d.is_negative()));
+    /// assert_eq!(Direction::all_possible().iter().count(), 2);
+    /// ```
+    pub const fn all_possible() -> &'static [Direction; 2] {
         &ALL_DIRECTIONS
     }
 
     /// Constructs a new positive or negative direction depending on the flag
     #[inline(always)]
-    pub const fn from_bool(is_positive: bool) -> Self {
+    /// ```
+    /// use crate::splashsurf_lib::uniform_grid::Direction;
+    /// assert_eq!(Direction::new_positive(true), Direction::Positive);
+    /// assert_eq!(Direction::new_positive(false), Direction::Negative);
+    /// ```
+    pub const fn new_positive(is_positive: bool) -> Self {
         if is_positive {
             Direction::Positive
         } else {
@@ -800,7 +842,7 @@ impl Direction {
     }
 
     /// Adds or subtracts the given step from the value depending on the direction
-    /// ```ignore
+    /// ```
     /// use crate::splashsurf_lib::uniform_grid::Direction;
     /// assert_eq!(Direction::Positive.apply_step(27, 3), 30);
     /// assert_eq!(Direction::Negative.apply_step(27, 3), 24);
@@ -815,7 +857,7 @@ impl Direction {
     }
 
     /// Same as `apply_step` but uses `checked_add` and `checked_sub`, i.e. returns `None` on overflow
-    /// ```ignore
+    /// ```
     /// use crate::splashsurf_lib::uniform_grid::Direction;
     /// assert_eq!(Direction::Negative.checked_apply_step(0 as i32, 10), Some(-10));
     /// assert_eq!(Direction::Negative.checked_apply_step(0 as u32, 10), None);
@@ -834,7 +876,7 @@ impl Direction {
     }
 
     /// Returns whether the direction is positive
-    /// ```ignore
+    /// ```
     /// use crate::splashsurf_lib::uniform_grid::Direction;
     /// assert_eq!(Direction::Positive.is_positive(), true);
     /// assert_eq!(Direction::Negative.is_positive(), false);
@@ -848,7 +890,7 @@ impl Direction {
     }
 
     /// Returns whether the direction is negative
-    /// ```ignore
+    /// ```
     /// use crate::splashsurf_lib::uniform_grid::Direction;
     /// assert_eq!(Direction::Positive.is_negative(), false);
     /// assert_eq!(Direction::Negative.is_negative(), true);
@@ -862,8 +904,8 @@ impl Direction {
 const ALL_DIRECTIONS: [Direction; 2] = [Direction::Negative, Direction::Positive];
 
 impl CartesianAxis3d {
-    /// Converts the cartesian axis into the 3D dimension index (X=0, Y=1, Z=2)
-    /// ```ignore
+    /// Converts the cartesian axis into the corresponding 3D dimension index (X=0, Y=1, Z=2)
+    /// ```
     /// use crate::splashsurf_lib::uniform_grid::CartesianAxis3d as Axis;
     /// assert_eq!(Axis::X.dim(), 0);
     /// assert_eq!(Axis::Y.dim(), 1);
@@ -875,7 +917,7 @@ impl CartesianAxis3d {
     }
 
     /// Returns the other two axes that are orthogonal to the current axis
-    /// ```ignore
+    /// ```
     /// use crate::splashsurf_lib::uniform_grid::CartesianAxis3d as Axis;
     /// assert_eq!(Axis::X.orthogonal_axes(), [Axis::Y, Axis::Z]);
     /// ```
@@ -885,12 +927,14 @@ impl CartesianAxis3d {
     }
 
     /// Combines this coordinate axis with a direction into a DirectedAxis
+    /// ```
+    /// use crate::splashsurf_lib::uniform_grid::CartesianAxis3d as Axis;
+    /// use crate::splashsurf_lib::uniform_grid::{DirectedAxis, Direction};
+    /// assert_eq!(Axis::X.with_direction(Direction::Positive), DirectedAxis::new(Axis::X, Direction::Positive));
+    /// ```
     #[inline(always)]
     pub const fn with_direction(self, direction: Direction) -> DirectedAxis {
-        DirectedAxis {
-            axis: self,
-            direction,
-        }
+        DirectedAxis::new(self, direction)
     }
 }
 
@@ -911,6 +955,12 @@ fn test_orthogonal_axes() {
 }
 
 impl DirectedAxis {
+    /// Constructs a new directed axis
+    #[inline(always)]
+    pub const fn new(axis: Axis, direction: Direction) -> Self {
+        Self { axis, direction }
+    }
+
     /// Returns a reference to an array of all possible directed axes in 3D
     #[inline(always)]
     pub const fn all_possible() -> &'static [DirectedAxis; 6] {
@@ -918,15 +968,16 @@ impl DirectedAxis {
     }
 
     #[inline(always)]
-    pub const fn from_usize(n: usize) -> Self {
+    const fn from_usize(n: usize) -> Self {
         Self::all_possible()[n]
     }
 
     #[inline(always)]
-    pub const fn to_usize(&self) -> usize {
+    const fn to_usize(&self) -> usize {
         (self.direction as usize * 3) + self.axis as usize
     }
 
+    /// Applies an increment of 1 in the direction of this directed axis to the given index array
     #[inline(always)]
     pub fn apply_step<N: Clone + CheckedAdd<Output = N> + CheckedSub<Output = N> + One>(
         &self,
@@ -939,13 +990,13 @@ impl DirectedAxis {
         Some(index)
     }
 
-    /// Cartesian axis
+    /// Returns the cartesian axis of this directed axis
     #[inline(always)]
     pub const fn axis(&self) -> Axis {
         self.axis
     }
 
-    /// Direction along the axis
+    /// Returns the direction along the axis of this directed axis
     #[inline(always)]
     pub const fn direction(&self) -> Direction {
         self.direction
@@ -1054,30 +1105,12 @@ const ORTHOGONAL_TO_Z: [Axis; 2] = [Axis::X, Axis::Y];
 const ORTHOGONAL_AXES: [[Axis; 2]; 3] = [ORTHOGONAL_TO_X, ORTHOGONAL_TO_Y, ORTHOGONAL_TO_Z];
 
 const ALL_GRID_NEIGHBOR_LOCATIONS: [DirectedAxis; 6] = [
-    DirectedAxis {
-        axis: Axis::X,
-        direction: Direction::Negative,
-    },
-    DirectedAxis {
-        axis: Axis::Y,
-        direction: Direction::Negative,
-    },
-    DirectedAxis {
-        axis: Axis::Z,
-        direction: Direction::Negative,
-    },
-    DirectedAxis {
-        axis: Axis::X,
-        direction: Direction::Positive,
-    },
-    DirectedAxis {
-        axis: Axis::Y,
-        direction: Direction::Positive,
-    },
-    DirectedAxis {
-        axis: Axis::Z,
-        direction: Direction::Positive,
-    },
+    DirectedAxis::new(Axis::X, Direction::Negative),
+    DirectedAxis::new(Axis::Y, Direction::Negative),
+    DirectedAxis::new(Axis::Z, Direction::Negative),
+    DirectedAxis::new(Axis::X, Direction::Positive),
+    DirectedAxis::new(Axis::Y, Direction::Positive),
+    DirectedAxis::new(Axis::Z, Direction::Positive),
 ];
 
 #[cfg(test)]
