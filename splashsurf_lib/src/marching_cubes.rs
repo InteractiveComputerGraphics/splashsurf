@@ -3,6 +3,7 @@ use nalgebra::Vector3;
 
 use crate::marching_cubes_lut::get_marching_cubes_triangulation;
 use crate::mesh::TriMesh3d;
+use crate::uniform_grid::GridBoundaryFaceFlags;
 use crate::{new_map, DensityMap, Index, MapType, Real, UniformGrid};
 
 /// Performs a marching cubes triangulation of a density map on the given background grid
@@ -254,18 +255,36 @@ pub(crate) fn interpolate_points_to_cell_data<I: Index, R: Real>(
     MarchingCubesInput { cell_data }
 }
 
-pub(crate) fn get_stiching_data<I: Index, R: Real>(grid: &UniformGrid<I, R>, input: MarchingCubesInput<I>,) {
+pub(crate) fn get_stitching_data<I: Index, R: Real>(
+    grid: &UniformGrid<I, R>,
+    input: MarchingCubesInput<I>,
+) {
+    //let mut boundary_vertices = Vec::new();
     for (&flat_cell_index, cell_data) in &input.cell_data {
-        let cell_index = grid.try_unflatten_cell_index(flat_cell_index).expect("Cannot get cell index");
-        if grid.is_boundary_cell(&cell_index) {
+        let cell_index = grid
+            .try_unflatten_cell_index(flat_cell_index)
+            .expect("Cannot get cell index");
 
+        // Check which grid boundary faces this cell is part of
+        let cell_grid_face = GridBoundaryFaceFlags::classify_cell(grid, &cell_index);
+        // Skip cells that are not part of any grid boundary
+        if !cell_grid_face.is_empty() {
+            for (local_edge_index, vertex_index) in cell_data
+                .iso_surface_vertices
+                .iter()
+                .copied()
+                // Enumerate to get the local edge index
+                .enumerate()
+                // Skip local edges without an iso-surface vertex
+                .filter_map(|(i, vert)| vert.map(|vert| (i, vert)))
+            {
+                let edge_grid_face = cell_grid_face.classify_local_edge(local_edge_index);
+                // Skip edges that are not on a boundary face of the grid
+                if !edge_grid_face.is_empty() {}
+            }
         }
-        // If cell is part of boundary
-            // For every every edge that has vertex and is part of boundary
-                // Store (Cell, Vertex, Boundary side)
     }
 }
-
 
 /// Converts the marching cubes input cell data into a triangle surface mesh, appends triangles to existing mesh
 #[inline(never)]
