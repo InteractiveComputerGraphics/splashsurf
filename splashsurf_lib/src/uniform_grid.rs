@@ -1,6 +1,7 @@
 use std::iter::Iterator;
 use std::ops::{Add, Sub};
 
+use bitflags::bitflags;
 use itertools::iproduct;
 use nalgebra::Vector3;
 use num::{CheckedAdd, CheckedSub, One};
@@ -78,6 +79,49 @@ pub struct NeighborEdge<'a, 'b: 'a, I: Index> {
     neighbor: &'a PointIndex<I>,
     /// Edge connectivity from the origin point to the neighboring point
     connectivity: DirectedAxis,
+}
+
+bitflags! {
+    pub struct GridBoundary: u8 {
+        const X_NEG = 0b00000001;
+        const X_POS = 0b00000010;
+        const Y_NEG = 0b00000100;
+        const Y_POS = 0b00001000;
+        const Z_NEG = 0b00010000;
+        const Z_POS = 0b00100000;
+    }
+}
+
+impl GridBoundary {
+    #[rustfmt::skip]
+    pub fn classify_cell<I: Index, R: Real>(
+        grid: &UniformGrid<I, R>,
+        cell_index: &CellIndex<I>,
+    ) -> Self {
+        let mut boundary = GridBoundary::empty();
+        boundary.set(GridBoundary::X_NEG, cell_index.index[0] == I::zero());
+        boundary.set(GridBoundary::Y_NEG, cell_index.index[1] == I::zero());
+        boundary.set(GridBoundary::Z_NEG, cell_index.index[2] == I::zero());
+        boundary.set(GridBoundary::X_POS, cell_index.index[0] + I::one() == grid.n_cells_per_dim[0]);
+        boundary.set(GridBoundary::Y_POS, cell_index.index[1] + I::one() == grid.n_cells_per_dim[1]);
+        boundary.set(GridBoundary::Z_POS, cell_index.index[2] + I::one() == grid.n_cells_per_dim[2]);
+        boundary
+    }
+
+    #[rustfmt::skip]
+    pub fn classify_edge<I: Index, R: Real>(
+        grid: &UniformGrid<I, R>,
+        cell_index: &CellIndex<I>,
+    ) -> Self {
+        let mut boundary = GridBoundary::empty();
+        boundary.set(GridBoundary::X_NEG, cell_index.index[0] == I::zero());
+        boundary.set(GridBoundary::Y_NEG, cell_index.index[1] == I::zero());
+        boundary.set(GridBoundary::Z_NEG, cell_index.index[2] == I::zero());
+        boundary.set(GridBoundary::X_POS, cell_index.index[0] + I::one() == grid.n_cells_per_dim[0]);
+        boundary.set(GridBoundary::Y_POS, cell_index.index[1] + I::one() == grid.n_cells_per_dim[1]);
+        boundary.set(GridBoundary::Z_POS, cell_index.index[2] + I::one() == grid.n_cells_per_dim[2]);
+        boundary
+    }
 }
 
 /// Abbreviated type alias for a uniform cartesian cube grid in 3D
@@ -274,6 +318,15 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
             && (cell_min_point_ijk[0] >= I::zero()
                 && cell_min_point_ijk[1] >= I::zero()
                 && cell_min_point_ijk[2] >= I::zero())
+    }
+
+    pub fn is_boundary_cell(&self, cell_index: &CellIndex<I>) -> bool {
+        (cell_index.index[0] == I::zero()
+            || cell_index.index[1] == I::zero()
+            || cell_index.index[2] == I::zero())
+            || (cell_index.index[0] + I::one() == self.n_cells_per_dim[0]
+                || cell_index.index[1] + I::one() == self.n_cells_per_dim[1]
+                || cell_index.index[2] + I::one() == self.n_cells_per_dim[2])
     }
 
     /// Flattens the grid point index triplet to a single index

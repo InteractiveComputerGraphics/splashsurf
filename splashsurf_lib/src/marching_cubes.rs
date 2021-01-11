@@ -254,6 +254,19 @@ pub(crate) fn interpolate_points_to_cell_data<I: Index, R: Real>(
     MarchingCubesInput { cell_data }
 }
 
+pub(crate) fn get_stiching_data<I: Index, R: Real>(grid: &UniformGrid<I, R>, input: MarchingCubesInput<I>,) {
+    for (&flat_cell_index, cell_data) in &input.cell_data {
+        let cell_index = grid.try_unflatten_cell_index(flat_cell_index).expect("Cannot get cell index");
+        if grid.is_boundary_cell(&cell_index) {
+
+        }
+        // If cell is part of boundary
+            // For every every edge that has vertex and is part of boundary
+                // Store (Cell, Vertex, Boundary side)
+    }
+}
+
+
 /// Converts the marching cubes input cell data into a triangle surface mesh, appends triangles to existing mesh
 #[inline(never)]
 pub(crate) fn triangulate<I: Index, R: Real>(
