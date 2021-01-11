@@ -3,7 +3,7 @@ use std::path::Path;
 use splashsurf_lib::mesh::PointCloud3d;
 use splashsurf_lib::nalgebra::Vector3;
 use splashsurf_lib::octree::Octree;
-use splashsurf_lib::{grid_for_reconstruction, Index, Real, UniformGrid};
+use splashsurf_lib::{grid_for_reconstruction, Index, Real, SubdivisionCriterion, UniformGrid};
 
 use vtkio::model::UnstructuredGridPiece;
 
@@ -79,7 +79,12 @@ fn build_octree() {
     println!("{:?}", grid);
 
     let mut octree = Octree::new(&grid, particles.as_slice().len());
-    octree.subdivide_recursively(&grid, particles.as_slice(), 30);
+    octree.subdivide_recursively_margin(
+        &grid,
+        particles.as_slice(),
+        SubdivisionCriterion::MaxParticleCount(30),
+        0.0,
+    );
 
     let root = octree.root();
     println!("min: {:?}, max: {:?}", root.min_corner(), root.max_corner());
@@ -100,11 +105,17 @@ fn build_octree_from_vtk() {
     let particles = io::vtk::particles_from_vtk::<f64, _>(file).unwrap();
     println!("Loaded {} particles from {}", particles.len(), file);
 
-    let grid = grid_for_reconstruction::<i64, _>(particles.as_slice(), 0.025, 0.2, None).unwrap();
+    let grid =
+        grid_for_reconstruction::<i64, _>(particles.as_slice(), 0.025, 0.2, None, true).unwrap();
     println!("{:?}", grid);
 
     let mut octree = Octree::new(&grid, particles.as_slice().len());
-    octree.subdivide_recursively(&grid, particles.as_slice(), 60);
+    octree.subdivide_recursively_margin(
+        &grid,
+        particles.as_slice(),
+        SubdivisionCriterion::MaxParticleCount(60),
+        0.0,
+    );
 
     // Sum the number of particles per leaf
     let mut particle_count = 0;
@@ -133,13 +144,26 @@ fn build_octree_par_consistency() {
     let particles = io::vtk::particles_from_vtk::<f64, _>(file).unwrap();
     println!("Loaded {} particles from {}", particles.len(), file);
 
-    let grid = grid_for_reconstruction::<i64, _>(particles.as_slice(), 0.025, 0.2, None).unwrap();
+    let grid =
+        grid_for_reconstruction::<i64, _>(particles.as_slice(), 0.025, 0.2, None, true).unwrap();
 
     let mut octree_seq = Octree::new(&grid, particles.as_slice().len());
-    octree_seq.subdivide_recursively(&grid, particles.as_slice(), 20);
+    //octree_seq.subdivide_recursively(&grid, particles.as_slice(), 20);
+    octree_seq.subdivide_recursively_margin(
+        &grid,
+        particles.as_slice(),
+        SubdivisionCriterion::MaxParticleCount(20),
+        0.0,
+    );
 
     let mut octree_par = Octree::new(&grid, particles.as_slice().len());
-    octree_par.subdivide_recursively(&grid, particles.as_slice(), 20);
+    //octree_par.subdivide_recursively(&grid, particles.as_slice(), 20);
+    octree_par.subdivide_recursively_margin_par(
+        &grid,
+        particles.as_slice(),
+        SubdivisionCriterion::MaxParticleCount(20),
+        0.0,
+    );
 
     let mut particle_count = 0;
     for (node_seq, node_par) in octree_seq
