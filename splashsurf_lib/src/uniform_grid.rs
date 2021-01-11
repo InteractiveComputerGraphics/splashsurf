@@ -759,15 +759,30 @@ const CELL_LOCAL_EDGES_FROM_LOCAL_POINT: [[Option<usize>; 3]; 8] = [
     [Some(6), None   , None    ],
 ];
 
-const LOCAL_EDGES_PARALLEL_TO_X_AXIS: [usize; 4] = [0, 8, 10, 2];
-const LOCAL_EDGES_PARALLEL_TO_Y_AXIS: [usize; 4] = [3, 1, 9, 11];
-const LOCAL_EDGES_PARALLEL_TO_Z_AXIS: [usize; 4] = [4, 5, 6, 7];
+/// All local edges of a cell that are parallel to the x-axis in CCW ordering
+const LOCAL_EDGES_PARALLEL_TO_X_AXIS: [usize; 4] = [0, 2, 6, 4];
+/// All local edges of a cell that are parallel to the y-axis in CCW ordering
+const LOCAL_EDGES_PARALLEL_TO_Y_AXIS: [usize; 4] = [3, 1, 5, 7];
+/// All local edges of a cell that are parallel to the z-axis in CCW ordering
+const LOCAL_EDGES_PARALLEL_TO_Z_AXIS: [usize; 4] = [8, 9, 10, 11];
 
 const CELL_LOCAL_EDGES: [[usize; 4]; 3] = [
     LOCAL_EDGES_PARALLEL_TO_X_AXIS,
     LOCAL_EDGES_PARALLEL_TO_Y_AXIS,
     LOCAL_EDGES_PARALLEL_TO_Z_AXIS,
 ];
+
+#[test]
+fn test_cube_local_edge_consistency() {
+    for (i, edges_parallel_to_axis) in CELL_LOCAL_EDGES.iter().enumerate() {
+        for &local_edge in edges_parallel_to_axis {
+            // Ensure that each edge that is marked as parallel to axis_i is also stored as an axis in axis_i originating at some local point
+            assert!(CELL_LOCAL_EDGES_FROM_LOCAL_POINT
+                .iter()
+                .any(|edge| edge[i] == Some(local_edge)))
+        }
+    }
+}
 
 impl Direction {
     pub fn all() -> &'static [Direction; 2] {
