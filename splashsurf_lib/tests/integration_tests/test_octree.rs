@@ -148,7 +148,6 @@ fn build_octree_par_consistency() {
         grid_for_reconstruction::<i64, _>(particles.as_slice(), 0.025, 0.2, None, true).unwrap();
 
     let mut octree_seq = Octree::new(&grid, particles.as_slice().len());
-    //octree_seq.subdivide_recursively(&grid, particles.as_slice(), 20);
     octree_seq.subdivide_recursively_margin(
         &grid,
         particles.as_slice(),
@@ -157,7 +156,6 @@ fn build_octree_par_consistency() {
     );
 
     let mut octree_par = Octree::new(&grid, particles.as_slice().len());
-    //octree_par.subdivide_recursively(&grid, particles.as_slice(), 20);
     octree_par.subdivide_recursively_margin_par(
         &grid,
         particles.as_slice(),
