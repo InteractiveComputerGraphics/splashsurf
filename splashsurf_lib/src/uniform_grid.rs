@@ -26,13 +26,13 @@ use crate::{AxisAlignedBoundingBox3d, Index, Real};
  */
 
 /// An index triplet of a point or vertex in a 3D cartesian grid (index along each axis)
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub struct PointIndex<I: Index> {
     index: [I; 3],
 }
 
 /// An index triplet of a cell in a 3D cartesian grid (index along each axis)
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub struct CellIndex<I: Index> {
     index: [I; 3],
 }
@@ -41,7 +41,7 @@ pub struct CellIndex<I: Index> {
 pub type Axis = CartesianAxis3d;
 
 /// The cartesian coordinate axes in 3D
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub enum CartesianAxis3d {
     X = 0,
     Y = 1,
@@ -49,14 +49,14 @@ pub enum CartesianAxis3d {
 }
 
 /// Indicates a direction on a number line or coordinate axis
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub enum Direction {
     Negative = 0,
     Positive = 1,
 }
 
 /// Identifies a direction along a cartesian axis
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub struct DirectedAxis {
     axis: Axis,
     direction: Direction,

@@ -260,8 +260,8 @@ pub(crate) fn interpolate_points_to_cell_data<I: Index, R: Real>(
 pub(crate) fn collect_boundary_vertices<I: Index, R: Real>(
     grid: &UniformGrid<I, R>,
     input: MarchingCubesInput<I>,
-) -> Vec<(DirectedAxis, CellIndex<I>, usize)> {
-    let mut boundary_vertices = Vec::new();
+) -> MapType<DirectedAxis, Vec<(CellIndex<I>, usize)>> {
+    let mut boundary_vertices = new_map();
 
     for (&flat_cell_index, cell_data) in &input.cell_data {
         let cell_index = grid
@@ -288,7 +288,10 @@ pub(crate) fn collect_boundary_vertices<I: Index, R: Real>(
                 if !edge_grid_face.is_empty() {
                     // Store the vertex id with each face it touches (might touch one or two boundaries)
                     for face in edge_grid_face.iter_individual() {
-                        boundary_vertices.push((face, cell_index, vertex_index))
+                        boundary_vertices
+                            .entry(face)
+                            .or_insert_with(Vec::new)
+                            .push((cell_index, vertex_index));
                     }
                 }
             }
