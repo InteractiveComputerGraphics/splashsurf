@@ -1,9 +1,11 @@
-use log::info;
+use log::{info, warn};
 use nalgebra::Vector3;
 
 use crate::marching_cubes_lut::get_marching_cubes_triangulation;
 use crate::mesh::TriMesh3d;
-use crate::uniform_grid::{CellIndex, DirectedAxis, GridBoundaryFaceFlags};
+use crate::uniform_grid::{
+    CartesianAxis3d, DirectedAxis, Direction, EdgeIndex, GridBoundaryFaceFlags, SubdomainGrid,
+};
 use crate::{new_map, DensityMap, Index, MapType, Real, UniformGrid};
 
 /// Performs a marching cubes triangulation of a density map on the given background grid
@@ -258,20 +260,26 @@ pub(crate) fn interpolate_points_to_cell_data<I: Index, R: Real>(
 /// Collects the indices of all vertex indices that are on the boundary of the grid, with the respective boundary direction and cell index
 #[inline(never)]
 pub(crate) fn collect_boundary_vertices<I: Index, R: Real>(
-    grid: &UniformGrid<I, R>,
+    subdomain: &SubdomainGrid<I, R>,
     input: MarchingCubesInput<I>,
-) -> MapType<DirectedAxis, Vec<(CellIndex<I>, usize)>> {
+) -> MapType<DirectedAxis, Vec<(EdgeIndex<I>, usize)>> {
     let mut boundary_vertices = new_map();
 
+    let subdomain_grid = subdomain.subdomain_grid();
     for (&flat_cell_index, cell_data) in &input.cell_data {
-        let cell_index = grid
+        let cell_index = subdomain_grid
             .try_unflatten_cell_index(flat_cell_index)
             .expect("Cannot get cell index");
 
         // Check which grid boundary faces this cell is part of
-        let cell_grid_face = GridBoundaryFaceFlags::classify_cell(grid, &cell_index);
+        let cell_grid_face = GridBoundaryFaceFlags::classify_cell(subdomain_grid, &cell_index);
         // Skip cells that are not part of any grid boundary
         if !cell_grid_face.is_empty() {
+            // Get the cell index on the global background grid
+            let global_cell_index = subdomain
+                .inv_map_cell(&cell_index)
+                .expect("Failed to map cell from subdomain into global grid");
+
             // Loop over all iso-surface vertices (located on the cell edges)
             for (local_edge_index, vertex_index) in cell_data
                 .iso_surface_vertices
@@ -282,23 +290,91 @@ pub(crate) fn collect_boundary_vertices<I: Index, R: Real>(
                 // Skip local edges without an interpolated iso-surface vertex
                 .filter_map(|(i, vert)| vert.map(|vert| (i, vert)))
             {
-                // Check which grid bounday faces this edge is part of
+                // Check which grid boundary faces this edge is part of
                 let edge_grid_face = cell_grid_face.classify_local_edge(local_edge_index);
                 // Skip edges that are not on a boundary face of the grid
                 if !edge_grid_face.is_empty() {
+                    // Obtain the unique index of this edge on the global background grid
+                    let edge_index = global_cell_index
+                        .global_edge_index_of(local_edge_index)
+                        .expect("Unable to obtain global edge index");
+
                     // Store the vertex id with each face it touches (might touch one or two boundaries)
                     for face in edge_grid_face.iter_individual() {
                         boundary_vertices
                             .entry(face)
                             .or_insert_with(Vec::new)
-                            .push((cell_index, vertex_index));
+                            .push((edge_index, vertex_index));
                     }
                 }
             }
         }
     }
 
+    // Sort, so the we can step through both sides of the seam simultaneously when stitching
+    for (_, bvs) in boundary_vertices.iter_mut() {
+        bvs.sort_unstable();
+    }
+
     boundary_vertices
+}
+
+pub(crate) struct StitchingData<'a, I: Index, R: Real> {
+    mesh: TriMesh3d<R>,
+    boundary_vertices: MapType<DirectedAxis, Vec<(EdgeIndex<I>, usize)>>,
+    subdomain: SubdomainGrid<'a, I, R>,
+}
+
+pub(crate) fn stitch_meshes<'a, I: Index, R: Real>(
+    stitching_axis: CartesianAxis3d,
+    negative_side: &StitchingData<'a, I, R>,
+    positive_side: &StitchingData<'a, I, R>,
+) {
+    let negative_boundary = negative_side
+        .boundary_vertices
+        .get(&DirectedAxis::new(stitching_axis, Direction::Positive));
+    let positive_boundary = positive_side
+        .boundary_vertices
+        .get(&DirectedAxis::new(stitching_axis, Direction::Negative));
+
+    match (negative_boundary, positive_boundary) {
+        (Some(negative_boundary), Some(positive_boundary)) => {
+            if negative_boundary.len() != positive_boundary.len() {
+                warn!("Stitching: Both sides have different numbers of boundary iso-surface vertices. Negative side mesh: {}, positive side mesh: {}. This means that the surface reconstruction of the neighboring patches is inconsistent.", negative_boundary.len(), positive_boundary.len());
+            }
+
+            let mut neg_iter = negative_boundary.iter();
+            let mut pos_iter = positive_boundary.iter();
+
+            let mut next_neg_edge = neg_iter.next();
+            let mut next_pos_edge = pos_iter.next();
+
+            while let (Some(neg_edge), Some(pos_edge)) = (next_neg_edge, next_pos_edge) {
+                if neg_edge.0 == pos_edge.0 {
+                    // A matching edge was found
+                    // Now, one of the vertices has to be replaced by the other one in all triangles
+                } else if neg_edge.0 < pos_edge.0 {
+                    warn!("Stitching: Edge {:?} on negative side does not have a corresponding edge on the positive side.", neg_edge.0);
+                    next_neg_edge = neg_iter.next()
+                } else {
+                    warn!("Stitching: Edge {:?} on positive side does not have a corresponding edge on the negative side.", neg_edge.0);
+                    next_pos_edge = pos_iter.next()
+                }
+            }
+        }
+        (Some(negative_boundary), None) => {
+            warn!("Stitching: Negative side mesh has {} boundary vertices, while positive side has none. This is probably a bug.", negative_boundary.len());
+            // TODO: Error?
+        }
+        (None, Some(positive_boundary)) => {
+            warn!("Stitching: Positive side mesh has {} boundary vertices, while negative side has none. This is probably a bug.", positive_boundary.len());
+            // TODO: Error?
+        }
+        (None, None) => {
+            info!("Stitching: No boundary vertices in both meshes.");
+            // TODO: Just append meshes
+        }
+    }
 }
 
 /// Converts the marching cubes input cell data into a triangle surface mesh, appends triangles to existing mesh
@@ -318,6 +394,56 @@ pub(crate) fn triangulate<I: Index, R: Real>(
 
     // Triangulate affected cells
     for (&_flat_cell_index, cell_data) in &cell_data {
+        let triangles = get_marching_cubes_triangulation(&cell_data.are_vertices_above());
+
+        for triangle in triangles.iter().flatten() {
+            // Note: If the one of the following expect calls causes a panic, it is probably because
+            //  a cell was added improperly to the marching cubes input, e.g. a cell was added to the
+            //  cell data map that is not part of the domain (such that only those edges of the cell
+            //  that are neighboring to the domain have correct iso surface vertices)
+            //
+            //  If this happens, it's a bug in the cell data map generation.
+            let global_triangle = [
+                cell_data.iso_surface_vertices[triangle[0] as usize]
+                    .expect("Missing iso surface vertex. This is a bug."),
+                cell_data.iso_surface_vertices[triangle[1] as usize]
+                    .expect("Missing iso surface vertex. This is a bug."),
+                cell_data.iso_surface_vertices[triangle[2] as usize]
+                    .expect("Missing iso surface vertex. This is a bug."),
+            ];
+            mesh.triangles.push(global_triangle);
+        }
+    }
+
+    info!(
+        "Generated surface mesh with {} triangles and {} vertices.",
+        mesh.triangles.len(),
+        mesh.vertices.len()
+    );
+    info!("Triangulation done.");
+}
+
+/// Converts the marching cubes input cell data into a triangle surface mesh, appends triangles to existing mesh
+#[inline(never)]
+pub(crate) fn triangulate_with_stitching_data<'a, 'b, I: Index, R: Real>(
+    subdomain: SubdomainGrid<'a, I, R>,
+    input: MarchingCubesInput<I>,
+    mesh: &'b mut TriMesh3d<R>,
+) {
+    profile!("triangulate");
+
+    let MarchingCubesInput { cell_data } = input;
+
+    info!(
+        "Starting marching cubes triangulation of {} cells...",
+        cell_data.len()
+    );
+
+    // Triangulate affected cells
+    for (&_flat_cell_index, cell_data) in &cell_data {
+        // TODO: Check if boundary cell...
+        // TODO: If boundary cell, store (global_cell_id, [triangle_indices...]) in map
+
         let triangles = get_marching_cubes_triangulation(&cell_data.are_vertices_above());
 
         for triangle in triangles.iter().flatten() {

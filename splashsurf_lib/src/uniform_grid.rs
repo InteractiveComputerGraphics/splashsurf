@@ -81,6 +81,60 @@ pub struct NeighborEdge<'a, 'b: 'a, I: Index> {
     connectivity: DirectedAxis,
 }
 
+pub struct SubdomainGrid<'a, I: Index, R: Real> {
+    /// The global grid
+    grid: &'a UniformGrid<I, R>,
+    /// The smaller subdomain grid inside of the global grid
+    subdomain_grid: &'a UniformGrid<I, R>,
+    /// The offset of the subdomain grid relative to the global grid
+    subdomain_offset: &'a [I; 3],
+}
+
+impl<'a, I: Index, R: Real> SubdomainGrid<'a, I, R> {
+    /// Returns a reference to the global grid corresponding to the subdomain
+    pub fn global_grid(&self) -> &UniformGrid<I, R> {
+        self.grid
+    }
+
+    /// Returns a reference to the subdomain grid
+    pub fn subdomain_grid(&self) -> &UniformGrid<I, R> {
+        self.subdomain_grid
+    }
+
+    /// Returns the offset of the subdomain grid relative to the global grid
+    pub fn subdomain_offset(&self) -> &[I; 3] {
+        self.subdomain_offset
+    }
+
+    /// Maps the point index from the global grid into the subdomain grid
+    pub fn map_point(&self, point: &PointIndex<I>) -> Option<PointIndex<I>> {
+        let new_point =
+            Direction::Negative.checked_apply_step_ijk(point.index(), &self.subdomain_offset)?;
+        self.subdomain_grid.get_point(new_point)
+    }
+
+    /// Maps the point index from the subdomain grid to the global grid
+    pub fn inv_map_point(&self, point: &PointIndex<I>) -> Option<PointIndex<I>> {
+        let new_point =
+            Direction::Positive.checked_apply_step_ijk(point.index(), &self.subdomain_offset)?;
+        self.grid.get_point(new_point)
+    }
+
+    /// Maps the cell index from the global grid into the subdomain grid
+    pub fn map_cell(&self, cell: &CellIndex<I>) -> Option<CellIndex<I>> {
+        let new_cell =
+            Direction::Negative.checked_apply_step_ijk(cell.index(), &self.subdomain_offset)?;
+        self.subdomain_grid.get_cell(new_cell)
+    }
+
+    /// Maps the cell index from the subdomain grid to the global grid
+    pub fn inv_map_cell(&self, cell: &CellIndex<I>) -> Option<CellIndex<I>> {
+        let new_cell =
+            Direction::Positive.checked_apply_step_ijk(cell.index(), &self.subdomain_offset)?;
+        self.grid.get_cell(new_cell)
+    }
+}
+
 bitflags! {
     /// Flags naming the outer faces of a grid cell or an entire grid, can be used to select multiple faces at once
     struct FaceFlags: u8 {
@@ -635,38 +689,6 @@ impl<I: Index> PointIndex<I> {
     pub fn index(&self) -> &[I; 3] {
         &self.index
     }
-
-    /// Maps the point index from the original grid into the given subdomain grid
-    pub fn map_to_subdomain<R: Real>(
-        &self,
-        _grid: &UniformGrid<I, R>,
-        subdomain_grid: &UniformGrid<I, R>,
-        subdomain_offset: &[I; 3],
-    ) -> Option<Self> {
-        let new_point = [
-            self.index[0] - subdomain_offset[0],
-            self.index[1] - subdomain_offset[1],
-            self.index[2] - subdomain_offset[2],
-        ];
-
-        subdomain_grid.get_point(new_point)
-    }
-
-    /// Maps the point index from the given subdomain grid to the original grid
-    pub fn map_to_subdomain_inv<R: Real>(
-        &self,
-        grid: &UniformGrid<I, R>,
-        _subdomain_grid: &UniformGrid<I, R>,
-        subdomain_offset: &[I; 3],
-    ) -> Option<Self> {
-        let new_point = [
-            self.index[0] + subdomain_offset[0],
-            self.index[1] + subdomain_offset[1],
-            self.index[2] + subdomain_offset[2],
-        ];
-
-        grid.get_point(new_point)
-    }
 }
 
 impl<I: Index> CellIndex<I> {
@@ -1019,6 +1041,27 @@ impl Direction {
         } else {
             n.checked_sub(&step)
         }
+    }
+
+    #[inline(always)]
+    pub fn checked_apply_step_ijk<N: CheckedAdd<Output = N> + CheckedSub<Output = N>>(
+        &self,
+        start: &[N; 3],
+        step: &[N; 3],
+    ) -> Option<[N; 3]> {
+        Some(if self.is_positive() {
+            [
+                start[0].checked_add(&step[0])?,
+                start[1].checked_add(&step[1])?,
+                start[2].checked_add(&step[2])?,
+            ]
+        } else {
+            [
+                start[0].checked_sub(&step[0])?,
+                start[1].checked_sub(&step[1])?,
+                start[2].checked_sub(&step[2])?,
+            ]
+        })
     }
 
     /// Returns whether the direction is positive
