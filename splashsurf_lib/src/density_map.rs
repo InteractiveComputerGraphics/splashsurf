@@ -758,7 +758,7 @@ pub fn sparse_density_map_to_hex_mesh<I: Index, R: Real>(
         for (local_point_index, vertex) in cell_vertices.iter_mut().enumerate() {
             if vertex.is_none() {
                 // Map local point index to global index in grid
-                let point = cell.global_index_of(local_point_index).unwrap();
+                let point = cell.global_point_index_of(local_point_index).unwrap();
                 let flat_point_index = grid.flatten_point_index(&point);
 
                 // Try to lookup the vertex associated with the point or create a new one with default value

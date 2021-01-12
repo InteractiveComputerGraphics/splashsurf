@@ -325,7 +325,7 @@ fn sequential_generate_cell_to_particle_map<I: Index, R: Real>(
     // Assign all particles to enclosing cells
     for (particle_i, particle) in particle_positions.iter().enumerate() {
         let cell_ijk = grid.enclosing_cell(particle);
-        let cell = grid.get_cell(&cell_ijk).unwrap();
+        let cell = grid.get_cell(cell_ijk).unwrap();
         let flat_cell_index = grid.flatten_cell_index(&cell);
 
         particles_per_cell
@@ -351,7 +351,7 @@ fn parallel_generate_cell_to_particle_map<I: Index, R: Real>(
         .enumerate()
         .for_each(|(particle_i, particle)| {
             let cell_ijk = grid.enclosing_cell(particle);
-            let cell = grid.get_cell(&cell_ijk).unwrap();
+            let cell = grid.get_cell(cell_ijk).unwrap();
             let flat_cell_index = grid.flatten_cell_index(&cell);
 
             particles_per_cell

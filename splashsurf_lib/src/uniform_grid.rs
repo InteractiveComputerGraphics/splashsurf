@@ -26,13 +26,13 @@ use crate::{AxisAlignedBoundingBox3d, Index, Real};
  */
 
 /// An index triplet of a point or vertex in a 3D cartesian grid (index along each axis)
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct PointIndex<I: Index> {
     index: [I; 3],
 }
 
 /// An index triplet of a cell in a 3D cartesian grid (index along each axis)
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct CellIndex<I: Index> {
     index: [I; 3],
 }
@@ -41,7 +41,7 @@ pub struct CellIndex<I: Index> {
 pub type Axis = CartesianAxis3d;
 
 /// The cartesian coordinate axes in 3D
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub enum CartesianAxis3d {
     X = 0,
     Y = 1,
@@ -49,14 +49,14 @@ pub enum CartesianAxis3d {
 }
 
 /// Indicates a direction on a number line or coordinate axis
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub enum Direction {
     Negative = 0,
     Positive = 1,
 }
 
 /// Identifies a direction along a cartesian axis
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct DirectedAxis {
     axis: Axis,
     direction: Direction,
@@ -258,9 +258,9 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
 
     /// Converts a point index triplet into a strongly typed index, returns `None` if the corresponding point is not part of the grid
     #[inline(always)]
-    pub fn get_point(&self, ijk: &[I; 3]) -> Option<PointIndex<I>> {
-        if self.point_exists(ijk) {
-            Some(PointIndex::from_ijk(ijk.clone()))
+    pub fn get_point(&self, ijk: [I; 3]) -> Option<PointIndex<I>> {
+        if self.point_exists(&ijk) {
+            Some(PointIndex::from_ijk(ijk))
         } else {
             None
         }
@@ -268,9 +268,9 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
 
     /// Converts a cell index triplet into a strongly typed index, returns `None` if the corresponding cell is not part of the grid
     #[inline(always)]
-    pub fn get_cell(&self, ijk: &[I; 3]) -> Option<CellIndex<I>> {
-        if self.cell_exists(ijk) {
-            Some(CellIndex::from_ijk(ijk.clone()))
+    pub fn get_cell(&self, ijk: [I; 3]) -> Option<CellIndex<I>> {
+        if self.cell_exists(&ijk) {
+            Some(CellIndex::from_ijk(ijk))
         } else {
             None
         }
@@ -360,7 +360,7 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
     #[inline(always)]
     pub fn try_unflatten_point_index(&self, point_index: I) -> Option<PointIndex<I>> {
         let point_ijk = self.unflatten_point_index(point_index);
-        self.get_point(&point_ijk)
+        self.get_point(point_ijk)
     }
 
     /// Converts a flat cell index value back to a cell index triplet, does not check if the cell is part of the grid
@@ -379,7 +379,7 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
     #[inline(always)]
     pub fn try_unflatten_cell_index(&self, cell_index: I) -> Option<CellIndex<I>> {
         let cell_ijk = self.unflatten_cell_index(cell_index);
-        self.get_cell(&cell_ijk)
+        self.get_cell(cell_ijk)
     }
 
     /// Returns the real-valued coordinates of a grid point in space
@@ -577,7 +577,7 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
                     step_y.checked_apply_step(index[1], I::one())?,
                     step_z.checked_apply_step(index[2], I::one())?,
                 ];
-                self.get_cell(&neighbor_cell_ijk)
+                self.get_cell(neighbor_cell_ijk)
             },
         )
     }
@@ -635,6 +635,38 @@ impl<I: Index> PointIndex<I> {
     pub fn index(&self) -> &[I; 3] {
         &self.index
     }
+
+    /// Maps the point index from the original grid into the given subdomain grid
+    pub fn map_to_subdomain<R: Real>(
+        &self,
+        _grid: &UniformGrid<I, R>,
+        subdomain_grid: &UniformGrid<I, R>,
+        subdomain_offset: &[I; 3],
+    ) -> Option<Self> {
+        let new_point = [
+            self.index[0] - subdomain_offset[0],
+            self.index[1] - subdomain_offset[1],
+            self.index[2] - subdomain_offset[2],
+        ];
+
+        subdomain_grid.get_point(new_point)
+    }
+
+    /// Maps the point index from the given subdomain grid to the original grid
+    pub fn map_to_subdomain_inv<R: Real>(
+        &self,
+        grid: &UniformGrid<I, R>,
+        _subdomain_grid: &UniformGrid<I, R>,
+        subdomain_offset: &[I; 3],
+    ) -> Option<Self> {
+        let new_point = [
+            self.index[0] + subdomain_offset[0],
+            self.index[1] + subdomain_offset[1],
+            self.index[2] + subdomain_offset[2],
+        ];
+
+        grid.get_point(new_point)
+    }
 }
 
 impl<I: Index> CellIndex<I> {
@@ -659,7 +691,7 @@ impl<I: Index> CellIndex<I> {
     /// Returns an array containing all local edge indices that are parallel to the given axis in CCW ordering
     #[inline(always)]
     pub fn local_edges_parallel_to(axis: Axis) -> &'static [usize; 4] {
-        &CELL_LOCAL_EDGES[axis.dim()]
+        &CELL_LOCAL_EDGES_BY_AXIS[axis.dim()]
     }
 
     /// Returns the local index inside of the cube of the given point
@@ -682,15 +714,56 @@ impl<I: Index> CellIndex<I> {
         CELL_LOCAL_EDGES_FROM_LOCAL_POINT[start_point_local][edge_dim]
     }
 
-    /// Converts the given local point index (0 to 7) to a global point index
+    /// Converts the given local point index (0 to 7) to a global grid point index
     #[inline(always)]
-    pub fn global_index_of(&self, local_index: usize) -> Option<PointIndex<I>> {
+    pub fn global_point_index_of(&self, local_index: usize) -> Option<PointIndex<I>> {
         let local_coords = CELL_LOCAL_POINT_COORDS.get(local_index)?;
         Some(PointIndex::from_ijk([
             self.index[0] + I::from_i32(local_coords[0])?,
             self.index[1] + I::from_i32(local_coords[1])?,
             self.index[2] + I::from_i32(local_coords[2])?,
         ]))
+    }
+
+    /// Converts the given local edge index (0 to 11) to a global grid edge index
+    #[inline(always)]
+    pub fn global_edge_index_of(&self, local_edge_index: usize) -> Option<EdgeIndex<I>> {
+        let (origin_local_point, axis) = CELL_LOCAL_EDGES.get(local_edge_index).copied()?;
+        let origin_local_coords = CELL_LOCAL_POINT_COORDS[origin_local_point];
+        let origin = [
+            self.index[0] + I::from_i32(origin_local_coords[0])?,
+            self.index[1] + I::from_i32(origin_local_coords[1])?,
+            self.index[2] + I::from_i32(origin_local_coords[2])?,
+        ];
+
+        Some(EdgeIndex {
+            origin: PointIndex::from_ijk(origin),
+            axis,
+        })
+    }
+}
+
+/// Unique identifier for an edge on a grid
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+pub struct EdgeIndex<I: Index> {
+    /// The starting point of this edge (the vertex of the edge that is at the negative side of the edge)
+    origin: PointIndex<I>,
+    /// The axis this edge is parallel to
+    axis: CartesianAxis3d,
+}
+
+impl<I: Index> EdgeIndex<I> {
+    /// The origin point of this edge
+    pub fn origin(&self) -> &PointIndex<I> {
+        &self.origin
+    }
+
+    /// The target point of this edge
+    pub fn target(&self) -> PointIndex<I> {
+        let new_index = DirectedAxis::new(self.axis, Direction::Positive)
+            .apply_step(self.origin.index())
+            .expect("Index type overflow");
+        PointIndex::from_ijk(new_index)
     }
 }
 
@@ -710,30 +783,56 @@ fn test_cube_cell_local_point_index() {
     assert_eq!(cube.local_point_index_of(&[1, 2, 3]), None);
 }
 
+/// Maps from a flattened coordinate index inside of a cell to the corresponding local vertex
 const CELL_LOCAL_POINTS: [usize; 8] = [0, 1, 3, 2, 4, 5, 7, 6];
 
+/// Maps from the local numbering of the cell vertices to their coordinates in the cell
 const CELL_LOCAL_POINT_COORDS: [[i32; 3]; 8] = [
-    [0, 0, 0],
-    [1, 0, 0],
-    [1, 1, 0],
-    [0, 1, 0],
-    [0, 0, 1],
-    [1, 0, 1],
-    [1, 1, 1],
-    [0, 1, 1],
+    [0, 0, 0], // vertex 0
+    [1, 0, 0], // vertex 1
+    [1, 1, 0], // vertex 2
+    [0, 1, 0], // vertex 3
+    [0, 0, 1], // vertex 4
+    [1, 0, 1], // vertex 5
+    [1, 1, 1], // vertex 6
+    [0, 1, 1], // vertex 7
 ];
+
+#[test]
+fn test_cube_local_point_coordinate_consistency() {
+    for (local_point, coords) in CELL_LOCAL_POINT_COORDS.iter().enumerate() {
+        let flattened = coords[0] + 2 * coords[1] + 4 * coords[2];
+        assert_eq!(CELL_LOCAL_POINTS[flattened as usize], local_point);
+    }
+}
 
 /// Maps from a local point in a cell and an axis direction originating from this point to the local edge index
 #[rustfmt::skip]
 const CELL_LOCAL_EDGES_FROM_LOCAL_POINT: [[Option<usize>; 3]; 8] = [
-    [Some(0), Some(3), Some(8) ],
-    [None   , Some(1), Some(9) ],
-    [None   , None   , Some(10)],
-    [Some(2), None   , Some(11)],
-    [Some(4), Some(7), None    ],
-    [None   , Some(5), None    ],
-    [None   , None   , None    ],
-    [Some(6), None   , None    ],
+    [Some(0), Some(3), Some(8) ],  // vertex 0
+    [None   , Some(1), Some(9) ],  // vertex 1
+    [None   , None   , Some(10)],  // vertex 2
+    [Some(2), None   , Some(11)],  // vertex 3
+    [Some(4), Some(7), None    ],  // vertex 4
+    [None   , Some(5), None    ],  // vertex 5
+    [None   , None   , None    ],  // vertex 6
+    [Some(6), None   , None    ],  // vertex 7
+];
+
+/// Maps from local edge index to the corresponding local point index and axis
+const CELL_LOCAL_EDGES: [(usize, Axis); 12] = [
+    (0, Axis::X), // edge 0
+    (1, Axis::Y), // edge 1
+    (3, Axis::X), // edge 2
+    (0, Axis::Y), // edge 3
+    (4, Axis::X), // edge 4
+    (5, Axis::Y), // edge 5
+    (7, Axis::X), // edge 6
+    (4, Axis::Y), // edge 7
+    (0, Axis::Z), // edge 8
+    (1, Axis::Z), // edge 9
+    (2, Axis::Z), // edge 10
+    (3, Axis::Z), // edge 11
 ];
 
 /// All local edges of a cell that are parallel to the x-axis in CCW ordering
@@ -744,7 +843,7 @@ const LOCAL_EDGES_PARALLEL_TO_Y_AXIS: [usize; 4] = [3, 1, 5, 7];
 const LOCAL_EDGES_PARALLEL_TO_Z_AXIS: [usize; 4] = [8, 9, 10, 11];
 
 /// Stores per dimension which local edges of a cell are parallel to an axis of this dimension
-const CELL_LOCAL_EDGES: [[usize; 4]; 3] = [
+const CELL_LOCAL_EDGES_BY_AXIS: [[usize; 4]; 3] = [
     LOCAL_EDGES_PARALLEL_TO_X_AXIS,
     LOCAL_EDGES_PARALLEL_TO_Y_AXIS,
     LOCAL_EDGES_PARALLEL_TO_Z_AXIS,
@@ -752,7 +851,30 @@ const CELL_LOCAL_EDGES: [[usize; 4]; 3] = [
 
 #[test]
 fn test_cube_local_edge_consistency() {
-    for (i, edges_parallel_to_axis) in CELL_LOCAL_EDGES.iter().enumerate() {
+    for (local_edge, (local_point, axis)) in CELL_LOCAL_EDGES.iter().copied().enumerate() {
+        assert_eq!(
+            CELL_LOCAL_EDGES_FROM_LOCAL_POINT[local_point][axis.dim()],
+            Some(local_edge)
+        )
+    }
+
+    for (local_point, edges) in CELL_LOCAL_EDGES_FROM_LOCAL_POINT.iter().enumerate() {
+        for (local_edge, axis) in edges
+            .iter()
+            .copied()
+            .zip(Axis::all_possible().iter().copied())
+        {
+            if let Some(local_edge) = local_edge {
+                assert_eq!(CELL_LOCAL_EDGES[local_edge].0, local_point);
+                assert_eq!(CELL_LOCAL_EDGES[local_edge].1, axis);
+            }
+        }
+    }
+}
+
+#[test]
+fn test_cube_local_edge_by_axis_consistency() {
+    for (i, edges_parallel_to_axis) in CELL_LOCAL_EDGES_BY_AXIS.iter().enumerate() {
         for &local_edge in edges_parallel_to_axis {
             // Ensure that each edge that is marked as parallel to axis_i is also stored as an axis in axis_i originating at some local point
             assert!(CELL_LOCAL_EDGES_FROM_LOCAL_POINT
@@ -928,6 +1050,18 @@ impl Direction {
 const ALL_DIRECTIONS: [Direction; 2] = [Direction::Negative, Direction::Positive];
 
 impl CartesianAxis3d {
+    /// Returns a reference to an array containing all 3D cartesian axes
+    /// ```
+    /// use crate::splashsurf_lib::uniform_grid::CartesianAxis3d as Axis;
+    /// assert_eq!(Axis::all_possible()[0], Axis::X);
+    /// assert_eq!(Axis::all_possible()[2], Axis::Z);
+    /// assert_eq!(Axis::all_possible().len(), 3);
+    /// ```
+    #[inline(always)]
+    pub const fn all_possible() -> &'static [Axis; 3] {
+        &ALL_AXES
+    }
+
     /// Converts the cartesian axis into the corresponding 3D dimension index (X=0, Y=1, Z=2)
     /// ```
     /// use crate::splashsurf_lib::uniform_grid::CartesianAxis3d as Axis;
@@ -961,6 +1095,8 @@ impl CartesianAxis3d {
         DirectedAxis::new(self, direction)
     }
 }
+
+const ALL_AXES: [Axis; 3] = [Axis::X, Axis::Y, Axis::Z];
 
 #[test]
 fn test_orthogonal_axes() {
@@ -1173,7 +1309,7 @@ mod tests {
 
         assert!(grid.cell_exists(&[0, 0, 0]));
 
-        let origin = grid.get_point(&points[0]);
+        let origin = grid.get_point(points[0]);
         assert!(origin.is_some());
         let origin = origin.unwrap();
 

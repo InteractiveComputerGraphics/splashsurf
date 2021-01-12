@@ -374,10 +374,10 @@ impl<I: Index> OctreeNode<I> {
 
         Self {
             min_corner: grid
-                .get_point(&min_point)
+                .get_point(min_point)
                 .expect("Cannot get lower corner of grid"),
             max_corner: grid
-                .get_point(&max_point)
+                .get_point(max_point)
                 .expect("Cannot get upper corner of grid"),
             body: NodeBody::new_leaf((0..n_particles).collect::<SmallVec<_>>(), 0),
         }
@@ -760,7 +760,7 @@ fn get_split_point<I: Index, R: Real>(
         (lower[2] + upper[2]) / two,
     ];
 
-    grid.get_point(&mid_indices)
+    grid.get_point(mid_indices)
 }
 
 mod octant_helper {
@@ -946,7 +946,7 @@ mod octant_helper {
                 },
             ];
 
-            grid.get_point(&combined_index)
+            grid.get_point(combined_index)
         }
     }
 

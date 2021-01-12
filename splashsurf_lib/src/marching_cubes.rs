@@ -227,7 +227,7 @@ pub(crate) fn interpolate_points_to_cell_data<I: Index, R: Real>(
                 }
 
                 // Otherwise try to look up its value and potentially mark it as above the threshold
-                let point = cell.global_index_of(local_point_index).unwrap();
+                let point = cell.global_point_index_of(local_point_index).unwrap();
                 let flat_point_index = grid.flatten_point_index(&point);
                 if let Some(point_value) = density_map.get(flat_point_index) {
                     if point_value > iso_surface_threshold {
@@ -363,7 +363,7 @@ fn assert_cell_data_point_data_consistency<I: Index, R: Real>(
 
         let cell = grid.try_unflatten_cell_index(flat_cell_index).unwrap();
         for i in 0..8 {
-            let point = cell.global_index_of(i).unwrap();
+            let point = cell.global_point_index_of(i).unwrap();
             let flat_point_index = grid.flatten_point_index(&point);
             if let Some(point_value) = density_map.get(flat_point_index) {
                 if point_value > iso_surface_threshold {
