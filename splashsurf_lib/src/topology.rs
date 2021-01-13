@@ -26,34 +26,10 @@ pub struct DirectedAxis {
     pub direction: Direction,
 }
 
-/// Collection that stores one value per unique [DirectedAxis] value
-#[derive(Clone, Default)]
-pub struct DirectedAxisStorage<T> {
+/// Collection that stores one value per unique [DirectedAxis]
+#[derive(Copy, Clone, PartialEq, Eq, Default, Debug)]
+pub struct DirectedAxisArray<T> {
     data: [T; 6],
-}
-
-impl<T> DirectedAxisStorage<T> {
-    pub fn get(&self, axis: &DirectedAxis) -> &T {
-        &self.data[axis.to_usize()]
-    }
-
-    pub fn get_mut(&mut self, axis: &DirectedAxis) -> &mut T {
-        &mut self.data[axis.to_usize()]
-    }
-
-    pub fn iter(&self) -> impl Iterator<Item = (&DirectedAxis, &T)> {
-        DirectedAxis::all_possible().iter().zip(self.data.iter())
-    }
-
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = (&DirectedAxis, &mut T)> {
-        DirectedAxis::all_possible()
-            .iter()
-            .zip(self.data.iter_mut())
-    }
-
-    pub fn values(&self) -> impl Iterator<Item = &T> {
-        self.data.iter()
-    }
 }
 
 impl Direction {
@@ -306,5 +282,48 @@ fn test_directed_axis_all_possible_consistency() {
     for (i, ax) in all_directed_axes.iter().enumerate() {
         assert_eq!(ax.to_usize(), i);
         assert_eq!(*ax, DirectedAxis::from_usize(i));
+    }
+}
+
+impl<T> DirectedAxisArray<T> {
+    /// Constructs a new array and fills it with values produced by the given closure
+    pub fn new_with<F: Fn(&DirectedAxis) -> T>(f: F) -> Self {
+        Self {
+            data: [
+                f(&DirectedAxis::all_possible()[0]),
+                f(&DirectedAxis::all_possible()[1]),
+                f(&DirectedAxis::all_possible()[2]),
+                f(&DirectedAxis::all_possible()[3]),
+                f(&DirectedAxis::all_possible()[4]),
+                f(&DirectedAxis::all_possible()[5]),
+            ]
+        }
+    }
+
+    /// Returns a reference to the value stored for the given axis
+    pub fn get(&self, axis: &DirectedAxis) -> &T {
+        &self.data[axis.to_usize()]
+    }
+
+    /// Returns a mutable reference to the value stored for the given axis
+    pub fn get_mut(&mut self, axis: &DirectedAxis) -> &mut T {
+        &mut self.data[axis.to_usize()]
+    }
+
+    /// Returns an iterator of all unique directed axes and references to the corresponding stored value
+    pub fn iter(&self) -> impl Iterator<Item = (&DirectedAxis, &T)> {
+        DirectedAxis::all_possible().iter().zip(self.data.iter())
+    }
+
+    /// Returns an iterator of all unique directed axes and mutable references to the corresponding stored value
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = (&DirectedAxis, &mut T)> {
+        DirectedAxis::all_possible()
+            .iter()
+            .zip(self.data.iter_mut())
+    }
+
+    /// Returns an iterator over references of all stored values
+    pub fn values(&self) -> impl Iterator<Item = &T> {
+        self.data.iter()
     }
 }

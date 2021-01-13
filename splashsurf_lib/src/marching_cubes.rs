@@ -1,6 +1,6 @@
 use crate::marching_cubes_lut::marching_cubes_triangulation_iter;
 use crate::mesh::TriMesh3d;
-use crate::topology::{Axis, DirectedAxis, DirectedAxisStorage, Direction};
+use crate::topology::{Axis, DirectedAxis, DirectedAxisArray, Direction};
 use crate::uniform_grid::{EdgeIndex, GridBoundaryFaceFlags, SubdomainGrid};
 use crate::{new_map, DensityMap, Index, MapType, Real, UniformGrid};
 use arrayvec::ArrayVec;
@@ -271,8 +271,8 @@ pub(crate) struct BoundaryVertexStichingData<I: Index> {
 pub(crate) fn collect_boundary_vertices<I: Index, R: Real>(
     subdomain: &SubdomainGrid<I, R>,
     input: MarchingCubesInput<I>,
-) -> DirectedAxisStorage<Vec<BoundaryVertexStichingData<I>>> {
-    let mut boundary_vertices: DirectedAxisStorage<Vec<_>> = Default::default();
+) -> DirectedAxisArray<Vec<BoundaryVertexStichingData<I>>> {
+    let mut boundary_vertices: DirectedAxisArray<Vec<_>> = Default::default();
 
     let subdomain_grid = subdomain.subdomain_grid();
     for (&flat_cell_index, cell_data) in &input.cell_data {
@@ -350,7 +350,7 @@ pub(crate) struct StitchingSide<'a, I: Index, R: Real> {
     /// The subdomain of this local mesh
     subdomain: SubdomainGrid<'a, I, R>,
     /// All additional data required for stitching
-    data: DirectedAxisStorage<BoundaryData<I>>,
+    data: DirectedAxisArray<BoundaryData<I>>,
 }
 
 pub(crate) fn stitch_meshes<'a, I: Index, R: Real>(
@@ -460,7 +460,7 @@ pub(crate) fn triangulate_with_stitching_data<'a, 'b, I: Index, R: Real>(
     subdomain: SubdomainGrid<'a, I, R>,
     input: MarchingCubesInput<I>,
     mesh: &'b mut TriMesh3d<R>,
-) -> DirectedAxisStorage<MapType<I, ArrayVec<[usize; 5]>>> {
+) -> DirectedAxisArray<MapType<I, ArrayVec<[usize; 5]>>> {
     profile!("triangulate");
 
     let MarchingCubesInput { cell_data } = input;
@@ -471,7 +471,7 @@ pub(crate) fn triangulate_with_stitching_data<'a, 'b, I: Index, R: Real>(
     );
 
     // Map containing triangle indices for each boundary cell
-    let mut boundary_triangles: DirectedAxisStorage<MapType<_, _>> = Default::default();
+    let mut boundary_triangles: DirectedAxisArray<MapType<_, _>> = Default::default();
 
     // Triangulate affected cells
     let subdomain_grid = subdomain.subdomain_grid();

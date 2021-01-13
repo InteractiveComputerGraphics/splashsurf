@@ -4,7 +4,7 @@ use nalgebra::Vector3;
 use std::iter::Iterator;
 use thiserror::Error as ThisError;
 
-use crate::topology::{Axis, DirectedAxis, Direction};
+use crate::topology::{Axis, DirectedAxis, DirectedAxisArray, Direction};
 use crate::{AxisAlignedBoundingBox3d, Index, Real};
 
 // TODO: Reduce mess with all array and scalar indexing functions
@@ -50,7 +50,7 @@ pub struct Neighborhood<'a, I: Index> {
     /// The reference or origin point of the neighborhood
     origin: &'a PointIndex<I>,
     /// Indices of neighboring points in all six grid directions
-    neighbors: [Option<PointIndex<I>>; 6],
+    neighbors: DirectedAxisArray<Option<PointIndex<I>>>,
 }
 
 /// Helper type that provides connectivity information about an edge that connects a primary point and a neighbor point
@@ -441,18 +441,11 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
 
     /// Returns full neighborhood information of a point on the grid
     pub fn get_point_neighborhood<'a>(&self, point: &'a PointIndex<I>) -> Neighborhood<'a, I> {
-        let neighbors = [
-            self.get_point_neighbor(point, DirectedAxis::from_usize(0)),
-            self.get_point_neighbor(point, DirectedAxis::from_usize(1)),
-            self.get_point_neighbor(point, DirectedAxis::from_usize(2)),
-            self.get_point_neighbor(point, DirectedAxis::from_usize(3)),
-            self.get_point_neighbor(point, DirectedAxis::from_usize(4)),
-            self.get_point_neighbor(point, DirectedAxis::from_usize(5)),
-        ];
-
         Neighborhood {
             origin: point,
-            neighbors,
+            neighbors: DirectedAxisArray::new_with(|direction| {
+                self.get_point_neighbor(point, *direction)
+            }),
         }
     }
 
@@ -959,13 +952,13 @@ impl<'a, I: Index> Neighborhood<'a, I> {
     /// Returns if the origin point has a valid neighbor following the specified directed axis
     #[inline(always)]
     pub fn has_neighbor(&self, direction: DirectedAxis) -> bool {
-        self.neighbors[direction.to_usize()].is_some()
+        self.neighbors.get(&direction).is_some()
     }
 
     /// Get a specific neighbor in the given direction from the origin point of the neighborhood
     #[inline(always)]
     pub fn get_neighbor(&self, direction: DirectedAxis) -> Option<PointIndex<I>> {
-        self.neighbors[direction.to_usize()]
+        self.neighbors.get(&direction).clone()
     }
 
     /// Get the edge to a specific neighbor in the given direction from the origin point of the neighborhood
@@ -974,7 +967,8 @@ impl<'a, I: Index> Neighborhood<'a, I> {
         &'b self,
         direction: DirectedAxis,
     ) -> Option<NeighborEdge<'b, 'b, I>> {
-        self.neighbors[direction.to_usize()]
+        self.neighbors
+            .get(&direction)
             .as_ref()
             .map(|neighbor| self.new_neighbor_edge(neighbor, direction))
     }
@@ -983,8 +977,7 @@ impl<'a, I: Index> Neighborhood<'a, I> {
     pub fn neighbor_edge_iter<'b>(&'b self) -> impl Iterator<Item = NeighborEdge<'b, 'b, I>> {
         self.neighbors
             .iter()
-            .zip(DirectedAxis::all_possible().iter().copied())
-            .filter_map(move |(optional_neighbor, connectivity)| {
+            .filter_map(move |(&connectivity, optional_neighbor)| {
                 optional_neighbor
                     .as_ref()
                     .map(|neighbor| self.new_neighbor_edge(neighbor, connectivity))
