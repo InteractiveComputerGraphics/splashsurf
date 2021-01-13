@@ -32,8 +32,6 @@
 //   0          1
 //          Vertices              Edges
 
-use arrayvec::{ArrayVec};
-
 /// The classic marching cubes table
 #[rustfmt::skip]
 static MARCHING_CUBES_TABLE: [[i32; 16]; 256] = [
@@ -308,12 +306,8 @@ pub fn get_marching_cubes_triangulation_raw(vertices_inside: &[bool; 8]) -> &'st
 /// Returns the marching cubes triangulation corresponding to the given vertex configuration
 ///
 /// In the vertex configuration, a `true` value indicates that the given vertex is inside the
-/// iso-surface, i.e. above the iso-surface threshold value. The returned triangulation contains
-/// at most 5 triangles identified with the indices of the edges of their corner vertices.
-pub fn marching_cubes_triangulation(vertices_inside: &[bool; 8]) -> ArrayVec<[[i32; 3]; 5]> {
-    marching_cubes_triangulation_iter(vertices_inside).collect()
-}
-
+/// iso-surface, i.e. above the iso-surface threshold value. The returned iterator yields
+/// at most 5 triangles defined by the indices of the edges of their corner vertices.
 pub fn marching_cubes_triangulation_iter(vertices_inside: &[bool; 8]) -> impl Iterator<Item = [i32; 3]> {
     let triangulation = get_marching_cubes_triangulation_raw(vertices_inside);
 
@@ -344,21 +338,5 @@ fn test_marching_cubes_triangulation_iter() {
     assert_eq!(
         marching_cubes_triangulation_iter(&[false, false, true, false, true, false, false, false]).collect::<Vec<_>>(),
         vec![[1, 2, 10], [8, 4, 7]]
-    );
-}
-
-#[test]
-fn test_marching_cubes_triangulation_consistency() {
-    assert_eq!(
-        marching_cubes_triangulation(&[false, false, false, false, false, false, false, false]),
-        marching_cubes_triangulation_iter(&[false, false, false, false, false, false, false, false]).collect::<ArrayVec<_>>()
-    );
-    assert_eq!(
-        marching_cubes_triangulation(&[true, false, false, false, false, false, false, false]),
-        marching_cubes_triangulation_iter(&[true, false, false, false, false, false, false, false]).collect::<ArrayVec<_>>()
-    );
-    assert_eq!(
-        marching_cubes_triangulation(&[false, false, true, false, true, false, false, false]),
-        marching_cubes_triangulation_iter(&[false, false, true, false, true, false, false, false]).collect::<ArrayVec<_>>()
     );
 }
