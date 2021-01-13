@@ -26,6 +26,36 @@ pub struct DirectedAxis {
     pub direction: Direction,
 }
 
+/// Collection that stores one value per unique [DirectedAxis] value
+#[derive(Clone, Default)]
+pub struct DirectedAxisStorage<T> {
+    data: [T; 6],
+}
+
+impl<T> DirectedAxisStorage<T> {
+    pub fn get(&self, axis: &DirectedAxis) -> &T {
+        &self.data[axis.to_usize()]
+    }
+
+    pub fn get_mut(&mut self, axis: &DirectedAxis) -> &mut T {
+        &mut self.data[axis.to_usize()]
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (&DirectedAxis, &T)> {
+        DirectedAxis::all_possible().iter().zip(self.data.iter())
+    }
+
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = (&DirectedAxis, &mut T)> {
+        DirectedAxis::all_possible()
+            .iter()
+            .zip(self.data.iter_mut())
+    }
+
+    pub fn values(&self) -> impl Iterator<Item = &T> {
+        self.data.iter()
+    }
+}
+
 impl Direction {
     /// Returns a reference to an array containing all possible directions
     /// ```
