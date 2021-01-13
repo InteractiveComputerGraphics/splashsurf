@@ -1,6 +1,6 @@
 use crate::marching_cubes_lut::marching_cubes_triangulation_iter;
 use crate::mesh::TriMesh3d;
-use crate::topology::{Axis, DirectedAxis, Direction};
+use crate::topology::{Axis, DirectedAxis, DirectedAxisStorage, Direction};
 use crate::uniform_grid::{EdgeIndex, GridBoundaryFaceFlags, SubdomainGrid};
 use crate::{new_map, DensityMap, Index, MapType, Real, UniformGrid};
 use arrayvec::ArrayVec;
@@ -256,13 +256,23 @@ pub(crate) fn interpolate_points_to_cell_data<I: Index, R: Real>(
     MarchingCubesInput { cell_data }
 }
 
+/// All data that is required per boundary iso-surface vertex for stitching
+pub(crate) struct BoundaryVertexStichingData<I: Index> {
+    /// The unique global edge index of this iso-surface vertex on the background grid (identical for both sides of the boundary)
+    global_edge_index: EdgeIndex<I>,
+    /// The flat index of the cell containing the triangles affected by this vertex (on this side of the boundary)
+    flat_global_cell_index: I,
+    /// The vertex index in the triangulated mesh (on this side of the boundary)
+    vertex_index: usize,
+}
+
 /// Collects the indices of all vertex indices that are on the boundary of the grid, with the respective boundary direction and cell index
 #[inline(never)]
 pub(crate) fn collect_boundary_vertices<I: Index, R: Real>(
     subdomain: &SubdomainGrid<I, R>,
     input: MarchingCubesInput<I>,
-) -> MapType<DirectedAxis, Vec<(EdgeIndex<I>, usize)>> {
-    let mut boundary_vertices = new_map();
+) -> DirectedAxisStorage<Vec<BoundaryVertexStichingData<I>>> {
+    let mut boundary_vertices: DirectedAxisStorage<Vec<_>> = Default::default();
 
     let subdomain_grid = subdomain.subdomain_grid();
     for (&flat_cell_index, cell_data) in &input.cell_data {
@@ -271,13 +281,17 @@ pub(crate) fn collect_boundary_vertices<I: Index, R: Real>(
             .expect("Unable to unflatten cell index");
 
         // Check which grid boundary faces this cell is part of
-        let cell_grid_face = GridBoundaryFaceFlags::classify_cell(subdomain_grid, &cell_index);
+        let cell_grid_boundaries =
+            GridBoundaryFaceFlags::classify_cell(subdomain_grid, &cell_index);
         // Skip cells that are not part of any grid boundary
-        if !cell_grid_face.is_empty() {
+        if !cell_grid_boundaries.is_empty() {
             // Get the cell index on the global background grid
             let global_cell_index = subdomain
                 .inv_map_cell(&cell_index)
                 .expect("Failed to map cell from subdomain into global grid");
+            let flat_global_cell_index = subdomain
+                .global_grid()
+                .flatten_cell_index(&global_cell_index);
 
             // Loop over all iso-surface vertices (located on the cell edges)
             for (local_edge_index, vertex_index) in cell_data
@@ -290,20 +304,24 @@ pub(crate) fn collect_boundary_vertices<I: Index, R: Real>(
                 .filter_map(|(i, vert)| vert.map(|vert| (i, vert)))
             {
                 // Check which grid boundary faces this edge is part of
-                let edge_grid_face = cell_grid_face.classify_local_edge(local_edge_index);
+                let edge_grid_boundaries =
+                    cell_grid_boundaries.classify_local_edge(local_edge_index);
                 // Skip edges that are not on a boundary face of the grid
-                if !edge_grid_face.is_empty() {
+                if !edge_grid_boundaries.is_empty() {
                     // Obtain the unique index of this edge on the global background grid
-                    let edge_index = global_cell_index
+                    let global_edge_index = global_cell_index
                         .global_edge_index_of(local_edge_index)
                         .expect("Unable to obtain global edge index");
 
                     // Store the vertex id with each face it touches (might touch one or two boundaries)
-                    for face in edge_grid_face.iter_individual() {
+                    for boundary in edge_grid_boundaries.iter_individual() {
                         boundary_vertices
-                            .entry(face)
-                            .or_insert_with(Vec::new)
-                            .push((edge_index, vertex_index));
+                            .get_mut(&boundary)
+                            .push(BoundaryVertexStichingData {
+                                global_edge_index,
+                                flat_global_cell_index,
+                                vertex_index,
+                            });
                     }
                 }
             }
@@ -312,68 +330,84 @@ pub(crate) fn collect_boundary_vertices<I: Index, R: Real>(
 
     // Sort, so the we can step through both sides of the seam simultaneously when stitching
     for (_, bvs) in boundary_vertices.iter_mut() {
-        bvs.sort_unstable();
+        bvs.sort_unstable_by_key(|data| data.global_edge_index);
     }
 
     boundary_vertices
 }
 
-pub(crate) struct StitchingData<'a, I: Index, R: Real> {
+/// Stitching data per boundary
+pub(crate) struct BoundaryData<I: Index> {
+    /// All per-boundary-vertex data
+    boundary_vertices: Vec<BoundaryVertexStichingData<I>>,
+    /// Triangle indices per cell of the boundary
+    boundary_triangles: MapType<I, ArrayVec<[usize; 5]>>,
+}
+
+pub(crate) struct StitchingSide<'a, I: Index, R: Real> {
+    /// The local surface mesh of this side
     mesh: TriMesh3d<R>,
-    boundary_vertices: MapType<DirectedAxis, Vec<(EdgeIndex<I>, usize)>>,
+    /// The subdomain of this local mesh
     subdomain: SubdomainGrid<'a, I, R>,
+    /// All additional data required for stitching
+    data: DirectedAxisStorage<BoundaryData<I>>,
 }
 
 pub(crate) fn stitch_meshes<'a, I: Index, R: Real>(
     stitching_axis: Axis,
-    negative_side: &StitchingData<'a, I, R>,
-    positive_side: &StitchingData<'a, I, R>,
+    negative_side: StitchingSide<'a, I, R>,
+    positive_side: StitchingSide<'a, I, R>,
 ) {
-    let negative_boundary = negative_side
-        .boundary_vertices
+    /*
+    // Choose what side to use as input (take data out) and what side to use as output (append data)
+    let (output_side, input_side) = {
+        if negative_side.mesh.triangles.len() > positive_side.mesh.triangles.len() {
+            (negative_side, positive_side)
+        } else {
+            (positive_side, negative_side)
+        }
+    };
+     */
+
+    // On the negative side we need the data of its positive boundary and vice versa
+    let negative_data = negative_side
+        .data
         .get(&DirectedAxis::new(stitching_axis, Direction::Positive));
-    let positive_boundary = positive_side
-        .boundary_vertices
+    let positive_data = positive_side
+        .data
         .get(&DirectedAxis::new(stitching_axis, Direction::Negative));
 
-    match (negative_boundary, positive_boundary) {
-        (Some(negative_boundary), Some(positive_boundary)) => {
-            if negative_boundary.len() != positive_boundary.len() {
-                warn!("Stitching: Both sides have different numbers of boundary iso-surface vertices. Negative side mesh: {}, positive side mesh: {}. This means that the surface reconstruction of the neighboring patches is inconsistent.", negative_boundary.len(), positive_boundary.len());
-            }
+    if negative_data.boundary_vertices.len() != positive_data.boundary_vertices.len() {
+        warn!("Stitching: Both sides have different numbers of boundary iso-surface vertices. Negative side mesh: {}, positive side mesh: {}. This means that the surface reconstruction of the neighboring patches is inconsistent.", negative_data.boundary_vertices.len(), negative_data.boundary_vertices.len());
+    }
 
-            let mut neg_iter = negative_boundary.iter();
-            let mut pos_iter = positive_boundary.iter();
+    let mut neg_iter = negative_data.boundary_vertices.iter();
+    let mut pos_iter = positive_data.boundary_vertices.iter();
 
-            let mut next_neg_edge = neg_iter.next();
-            let mut next_pos_edge = pos_iter.next();
+    let mut next_neg_edge = neg_iter.next();
+    let mut next_pos_edge = pos_iter.next();
 
-            while let (Some(neg_edge), Some(pos_edge)) = (next_neg_edge, next_pos_edge) {
-                if neg_edge.0 == pos_edge.0 {
-                    // A matching edge was found
-                    // Now, one of the vertices has to be replaced by the other one in all triangles
-                } else if neg_edge.0 < pos_edge.0 {
-                    warn!("Stitching: Edge {:?} on negative side does not have a corresponding edge on the positive side.", neg_edge.0);
-                    next_neg_edge = neg_iter.next()
-                } else {
-                    warn!("Stitching: Edge {:?} on positive side does not have a corresponding edge on the negative side.", neg_edge.0);
-                    next_pos_edge = pos_iter.next()
-                }
-            }
-        }
-        (Some(negative_boundary), None) => {
-            warn!("Stitching: Negative side mesh has {} boundary vertices, while positive side has none. This is probably a bug.", negative_boundary.len());
-            // TODO: Error?
-        }
-        (None, Some(positive_boundary)) => {
-            warn!("Stitching: Positive side mesh has {} boundary vertices, while negative side has none. This is probably a bug.", positive_boundary.len());
-            // TODO: Error?
-        }
-        (None, None) => {
-            info!("Stitching: No boundary vertices in both meshes.");
-            // TODO: Just append meshes
+    while let (Some(neg_edge), Some(pos_edge)) = (next_neg_edge, next_pos_edge) {
+        if neg_edge.global_edge_index == pos_edge.global_edge_index {
+            // A matching edge was found
+            // Now, one of the vertices has to be replaced by the other one in all triangles
+
+            let candidate_triangles = positive_data
+                .boundary_triangles
+                .get(&pos_edge.flat_global_cell_index)
+                .expect("Cannot find boundary triangles");
+        //for triangle
+        } else if neg_edge.global_edge_index < pos_edge.global_edge_index {
+            warn!("Stitching: Edge {:?} on negative side does not have a corresponding edge on the positive side.", neg_edge.global_edge_index);
+            next_neg_edge = neg_iter.next()
+        } else {
+            warn!("Stitching: Edge {:?} on positive side does not have a corresponding edge on the negative side.", neg_edge.global_edge_index);
+            next_pos_edge = pos_iter.next()
         }
     }
+
+    // TODO: Update all vertex indices and triangle indices in the stitching data to match the stitched output mesh
+    // TODO: Join the remaining boundary data
 }
 
 /// Converts the marching cubes input cell data into a triangle surface mesh, appends triangles to existing mesh
@@ -426,7 +460,7 @@ pub(crate) fn triangulate_with_stitching_data<'a, 'b, I: Index, R: Real>(
     subdomain: SubdomainGrid<'a, I, R>,
     input: MarchingCubesInput<I>,
     mesh: &'b mut TriMesh3d<R>,
-) {
+) -> DirectedAxisStorage<MapType<I, ArrayVec<[usize; 5]>>> {
     profile!("triangulate");
 
     let MarchingCubesInput { cell_data } = input;
@@ -436,7 +470,8 @@ pub(crate) fn triangulate_with_stitching_data<'a, 'b, I: Index, R: Real>(
         cell_data.len()
     );
 
-    let mut boundary_triangles = new_map();
+    // Map containing triangle indices for each boundary cell
+    let mut boundary_triangles: DirectedAxisStorage<MapType<_, _>> = Default::default();
 
     // Triangulate affected cells
     let subdomain_grid = subdomain.subdomain_grid();
@@ -444,9 +479,6 @@ pub(crate) fn triangulate_with_stitching_data<'a, 'b, I: Index, R: Real>(
         let cell_index = subdomain_grid
             .try_unflatten_cell_index(flat_cell_index)
             .expect("Unable to unflatten cell index");
-
-        // TODO: Check if boundary cell...
-        // TODO: If boundary cell, store (global_cell_id, [triangle_indices...]) in map
 
         let mut triangle_indices: ArrayVec<[_; 5]> = ArrayVec::new();
         for triangle in marching_cubes_triangulation_iter(&cell_data.are_vertices_above()) {
@@ -469,19 +501,25 @@ pub(crate) fn triangulate_with_stitching_data<'a, 'b, I: Index, R: Real>(
             mesh.triangles.push(global_triangle);
         }
 
-        // Store triangles for all boundary cells
-        let cell_grid_face = GridBoundaryFaceFlags::classify_cell(subdomain_grid, &cell_index);
-        if !cell_grid_face.is_empty() {
+        // Store triangles indices for all boundary cells
+        let cell_grid_boundaries =
+            GridBoundaryFaceFlags::classify_cell(subdomain_grid, &cell_index);
+        if !cell_grid_boundaries.is_empty() {
             // Get the cell index on the global background grid
             let global_cell_index = subdomain
                 .inv_map_cell(&cell_index)
                 .expect("Failed to map cell from subdomain into global grid");
+            // Flatten to use as hashmap index
             let flat_global_cell_index = subdomain
                 .global_grid()
                 .flatten_cell_index(&global_cell_index);
 
-            //
-            boundary_triangles.insert(global_cell_index, triangle_indices);
+            // Store triangle indices to each boundary this cell is part of
+            for boundary in cell_grid_boundaries.iter_individual() {
+                boundary_triangles
+                    .get_mut(&boundary)
+                    .insert(flat_global_cell_index, triangle_indices.clone());
+            }
         }
     }
 
@@ -491,6 +529,8 @@ pub(crate) fn triangulate_with_stitching_data<'a, 'b, I: Index, R: Real>(
         mesh.vertices.len()
     );
     info!("Triangulation done.");
+
+    boundary_triangles
 }
 
 #[allow(unused)]
