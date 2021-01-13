@@ -39,6 +39,7 @@ vtkio = { version = "0.5", optional = true }
 thread_local = "1.0"
 smallvec = { version = "1.6", features = ["union"] }
 bitflags = "1.2"
+arrayvec = "0.5"
 
 [dev-dependencies]
 criterion = "0.3"

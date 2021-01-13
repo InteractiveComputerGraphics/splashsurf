@@ -1,12 +1,12 @@
-use log::{info, warn};
-use nalgebra::Vector3;
-
-use crate::marching_cubes_lut::get_marching_cubes_triangulation;
+use crate::marching_cubes_lut::marching_cubes_triangulation_iter;
 use crate::mesh::TriMesh3d;
 use crate::uniform_grid::{
     CartesianAxis3d, DirectedAxis, Direction, EdgeIndex, GridBoundaryFaceFlags, SubdomainGrid,
 };
 use crate::{new_map, DensityMap, Index, MapType, Real, UniformGrid};
+use arrayvec::ArrayVec;
+use log::{info, warn};
+use nalgebra::Vector3;
 
 /// Performs a marching cubes triangulation of a density map on the given background grid
 pub fn triangulate_density_map<I: Index, R: Real>(
@@ -269,7 +269,7 @@ pub(crate) fn collect_boundary_vertices<I: Index, R: Real>(
     for (&flat_cell_index, cell_data) in &input.cell_data {
         let cell_index = subdomain_grid
             .try_unflatten_cell_index(flat_cell_index)
-            .expect("Cannot get cell index");
+            .expect("Unable to unflatten cell index");
 
         // Check which grid boundary faces this cell is part of
         let cell_grid_face = GridBoundaryFaceFlags::classify_cell(subdomain_grid, &cell_index);
@@ -394,9 +394,7 @@ pub(crate) fn triangulate<I: Index, R: Real>(
 
     // Triangulate affected cells
     for (&_flat_cell_index, cell_data) in &cell_data {
-        let triangles = get_marching_cubes_triangulation(&cell_data.are_vertices_above());
-
-        for triangle in triangles.iter().flatten() {
+        for triangle in marching_cubes_triangulation_iter(&cell_data.are_vertices_above()) {
             // Note: If the one of the following expect calls causes a panic, it is probably because
             //  a cell was added improperly to the marching cubes input, e.g. a cell was added to the
             //  cell data map that is not part of the domain (such that only those edges of the cell
@@ -439,14 +437,20 @@ pub(crate) fn triangulate_with_stitching_data<'a, 'b, I: Index, R: Real>(
         cell_data.len()
     );
 
+    let mut boundary_triangles = new_map();
+
     // Triangulate affected cells
-    for (&_flat_cell_index, cell_data) in &cell_data {
+    let subdomain_grid = subdomain.subdomain_grid();
+    for (&flat_cell_index, cell_data) in &cell_data {
+        let cell_index = subdomain_grid
+            .try_unflatten_cell_index(flat_cell_index)
+            .expect("Unable to unflatten cell index");
+
         // TODO: Check if boundary cell...
         // TODO: If boundary cell, store (global_cell_id, [triangle_indices...]) in map
 
-        let triangles = get_marching_cubes_triangulation(&cell_data.are_vertices_above());
-
-        for triangle in triangles.iter().flatten() {
+        let mut triangle_indices: ArrayVec<[_; 5]> = ArrayVec::new();
+        for triangle in marching_cubes_triangulation_iter(&cell_data.are_vertices_above()) {
             // Note: If the one of the following expect calls causes a panic, it is probably because
             //  a cell was added improperly to the marching cubes input, e.g. a cell was added to the
             //  cell data map that is not part of the domain (such that only those edges of the cell
@@ -461,7 +465,24 @@ pub(crate) fn triangulate_with_stitching_data<'a, 'b, I: Index, R: Real>(
                 cell_data.iso_surface_vertices[triangle[2] as usize]
                     .expect("Missing iso surface vertex. This is a bug."),
             ];
+
+            triangle_indices.push(mesh.triangles.len());
             mesh.triangles.push(global_triangle);
+        }
+
+        // Store triangles for all boundary cells
+        let cell_grid_face = GridBoundaryFaceFlags::classify_cell(subdomain_grid, &cell_index);
+        if !cell_grid_face.is_empty() {
+            // Get the cell index on the global background grid
+            let global_cell_index = subdomain
+                .inv_map_cell(&cell_index)
+                .expect("Failed to map cell from subdomain into global grid");
+            let flat_global_cell_index = subdomain
+                .global_grid()
+                .flatten_cell_index(&global_cell_index);
+
+            //
+            boundary_triangles.insert(global_cell_index, triangle_indices);
         }
     }
 
