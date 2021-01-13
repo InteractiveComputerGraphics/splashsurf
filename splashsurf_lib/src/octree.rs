@@ -772,6 +772,28 @@ mod octant_helper {
     use crate::uniform_grid::{Direction, PointIndex, UniformGrid};
     use crate::{Index, Real};
 
+    /// All octants of a 3D cartesian coordinate system
+    #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+    #[repr(u8)]
+    pub enum Octant {
+        NegNegNeg = 0,
+        PosNegNeg = 1,
+        NegPosNeg = 2,
+        PosPosNeg = 3,
+        NegNegPos = 4,
+        PosNegPos = 5,
+        NegPosPos = 6,
+        PosPosPos = 7,
+    }
+
+    /// Representation of a cartesian coordinate system octant using a direction along each coordinate axis
+    #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+    pub struct OctantAxisDirections {
+        pub x_axis: Direction,
+        pub y_axis: Direction,
+        pub z_axis: Direction,
+    }
+
     bitflags! {
         pub struct OctantDirectionFlags: u8 {
             const X_NEG = 0b00000001;
@@ -791,17 +813,6 @@ mod octant_helper {
             const POS_POS_POS = Self::X_POS.bits | Self::Y_POS.bits | Self::Z_POS.bits;
         }
     }
-
-    const ALL_UNIQUE_OCTANT_DIRECTION_FLAGS: [OctantDirectionFlags; 8] = [
-        OctantDirectionFlags::NEG_NEG_NEG,
-        OctantDirectionFlags::POS_NEG_NEG,
-        OctantDirectionFlags::NEG_POS_NEG,
-        OctantDirectionFlags::POS_POS_NEG,
-        OctantDirectionFlags::NEG_NEG_POS,
-        OctantDirectionFlags::POS_NEG_POS,
-        OctantDirectionFlags::NEG_POS_POS,
-        OctantDirectionFlags::POS_POS_POS,
-    ];
 
     impl OctantDirectionFlags {
         #[inline(always)]
@@ -861,25 +872,16 @@ mod octant_helper {
         }
     }
 
-    #[derive(Copy, Clone, Eq, PartialEq, Debug)]
-    pub struct OctantAxisDirections {
-        x_axis: Direction,
-        y_axis: Direction,
-        z_axis: Direction,
-    }
-
-    #[derive(Copy, Clone, Eq, PartialEq, Debug)]
-    #[repr(u8)]
-    pub enum Octant {
-        NegNegNeg = 0,
-        PosNegNeg = 1,
-        NegPosNeg = 2,
-        PosPosNeg = 3,
-        NegNegPos = 4,
-        PosNegPos = 5,
-        NegPosPos = 6,
-        PosPosPos = 7,
-    }
+    const ALL_UNIQUE_OCTANT_DIRECTION_FLAGS: [OctantDirectionFlags; 8] = [
+        OctantDirectionFlags::NEG_NEG_NEG,
+        OctantDirectionFlags::POS_NEG_NEG,
+        OctantDirectionFlags::NEG_POS_NEG,
+        OctantDirectionFlags::POS_POS_NEG,
+        OctantDirectionFlags::NEG_NEG_POS,
+        OctantDirectionFlags::POS_NEG_POS,
+        OctantDirectionFlags::NEG_POS_POS,
+        OctantDirectionFlags::POS_POS_POS,
+    ];
 
     impl OctantAxisDirections {
         #[allow(dead_code)]

@@ -25,16 +25,25 @@ use crate::{AxisAlignedBoundingBox3d, Index, Real};
  *   0          1
  */
 
-/// An index triplet of a point or vertex in a 3D cartesian grid (index along each axis)
+/// Unique identifier for a point on a grid, represented by an index triplet on the 3D cartesian grid
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct PointIndex<I: Index> {
     index: [I; 3],
 }
 
-/// An index triplet of a cell in a 3D cartesian grid (index along each axis)
+/// Unique identifier for a cell on a grid, represented by an index triplet on the 3D cartesian grid
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct CellIndex<I: Index> {
     index: [I; 3],
+}
+
+/// Unique identifier for an edge on a grid, represented by an origin point and an axis
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+pub struct EdgeIndex<I: Index> {
+    /// The starting point of this edge (the vertex of the edge that is at the negative side of the edge)
+    origin: PointIndex<I>,
+    /// The axis this edge is parallel to
+    axis: CartesianAxis3d,
 }
 
 /// Abbreviated type alias for cartesian coordinate axes in 3D
@@ -55,7 +64,7 @@ pub enum Direction {
     Positive = 1,
 }
 
-/// Identifies a direction along a cartesian axis
+/// Identifies a direction along a specific cartesian axis
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct DirectedAxis {
     axis: Axis,
@@ -71,7 +80,7 @@ pub struct Neighborhood<'a, I: Index> {
     neighbors: [Option<PointIndex<I>>; 6],
 }
 
-/// An edge that connects a primary point and a neighbor point
+/// Helper type that provides connectivity information about an edge that connects a primary point and a neighbor point
 pub struct NeighborEdge<'a, 'b: 'a, I: Index> {
     /// Neighborhood of the origin point of this edge
     neighborhood: &'a Neighborhood<'b, I>,
@@ -81,8 +90,9 @@ pub struct NeighborEdge<'a, 'b: 'a, I: Index> {
     connectivity: DirectedAxis,
 }
 
+/// A [UniformGrid] that represents a subdomain with an offset inside an outer grid
 pub struct SubdomainGrid<'a, I: Index, R: Real> {
-    /// The global grid
+    /// The global or outer grid
     grid: &'a UniformGrid<I, R>,
     /// The smaller subdomain grid inside of the global grid
     subdomain_grid: &'a UniformGrid<I, R>,
@@ -155,8 +165,6 @@ pub struct GridBoundaryFaceFlags(FaceFlags);
 struct CellBoundaryFaceFlags(FaceFlags);
 
 /// Abbreviated type alias for a uniform cartesian cube grid in 3D
-///
-/// The underlying type is not public because its methods are only useful internally.
 pub type UniformGrid<I, R> = UniformCartesianCubeGrid3d<I, R>;
 
 /// Helper type for connectivity information on a 3D cartesian grid based on uniform cubes
@@ -763,15 +771,6 @@ impl<I: Index> CellIndex<I> {
             axis,
         })
     }
-}
-
-/// Unique identifier for an edge on a grid
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
-pub struct EdgeIndex<I: Index> {
-    /// The starting point of this edge (the vertex of the edge that is at the negative side of the edge)
-    origin: PointIndex<I>,
-    /// The axis this edge is parallel to
-    axis: CartesianAxis3d,
 }
 
 impl<I: Index> EdgeIndex<I> {
