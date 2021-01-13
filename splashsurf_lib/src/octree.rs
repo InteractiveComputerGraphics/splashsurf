@@ -15,6 +15,7 @@ use crate::{
 };
 
 use octant_helper::{Octant, OctantAxisDirections, OctantDirectionFlags};
+use arrayvec::ArrayVec;
 
 // TODO: Make margin an Option
 
@@ -41,8 +42,8 @@ pub struct OctreeNode<I: Index> {
     body: NodeBody<I>,
 }
 
-type OctreeNodeChildrenStorage<I> = SmallVec<[Box<OctreeNode<I>>; 8]>;
-type OctreeNodeParticleStorage = SmallVec<[usize; 8]>;
+type OctreeNodeChildrenStorage<I> = ArrayVec<[Box<OctreeNode<I>>; 8]>;
+type OctreeNodeParticleStorage = SmallVec<[usize; 6]>;
 
 #[derive(Clone, Debug)]
 enum NodeBody<I: Index> {
@@ -512,7 +513,7 @@ impl<I: Index> OctreeNode<I> {
             }
 
             // Construct the node for each octant
-            let mut children = SmallVec::with_capacity(8);
+            let mut children = ArrayVec::new();
             for (&current_octant, (&octant_particle_count, &octant_non_ghost_count)) in
                 Octant::all()
                     .iter()
@@ -685,6 +686,7 @@ impl<I: Index> OctreeNode<I> {
                     },
                 )
                 .collect_into_vec(&mut children);
+            let children = children.into_iter().collect::<ArrayVec<_>>();
 
             NodeBody::new_with_children(children)
         } else {
