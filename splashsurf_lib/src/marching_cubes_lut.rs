@@ -308,7 +308,9 @@ pub fn get_marching_cubes_triangulation_raw(vertices_inside: &[bool; 8]) -> &'st
 /// In the vertex configuration, a `true` value indicates that the given vertex is inside the
 /// iso-surface, i.e. above the iso-surface threshold value. The returned iterator yields
 /// at most 5 triangles defined by the indices of the edges of their corner vertices.
-pub fn marching_cubes_triangulation_iter(vertices_inside: &[bool; 8]) -> impl Iterator<Item = [i32; 3]> {
+pub fn marching_cubes_triangulation_iter(
+    vertices_inside: &[bool; 8],
+) -> impl Iterator<Item = [i32; 3]> {
     let triangulation = get_marching_cubes_triangulation_raw(vertices_inside);
 
     let get_triangle = move |i: usize| -> Option<[i32; 3]> {
@@ -328,15 +330,19 @@ pub fn marching_cubes_triangulation_iter(vertices_inside: &[bool; 8]) -> impl It
 
 #[test]
 fn test_marching_cubes_triangulation_iter() {
-    assert!(
-        marching_cubes_triangulation_iter(&[false, false, false, false, false, false, false, false]).next().is_none(),
-    );
+    assert!(marching_cubes_triangulation_iter(&[
+        false, false, false, false, false, false, false, false
+    ])
+    .next()
+    .is_none(),);
     assert_eq!(
-        marching_cubes_triangulation_iter(&[true, false, false, false, false, false, false, false]).collect::<Vec<_>>(),
+        marching_cubes_triangulation_iter(&[true, false, false, false, false, false, false, false])
+            .collect::<Vec<_>>(),
         vec![[0, 8, 3]]
     );
     assert_eq!(
-        marching_cubes_triangulation_iter(&[false, false, true, false, true, false, false, false]).collect::<Vec<_>>(),
+        marching_cubes_triangulation_iter(&[false, false, true, false, true, false, false, false])
+            .collect::<Vec<_>>(),
         vec![[1, 2, 10], [8, 4, 7]]
     );
 }

@@ -14,8 +14,8 @@ use crate::{
     ThreadSafe,
 };
 
-use octant_helper::{Octant, OctantAxisDirections, OctantDirectionFlags};
 use arrayvec::ArrayVec;
+use octant_helper::{Octant, OctantAxisDirections, OctantDirectionFlags};
 
 // TODO: Make margin an Option
 
@@ -769,7 +769,8 @@ mod octant_helper {
     use bitflags::bitflags;
     use nalgebra::Vector3;
 
-    use crate::uniform_grid::{Direction, PointIndex, UniformGrid};
+    use crate::topology::Direction;
+    use crate::uniform_grid::{PointIndex, UniformGrid};
     use crate::{Index, Real};
 
     /// All octants of a 3D cartesian coordinate system
@@ -820,7 +821,7 @@ mod octant_helper {
             &ALL_UNIQUE_OCTANT_DIRECTION_FLAGS
         }
 
-        /// Classifies a point relative to zero into all octants it belongs by considering a margin around the octants
+        /// Classifies a point relative to zero into all octants it belongs including a margin around the octants
         #[inline(always)]
         pub fn classify_with_margin<R: Real>(point: &Vector3<R>, margin: R) -> Self {
             let mut flags = OctantDirectionFlags::empty();

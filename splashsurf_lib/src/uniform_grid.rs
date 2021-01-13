@@ -1,12 +1,10 @@
-use std::iter::Iterator;
-use std::ops::{Add, Sub};
-
 use bitflags::bitflags;
 use itertools::iproduct;
 use nalgebra::Vector3;
-use num::{CheckedAdd, CheckedSub, One};
+use std::iter::Iterator;
 use thiserror::Error as ThisError;
 
+use crate::topology::{Axis, DirectedAxis, Direction};
 use crate::{AxisAlignedBoundingBox3d, Index, Real};
 
 // TODO: Reduce mess with all array and scalar indexing functions
@@ -43,32 +41,7 @@ pub struct EdgeIndex<I: Index> {
     /// The starting point of this edge (the vertex of the edge that is at the negative side of the edge)
     origin: PointIndex<I>,
     /// The axis this edge is parallel to
-    axis: CartesianAxis3d,
-}
-
-/// Abbreviated type alias for cartesian coordinate axes in 3D
-pub type Axis = CartesianAxis3d;
-
-/// The cartesian coordinate axes in 3D
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
-pub enum CartesianAxis3d {
-    X = 0,
-    Y = 1,
-    Z = 2,
-}
-
-/// Indicates a direction on a number line or coordinate axis
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
-pub enum Direction {
-    Negative = 0,
-    Positive = 1,
-}
-
-/// Identifies a direction along a specific cartesian axis
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
-pub struct DirectedAxis {
     axis: Axis,
-    direction: Direction,
 }
 
 /// Full neighborhood information of a point (denoted as origin point of the neighborhood)
@@ -98,51 +71,6 @@ pub struct SubdomainGrid<'a, I: Index, R: Real> {
     subdomain_grid: &'a UniformGrid<I, R>,
     /// The offset of the subdomain grid relative to the global grid
     subdomain_offset: &'a [I; 3],
-}
-
-impl<'a, I: Index, R: Real> SubdomainGrid<'a, I, R> {
-    /// Returns a reference to the global grid corresponding to the subdomain
-    pub fn global_grid(&self) -> &UniformGrid<I, R> {
-        self.grid
-    }
-
-    /// Returns a reference to the subdomain grid
-    pub fn subdomain_grid(&self) -> &UniformGrid<I, R> {
-        self.subdomain_grid
-    }
-
-    /// Returns the offset of the subdomain grid relative to the global grid
-    pub fn subdomain_offset(&self) -> &[I; 3] {
-        self.subdomain_offset
-    }
-
-    /// Maps the point index from the global grid into the subdomain grid
-    pub fn map_point(&self, point: &PointIndex<I>) -> Option<PointIndex<I>> {
-        let new_point =
-            Direction::Negative.checked_apply_step_ijk(point.index(), &self.subdomain_offset)?;
-        self.subdomain_grid.get_point(new_point)
-    }
-
-    /// Maps the point index from the subdomain grid to the global grid
-    pub fn inv_map_point(&self, point: &PointIndex<I>) -> Option<PointIndex<I>> {
-        let new_point =
-            Direction::Positive.checked_apply_step_ijk(point.index(), &self.subdomain_offset)?;
-        self.grid.get_point(new_point)
-    }
-
-    /// Maps the cell index from the global grid into the subdomain grid
-    pub fn map_cell(&self, cell: &CellIndex<I>) -> Option<CellIndex<I>> {
-        let new_cell =
-            Direction::Negative.checked_apply_step_ijk(cell.index(), &self.subdomain_offset)?;
-        self.subdomain_grid.get_cell(new_cell)
-    }
-
-    /// Maps the cell index from the subdomain grid to the global grid
-    pub fn inv_map_cell(&self, cell: &CellIndex<I>) -> Option<CellIndex<I>> {
-        let new_cell =
-            Direction::Positive.checked_apply_step_ijk(cell.index(), &self.subdomain_offset)?;
-        self.grid.get_cell(new_cell)
-    }
 }
 
 bitflags! {
@@ -686,6 +614,51 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
     }
 }
 
+impl<'a, I: Index, R: Real> SubdomainGrid<'a, I, R> {
+    /// Returns a reference to the global grid corresponding to the subdomain
+    pub fn global_grid(&self) -> &UniformGrid<I, R> {
+        self.grid
+    }
+
+    /// Returns a reference to the subdomain grid
+    pub fn subdomain_grid(&self) -> &UniformGrid<I, R> {
+        self.subdomain_grid
+    }
+
+    /// Returns the offset of the subdomain grid relative to the global grid
+    pub fn subdomain_offset(&self) -> &[I; 3] {
+        self.subdomain_offset
+    }
+
+    /// Maps the point index from the global grid into the subdomain grid
+    pub fn map_point(&self, point: &PointIndex<I>) -> Option<PointIndex<I>> {
+        let new_point =
+            Direction::Negative.checked_apply_step_ijk(point.index(), &self.subdomain_offset)?;
+        self.subdomain_grid.get_point(new_point)
+    }
+
+    /// Maps the point index from the subdomain grid to the global grid
+    pub fn inv_map_point(&self, point: &PointIndex<I>) -> Option<PointIndex<I>> {
+        let new_point =
+            Direction::Positive.checked_apply_step_ijk(point.index(), &self.subdomain_offset)?;
+        self.grid.get_point(new_point)
+    }
+
+    /// Maps the cell index from the global grid into the subdomain grid
+    pub fn map_cell(&self, cell: &CellIndex<I>) -> Option<CellIndex<I>> {
+        let new_cell =
+            Direction::Negative.checked_apply_step_ijk(cell.index(), &self.subdomain_offset)?;
+        self.subdomain_grid.get_cell(new_cell)
+    }
+
+    /// Maps the cell index from the subdomain grid to the global grid
+    pub fn inv_map_cell(&self, cell: &CellIndex<I>) -> Option<CellIndex<I>> {
+        let new_cell =
+            Direction::Positive.checked_apply_step_ijk(cell.index(), &self.subdomain_offset)?;
+        self.grid.get_cell(new_cell)
+    }
+}
+
 impl<I: Index> PointIndex<I> {
     #[inline(always)]
     fn from_ijk(point_ijk: [I; 3]) -> Self {
@@ -927,9 +900,9 @@ impl GridBoundaryFaceFlags {
         Self(boundary)
     }
 
-    /// Bitwise-or combination with the face flags of a local edge of a cell
+    /// Bitwise-and combination with the face flags of a local edge of a cell
     ///
-    /// If the current face flags correspond to the boundary faces of a grid touched by a cell, this bitwise or
+    /// If the current face flags correspond to the boundary faces of a grid touched by a cell, this bitwise and
     /// corresponds to the grid boundaries that are touched by the given edge of that cell.
     pub fn classify_local_edge(&self, local_edge_index: usize) -> Self {
         assert!(local_edge_index < 12);
@@ -955,6 +928,7 @@ impl CellBoundaryFaceFlags {
     }
 }
 
+/// Map from each individual cell faces to the corresponding directed axis
 #[rustfmt::skip]
 const FACE_FLAGS_TO_DIRECTED_AXIS: [(FaceFlags, DirectedAxis); 6] = [
     (FaceFlags::X_NEG, DirectedAxis::new(Axis::X, Direction::Negative)),
@@ -965,7 +939,7 @@ const FACE_FLAGS_TO_DIRECTED_AXIS: [(FaceFlags, DirectedAxis); 6] = [
     (FaceFlags::Z_POS, DirectedAxis::new(Axis::Z, Direction::Positive)),
 ];
 
-/// Classifies a local edge index in a cell to the corresponding boundary of the cell (or face of the cell)
+/// Classifies a local edge index in a cell to the corresponding boundaries of the cell (or faces of the cell)
 const CELL_LOCAL_EDGE_TO_FACE_FLAGS: [FaceFlags; 12] = [
     FaceFlags::from_bits_truncate(FaceFlags::Y_NEG.bits | FaceFlags::Z_NEG.bits),
     FaceFlags::from_bits_truncate(FaceFlags::X_POS.bits | FaceFlags::Z_NEG.bits),
@@ -980,246 +954,6 @@ const CELL_LOCAL_EDGE_TO_FACE_FLAGS: [FaceFlags; 12] = [
     FaceFlags::from_bits_truncate(FaceFlags::X_POS.bits | FaceFlags::Y_POS.bits),
     FaceFlags::from_bits_truncate(FaceFlags::X_NEG.bits | FaceFlags::Y_POS.bits),
 ];
-
-impl Direction {
-    /// Returns a reference to an array containing all possible directions
-    /// ```
-    /// use crate::splashsurf_lib::uniform_grid::Direction;
-    /// assert!(Direction::all_possible().iter().any(|d| d.is_positive()));
-    /// assert!(Direction::all_possible().iter().any(|d| d.is_negative()));
-    /// assert_eq!(Direction::all_possible().iter().count(), 2);
-    /// ```
-    pub const fn all_possible() -> &'static [Direction; 2] {
-        &ALL_DIRECTIONS
-    }
-
-    /// Constructs a new positive or negative direction depending on the flag
-    #[inline(always)]
-    /// ```
-    /// use crate::splashsurf_lib::uniform_grid::Direction;
-    /// assert_eq!(Direction::new_positive(true), Direction::Positive);
-    /// assert_eq!(Direction::new_positive(false), Direction::Negative);
-    /// ```
-    pub const fn new_positive(is_positive: bool) -> Self {
-        if is_positive {
-            Direction::Positive
-        } else {
-            Direction::Negative
-        }
-    }
-
-    /// Adds or subtracts the given step from the value depending on the direction
-    /// ```
-    /// use crate::splashsurf_lib::uniform_grid::Direction;
-    /// assert_eq!(Direction::Positive.apply_step(27, 3), 30);
-    /// assert_eq!(Direction::Negative.apply_step(27, 3), 24);
-    /// ```
-    #[inline(always)]
-    pub fn apply_step<N: Add<Output = N> + Sub<Output = N>>(&self, n: N, step: N) -> N {
-        if self.is_positive() {
-            n + step
-        } else {
-            n - step
-        }
-    }
-
-    /// Same as `apply_step` but uses `checked_add` and `checked_sub`, i.e. returns `None` on overflow
-    /// ```
-    /// use crate::splashsurf_lib::uniform_grid::Direction;
-    /// assert_eq!(Direction::Negative.checked_apply_step(0 as i32, 10), Some(-10));
-    /// assert_eq!(Direction::Negative.checked_apply_step(0 as u32, 10), None);
-    /// ```
-    #[inline(always)]
-    pub fn checked_apply_step<N: CheckedAdd<Output = N> + CheckedSub<Output = N>>(
-        &self,
-        n: N,
-        step: N,
-    ) -> Option<N> {
-        if self.is_positive() {
-            n.checked_add(&step)
-        } else {
-            n.checked_sub(&step)
-        }
-    }
-
-    #[inline(always)]
-    pub fn checked_apply_step_ijk<N: CheckedAdd<Output = N> + CheckedSub<Output = N>>(
-        &self,
-        start: &[N; 3],
-        step: &[N; 3],
-    ) -> Option<[N; 3]> {
-        Some(if self.is_positive() {
-            [
-                start[0].checked_add(&step[0])?,
-                start[1].checked_add(&step[1])?,
-                start[2].checked_add(&step[2])?,
-            ]
-        } else {
-            [
-                start[0].checked_sub(&step[0])?,
-                start[1].checked_sub(&step[1])?,
-                start[2].checked_sub(&step[2])?,
-            ]
-        })
-    }
-
-    /// Returns whether the direction is positive
-    /// ```
-    /// use crate::splashsurf_lib::uniform_grid::Direction;
-    /// assert_eq!(Direction::Positive.is_positive(), true);
-    /// assert_eq!(Direction::Negative.is_positive(), false);
-    /// ```
-    #[inline(always)]
-    pub const fn is_positive(&self) -> bool {
-        match self {
-            Direction::Positive => true,
-            Direction::Negative => false,
-        }
-    }
-
-    /// Returns whether the direction is negative
-    /// ```
-    /// use crate::splashsurf_lib::uniform_grid::Direction;
-    /// assert_eq!(Direction::Positive.is_negative(), false);
-    /// assert_eq!(Direction::Negative.is_negative(), true);
-    /// ```
-    #[inline(always)]
-    pub const fn is_negative(&self) -> bool {
-        !self.is_positive()
-    }
-}
-
-const ALL_DIRECTIONS: [Direction; 2] = [Direction::Negative, Direction::Positive];
-
-impl CartesianAxis3d {
-    /// Returns a reference to an array containing all 3D cartesian axes
-    /// ```
-    /// use crate::splashsurf_lib::uniform_grid::CartesianAxis3d as Axis;
-    /// assert_eq!(Axis::all_possible()[0], Axis::X);
-    /// assert_eq!(Axis::all_possible()[2], Axis::Z);
-    /// assert_eq!(Axis::all_possible().len(), 3);
-    /// ```
-    #[inline(always)]
-    pub const fn all_possible() -> &'static [Axis; 3] {
-        &ALL_AXES
-    }
-
-    /// Converts the cartesian axis into the corresponding 3D dimension index (X=0, Y=1, Z=2)
-    /// ```
-    /// use crate::splashsurf_lib::uniform_grid::CartesianAxis3d as Axis;
-    /// assert_eq!(Axis::X.dim(), 0);
-    /// assert_eq!(Axis::Y.dim(), 1);
-    /// assert_eq!(Axis::Z.dim(), 2);
-    /// ```
-    #[inline(always)]
-    pub const fn dim(self) -> usize {
-        self as usize
-    }
-
-    /// Returns the other two axes that are orthogonal to the current axis
-    /// ```
-    /// use crate::splashsurf_lib::uniform_grid::CartesianAxis3d as Axis;
-    /// assert_eq!(Axis::X.orthogonal_axes(), [Axis::Y, Axis::Z]);
-    /// ```
-    #[inline(always)]
-    pub const fn orthogonal_axes(&self) -> [Self; 2] {
-        ORTHOGONAL_AXES[self.dim()]
-    }
-
-    /// Combines this coordinate axis with a direction into a DirectedAxis
-    /// ```
-    /// use crate::splashsurf_lib::uniform_grid::CartesianAxis3d as Axis;
-    /// use crate::splashsurf_lib::uniform_grid::{DirectedAxis, Direction};
-    /// assert_eq!(Axis::X.with_direction(Direction::Positive), DirectedAxis::new(Axis::X, Direction::Positive));
-    /// ```
-    #[inline(always)]
-    pub const fn with_direction(self, direction: Direction) -> DirectedAxis {
-        DirectedAxis::new(self, direction)
-    }
-}
-
-const ALL_AXES: [Axis; 3] = [Axis::X, Axis::Y, Axis::Z];
-
-#[test]
-fn test_orthogonal_axes() {
-    assert_eq!(
-        CartesianAxis3d::X.orthogonal_axes(),
-        [CartesianAxis3d::Y, CartesianAxis3d::Z]
-    );
-    assert_eq!(
-        CartesianAxis3d::Y.orthogonal_axes(),
-        [CartesianAxis3d::Z, CartesianAxis3d::X]
-    );
-    assert_eq!(
-        CartesianAxis3d::Z.orthogonal_axes(),
-        [CartesianAxis3d::X, CartesianAxis3d::Y]
-    );
-}
-
-impl DirectedAxis {
-    /// Constructs a new directed axis
-    #[inline(always)]
-    pub const fn new(axis: Axis, direction: Direction) -> Self {
-        Self { axis, direction }
-    }
-
-    /// Returns a reference to an array of all possible directed axes in 3D
-    #[inline(always)]
-    pub const fn all_possible() -> &'static [DirectedAxis; 6] {
-        &ALL_GRID_NEIGHBOR_LOCATIONS
-    }
-
-    #[inline(always)]
-    const fn from_usize(n: usize) -> Self {
-        Self::all_possible()[n]
-    }
-
-    #[inline(always)]
-    const fn to_usize(&self) -> usize {
-        (self.direction as usize * 3) + self.axis as usize
-    }
-
-    /// Applies an increment of 1 in the direction of this directed axis to the given index array
-    #[inline(always)]
-    pub fn apply_step<N: Clone + CheckedAdd<Output = N> + CheckedSub<Output = N> + One>(
-        &self,
-        index: &[N; 3],
-    ) -> Option<[N; 3]> {
-        let mut index = index.clone();
-        index[self.axis().dim()] = self
-            .direction
-            .checked_apply_step(index[self.axis().dim()].clone(), N::one())?;
-        Some(index)
-    }
-
-    /// Returns the cartesian axis of this directed axis
-    #[inline(always)]
-    pub const fn axis(&self) -> Axis {
-        self.axis
-    }
-
-    /// Returns the direction along the axis of this directed axis
-    #[inline(always)]
-    pub const fn direction(&self) -> Direction {
-        self.direction
-    }
-}
-
-#[test]
-fn test_directed_axis_usize_conversion() {
-    for i in 0..6 {
-        debug_assert_eq!(DirectedAxis::from_usize(i).to_usize(), i);
-    }
-}
-
-#[test]
-fn test_directed_axis_all_possible_consistency() {
-    let all_directed_axes = DirectedAxis::all_possible();
-    for (i, ax) in all_directed_axes.iter().enumerate() {
-        debug_assert_eq!(ax.to_usize(), i);
-        debug_assert_eq!(*ax, DirectedAxis::from_usize(i));
-    }
-}
 
 impl<'a, I: Index> Neighborhood<'a, I> {
     /// Returns if the origin point has a valid neighbor following the specified directed axis
@@ -1249,11 +983,11 @@ impl<'a, I: Index> Neighborhood<'a, I> {
     pub fn neighbor_edge_iter<'b>(&'b self) -> impl Iterator<Item = NeighborEdge<'b, 'b, I>> {
         self.neighbors
             .iter()
-            .enumerate()
-            .filter_map(move |(i, optional_neighbor)| {
+            .zip(DirectedAxis::all_possible().iter().copied())
+            .filter_map(move |(optional_neighbor, connectivity)| {
                 optional_neighbor
                     .as_ref()
-                    .map(|neighbor| self.new_neighbor_edge(neighbor, DirectedAxis::from_usize(i)))
+                    .map(|neighbor| self.new_neighbor_edge(neighbor, connectivity))
             })
     }
 
@@ -1300,20 +1034,6 @@ impl<'a, 'b, I: Index> NeighborEdge<'a, 'b, I> {
         }
     }
 }
-
-const ORTHOGONAL_TO_X: [Axis; 2] = [Axis::Y, Axis::Z];
-const ORTHOGONAL_TO_Y: [Axis; 2] = [Axis::Z, Axis::X];
-const ORTHOGONAL_TO_Z: [Axis; 2] = [Axis::X, Axis::Y];
-const ORTHOGONAL_AXES: [[Axis; 2]; 3] = [ORTHOGONAL_TO_X, ORTHOGONAL_TO_Y, ORTHOGONAL_TO_Z];
-
-const ALL_GRID_NEIGHBOR_LOCATIONS: [DirectedAxis; 6] = [
-    DirectedAxis::new(Axis::X, Direction::Negative),
-    DirectedAxis::new(Axis::Y, Direction::Negative),
-    DirectedAxis::new(Axis::Z, Direction::Negative),
-    DirectedAxis::new(Axis::X, Direction::Positive),
-    DirectedAxis::new(Axis::Y, Direction::Positive),
-    DirectedAxis::new(Axis::Z, Direction::Positive),
-];
 
 #[cfg(test)]
 mod tests {

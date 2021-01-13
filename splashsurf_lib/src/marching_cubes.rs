@@ -1,8 +1,7 @@
 use crate::marching_cubes_lut::marching_cubes_triangulation_iter;
 use crate::mesh::TriMesh3d;
-use crate::uniform_grid::{
-    CartesianAxis3d, DirectedAxis, Direction, EdgeIndex, GridBoundaryFaceFlags, SubdomainGrid,
-};
+use crate::topology::{Axis, DirectedAxis, Direction};
+use crate::uniform_grid::{EdgeIndex, GridBoundaryFaceFlags, SubdomainGrid};
 use crate::{new_map, DensityMap, Index, MapType, Real, UniformGrid};
 use arrayvec::ArrayVec;
 use log::{info, warn};
@@ -326,7 +325,7 @@ pub(crate) struct StitchingData<'a, I: Index, R: Real> {
 }
 
 pub(crate) fn stitch_meshes<'a, I: Index, R: Real>(
-    stitching_axis: CartesianAxis3d,
+    stitching_axis: Axis,
     negative_side: &StitchingData<'a, I, R>,
     positive_side: &StitchingData<'a, I, R>,
 ) {

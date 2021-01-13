@@ -42,6 +42,8 @@ pub mod neighborhood_search;
 mod numeric_types;
 /// Octree implementation to spatially partition particle sets
 pub mod octree;
+/// Helper types for cartesian coordinate system topology
+pub mod topology;
 /// Types related to the virtual background grid used for marching cubes
 pub mod uniform_grid;
 mod utils;
