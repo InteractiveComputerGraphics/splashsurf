@@ -96,10 +96,10 @@ pub(crate) fn entry_point_generic<I: Index, R: Real>(
 
         let point_cloud: PointCloud3d<R> = {
             let mut points = Vec::with_capacity(density_map.len());
-            for (flat_point_index, _) in density_map.iter() {
+            density_map.for_each(|flat_point_index, _| {
                 let point = grid.try_unflatten_point_index(flat_point_index).unwrap();
                 points.push(grid.point_coordinates(&point));
-            }
+            });
 
             PointCloud3d { points }
         };

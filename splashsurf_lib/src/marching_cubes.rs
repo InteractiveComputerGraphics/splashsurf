@@ -130,7 +130,7 @@ pub(crate) fn interpolate_points_to_cell_data<I: Index, R: Real>(
     // Generate iso-surface vertices and identify affected cells & edges
     {
         profile!("generate_iso_surface_vertices");
-        for (flat_point_index, point_value) in density_map.iter() {
+        density_map.for_each(|flat_point_index, point_value| {
             // We want to find edges that cross the iso-surface,
             // therefore we can choose to either skip all points above or below the threshold.
             //
@@ -140,7 +140,7 @@ pub(crate) fn interpolate_points_to_cell_data<I: Index, R: Real>(
             //
             // Therefore, we choose to skip points with densities above the threshold to improve efficiency
             if point_value > iso_surface_threshold {
-                continue;
+                return;
             }
 
             let point = grid.try_unflatten_point_index(flat_point_index)
@@ -199,7 +199,7 @@ pub(crate) fn interpolate_points_to_cell_data<I: Index, R: Real>(
                     }
                 }
             }
-        }
+        });
     }
 
     // Cell corner points above the iso-surface threshold which are only surrounded by neighbors that

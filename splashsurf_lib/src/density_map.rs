@@ -200,26 +200,13 @@ impl<I: Index, R: Real> DensityMap<I, R> {
         self.standard_or_insert_mut()
     }
 
-    pub fn iter<'a>(&'a self) -> impl Iterator<Item = (I, R)> + 'a {
-        let iter_standard = std::iter::once(if let DensityMap::Standard(map) = self {
-            Some(map)
-        } else {
-            None
-        })
-        .flatten()
-        .flat_map(|map| map.iter())
-        .map(|(&i, &r)| (i, r));
-
-        let iter_dash = std::iter::once(if let DensityMap::DashMap(map) = self {
-            Some(map)
-        } else {
-            None
-        })
-        .flatten()
-        .flat_map(|map| map.iter())
-        .map(|(&i, &r)| (i, r));
-
-        iter_standard.chain(iter_dash)
+    /// Calls a closure for each (flat_point_index, density_value) tuple in the map
+    pub fn for_each<F: FnMut(I, R)>(&self, f: F) {
+        let mut f = f;
+        match self {
+            DensityMap::Standard(map) => map.iter().for_each(|(&i, &r)| f(i, r)),
+            DensityMap::DashMap(map) => map.iter().for_each(|(&i, &r)| f(i, r)),
+        }
     }
 }
 
@@ -727,7 +714,7 @@ pub fn sparse_density_map_to_hex_mesh<I: Index, R: Real>(
     let mut cells = new_map();
 
     // Create vertices and cells for points with values
-    for (flat_point_index, point_value) in density_map.iter() {
+    density_map.for_each(|flat_point_index, point_value| {
         let point = grid.try_unflatten_point_index(flat_point_index).unwrap();
         let point_coords = grid.point_coordinates(&point);
 
@@ -748,7 +735,7 @@ pub fn sparse_density_map_to_hex_mesh<I: Index, R: Real>(
             let local_point_index = cell.local_point_index_of(point.index()).unwrap();
             cell_connectivity_entry[local_point_index] = Some(vertex_index);
         }
-    }
+    });
 
     // Add missing vertices of cells using default values
     let mut additional_vertices = new_map();
