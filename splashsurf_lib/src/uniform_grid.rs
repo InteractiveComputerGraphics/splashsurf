@@ -430,7 +430,11 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
     }
 
     #[inline(always)]
-    fn get_point_neighbor_unchecked(&self, point_ijk: &[I; 3], direction: DirectedAxis) -> [I; 3] {
+    pub fn get_point_neighbor_unchecked(
+        &self,
+        point_ijk: &[I; 3],
+        direction: DirectedAxis,
+    ) -> [I; 3] {
         let DirectedAxis { axis, direction } = direction;
         let dim = axis.dim();
 
@@ -883,13 +887,28 @@ impl GridBoundaryFaceFlags {
         grid: &UniformGrid<I, R>,
         cell_index: &CellIndex<I>,
     ) -> Self {
+        Self::classify_ijk(cell_index.index(), grid.cells_per_dim())
+    }
+
+    /// Classifies the point with the given index to zero or more boundary faces of the grid
+    #[rustfmt::skip]
+    pub fn classify_point<I: Index, R: Real>(
+        grid: &UniformGrid<I, R>,
+        point_index: &PointIndex<I>,
+    ) -> Self {
+        Self::classify_ijk(point_index.index(), grid.points_per_dim())
+    }
+
+    /// Classifies the given index to zero or more boundaries of the grid starting at (0,0,0) with `index_count` points/cells per dimension
+    #[inline(always)]
+    fn classify_ijk<I: Index>(ijk: &[I; 3], index_count: &[I; 3]) -> Self {
         let mut boundary = FaceFlags::empty();
-        boundary.set(FaceFlags::X_NEG, cell_index.index[0] == I::zero());
-        boundary.set(FaceFlags::Y_NEG, cell_index.index[1] == I::zero());
-        boundary.set(FaceFlags::Z_NEG, cell_index.index[2] == I::zero());
-        boundary.set(FaceFlags::X_POS, cell_index.index[0] + I::one() == grid.n_cells_per_dim[0]);
-        boundary.set(FaceFlags::Y_POS, cell_index.index[1] + I::one() == grid.n_cells_per_dim[1]);
-        boundary.set(FaceFlags::Z_POS, cell_index.index[2] + I::one() == grid.n_cells_per_dim[2]);
+        boundary.set(FaceFlags::X_NEG, ijk[0] == I::zero());
+        boundary.set(FaceFlags::Y_NEG, ijk[1] == I::zero());
+        boundary.set(FaceFlags::Z_NEG, ijk[2] == I::zero());
+        boundary.set(FaceFlags::X_POS, ijk[0] + I::one() == index_count[0]);
+        boundary.set(FaceFlags::Y_POS, ijk[1] + I::one() == index_count[1]);
+        boundary.set(FaceFlags::Z_POS, ijk[2] + I::one() == index_count[2]);
         Self(boundary)
     }
 
@@ -915,6 +934,7 @@ impl GridBoundaryFaceFlags {
 
 impl CellBoundaryFaceFlags {
     /// Classifies the local edge index in a cell to zero or more faces of the cell
+    #[inline(always)]
     pub fn classify_cell_local_edge(local_edge_index: usize) -> Self {
         assert!(local_edge_index < 12);
         Self(CELL_LOCAL_EDGE_TO_FACE_FLAGS[local_edge_index])
@@ -957,8 +977,8 @@ impl<'a, I: Index> Neighborhood<'a, I> {
 
     /// Get a specific neighbor in the given direction from the origin point of the neighborhood
     #[inline(always)]
-    pub fn get_neighbor(&self, direction: DirectedAxis) -> Option<PointIndex<I>> {
-        self.neighbors.get(&direction).clone()
+    pub fn get_neighbor(&self, direction: DirectedAxis) -> Option<&PointIndex<I>> {
+        self.neighbors.get(&direction).as_ref()
     }
 
     /// Get the edge to a specific neighbor in the given direction from the origin point of the neighborhood

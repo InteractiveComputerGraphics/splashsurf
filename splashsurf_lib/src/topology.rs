@@ -59,6 +59,14 @@ impl Direction {
         }
     }
 
+    /// Returns the opposite direction
+    pub const fn opposite(&self) -> Self {
+        match self {
+            Direction::Positive => Direction::Negative,
+            Direction::Negative => Direction::Positive,
+        }
+    }
+
     /// Adds or subtracts the given step from the value depending on the direction
     /// ```
     /// use crate::splashsurf_lib::topology::Direction;
@@ -222,16 +230,22 @@ fn test_orthogonal_axes() {
 }
 
 impl DirectedAxis {
+    /// Returns a reference to an array of all possible directed axes in 3D
+    #[inline(always)]
+    pub const fn all_possible() -> &'static [DirectedAxis; 6] {
+        &ALL_DIRECTED_AXES
+    }
+
     /// Constructs a new directed axis
     #[inline(always)]
     pub const fn new(axis: Axis, direction: Direction) -> Self {
         Self { axis, direction }
     }
 
-    /// Returns a reference to an array of all possible directed axes in 3D
+    /// Returns a directed axis with the opposite direction
     #[inline(always)]
-    pub const fn all_possible() -> &'static [DirectedAxis; 6] {
-        &ALL_DIRECTED_AXES
+    pub const fn opposite(&self) -> Self {
+        Self::new(self.axis, self.direction.opposite())
     }
 
     /// Converts the directed axis into a unique index in the range (0..5)
@@ -287,7 +301,8 @@ fn test_directed_axis_all_possible_consistency() {
 
 impl<T> DirectedAxisArray<T> {
     /// Constructs a new array and fills it with values produced by the given closure
-    pub fn new_with<F: Fn(&DirectedAxis) -> T>(f: F) -> Self {
+    pub fn new_with<F: FnMut(&DirectedAxis) -> T>(f: F) -> Self {
+        let mut f = f;
         Self {
             data: [
                 f(&DirectedAxis::all_possible()[0]),
@@ -296,7 +311,7 @@ impl<T> DirectedAxisArray<T> {
                 f(&DirectedAxis::all_possible()[3]),
                 f(&DirectedAxis::all_possible()[4]),
                 f(&DirectedAxis::all_possible()[5]),
-            ]
+            ],
         }
     }
 
