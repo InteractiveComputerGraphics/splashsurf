@@ -289,8 +289,8 @@ impl ReconstrunctionRunnerPathCollection {
 
             Ok(Self {
                 is_sequence,
-                input_file: input_file,
-                output_file: output_base_path.join(output_file),
+                input_file,
+                output_file,
                 output_density_map_points_file: output_density_map_points_file
                     .map(|f| output_base_path.join(f)),
                 output_density_map_grid_file: output_density_map_grid_file
@@ -300,8 +300,8 @@ impl ReconstrunctionRunnerPathCollection {
         } else {
             Ok(Self {
                 is_sequence,
-                input_file: input_file,
-                output_file: output_file,
+                input_file,
+                output_file,
                 output_density_map_points_file,
                 output_density_map_grid_file,
                 output_octree_file,
