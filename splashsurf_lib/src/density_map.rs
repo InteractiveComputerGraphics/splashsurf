@@ -496,7 +496,37 @@ struct SparseDensityMapGenerator<I: Index, R: Real> {
     allowed_domain: AxisAlignedBoundingBox3d<R>,
 }
 
-// TODO: Maybe remove allowed domain check?
+pub(crate) struct GridKernelExtents<I: Index, R: Real> {
+    // The number of cells in each direction from a particle that can be affected by its compact support
+    pub half_supported_cells: I,
+    // The total number of points per dimension that can be affected by a particle's compact support
+    pub supported_points: I,
+    // The resulting maximum kernel evaluation radius (more than the kernel compact support)
+    pub kernel_evaluation_radius: R,
+}
+
+pub(crate) fn compute_kernel_evaluation_radius<I: Index, R: Real>(
+    kernel_radius: R,
+    cube_size: R,
+) -> GridKernelExtents<I, R> {
+    // The number of cells in each direction from a particle that can be affected by its compact support
+    let half_supported_cells_real = (kernel_radius / cube_size).ceil();
+    // Convert to index type for cell and point indexing
+    let half_supported_cells: I = half_supported_cells_real.to_index_unchecked();
+    // The total number of points per dimension that can be affected by a particle's compact support
+    //  + account for an additional layer of points that cover the positive outside of the supported cells
+    let supported_points: I = I::one() + half_supported_cells.times(2);
+
+    let kernel_evaluation_radius = cube_size.times_f64(1.0 + 1e-3) * half_supported_cells_real;
+
+    GridKernelExtents {
+        half_supported_cells,
+        supported_points,
+        kernel_evaluation_radius,
+    }
+}
+
+// TODO: Maybe remove allowed domain check? And require this is done before, using the active_particles array?
 impl<I: Index, R: Real> SparseDensityMapGenerator<I, R> {
     fn new(
         grid: &UniformGrid<I, R>,
@@ -504,26 +534,25 @@ impl<I: Index, R: Real> SparseDensityMapGenerator<I, R> {
         cube_size: R,
         particle_rest_mass: R,
     ) -> Option<Self> {
-        // The number of cells in each direction from a particle that can be affected by its compact support
-        let half_supported_cells_real = (kernel_radius / cube_size).ceil();
-        // Convert to index type for cell and point indexing
-        let half_supported_cells: I = half_supported_cells_real.to_index_unchecked();
-        // The total number of points per dimension that can be affected by a particle's compact support
-        //  + account for an additional layer of points that cover the positive outside of the supported cells
-        let supported_points: I = I::one() + half_supported_cells.times(2);
-
-        let kernel_evaluation_radius = cube_size.times_f64(1.0 + 1e-3) * half_supported_cells_real;
-        let kernel_evaluation_radius_sq = kernel_evaluation_radius * kernel_evaluation_radius;
+        let GridKernelExtents {
+            half_supported_cells,
+            supported_points,
+            kernel_evaluation_radius,
+        } = compute_kernel_evaluation_radius(kernel_radius, cube_size);
 
         // Pre-compute the kernel which can be queried using squared distances
+        let kernel_evaluation_radius_sq = kernel_evaluation_radius * kernel_evaluation_radius;
         let kernel = DiscreteSquaredDistanceCubicKernel::new(1000, kernel_radius);
 
         // Shrink the allowed domain for particles by the kernel evaluation radius. This ensures that all cells/points
         // that are affected by a particle are actually part of the domain/grid, so it does not have to be checked in the loops below.
         // However, any particles inside of this margin, close to the border of the originally requested domain will be ignored.
+        //
+        // This also implies that this density map should always represent a closed surfaces.
+        // If particles were closer to the AABB boundary than this margin, there could be holes in the resulting level-set.
         let allowed_domain = {
             let mut aabb = grid.aabb().clone();
-            aabb.grow_uniformly(kernel_evaluation_radius.neg().times(1));
+            aabb.grow_uniformly(kernel_evaluation_radius.neg());
             aabb
         };
 

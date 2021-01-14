@@ -296,6 +296,7 @@ pub fn reconstruct_surface_inplace<'a, I: Index, R: Real>(
     output_surface.grid = grid_for_reconstruction(
         particle_positions,
         parameters.particle_radius,
+        parameters.kernel_radius,
         parameters.cube_size,
         parameters.domain_aabb.as_ref(),
         parameters.enable_multi_threading,
@@ -584,6 +585,7 @@ fn log_grid_info<I: Index, R: Real>(grid: &UniformGrid<I, R>) {
 pub fn grid_for_reconstruction<I: Index, R: Real>(
     particle_positions: &[Vector3<R>],
     particle_radius: R,
+    kernel_radius: R,
     cube_size: R,
     domain_aabb: Option<&AxisAlignedBoundingBox3d<R>>,
     enable_multi_threading: bool,
@@ -608,7 +610,10 @@ pub fn grid_for_reconstruction<I: Index, R: Real>(
             domain_aabb
         );
 
-        domain_aabb.scale_uniformly(R::one().times(2));
+        // Ensure that we have enough margin around the particles such that the every particle's kernel support is completely in the domain
+        let kernel_margin = density_map::compute_kernel_evaluation_radius::<I, R>(kernel_radius, cube_size).kernel_evaluation_radius;
+        domain_aabb.grow_uniformly(kernel_margin);
+
         domain_aabb
     };
 

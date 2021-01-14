@@ -18,6 +18,7 @@ pub fn subdivide_recursively_benchmark(c: &mut Criterion) {
     let grid: &UniformGrid<i64, _> = &grid_for_reconstruction(
         particle_positions.as_slice(),
         particle_radius,
+        kernel_radius,
         cube_size,
         None,
         true,

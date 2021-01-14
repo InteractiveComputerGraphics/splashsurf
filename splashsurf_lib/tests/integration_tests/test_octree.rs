@@ -105,8 +105,15 @@ fn build_octree_from_vtk() {
     let particles = io::vtk::particles_from_vtk::<f64, _>(file).unwrap();
     println!("Loaded {} particles from {}", particles.len(), file);
 
-    let grid =
-        grid_for_reconstruction::<i64, _>(particles.as_slice(), 0.025, 0.2, None, true).unwrap();
+    let grid = grid_for_reconstruction::<i64, _>(
+        particles.as_slice(),
+        0.025,
+        4.0 * 0.025,
+        0.2,
+        None,
+        true,
+    )
+    .unwrap();
     println!("{:?}", grid);
 
     let mut octree = Octree::new(&grid, particles.as_slice().len());
@@ -144,8 +151,15 @@ fn build_octree_par_consistency() {
     let particles = io::vtk::particles_from_vtk::<f64, _>(file).unwrap();
     println!("Loaded {} particles from {}", particles.len(), file);
 
-    let grid =
-        grid_for_reconstruction::<i64, _>(particles.as_slice(), 0.025, 0.2, None, true).unwrap();
+    let grid = grid_for_reconstruction::<i64, _>(
+        particles.as_slice(),
+        0.025,
+        4.0 * 0.025,
+        0.2,
+        None,
+        true,
+    )
+    .unwrap();
 
     let mut octree_seq = Octree::new(&grid, particles.as_slice().len());
     octree_seq.subdivide_recursively_margin(
