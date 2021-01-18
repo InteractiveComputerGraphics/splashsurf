@@ -27,6 +27,9 @@ pub fn surface_reconstruction_bunny() {
     let reconstruction =
         reconstruct_surface::<i64, _>(particle_positions.as_slice(), &parameters).unwrap();
 
+    // Ensure that the mesh does not have a boundary
+    assert!(reconstruction.mesh().find_boundary_edges().is_empty());
+
     // TODO: Compare with a solution file
     // TODO: Test with a fixed grid?
 

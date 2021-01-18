@@ -1,8 +1,6 @@
-use std::fmt::Debug;
-
+use crate::{new_map, Real};
 use nalgebra::{Unit, Vector3};
-
-use crate::Real;
+use std::fmt::Debug;
 
 /// A triangle (surface) mesh in 3D
 #[derive(Clone, Debug, Default)]
@@ -127,6 +125,81 @@ impl<R: Real> TriMesh3d<R> {
         self.vertex_normals_inplace_assume_zeroed(normals.as_mut_slice());
         normals
     }
+
+    /// Finds edges which are only connected to exactly one triangle, along with the connected triangle
+    /// index and the local index of the edge within that triangle.
+    ///
+    /// Note that the output order is not necessarily deterministic due to the use of hash maps.
+    pub fn find_boundary_edges(&self) -> Vec<([usize; 2], usize, usize)> {
+        let mut sorted_edges = Vec::new();
+        let mut face_info = Vec::new();
+
+        // Local indices into the triangle connectivity to obtain all edges
+        let tri_edges: [(usize, usize); 3] = [(0, 1), (1, 2), (2, 0)];
+
+        // We want to use (sorted) slices as keys in a hash map, so we need to store
+        // and sort the slices first
+        for (tri_idx, tri_conn) in self.triangles.iter().enumerate() {
+            for (local_idx, (v0, v1)) in tri_edges
+                .iter()
+                .copied()
+                .map(|(i0, i1)| (tri_conn[i0], tri_conn[i1]))
+                .enumerate()
+            {
+                // Sort the edge
+                if v0 < v1 {
+                    sorted_edges.push([v0, v1])
+                } else {
+                    sorted_edges.push([v1, v0])
+                };
+
+                face_info.push(([v0, v1], tri_idx, local_idx));
+            }
+        }
+
+        // Count the number of occurrences of "equivalent" edges (in the sense that they refer
+        // to the same vertex indices).
+        let mut edge_counts = new_map();
+        for (edge_idx, edge) in sorted_edges.iter().copied().enumerate() {
+            edge_counts
+                .entry(edge)
+                .and_modify(|(_, count)| *count += 1)
+                .or_insert((edge_idx, 1));
+        }
+
+        // Take only the faces which have a count of 1, which correspond to boundary faces
+        edge_counts
+            .into_iter()
+            .map(|(_edge, value)| value)
+            .filter(|&(_, count)| count == 1)
+            .map(move |(edge_idx, _)| face_info[edge_idx].clone())
+            .collect()
+    }
+}
+
+#[test]
+fn test_find_boundary() {
+    // TODO: Needs a test with a real mesh
+    let mesh = TriMesh3d::<f64> {
+        vertices: vec![
+            Vector3::new_random(),
+            Vector3::new_random(),
+            Vector3::new_random(),
+        ],
+        triangles: vec![[0, 1, 2]],
+    };
+
+    let mut boundary = mesh.find_boundary_edges();
+    boundary.sort_unstable();
+
+    assert_eq!(
+        boundary,
+        vec![
+            ([0usize, 1usize], 0, 0),
+            ([1usize, 2usize], 0, 1),
+            ([2usize, 0usize], 0, 2),
+        ]
+    );
 }
 
 /// A hexahedral (volumetric) mesh in 3D
