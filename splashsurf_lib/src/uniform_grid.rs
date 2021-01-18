@@ -68,9 +68,9 @@ pub struct SubdomainGrid<'a, I: Index, R: Real> {
     /// The global or outer grid
     grid: &'a UniformGrid<I, R>,
     /// The smaller subdomain grid inside of the global grid
-    subdomain_grid: &'a UniformGrid<I, R>,
+    subdomain_grid: UniformGrid<I, R>,
     /// The offset of the subdomain grid relative to the global grid
-    subdomain_offset: &'a [I; 3],
+    subdomain_offset: [I; 3],
 }
 
 bitflags! {
@@ -612,19 +612,41 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
 }
 
 impl<'a, I: Index, R: Real> SubdomainGrid<'a, I, R> {
+    /// Creates a new subdomain grid
+    pub(crate) fn new(
+        grid: &'a UniformGrid<I, R>,
+        subdomain_grid: UniformGrid<I, R>,
+        subdomain_offset: [I; 3],
+    ) -> Self {
+        SubdomainGrid {
+            grid,
+            subdomain_grid,
+            subdomain_offset,
+        }
+    }
+
+    /// Creates a new subdomain grid without an offset, just cloning the supplied grid
+    pub(crate) fn new_dummy(grid: &'a UniformGrid<I, R>) -> Self {
+        SubdomainGrid {
+            grid,
+            subdomain_grid: grid.clone(),
+            subdomain_offset: [I::zero(), I::zero(), I::zero()],
+        }
+    }
+
     /// Returns a reference to the global grid corresponding to the subdomain
-    pub fn global_grid(&self) -> &UniformGrid<I, R> {
+    pub fn global_grid(&self) -> &'a UniformGrid<I, R> {
         self.grid
     }
 
     /// Returns a reference to the subdomain grid
     pub fn subdomain_grid(&self) -> &UniformGrid<I, R> {
-        self.subdomain_grid
+        &self.subdomain_grid
     }
 
     /// Returns the offset of the subdomain grid relative to the global grid
     pub fn subdomain_offset(&self) -> &[I; 3] {
-        self.subdomain_offset
+        &self.subdomain_offset
     }
 
     /// Maps the point index from the global grid into the subdomain grid
@@ -635,10 +657,42 @@ impl<'a, I: Index, R: Real> SubdomainGrid<'a, I, R> {
     }
 
     /// Maps the point index from the subdomain grid to the global grid
-    pub fn inv_map_point(&self, point: &PointIndex<I>) -> Option<PointIndex<I>> {
-        let new_point =
-            Direction::Positive.checked_apply_step_ijk(point.index(), &self.subdomain_offset)?;
+    pub fn inv_map_point(&self, subdomain_point: &PointIndex<I>) -> Option<PointIndex<I>> {
+        let new_point = Direction::Positive
+            .checked_apply_step_ijk(subdomain_point.index(), &self.subdomain_offset)?;
         self.grid.get_point(new_point)
+    }
+
+    /// Maps a point from this subdomain to the other
+    pub fn map_point_to(
+        &self,
+        other_subdomain: &Self,
+        subdomain_point: &PointIndex<I>,
+    ) -> Option<PointIndex<I>> {
+        if self.grid != other_subdomain.grid {
+            return None;
+        }
+
+        let global_point = self.inv_map_point(subdomain_point)?;
+        other_subdomain.map_point(&global_point)
+    }
+
+    /// Maps a flat cell index from this subdomain to the other
+    pub fn map_flat_point_index_to(
+        &self,
+        other_subdomain: &Self,
+        flat_point_index: I,
+    ) -> Option<I> {
+        let point_index = self
+            .subdomain_grid()
+            .try_unflatten_point_index(flat_point_index)?;
+        let mapped_point_index = self.map_point_to(&other_subdomain, &point_index)?;
+
+        Some(
+            other_subdomain
+                .subdomain_grid()
+                .flatten_point_index(&mapped_point_index),
+        )
     }
 
     /// Maps the cell index from the global grid into the subdomain grid
@@ -653,6 +707,34 @@ impl<'a, I: Index, R: Real> SubdomainGrid<'a, I, R> {
         let new_cell =
             Direction::Positive.checked_apply_step_ijk(cell.index(), &self.subdomain_offset)?;
         self.grid.get_cell(new_cell)
+    }
+
+    /// Maps a cell from this subdomain to the other
+    pub fn map_cell_to(
+        &self,
+        other_subdomain: &Self,
+        subdomain_cell: &CellIndex<I>,
+    ) -> Option<CellIndex<I>> {
+        if self.grid != other_subdomain.grid {
+            return None;
+        }
+
+        let global_point = self.inv_map_cell(subdomain_cell)?;
+        other_subdomain.map_cell(&global_point)
+    }
+
+    /// Maps a flat cell index from this subdomain to the other
+    pub fn map_flat_cell_index_to(&self, other_subdomain: &Self, flat_cell_index: I) -> Option<I> {
+        let cell_index = self
+            .subdomain_grid()
+            .try_unflatten_cell_index(flat_cell_index)?;
+        let mapped_cell_index = self.map_cell_to(&other_subdomain, &cell_index)?;
+
+        Some(
+            other_subdomain
+                .subdomain_grid()
+                .flatten_cell_index(&mapped_cell_index),
+        )
     }
 }
 
@@ -752,7 +834,7 @@ impl<I: Index> EdgeIndex<I> {
     /// The target point of this edge
     pub fn target(&self) -> PointIndex<I> {
         let new_index = DirectedAxis::new(self.axis, Direction::Positive)
-            .apply_step(self.origin.index())
+            .apply_single_step(self.origin.index())
             .expect("Index type overflow");
         PointIndex::from_ijk(new_index)
     }

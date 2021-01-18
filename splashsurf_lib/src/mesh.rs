@@ -31,6 +31,7 @@ impl<R: Real> TriMesh3d<R> {
         self.vertices.append(new_verts);
         self.triangles.append(new_tris);
 
+        // Update the vertex indices per triangle
         for tri in self.triangles.iter_mut().skip(tri_offset) {
             tri[0] += vertex_offset;
             tri[1] += vertex_offset;

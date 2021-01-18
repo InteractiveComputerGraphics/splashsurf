@@ -262,14 +262,39 @@ impl DirectedAxis {
 
     /// Applies an increment of 1 in the direction of this directed axis to the given index array
     #[inline(always)]
-    pub fn apply_step<N: Clone + CheckedAdd<Output = N> + CheckedSub<Output = N> + One>(
+    pub fn apply_single_step<N: Clone + CheckedAdd<Output = N> + CheckedSub<Output = N> + One>(
         &self,
         index: &[N; 3],
+    ) -> Option<[N; 3]> {
+        self.checked_apply_step(index, N::one())
+    }
+
+    /// Applies the given step in the direction of this directed axis to the given index array
+    #[inline(always)]
+    pub fn checked_apply_step<N: Clone + CheckedAdd<Output = N> + CheckedSub<Output = N>>(
+        &self,
+        index: &[N; 3],
+        step: N,
     ) -> Option<[N; 3]> {
         let mut index = index.clone();
         index[self.axis.dim()] = self
             .direction
-            .checked_apply_step(index[self.axis.dim()].clone(), N::one())?;
+            .checked_apply_step(index[self.axis.dim()].clone(), step)?;
+        Some(index)
+    }
+
+    /// Applies the given step in the direction of this directed axis to the given index array
+    #[inline(always)]
+    pub fn checked_apply_step_ijk<N: Clone + CheckedAdd<Output = N> + CheckedSub<Output = N>>(
+        &self,
+        index: &[N; 3],
+        step: &[N; 3],
+    ) -> Option<[N; 3]> {
+        let mut index = index.clone();
+        index[self.axis.dim()] = self.direction.checked_apply_step(
+            index[self.axis.dim()].clone(),
+            step[self.axis.dim()].clone(),
+        )?;
         Some(index)
     }
 }

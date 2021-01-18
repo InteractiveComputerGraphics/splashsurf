@@ -559,7 +559,9 @@ fn reconstruct_single_surface_append<'a, I: Index, R: Real>(
     );
 
     marching_cubes::triangulate_density_map_append::<I, R>(
-        subdomain_grid.unwrap_or(grid),
+        grid,
+        subdomain_offset,
+        subdomain_grid,
         &density_map,
         parameters.iso_surface_threshold,
         output_mesh,
@@ -611,7 +613,9 @@ pub fn grid_for_reconstruction<I: Index, R: Real>(
         );
 
         // Ensure that we have enough margin around the particles such that the every particle's kernel support is completely in the domain
-        let kernel_margin = density_map::compute_kernel_evaluation_radius::<I, R>(kernel_radius, cube_size).kernel_evaluation_radius;
+        let kernel_margin =
+            density_map::compute_kernel_evaluation_radius::<I, R>(kernel_radius, cube_size)
+                .kernel_evaluation_radius;
         domain_aabb.grow_uniformly(kernel_margin);
 
         domain_aabb
