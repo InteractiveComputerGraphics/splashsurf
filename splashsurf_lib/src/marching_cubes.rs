@@ -6,6 +6,8 @@ use crate::{new_map, DensityMap, Index, MapType, Real, UniformGrid};
 use log::info;
 use nalgebra::Vector3;
 
+// TODO: Merge the three interpolate implementations
+
 /// Performs a marching cubes triangulation of a density map on the given background grid
 pub fn triangulate_density_map<I: Index, R: Real>(
     grid: &UniformGrid<I, R>,
@@ -905,22 +907,26 @@ pub(crate) fn stitch_meshes<'a, I: Index, R: Real>(
     let boundary_cell_data =
         collect_boundary_cell_data(&stitching_subdomain, &marching_cubes_input);
 
-    interpolate_points_to_cell_data_stitching(
-        stitching_subdomain.subdomain_grid(),
-        &boundary_density_map.into(),
-        iso_surface_threshold,
-        stitching_axis,
-        &mut output_mesh.vertices,
-        &mut marching_cubes_input,
-    );
+    // Perform marching cubes on the stitching domain
+    {
+        interpolate_points_to_cell_data_stitching(
+            stitching_subdomain.subdomain_grid(),
+            &boundary_density_map.into(),
+            iso_surface_threshold,
+            stitching_axis,
+            &mut output_mesh.vertices,
+            &mut marching_cubes_input,
+        );
 
-    triangulate_with_criterion(
-        &stitching_subdomain,
-        marching_cubes_input,
-        &mut output_mesh,
-        TriangulationAssertCellInsideGrid,
-    );
+        triangulate_with_criterion(
+            &stitching_subdomain,
+            marching_cubes_input,
+            &mut output_mesh,
+            TriangulationAssertCellInsideGrid,
+        );
+    }
 
+    // Get domain for the whole stitched domain
     let output_subdomain_grid = compute_stitching_result_domain(
         stitching_axis,
         global_grid,
@@ -928,6 +934,7 @@ pub(crate) fn stitch_meshes<'a, I: Index, R: Real>(
         &positive_side.subdomain,
     );
 
+    // Merge all remaining boundary data
     let output_boundary_data = DirectedAxisArray::new_with(|&directed_axis| {
         // The positive and negative sides of the result domain can be taken directly from the inputs
         if directed_axis == stitching_axis.with_direction(Direction::Negative) {

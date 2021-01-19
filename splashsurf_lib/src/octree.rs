@@ -1,21 +1,20 @@
-use log::info;
-use nalgebra::Vector3;
-use rayon::prelude::*;
-use rayon::ScopeFifo;
-use smallvec::SmallVec;
-use std::cell::RefCell;
-use thread_local::ThreadLocal;
-
-use crate::mesh::HexMesh3d;
+use crate::generic_octree::GenericOctree;
+use crate::mesh::{HexMesh3d, TriMesh3d};
 use crate::uniform_grid::{PointIndex, UniformGrid};
 use crate::utils::{ChunkSize, ParallelPolicy};
 use crate::{
     AxisAlignedBoundingBox, AxisAlignedBoundingBox3d, GridConstructionError, Index, Real,
     ThreadSafe,
 };
-
 use arrayvec::ArrayVec;
+use log::info;
+use nalgebra::Vector3;
 use octant_helper::{Octant, OctantAxisDirections, OctantDirectionFlags};
+use rayon::prelude::*;
+use rayon::ScopeFifo;
+use smallvec::SmallVec;
+use std::cell::RefCell;
+use thread_local::ThreadLocal;
 
 // TODO: Make margin an Option
 
@@ -26,6 +25,39 @@ pub enum SubdivisionCriterion {
     MaxParticleCountAuto,
     /// Perform octree subdivision until an upper limit of particles is reached per chunk, based on the given fixed number of particles
     MaxParticleCount(usize),
+}
+
+/// Octree for the spatial decomposition of a set of particles and parallel surface reconstruction
+pub struct ParticleOctree<I: Index, R: Real> {
+    tree: GenericOctree<ParticleOctreeNode<I, R>>,
+}
+
+pub struct ParticleOctreeNode<I: Index, R: Real> {
+    /// Lower corner point of the octree node on the background grid
+    min_corner: PointIndex<I>,
+    /// Upper corner point of the octree node on the background grid
+    max_corner: PointIndex<I>,
+    /// Additional data associated to this octree node
+    data: NodeData<R>,
+}
+
+pub enum NodeData<R: Real> {
+    /// Storage for a set of SPH particles
+    ParticleSet(ParticleSet),
+    /// A patch that was already meshed
+    MeshPatch(MeshPatch<R>),
+}
+
+pub struct ParticleSet {
+    // The particles belonging to this set
+    particles: OctreeNodeParticleStorage,
+    // Number of ghost particles in this particle set
+    ghost_particle_count: usize,
+}
+
+pub struct MeshPatch<R: Real> {
+    /// The mesh of this domain
+    mesh: TriMesh3d<R>,
 }
 
 /// Octree representation of a set of particles
@@ -44,6 +76,14 @@ pub struct OctreeNode<I: Index> {
 
 type OctreeNodeChildrenStorage<I> = ArrayVec<[Box<OctreeNode<I>>; 8]>;
 type OctreeNodeParticleStorage = SmallVec<[usize; 6]>;
+
+enum LeafNode {
+    ParticleLeaf {
+        particles: OctreeNodeParticleStorage,
+        ghost_particle_count: usize,
+    },
+    MeshedLeaf {},
+}
 
 #[derive(Clone, Debug)]
 enum NodeBody<I: Index> {
