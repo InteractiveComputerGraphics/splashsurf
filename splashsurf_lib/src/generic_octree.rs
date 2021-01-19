@@ -1,60 +1,59 @@
 use crate::ThreadSafe;
-use arrayvec::ArrayVec;
 use rayon::{Scope, ScopeFifo};
 use std::collections::VecDeque;
-use std::ops::DerefMut;
+use std::ops::{Deref, DerefMut};
 
-#[derive(Clone, Debug, Default)]
-pub struct GenericOctree<T> {
-    root: GenericOctreeNode<T>,
+pub trait TreeNode {
+    /// Returns a slice of all child nodes
+    fn children(&self) -> &[Box<Self>];
+    /// Returns a mutable slice of all child nodes
+    fn children_mut(&mut self) -> &mut [Box<Self>];
 }
 
-#[derive(Clone, Debug, Default)]
-pub struct GenericOctreeNode<T> {
-    children: ArrayVec<[Box<GenericOctreeNode<T>>; 8]>,
-    data: T,
-}
+pub trait VisitableTree: TreeNode {
+    /// Visits a node and its children in depth-first order.
+    fn visit_dfs<'a, F: FnMut(&'a Self)>(&'a self, mut visitor: F) {
+        let mut queue_down = Vec::new();
+        queue_down.push(self);
 
-impl<T> GenericOctree<T> {
-    pub fn new(root_data: T) -> Self {
-        Self {
-            root: GenericOctreeNode::new(root_data),
+        while let Some(current_node) = queue_down.pop() {
+            visitor(current_node);
+            queue_down.extend(current_node.children().iter().rev().map(Deref::deref));
         }
     }
 
-    pub fn root(&self) -> &GenericOctreeNode<T> {
-        &self.root
+    /// Visits a node and its children in depth-first order. The visitor is applied before enqueuing each node's children.
+    fn visit_mut_dfs<F: FnMut(&mut Self)>(&mut self, mut visitor: F) {
+        let mut queue_down = Vec::new();
+        queue_down.push(self);
+
+        while let Some(current_node) = queue_down.pop() {
+            visitor(current_node);
+            queue_down.extend(
+                current_node
+                    .children_mut()
+                    .iter_mut()
+                    .rev()
+                    .map(DerefMut::deref_mut),
+            );
+        }
     }
 
-    /// Iterator that yields all nodes of the tree in depth-first order.
-    pub fn dfs_iter(&self) -> impl Iterator<Item = &GenericOctreeNode<T>> {
-        let mut queue = Vec::new();
-        queue.push(&self.root);
+    /// Visits a node and its children in breadth-first order.
+    fn visit_bfs<'a, F: FnMut(&'a Self)>(&'a self, mut visitor: F) {
+        let mut queue_down = VecDeque::new();
+        queue_down.push_back(self);
 
-        let iter = move || -> Option<&GenericOctreeNode<T>> {
-            if let Some(next_node) = queue.pop() {
-                // Enqueue all children
-                queue.extend(
-                    next_node
-                        .children()
-                        .iter()
-                        .rev()
-                        .map(std::ops::Deref::deref),
-                );
-
-                Some(next_node)
-            } else {
-                None
-            }
-        };
-
-        std::iter::from_fn(iter)
+        while let Some(current_node) = queue_down.pop_front() {
+            visitor(current_node);
+            queue_down.extend(current_node.children().iter().map(Deref::deref));
+        }
     }
 
     /// Visits a node and its children in breadth-first order. The visitor is applied before enqueuing each node's children.
-    pub fn visit_mut_bfs<F: FnMut(&mut GenericOctreeNode<T>)>(&mut self, mut visitor: F) {
+    fn visit_mut_bfs<F: FnMut(&mut Self)>(&mut self, mut visitor: F) {
         let mut queue_down = VecDeque::new();
-        queue_down.push_back(&mut self.root);
+        queue_down.push_back(self);
 
         while let Some(current_node) = queue_down.pop_front() {
             visitor(current_node);
@@ -68,74 +67,57 @@ impl<T> GenericOctree<T> {
     }
 }
 
-impl<T: ThreadSafe> GenericOctree<T> {
+pub trait ParVisitableTree: TreeNode {
     /// Visits a node and its children in breadth-first order. The visitor is applied before enqueuing each node's children. Parallel version.
-    pub fn visit_mut_bfs_par<F: Fn(&mut GenericOctreeNode<T>) + ThreadSafe>(&mut self, visitor: F) {
+    fn visit_mut_bfs_par<F: Fn(&mut Self) + ThreadSafe>(&mut self, visitor: F)
+    where
+        Self: ThreadSafe,
+    {
         let v = &visitor;
-        rayon::scope_fifo(move |s| self.root.visit_mut_bfs_par(s, v));
+        rayon::scope_fifo(move |s| self.visit_mut_bfs_par_impl(s, v));
     }
 
     /// Visits a node and its children in depth-first post-order. The visitor is applied after processing each node's children. Parallel version.
-    pub fn visit_mut_dfs_post_par<F: Fn(&mut GenericOctreeNode<T>) + ThreadSafe>(
-        &mut self,
-        visitor: F,
-    ) {
+    fn visit_mut_dfs_post_par<F: Fn(&mut Self) + ThreadSafe>(&mut self, visitor: F)
+    where
+        Self: ThreadSafe,
+    {
         let v = &visitor;
-        rayon::scope(move |s| self.root.visit_mut_dfs_post_par(s, v));
-    }
-}
-
-impl<T> GenericOctreeNode<T> {
-    pub fn new(data: T) -> Self {
-        Self {
-            children: Default::default(),
-            data,
-        }
+        rayon::scope(move |s| self.visit_mut_dfs_post_par_impl(s, v));
     }
 
-    pub fn children(&self) -> &[Box<GenericOctreeNode<T>>] {
-        self.children.as_slice()
-    }
-
-    pub fn children_mut(&mut self) -> &mut [Box<GenericOctreeNode<T>>] {
-        self.children.as_mut_slice()
-    }
-
-    pub fn data(&self) -> &T {
-        &self.data
-    }
-
-    pub fn data_mut(&mut self) -> &mut T {
-        &mut self.data
-    }
-}
-
-impl<T: ThreadSafe> GenericOctreeNode<T> {
-    fn visit_mut_bfs_par<'scope, F: Fn(&mut Self) + ThreadSafe>(
+    fn visit_mut_bfs_par_impl<'scope, F: Fn(&mut Self) + ThreadSafe>(
         &'scope mut self,
         s: &ScopeFifo<'scope>,
         visitor: &'scope F,
-    ) {
+    ) where
+        Self: ThreadSafe,
+    {
         visitor(self);
 
         // Spawn tasks for all children
-        for child in self.children.iter_mut() {
-            s.spawn_fifo(move |s| child.visit_mut_bfs_par(s, visitor));
+        for child in self.children_mut().iter_mut() {
+            s.spawn_fifo(move |s| child.visit_mut_bfs_par_impl(s, visitor));
         }
     }
 
-    fn visit_mut_dfs_post_par<'scope, F: Fn(&mut Self) + ThreadSafe>(
+    fn visit_mut_dfs_post_par_impl<'scope, F: Fn(&mut Self) + ThreadSafe>(
         &'scope mut self,
         _s: &Scope<'scope>,
         visitor: &'scope F,
-    ) {
+    ) where
+        Self: ThreadSafe,
+    {
         // Create a new scope to ensure that tasks are completed before the visitor runs
         rayon::scope(|s| {
-            for child in self.children.iter_mut() {
-                s.spawn(move |s| child.visit_mut_dfs_post_par(s, visitor));
+            for child in self.children_mut().iter_mut() {
+                s.spawn(move |s| child.visit_mut_dfs_post_par_impl(s, visitor));
             }
         });
 
         visitor(self);
     }
 }
+
+impl<T: TreeNode> VisitableTree for T {}
+impl<T: TreeNode + ThreadSafe> ParVisitableTree for T {}

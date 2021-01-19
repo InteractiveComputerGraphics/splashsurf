@@ -1,4 +1,4 @@
-use crate::generic_octree::GenericOctree;
+use crate::generic_octree::{TreeNode, VisitableTree};
 use crate::mesh::{HexMesh3d, TriMesh3d};
 use crate::uniform_grid::{PointIndex, UniformGrid};
 use crate::utils::{ChunkSize, ParallelPolicy};
@@ -28,11 +28,15 @@ pub enum SubdivisionCriterion {
 }
 
 /// Octree for the spatial decomposition of a set of particles and parallel surface reconstruction
-pub struct ParticleOctree<I: Index, R: Real> {
-    tree: GenericOctree<ParticleOctreeNode<I, R>>,
+#[derive(Clone, Debug)]
+pub struct Octree<I: Index, R: Real> {
+    root: OctreeNode<I, R>,
 }
 
-pub struct ParticleOctreeNode<I: Index, R: Real> {
+#[derive(Clone, Debug)]
+pub struct OctreeNode<I: Index, R: Real> {
+    /// All child nodes of this octree node
+    children: ArrayVec<[Box<Self>; 8]>,
     /// Lower corner point of the octree node on the background grid
     min_corner: PointIndex<I>,
     /// Upper corner point of the octree node on the background grid
@@ -41,165 +45,70 @@ pub struct ParticleOctreeNode<I: Index, R: Real> {
     data: NodeData<R>,
 }
 
+impl<I: Index, R: Real> TreeNode for OctreeNode<I, R> {
+    /// Returns a slice of all child nodes
+    fn children(&self) -> &[Box<Self>] {
+        self.children.as_slice()
+    }
+
+    /// Returns a mutable slice of all child nodes
+    fn children_mut(&mut self) -> &mut [Box<Self>] {
+        self.children.as_mut_slice()
+    }
+}
+
+#[derive(Clone, Debug)]
 pub enum NodeData<R: Real> {
+    /// Empty variant
+    None,
     /// Storage for a set of SPH particles
     ParticleSet(ParticleSet),
     /// A patch that was already meshed
     MeshPatch(MeshPatch<R>),
 }
 
+impl<R: Real> Default for NodeData<R> {
+    /// Returns an empty data instance
+    fn default() -> Self {
+        Self::None
+    }
+}
+
+impl<R: Real> NodeData<R> {
+    /// Returns the stored data and leaves `None` in its place
+    pub fn take(&mut self) -> Self {
+        std::mem::take(self)
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct ParticleSet {
     // The particles belonging to this set
-    particles: OctreeNodeParticleStorage,
+    pub particles: OctreeNodeParticleStorage,
     // Number of ghost particles in this particle set
-    ghost_particle_count: usize,
+    pub ghost_particle_count: usize,
 }
 
+#[derive(Clone, Debug)]
 pub struct MeshPatch<R: Real> {
     /// The mesh of this domain
-    mesh: TriMesh3d<R>,
+    pub mesh: TriMesh3d<R>,
 }
 
-/// Octree representation of a set of particles
-#[derive(Clone, Debug)]
-pub struct Octree<I: Index> {
-    root: OctreeNode<I>,
-}
-
-/// A single node in an Octree, may be a leaf (containing particles) or a node with further child nodes
-#[derive(Clone, Debug)]
-pub struct OctreeNode<I: Index> {
-    min_corner: PointIndex<I>,
-    max_corner: PointIndex<I>,
-    body: NodeBody<I>,
-}
-
-type OctreeNodeChildrenStorage<I> = ArrayVec<[Box<OctreeNode<I>>; 8]>;
 type OctreeNodeParticleStorage = SmallVec<[usize; 6]>;
 
-enum LeafNode {
-    ParticleLeaf {
-        particles: OctreeNodeParticleStorage,
-        ghost_particle_count: usize,
-    },
-    MeshedLeaf {},
-}
+use split_criterion::{default_split_criterion, LeafSplitCriterion};
 
-#[derive(Clone, Debug)]
-enum NodeBody<I: Index> {
-    Children {
-        children: OctreeNodeChildrenStorage<I>,
-    },
-    Leaf {
-        particles: OctreeNodeParticleStorage,
-        ghost_particle_count: usize,
-    },
-}
-
-/// Trait that is used by an octree to decide whether an octree node should be further split or subdivided
-trait LeafSplitCriterion<I: Index> {
-    /// Returns whether the specified node should be split
-    fn split_leaf(&self, node: &OctreeNode<I>) -> bool;
-}
-
-/// Split criterion that decides based on whether the number of non-ghost particles in a node is above a limit
-struct MaxNonGhostParticleLeafSplitCriterion {
-    max_particles: usize,
-}
-
-impl MaxNonGhostParticleLeafSplitCriterion {
-    fn new(max_particles: usize) -> Self {
-        Self { max_particles }
-    }
-}
-
-impl<I: Index> LeafSplitCriterion<I> for MaxNonGhostParticleLeafSplitCriterion {
-    /// Returns true if the number of non-ghost particles in a node is above a limit
-    fn split_leaf(&self, node: &OctreeNode<I>) -> bool {
-        if let NodeBody::Leaf {
-            particles,
-            ghost_particle_count,
-        } = &node.body
-        {
-            // Check if this leaf is already below the limit of particles per cell
-            return particles.len() - *ghost_particle_count > self.max_particles;
-        } else {
-            // Early out if called on a non-leaf node
-            return false;
-        }
-    }
-}
-
-/// Split criterion that decides based on whether the node's extents are larger than 1 cell in all dimensions
-struct MinimumExtentSplitCriterion<I> {
-    minimum_extent: I,
-}
-
-impl<I: Index> MinimumExtentSplitCriterion<I> {
-    fn new(minimum_extent: I) -> Self {
-        Self { minimum_extent }
-    }
-}
-
-impl<I: Index> LeafSplitCriterion<I> for MinimumExtentSplitCriterion<I> {
-    /// Returns true only if all extents of the octree node are larger than 1 cell
-    fn split_leaf(&self, node: &OctreeNode<I>) -> bool {
-        let lower = node.min_corner.index();
-        let upper = node.max_corner.index();
-
-        upper[0] - lower[0] > self.minimum_extent
-            && upper[1] - lower[1] > self.minimum_extent
-            && upper[2] - lower[2] > self.minimum_extent
-    }
-}
-
-impl<I: Index, A, B> LeafSplitCriterion<I> for (A, B)
-where
-    A: LeafSplitCriterion<I>,
-    B: LeafSplitCriterion<I>,
-{
-    fn split_leaf(&self, node: &OctreeNode<I>) -> bool {
-        self.0.split_leaf(node) && self.1.split_leaf(node)
-    }
-}
-
-fn default_split_criterion<I: Index>(
-    subdivision_criterion: SubdivisionCriterion,
-    num_particles: usize,
-) -> (
-    MaxNonGhostParticleLeafSplitCriterion,
-    MinimumExtentSplitCriterion<I>,
-) {
-    let particles_per_cell = match subdivision_criterion {
-        SubdivisionCriterion::MaxParticleCount(count) => count,
-        SubdivisionCriterion::MaxParticleCountAuto => {
-            ChunkSize::new(&ParallelPolicy::default(), num_particles)
-                .with_log("particles", "octree generation")
-                .chunk_size
-        }
-    };
-
-    info!(
-        "Building octree with at most {} particles per leaf",
-        num_particles
-    );
-
-    (
-        MaxNonGhostParticleLeafSplitCriterion::new(particles_per_cell),
-        MinimumExtentSplitCriterion::new(I::one()),
-    )
-}
-
-impl<I: Index> Octree<I> {
-    /// Creates a new [Octree] with a single leaf node containing all vertices
-    pub fn new<R: Real>(grid: &UniformGrid<I, R>, n_particles: usize) -> Self {
+impl<I: Index, R: Real> Octree<I, R> {
+    /// Creates a new octree with a single leaf node containing all vertices
+    pub fn new(grid: &UniformGrid<I, R>, n_particles: usize) -> Self {
         Self {
             root: OctreeNode::new_root(grid, n_particles),
         }
     }
 
     /// Create a new octree and perform subdivision with the specified margin
-    pub fn new_subdivided<R: Real>(
+    pub fn new_subdivided(
         grid: &UniformGrid<I, R>,
         particle_positions: &[Vector3<R>],
         subdivision_criterion: SubdivisionCriterion,
@@ -227,8 +136,13 @@ impl<I: Index> Octree<I> {
         tree
     }
 
+    /// Returns a reference to the root node of the octree
+    pub fn root(&self) -> &OctreeNode<I, R> {
+        &self.root
+    }
+
     /// Subdivide the octree recursively using the given splitting criterion and a margin to add ghost particles
-    pub fn subdivide_recursively_margin<R: Real>(
+    pub fn subdivide_recursively_margin(
         &mut self,
         grid: &UniformGrid<I, R>,
         particle_positions: &[Vector3<R>],
@@ -240,12 +154,21 @@ impl<I: Index> Octree<I> {
         let split_criterion =
             default_split_criterion(subdivision_criterion, particle_positions.len());
 
-        self.root
-            .subdivide_recursively_margin(grid, particle_positions, &split_criterion, margin);
+        self.root.visit_mut_bfs(|node| {
+            // Stop recursion if split criterion is not fulfilled
+            if !split_criterion.split_leaf(node) {
+                return;
+            }
+
+            // Perform one octree split on the node
+            node.subdivide_with_margin(grid, particle_positions, margin);
+        });
+
+        //self.root.subdivide_recursively_margin(grid, particle_positions, &split_criterion, margin);
     }
 
     /// Subdivide the octree recursively and in parallel using the given splitting criterion and a margin to add ghost particles
-    pub fn subdivide_recursively_margin_par<R: Real>(
+    pub fn subdivide_recursively_margin_par(
         &mut self,
         grid: &UniformGrid<I, R>,
         particle_positions: &[Vector3<R>],
@@ -270,40 +193,8 @@ impl<I: Index> Octree<I> {
         });
     }
 
-    /// Returns a reference to the root node of the octree
-    pub fn root(&self) -> &OctreeNode<I> {
-        &self.root
-    }
-
-    /// Returns an iterator that yields all nodes of the octree in depth-first order
-    pub fn depth_first_iter(&self) -> impl Iterator<Item = &OctreeNode<I>> {
-        let mut queue = Vec::new();
-        queue.push(&self.root);
-
-        let iter = move || -> Option<&OctreeNode<I>> {
-            if let Some(next_node) = queue.pop() {
-                // Check if the node has children
-                if let Some(children) = next_node.children() {
-                    // Enqueue all children
-                    queue.extend(children.iter().rev().map(std::ops::Deref::deref));
-                }
-
-                Some(next_node)
-            } else {
-                None
-            }
-        };
-
-        std::iter::from_fn(iter)
-    }
-
-    /// Returns an iterator that yields all leafs of the octree in depth-first order
-    pub fn leaf_iter(&self) -> impl Iterator<Item = &OctreeNode<I>> {
-        self.depth_first_iter().filter(|n| n.is_leaf())
-    }
-
     /// Constructs a hex mesh visualizing the cells of the octree, may contain hanging and duplicate vertices as cells are not connected
-    pub fn hexmesh<R: Real>(&self, grid: &UniformGrid<I, R>, only_non_empty: bool) -> HexMesh3d<R> {
+    pub fn hexmesh(&self, grid: &UniformGrid<I, R>, only_non_empty: bool) -> HexMesh3d<R> {
         profile!("convert octree into hexmesh");
 
         let mut mesh = HexMesh3d {
@@ -311,10 +202,16 @@ impl<I: Index> Octree<I> {
             cells: Vec::new(),
         };
 
-        for node in self.depth_first_iter() {
-            if node.is_leaf() {
-                if only_non_empty && node.particles().map(|p| p.is_empty()).unwrap_or(true) {
-                    continue;
+        self.root.visit_dfs(|node| {
+            if node.children().is_empty() {
+                if only_non_empty
+                    && node
+                        .data()
+                        .particle_set()
+                        .map(|ps| ps.particles.is_empty())
+                        .unwrap_or(true)
+                {
+                    return;
                 }
 
                 let lower_coords = grid.point_coordinates(&node.min_corner);
@@ -346,13 +243,54 @@ impl<I: Index> Octree<I> {
                 mesh.vertices.extend(vertices);
                 mesh.cells.push(cell);
             }
-        }
+        });
 
         mesh
     }
 }
 
-impl<I: Index> OctreeNode<I> {
+impl<I: Index, R: Real> OctreeNode<I, R> {
+    fn new_root(grid: &UniformGrid<I, R>, n_particles: usize) -> Self {
+        let n_points = grid.points_per_dim();
+        let min_point = [I::zero(), I::zero(), I::zero()];
+        let max_point = [
+            n_points[0] - I::one(),
+            n_points[1] - I::one(),
+            n_points[2] - I::one(),
+        ];
+
+        Self::new_leaf(
+            grid.get_point(min_point)
+                .expect("Cannot get lower corner of grid"),
+            grid.get_point(max_point)
+                .expect("Cannot get upper corner of grid"),
+            (0..n_particles).collect::<SmallVec<_>>(),
+            0,
+        )
+    }
+
+    fn new_leaf(
+        min_corner: PointIndex<I>,
+        max_corner: PointIndex<I>,
+        particles: OctreeNodeParticleStorage,
+        ghost_particle_count: usize,
+    ) -> Self {
+        Self {
+            children: Default::default(),
+            min_corner,
+            max_corner,
+            data: NodeData::ParticleSet(ParticleSet {
+                particles,
+                ghost_particle_count,
+            }),
+        }
+    }
+
+    /// Returns a reference to the data stored in the node
+    pub fn data(&self) -> &NodeData<R> {
+        &self.data
+    }
+
     /// Returns the [PointIndex] of the lower corner of the octree node
     pub fn min_corner(&self) -> &PointIndex<I> {
         &self.min_corner
@@ -364,7 +302,7 @@ impl<I: Index> OctreeNode<I> {
     }
 
     /// Returns the AABB represented by this octree node
-    pub fn aabb<R: Real>(&self, grid: &UniformGrid<I, R>) -> AxisAlignedBoundingBox3d<R> {
+    pub fn aabb(&self, grid: &UniformGrid<I, R>) -> AxisAlignedBoundingBox3d<R> {
         AxisAlignedBoundingBox::new(
             grid.point_coordinates(&self.min_corner),
             grid.point_coordinates(&self.max_corner),
@@ -372,7 +310,7 @@ impl<I: Index> OctreeNode<I> {
     }
 
     /// Constructs a [crate::UniformGrid] that represents the domain of this octree node
-    pub fn grid<R: Real>(
+    pub fn grid(
         &self,
         min: &Vector3<R>,
         cell_size: R,
@@ -389,84 +327,7 @@ impl<I: Index> OctreeNode<I> {
         UniformGrid::new(min, &n_cells_per_dim, cell_size)
     }
 
-    /// Returns whether this is a leaf node, i.e. it may contain particles and has no child nodes
-    pub fn is_leaf(&self) -> bool {
-        self.body.is_leaf()
-    }
-
-    /// Returns a slice of the particles of this node if it is a leaf node
-    pub fn particles(&self) -> Option<&[usize]> {
-        self.body.particles()
-    }
-
-    /// Returns a slice of the child nodes if this is not a leaf node
-    pub fn children(&self) -> Option<&[Box<OctreeNode<I>>]> {
-        self.body.children()
-    }
-
-    fn new_root<R: Real>(grid: &UniformGrid<I, R>, n_particles: usize) -> Self {
-        let n_points = grid.points_per_dim();
-        let min_point = [I::zero(), I::zero(), I::zero()];
-        let max_point = [
-            n_points[0] - I::one(),
-            n_points[1] - I::one(),
-            n_points[2] - I::one(),
-        ];
-
-        Self {
-            min_corner: grid
-                .get_point(min_point)
-                .expect("Cannot get lower corner of grid"),
-            max_corner: grid
-                .get_point(max_point)
-                .expect("Cannot get upper corner of grid"),
-            body: NodeBody::new_leaf((0..n_particles).collect::<SmallVec<_>>(), 0),
-        }
-    }
-
-    fn new_leaf(
-        min_corner: PointIndex<I>,
-        max_corner: PointIndex<I>,
-        particles: OctreeNodeParticleStorage,
-        ghost_particle_count: usize,
-    ) -> Self {
-        Self {
-            min_corner,
-            max_corner,
-            body: NodeBody::new_leaf(particles, ghost_particle_count),
-        }
-    }
-
-    /// Subdivides this [OctreeNode] and all new children until all leaves have at most the specified number of particles
-    fn subdivide_recursively_margin<R: Real, S: LeafSplitCriterion<I>>(
-        &mut self,
-        grid: &UniformGrid<I, R>,
-        particle_positions: &[Vector3<R>],
-        split_criterion: &S,
-        margin: R,
-    ) {
-        // Stop recursion if split criterion is not fulfilled
-        if !split_criterion.split_leaf(self) {
-            return;
-        }
-
-        // Perform one octree split on the leaf
-        self.subdivide_with_margin(grid, particle_positions, margin);
-
-        // Continue subdivision recursively in the new child nodes
-        if let Some(children) = self.body.children_mut() {
-            for child_node in children {
-                child_node.subdivide_recursively_margin(
-                    grid,
-                    particle_positions,
-                    split_criterion,
-                    margin,
-                );
-            }
-        }
-    }
-
-    fn subdivide_recursively_margin_par<'scope, R: Real, S: LeafSplitCriterion<I> + ThreadSafe>(
+    fn subdivide_recursively_margin_par<'scope, S: LeafSplitCriterion<I, R> + ThreadSafe>(
         &'scope mut self,
         s: &ScopeFifo<'scope>,
         grid: &'scope UniformGrid<I, R>,
@@ -481,7 +342,13 @@ impl<I: Index> OctreeNode<I> {
         }
 
         // Perform one octree split on the leaf
-        if self.body.particles().expect("Node is not a leaf").len() < parallel_policy.min_task_size
+        if self
+            .data
+            .particle_set()
+            .expect("Node is not a leaf")
+            .particles
+            .len()
+            < parallel_policy.min_task_size
         {
             self.subdivide_with_margin(grid, particle_positions, margin);
         } else {
@@ -489,31 +356,31 @@ impl<I: Index> OctreeNode<I> {
         }
 
         // Continue subdivision recursively in the new child nodes
-        if let Some(children) = self.body.children_mut() {
-            for child_node in children {
-                s.spawn_fifo(move |s| {
-                    child_node.subdivide_recursively_margin_par(
-                        s,
-                        grid,
-                        particle_positions,
-                        split_criterion,
-                        margin,
-                        parallel_policy,
-                    );
-                });
-            }
+        for child_node in self.children_mut() {
+            s.spawn_fifo(move |s| {
+                child_node.subdivide_recursively_margin_par(
+                    s,
+                    grid,
+                    particle_positions,
+                    split_criterion,
+                    margin,
+                    parallel_policy,
+                );
+            });
         }
     }
 
     /// Performs a subdivision of this [OctreeNode] while considering a margin with "ghost particles" around each octant
-    pub fn subdivide_with_margin<R: Real>(
+    pub fn subdivide_with_margin(
         &mut self,
         grid: &UniformGrid<I, R>,
         particle_positions: &[Vector3<R>],
         margin: R,
     ) {
         // Convert node body from Leaf to Children
-        let new_body = if let NodeBody::Leaf { particles, .. } = &self.body {
+        if let NodeData::ParticleSet(particle_set) = self.data.take() {
+            let particles = particle_set.particles;
+
             // Obtain the point used as the octree split/pivot point
             let split_point = get_split_point(grid, &self.min_corner, &self.max_corner)
                 .expect("Failed to get split point of octree node");
@@ -593,15 +460,14 @@ impl<I: Index> OctreeNode<I> {
                 children.push(child);
             }
 
-            NodeBody::new_with_children(children)
+            // Assign new children to the current node
+            self.children = children;
         } else {
-            panic!("Cannot subdivide a non-leaf octree node");
+            panic!("Only nodes with ParticleSet data can be subdivided");
         };
-
-        self.body = new_body;
     }
 
-    pub fn subdivide_with_margin_par<R: Real>(
+    pub fn subdivide_with_margin_par(
         &mut self,
         grid: &UniformGrid<I, R>,
         particle_positions: &[Vector3<R>],
@@ -609,7 +475,9 @@ impl<I: Index> OctreeNode<I> {
         parallel_policy: &ParallelPolicy,
     ) {
         // Convert node body from Leaf to Children
-        let new_body = if let NodeBody::Leaf { particles, .. } = &self.body {
+        if let NodeData::ParticleSet(particle_set) = self.data.take() {
+            let particles = particle_set.particles;
+
             // Obtain the point used as the octree split/pivot point
             let split_point = get_split_point(grid, &self.min_corner, &self.max_corner)
                 .expect("Failed to get split point of octree node");
@@ -726,61 +594,33 @@ impl<I: Index> OctreeNode<I> {
                     },
                 )
                 .collect_into_vec(&mut children);
-            let children = children.into_iter().collect::<ArrayVec<_>>();
 
-            NodeBody::new_with_children(children)
+            // Assign children to this node
+            self.children = children.into_iter().collect::<ArrayVec<_>>();
         } else {
-            panic!("Cannot subdivide a non-leaf octree node");
+            panic!("Only nodes with ParticleSet data can be subdivided");
         };
-
-        self.body = new_body;
     }
 }
 
-impl<I: Index> NodeBody<I> {
-    pub fn new_leaf<IndexVec: Into<OctreeNodeParticleStorage>>(
-        particles: IndexVec,
+impl<R: Real> NodeData<R> {
+    fn new_particle_set<P: Into<OctreeNodeParticleStorage>>(
+        particles: P,
         ghost_particle_count: usize,
     ) -> Self {
-        NodeBody::Leaf {
-            particles: particles.into(),
+        let particles = particles.into();
+        NodeData::ParticleSet(ParticleSet {
+            particles,
             ghost_particle_count,
-        }
+        })
     }
 
-    pub fn new_with_children<OctreeNodeVec: Into<OctreeNodeChildrenStorage<I>>>(
-        children: OctreeNodeVec,
-    ) -> Self {
-        let children = children.into();
-        assert_eq!(children.len(), 8);
-        NodeBody::Children { children }
-    }
-
-    pub fn is_leaf(&self) -> bool {
-        match self {
-            NodeBody::Leaf { .. } => true,
-            _ => false,
-        }
-    }
-
-    pub fn particles(&self) -> Option<&[usize]> {
-        match self {
-            NodeBody::Leaf { particles, .. } => Some(particles.as_slice()),
-            _ => None,
-        }
-    }
-
-    pub fn children(&self) -> Option<&[Box<OctreeNode<I>>]> {
-        match self {
-            NodeBody::Children { children } => Some(children.as_slice()),
-            _ => None,
-        }
-    }
-
-    pub fn children_mut(&mut self) -> Option<&mut [Box<OctreeNode<I>>]> {
-        match self {
-            NodeBody::Children { children } => Some(children.as_mut_slice()),
-            _ => None,
+    /// Returns a reference to the contained particle set if it contains one
+    pub fn particle_set(&self) -> Option<&ParticleSet> {
+        if let Self::ParticleSet(particle_set) = self {
+            Some(particle_set)
+        } else {
+            None
         }
     }
 }
@@ -803,6 +643,102 @@ fn get_split_point<I: Index, R: Real>(
     ];
 
     grid.get_point(mid_indices)
+}
+
+mod split_criterion {
+    use super::*;
+
+    /// Trait that is used by an octree to decide whether an octree node should be further split or subdivided
+    pub(super) trait LeafSplitCriterion<I: Index, R: Real> {
+        /// Returns whether the specified node should be split
+        fn split_leaf(&self, node: &OctreeNode<I, R>) -> bool;
+    }
+
+    /// Split criterion that decides based on whether the number of non-ghost particles in a node is above a limit
+    pub(super) struct MaxNonGhostParticleLeafSplitCriterion {
+        max_particles: usize,
+    }
+
+    impl MaxNonGhostParticleLeafSplitCriterion {
+        fn new(max_particles: usize) -> Self {
+            Self { max_particles }
+        }
+    }
+
+    impl<I: Index, R: Real> LeafSplitCriterion<I, R> for MaxNonGhostParticleLeafSplitCriterion {
+        /// Returns true if the number of non-ghost particles in a node is above a limit
+        fn split_leaf(&self, node: &OctreeNode<I, R>) -> bool {
+            match &node.data {
+                NodeData::ParticleSet(particle_set) => {
+                    // Check if this leaf is already below the limit of particles per cell
+                    return particle_set.particles.len() - particle_set.ghost_particle_count
+                        > self.max_particles;
+                }
+                // Early out if called on a non-leaf node
+                _ => return false,
+            };
+        }
+    }
+
+    /// Split criterion that decides based on whether the node's extents are larger than 1 cell in all dimensions
+    pub(super) struct MinimumExtentSplitCriterion<I> {
+        minimum_extent: I,
+    }
+
+    impl<I: Index> MinimumExtentSplitCriterion<I> {
+        fn new(minimum_extent: I) -> Self {
+            Self { minimum_extent }
+        }
+    }
+
+    impl<I: Index, R: Real> LeafSplitCriterion<I, R> for MinimumExtentSplitCriterion<I> {
+        /// Returns true only if all extents of the octree node are larger than 1 cell
+        fn split_leaf(&self, node: &OctreeNode<I, R>) -> bool {
+            let lower = node.min_corner.index();
+            let upper = node.max_corner.index();
+
+            upper[0] - lower[0] > self.minimum_extent
+                && upper[1] - lower[1] > self.minimum_extent
+                && upper[2] - lower[2] > self.minimum_extent
+        }
+    }
+
+    impl<I: Index, R: Real, A, B> LeafSplitCriterion<I, R> for (A, B)
+    where
+        A: LeafSplitCriterion<I, R>,
+        B: LeafSplitCriterion<I, R>,
+    {
+        fn split_leaf(&self, node: &OctreeNode<I, R>) -> bool {
+            self.0.split_leaf(node) && self.1.split_leaf(node)
+        }
+    }
+
+    pub(super) fn default_split_criterion<I: Index>(
+        subdivision_criterion: SubdivisionCriterion,
+        num_particles: usize,
+    ) -> (
+        MaxNonGhostParticleLeafSplitCriterion,
+        MinimumExtentSplitCriterion<I>,
+    ) {
+        let particles_per_cell = match subdivision_criterion {
+            SubdivisionCriterion::MaxParticleCount(count) => count,
+            SubdivisionCriterion::MaxParticleCountAuto => {
+                ChunkSize::new(&ParallelPolicy::default(), num_particles)
+                    .with_log("particles", "octree generation")
+                    .chunk_size
+            }
+        };
+
+        info!(
+            "Building octree with at most {} particles per leaf",
+            num_particles
+        );
+
+        (
+            MaxNonGhostParticleLeafSplitCriterion::new(particles_per_cell),
+            MinimumExtentSplitCriterion::new(I::one()),
+        )
+    }
 }
 
 mod octant_helper {
