@@ -83,7 +83,7 @@ pub trait ParVisitableTree: TreeNode {
             F: Fn(&T) + Sync,
         {
             // Spawn task for visitor
-            s.spawn_fifo(move |s| visitor(node));
+            s.spawn_fifo(move |_| visitor(node));
 
             // Spawn tasks for all children
             for child in node.children().iter().map(Deref::deref) {

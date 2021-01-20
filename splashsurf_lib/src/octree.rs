@@ -302,6 +302,11 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
         &self.data
     }
 
+    /// Returns a mutable reference to the data stored in the node
+    pub fn data_mut(&mut self) -> &mut NodeData<R> {
+        &mut self.data
+    }
+
     /// Returns the [PointIndex] of the lower corner of the octree node
     pub fn min_corner(&self) -> &PointIndex<I> {
         &self.min_corner
