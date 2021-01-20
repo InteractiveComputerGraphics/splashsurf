@@ -64,9 +64,10 @@ pub struct NeighborEdge<'a, 'b: 'a, I: Index> {
 }
 
 /// A [UniformGrid] that represents a subdomain with an offset inside an outer grid
-pub struct SubdomainGrid<'a, I: Index, R: Real> {
+#[derive(Clone, Debug)]
+pub struct SubdomainGrid<I: Index, R: Real> {
     /// The global or outer grid
-    grid: &'a UniformGrid<I, R>,
+    grid: UniformGrid<I, R>,
     /// The smaller subdomain grid inside of the global grid
     subdomain_grid: UniformGrid<I, R>,
     /// The offset of the subdomain grid relative to the global grid
@@ -611,10 +612,10 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
     }
 }
 
-impl<'a, I: Index, R: Real> SubdomainGrid<'a, I, R> {
+impl<I: Index, R: Real> SubdomainGrid<I, R> {
     /// Creates a new subdomain grid
     pub(crate) fn new(
-        grid: &'a UniformGrid<I, R>,
+        grid: UniformGrid<I, R>,
         subdomain_grid: UniformGrid<I, R>,
         subdomain_offset: [I; 3],
     ) -> Self {
@@ -626,17 +627,17 @@ impl<'a, I: Index, R: Real> SubdomainGrid<'a, I, R> {
     }
 
     /// Creates a new subdomain grid without an offset, just cloning the supplied grid
-    pub(crate) fn new_dummy(grid: &'a UniformGrid<I, R>) -> Self {
+    pub(crate) fn new_dummy(grid: UniformGrid<I, R>) -> Self {
         SubdomainGrid {
-            grid,
-            subdomain_grid: grid.clone(),
+            grid: grid.clone(),
+            subdomain_grid: grid,
             subdomain_offset: [I::zero(), I::zero(), I::zero()],
         }
     }
 
     /// Returns a reference to the global grid corresponding to the subdomain
-    pub fn global_grid(&self) -> &'a UniformGrid<I, R> {
-        self.grid
+    pub fn global_grid(&self) -> &UniformGrid<I, R> {
+        &self.grid
     }
 
     /// Returns a reference to the subdomain grid

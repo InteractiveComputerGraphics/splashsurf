@@ -1,5 +1,5 @@
 use crate::generic_tree::{ParVisitableTree, TreeNode, VisitableTree};
-use crate::mesh::{HexMesh3d, TriMesh3d};
+use crate::mesh::HexMesh3d;
 use crate::uniform_grid::{PointIndex, UniformGrid};
 use crate::utils::{ChunkSize, ParallelPolicy};
 use crate::{AxisAlignedBoundingBox, AxisAlignedBoundingBox3d, GridConstructionError, Index, Real};
@@ -38,7 +38,7 @@ pub struct OctreeNode<I: Index, R: Real> {
     /// Upper corner point of the octree node on the background grid
     max_corner: PointIndex<I>,
     /// Additional data associated to this octree node
-    data: NodeData<R>,
+    data: NodeData<I, R>,
 }
 
 impl<I: Index, R: Real> TreeNode for OctreeNode<I, R> {
@@ -54,26 +54,31 @@ impl<I: Index, R: Real> TreeNode for OctreeNode<I, R> {
 }
 
 #[derive(Clone, Debug)]
-pub enum NodeData<R: Real> {
+pub(crate) enum NodeData<I: Index, R: Real> {
     /// Empty variant
     None,
     /// Storage for a set of SPH particles
     ParticleSet(ParticleSet),
     /// A patch that was already meshed
-    MeshPatch(MeshPatch<R>),
+    SurfacePatch(SurfacePatch<I, R>),
 }
 
-impl<R: Real> Default for NodeData<R> {
+impl<I: Index, R: Real> Default for NodeData<I, R> {
     /// Returns an empty data instance
     fn default() -> Self {
         Self::None
     }
 }
 
-impl<R: Real> NodeData<R> {
+impl<I: Index, R: Real> NodeData<I, R> {
     /// Returns the stored data and leaves `None` in its place
     pub fn take(&mut self) -> Self {
         std::mem::take(self)
+    }
+
+    /// Returns the stored data and leaves `None` in its place
+    pub fn replace(&mut self, new_data: Self) {
+        *self = new_data;
     }
 }
 
@@ -85,14 +90,9 @@ pub struct ParticleSet {
     pub ghost_particle_count: usize,
 }
 
-#[derive(Clone, Debug)]
-pub struct MeshPatch<R: Real> {
-    /// The mesh of this domain
-    pub mesh: TriMesh3d<R>,
-}
-
 type OctreeNodeParticleStorage = SmallVec<[usize; 6]>;
 
+use crate::marching_cubes::SurfacePatch;
 use split_criterion::{default_split_criterion, LeafSplitCriterion};
 
 impl<I: Index, R: Real> Octree<I, R> {
@@ -298,12 +298,12 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
     }
 
     /// Returns a reference to the data stored in the node
-    pub fn data(&self) -> &NodeData<R> {
+    pub(crate) fn data(&self) -> &NodeData<I, R> {
         &self.data
     }
 
     /// Returns a mutable reference to the data stored in the node
-    pub fn data_mut(&mut self) -> &mut NodeData<R> {
+    pub(crate) fn data_mut(&mut self) -> &mut NodeData<I, R> {
         &mut self.data
     }
 
@@ -576,7 +576,7 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
     }
 }
 
-impl<R: Real> NodeData<R> {
+impl<I: Index, R: Real> NodeData<I, R> {
     fn new_particle_set<P: Into<OctreeNodeParticleStorage>>(
         particles: P,
         ghost_particle_count: usize,

@@ -40,7 +40,7 @@ pub fn triangulate_density_map_append<I: Index, R: Real>(
 
     if let (Some(subdomain_grid), Some(subdomain_offset)) = (subdomain_grid, subdomain_offset) {
         let subdomain = SubdomainGrid::new(
-            grid,
+            grid.clone(),
             subdomain_grid.clone(),
             subdomain_offset.index().clone(),
         );
@@ -66,6 +66,50 @@ pub fn triangulate_density_map_append<I: Index, R: Real>(
             &mut mesh.vertices,
         );
         triangulate::<I, R>(marching_cubes_data, mesh);
+    }
+}
+
+pub(crate) fn triangulate_density_map_with_stitching_data<I: Index, R: Real>(
+    grid: &UniformGrid<I, R>,
+    subdomain_offset: &PointIndex<I>,
+    subdomain_grid: &UniformGrid<I, R>,
+    density_map: &DensityMap<I, R>,
+    iso_surface_threshold: R,
+) -> SurfacePatch<I, R> {
+    profile!("triangulate_density_map_append");
+
+    let mut mesh = TriMesh3d::default();
+
+    let subdomain = SubdomainGrid::new(
+        grid.clone(),
+        subdomain_grid.clone(),
+        subdomain_offset.index().clone(),
+    );
+
+    let (marching_cubes_data, mut boundary_density_maps) =
+        interpolate_points_to_cell_data_skip_boundary::<I, R>(
+            &subdomain,
+            &density_map,
+            iso_surface_threshold,
+            &mut mesh.vertices,
+        );
+
+    let mut boundary_cell_data = collect_boundary_cell_data(&subdomain, &marching_cubes_data);
+
+    triangulate_with_criterion::<I, R, _>(
+        &subdomain,
+        marching_cubes_data,
+        &mut mesh,
+        TriangulationSkipBoundaryCells,
+    );
+
+    SurfacePatch {
+        mesh,
+        subdomain,
+        data: DirectedAxisArray::new_with(|axis| BoundaryData {
+            boundary_density_map: std::mem::take(boundary_density_maps.get_mut(axis)),
+            boundary_cell_data: std::mem::take(boundary_cell_data.get_mut(axis)),
+        }),
     }
 }
 
@@ -653,7 +697,7 @@ fn collect_boundary_cell_data<I: Index, R: Real>(
 }
 
 /// Stitching data per boundary
-#[derive(Default)]
+#[derive(Clone, Default, Debug)]
 pub(crate) struct BoundaryData<I: Index, R: Real> {
     /// The density map for all vertices of this boundary
     boundary_density_map: MapType<I, R>,
@@ -661,20 +705,21 @@ pub(crate) struct BoundaryData<I: Index, R: Real> {
     boundary_cell_data: MapType<I, CellData>,
 }
 
-pub(crate) struct StitchingSide<'a, I: Index, R: Real> {
+#[derive(Clone, Debug)]
+pub(crate) struct SurfacePatch<I: Index, R: Real> {
     /// The local surface mesh of this side
-    mesh: TriMesh3d<R>,
+    pub(crate) mesh: TriMesh3d<R>,
     /// The subdomain of this local mesh
-    subdomain: SubdomainGrid<'a, I, R>,
+    pub(crate) subdomain: SubdomainGrid<I, R>,
     /// All additional data required for stitching
-    data: DirectedAxisArray<BoundaryData<I, R>>,
+    pub(crate) data: DirectedAxisArray<BoundaryData<I, R>>,
 }
 
-fn merge_boundary_data<'a, I: Index, R: Real>(
-    result_subdomain: &SubdomainGrid<'a, I, R>,
-    negative_subdomain: &SubdomainGrid<'a, I, R>,
+fn merge_boundary_data<I: Index, R: Real>(
+    result_subdomain: &SubdomainGrid<I, R>,
+    negative_subdomain: &SubdomainGrid<I, R>,
     negative_data: &BoundaryData<I, R>,
-    positive_subdomain: &SubdomainGrid<'a, I, R>,
+    positive_subdomain: &SubdomainGrid<I, R>,
     positive_data: &BoundaryData<I, R>,
     positive_vertex_offset: usize,
 ) -> BoundaryData<I, R> {
@@ -749,17 +794,15 @@ fn merge_boundary_data<'a, I: Index, R: Real>(
 }
 
 // Returns a grid for the stitching domain between two subdomains and the offset of this grid
-fn compute_stitching_domain<'a, I: Index, R: Real>(
+fn compute_stitching_domain<I: Index, R: Real>(
     stitching_axis: Axis,
-    negative_subdomain: &SubdomainGrid<'a, I, R>,
-    positive_subdomain: &SubdomainGrid<'a, I, R>,
-) -> (UniformGrid<I, R>, [I; 3]) {
+    global_grid: &UniformGrid<I, R>,
+    negative_subdomain: &SubdomainGrid<I, R>,
+    positive_subdomain: &SubdomainGrid<I, R>,
+) -> SubdomainGrid<I, R> {
     // Ensure that global grids are equivalent
-    assert_eq!(
-        negative_subdomain.global_grid(),
-        positive_subdomain.global_grid()
-    );
-    let global_grid = negative_subdomain.global_grid();
+    assert_eq!(negative_subdomain.global_grid(), global_grid);
+    assert_eq!(positive_subdomain.global_grid(), global_grid);
 
     // Get the number of cells of the stitching domain
     let n_cells_per_dim = {
@@ -805,15 +848,15 @@ fn compute_stitching_domain<'a, I: Index, R: Real>(
     )
     .expect("Unable to construct stitching domain grid");
 
-    (stitching_grid, stitching_grid_offset)
+    SubdomainGrid::new(global_grid.clone(), stitching_grid, stitching_grid_offset)
 }
 
-fn compute_stitching_result_domain<'a, I: Index, R: Real>(
+fn compute_stitching_result_domain<I: Index, R: Real>(
     stitching_axis: Axis,
-    global_grid: &'a UniformGrid<I, R>,
-    negative_subdomain: &SubdomainGrid<'a, I, R>,
-    positive_subdomain: &SubdomainGrid<'a, I, R>,
-) -> SubdomainGrid<'a, I, R> {
+    global_grid: &UniformGrid<I, R>,
+    negative_subdomain: &SubdomainGrid<I, R>,
+    positive_subdomain: &SubdomainGrid<I, R>,
+) -> SubdomainGrid<I, R> {
     // Get the number of cells of the result domain by adding all cells in stitching direction
     let n_cells_per_dim = {
         let length_neg = negative_subdomain.subdomain_grid().cells_per_dim()[stitching_axis.dim()];
@@ -834,18 +877,18 @@ fn compute_stitching_result_domain<'a, I: Index, R: Real>(
     .expect("Unable to construct stitching domain grid");
 
     SubdomainGrid::new(
-        global_grid,
+        global_grid.clone(),
         subdomain_grid,
         negative_subdomain.subdomain_offset().clone(),
     )
 }
 
-pub(crate) fn stitch_meshes<'a, I: Index, R: Real>(
+pub(crate) fn stitch_meshes<I: Index, R: Real>(
     iso_surface_threshold: R,
     stitching_axis: Axis,
-    mut negative_side: StitchingSide<'a, I, R>,
-    mut positive_side: StitchingSide<'a, I, R>,
-) -> StitchingSide<'a, I, R> {
+    mut negative_side: SurfacePatch<I, R>,
+    mut positive_side: SurfacePatch<I, R>,
+) -> SurfacePatch<I, R> {
     assert!(std::ptr::eq(
         negative_side.subdomain.global_grid(),
         positive_side.subdomain.global_grid()
@@ -853,14 +896,12 @@ pub(crate) fn stitch_meshes<'a, I: Index, R: Real>(
     let global_grid = negative_side.subdomain.global_grid();
 
     // Construct domain for the triangulation of the boundary layer between the sides
-    let stitching_subdomain = {
-        let (stitching_grid, stitching_offset) = compute_stitching_domain(
-            stitching_axis,
-            &negative_side.subdomain,
-            &positive_side.subdomain,
-        );
-        SubdomainGrid::new(global_grid, stitching_grid, stitching_offset)
-    };
+    let stitching_subdomain = compute_stitching_domain(
+        stitching_axis,
+        global_grid,
+        &negative_side.subdomain,
+        &positive_side.subdomain,
+    );
 
     // Merge the two input meshes and get vertex offset for the positive side
     let (mut output_mesh, positive_vertex_offset) = {
@@ -967,7 +1008,7 @@ pub(crate) fn stitch_meshes<'a, I: Index, R: Real>(
         }
     });
 
-    StitchingSide {
+    SurfacePatch {
         subdomain: output_subdomain_grid,
         mesh: output_mesh,
         data: output_boundary_data,
@@ -977,8 +1018,7 @@ pub(crate) fn stitch_meshes<'a, I: Index, R: Real>(
 /// Converts the marching cubes input cell data into a triangle surface mesh, appends triangles to existing mesh
 #[inline(never)]
 fn triangulate<I: Index, R: Real>(input: MarchingCubesInput<I>, mesh: &mut TriMesh3d<R>) {
-    let dummy_grid = UniformGrid::new_zero();
-    let dummy_domain = SubdomainGrid::new_dummy(&dummy_grid);
+    let dummy_domain = SubdomainGrid::new_dummy(UniformGrid::new_zero());
     triangulate_with_criterion(&dummy_domain, input, mesh, TriangulationIdentityCriterion);
 }
 
@@ -1035,7 +1075,7 @@ impl<I: Index, R: Real> TriangulationCriterion<I, R> for TriangulationAssertCell
 
 /// Converts the marching cubes input cell data into a triangle surface mesh, appends triangles to existing mesh
 #[inline(never)]
-fn triangulate_with_criterion<'a, 'b, I: Index, R: Real, C: TriangulationCriterion<I, R>>(
+fn triangulate_with_criterion<I: Index, R: Real, C: TriangulationCriterion<I, R>>(
     subdomain: &SubdomainGrid<I, R>,
     input: MarchingCubesInput<I>,
     mesh: &mut TriMesh3d<R>,
@@ -1088,7 +1128,7 @@ fn triangulate_with_criterion<'a, 'b, I: Index, R: Real, C: TriangulationCriteri
 /// Converts the marching cubes input cell data into a triangle surface mesh, appends triangles to existing mesh
 #[inline(never)]
 pub(crate) fn triangulate_with_stitching_data<'a, 'b, I: Index, R: Real>(
-    subdomain: SubdomainGrid<'a, I, R>,
+    subdomain: SubdomainGrid<I, R>,
     input: MarchingCubesInput<I>,
     mesh: &'b mut TriMesh3d<R>,
 ) -> DirectedAxisArray<MapType<I, ArrayVec<[usize; 5]>>> {

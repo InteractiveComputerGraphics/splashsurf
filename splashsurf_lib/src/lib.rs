@@ -62,7 +62,8 @@ use uniform_grid::PointIndex;
 use workspace::{LocalReconstructionWorkspace, ReconstructionWorkspace};
 
 use crate::generic_tree::{ParVisitableTree, VisitableTree};
-use crate::octree::{MeshPatch, NodeData, OctreeNode};
+use crate::marching_cubes::SurfacePatch;
+use crate::octree::{NodeData, OctreeNode};
 pub use aabb::{AxisAlignedBoundingBox, AxisAlignedBoundingBox2d, AxisAlignedBoundingBox3d};
 pub use density_map::DensityMap;
 pub use numeric_types::{Index, Real, ThreadSafe};
@@ -583,23 +584,22 @@ fn reconstruct_surface_octree_recursive<'a, I: Index, R: Real>(
                     leaf_particle_positions
                 };
 
-                let mut mesh = TriMesh3d::default();
-                reconstruct_single_surface_append(
+                let surface_patch = reconstruct_surface_patch(
                     &mut *tl_workspace,
                     grid,
-                    Some(subdomain_offset),
-                    Some(subdomain_grid),
+                    subdomain_offset,
+                    subdomain_grid,
                     particle_positions.as_slice(),
                     parameters,
-                    &mut mesh,
                 );
+
+                // Store triangulation in the leaf
+                octree_node
+                    .data_mut()
+                    .replace(NodeData::SurfacePatch(surface_patch));
 
                 // Put back the particle position storage
                 tl_workspace.particle_positions = particle_positions;
-
-                // Store triangulation in the leaf
-                // TODO: Prepare all stitching data
-                *octree_node.data_mut() = NodeData::MeshPatch(MeshPatch { mesh })
             });
     };
 
@@ -611,8 +611,8 @@ fn reconstruct_surface_octree_recursive<'a, I: Index, R: Real>(
         octree
             .root_mut()
             .visit_mut_bfs(|octree_node: &mut OctreeNode<I, R>| {
-                if let NodeData::MeshPatch(mesh_patch) = octree_node.data_mut() {
-                    output_surface.mesh.append(&mut mesh_patch.mesh);
+                if let NodeData::SurfacePatch(surface_patch) = octree_node.data_mut() {
+                    output_surface.mesh.append(&mut surface_patch.mesh);
                 }
             });
 
@@ -687,6 +687,65 @@ fn reconstruct_single_surface_append<'a, I: Index, R: Real>(
         parameters.iso_surface_threshold,
         output_mesh,
     );
+}
+
+/// Reconstruct a surface, appends triangulation to the given mesh
+fn reconstruct_surface_patch<I: Index, R: Real>(
+    workspace: &mut LocalReconstructionWorkspace<I, R>,
+    grid: &UniformGrid<I, R>,
+    subdomain_offset: &PointIndex<I>,
+    subdomain_grid: &UniformGrid<I, R>,
+    particle_positions: &[Vector3<R>],
+    parameters: &Parameters<R>,
+) -> SurfacePatch<I, R> {
+    let particle_rest_density = parameters.rest_density;
+    let particle_rest_volume = R::from_f64((4.0 / 3.0) * std::f64::consts::PI).unwrap()
+        * parameters.particle_radius.powi(3);
+    let particle_rest_mass = particle_rest_volume * particle_rest_density;
+
+    info!("Starting neighborhood search...");
+    neighborhood_search::search_inplace::<I, R>(
+        &grid.aabb(),
+        particle_positions,
+        parameters.kernel_radius,
+        parameters.enable_multi_threading,
+        &mut workspace.particle_neighbor_lists,
+    );
+
+    info!("Computing particle densities...");
+    density_map::compute_particle_densities_inplace::<I, R>(
+        particle_positions,
+        workspace.particle_neighbor_lists.as_slice(),
+        parameters.kernel_radius,
+        particle_rest_mass,
+        parameters.enable_multi_threading,
+        &mut workspace.particle_densities,
+    );
+
+    // Create a new density map, reusing memory with the workspace is bad for cache efficiency
+    // Alternatively one could reuse memory with a custom caching allocator
+    let mut density_map = new_map().into();
+    density_map::generate_sparse_density_map(
+        grid,
+        Some(subdomain_offset),
+        Some(subdomain_grid),
+        particle_positions,
+        workspace.particle_densities.as_slice(),
+        None,
+        particle_rest_mass,
+        parameters.kernel_radius,
+        parameters.cube_size,
+        parameters.enable_multi_threading,
+        &mut density_map,
+    );
+
+    marching_cubes::triangulate_density_map_with_stitching_data::<I, R>(
+        grid,
+        subdomain_offset,
+        subdomain_grid,
+        &density_map,
+        parameters.iso_surface_threshold,
+    )
 }
 
 /// Logs the information about the given grid
