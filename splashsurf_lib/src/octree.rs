@@ -1,17 +1,13 @@
-use crate::generic_octree::{TreeNode, VisitableTree};
+use crate::generic_octree::{ParVisitableTree, TreeNode, VisitableTree};
 use crate::mesh::{HexMesh3d, TriMesh3d};
 use crate::uniform_grid::{PointIndex, UniformGrid};
 use crate::utils::{ChunkSize, ParallelPolicy};
-use crate::{
-    AxisAlignedBoundingBox, AxisAlignedBoundingBox3d, GridConstructionError, Index, Real,
-    ThreadSafe,
-};
+use crate::{AxisAlignedBoundingBox, AxisAlignedBoundingBox3d, GridConstructionError, Index, Real};
 use arrayvec::ArrayVec;
 use log::info;
 use nalgebra::Vector3;
 use octant_helper::{Octant, OctantAxisDirections, OctantDirectionFlags};
 use rayon::prelude::*;
-use rayon::ScopeFifo;
 use smallvec::SmallVec;
 use std::cell::RefCell;
 use thread_local::ThreadLocal;
@@ -163,8 +159,6 @@ impl<I: Index, R: Real> Octree<I, R> {
             // Perform one octree split on the node
             node.subdivide_with_margin(grid, particle_positions, margin);
         });
-
-        //self.root.subdivide_recursively_margin(grid, particle_positions, &split_criterion, margin);
     }
 
     /// Subdivide the octree recursively and in parallel using the given splitting criterion and a margin to add ghost particles
@@ -179,18 +173,30 @@ impl<I: Index, R: Real> Octree<I, R> {
 
         let split_criterion =
             default_split_criterion(subdivision_criterion, particle_positions.len());
-
         let parallel_policy = ParallelPolicy::default();
-        rayon::scope_fifo(|s| {
-            self.root.subdivide_recursively_margin_par(
-                s,
-                grid,
-                particle_positions,
-                &split_criterion,
-                margin,
-                &parallel_policy,
-            );
-        });
+
+        let visitor = move |node: &mut OctreeNode<I, R>| {
+            // Stop recursion if split criterion is not fulfilled
+            if !split_criterion.split_leaf(node) {
+                return;
+            }
+
+            // Perform one octree split on the leaf
+            if node
+                .data
+                .particle_set()
+                .expect("Node is not a leaf")
+                .particles
+                .len()
+                < parallel_policy.min_task_size
+            {
+                node.subdivide_with_margin(grid, particle_positions, margin);
+            } else {
+                node.subdivide_with_margin_par(grid, particle_positions, margin, &parallel_policy);
+            }
+        };
+
+        self.root.par_visit_mut_bfs(visitor);
     }
 
     /// Constructs a hex mesh visualizing the cells of the octree, may contain hanging and duplicate vertices as cells are not connected
@@ -325,49 +331,6 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
         ];
 
         UniformGrid::new(min, &n_cells_per_dim, cell_size)
-    }
-
-    fn subdivide_recursively_margin_par<'scope, S: LeafSplitCriterion<I, R> + ThreadSafe>(
-        &'scope mut self,
-        s: &ScopeFifo<'scope>,
-        grid: &'scope UniformGrid<I, R>,
-        particle_positions: &'scope [Vector3<R>],
-        split_criterion: &'scope S,
-        margin: R,
-        parallel_policy: &'scope ParallelPolicy,
-    ) {
-        // Stop recursion if split criterion is not fulfilled
-        if !split_criterion.split_leaf(self) {
-            return;
-        }
-
-        // Perform one octree split on the leaf
-        if self
-            .data
-            .particle_set()
-            .expect("Node is not a leaf")
-            .particles
-            .len()
-            < parallel_policy.min_task_size
-        {
-            self.subdivide_with_margin(grid, particle_positions, margin);
-        } else {
-            self.subdivide_with_margin_par(grid, particle_positions, margin, parallel_policy);
-        }
-
-        // Continue subdivision recursively in the new child nodes
-        for child_node in self.children_mut() {
-            s.spawn_fifo(move |s| {
-                child_node.subdivide_recursively_margin_par(
-                    s,
-                    grid,
-                    particle_positions,
-                    split_criterion,
-                    margin,
-                    parallel_policy,
-                );
-            });
-        }
     }
 
     /// Performs a subdivision of this [OctreeNode] while considering a margin with "ghost particles" around each octant

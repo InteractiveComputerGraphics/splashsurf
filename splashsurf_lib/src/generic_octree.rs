@@ -1,4 +1,3 @@
-use crate::ThreadSafe;
 use rayon::{Scope, ScopeFifo};
 use std::collections::VecDeque;
 use std::ops::{Deref, DerefMut};
@@ -69,55 +68,61 @@ pub trait VisitableTree: TreeNode {
 
 pub trait ParVisitableTree: TreeNode {
     /// Visits a node and its children in breadth-first order. The visitor is applied before enqueuing each node's children. Parallel version.
-    fn visit_mut_bfs_par<F: Fn(&mut Self) + ThreadSafe>(&mut self, visitor: F)
+    fn par_visit_mut_bfs<F>(&mut self, visitor: F)
     where
-        Self: ThreadSafe,
+        Self: Send + Sync,
+        F: Fn(&mut Self) + Sync,
     {
+        // Parallel implementation of recursive bread-first visitation
+        fn par_visit_mut_bfs_impl<'scope, T, F>(
+            node: &'scope mut T,
+            s: &ScopeFifo<'scope>,
+            visitor: &'scope F,
+        ) where
+            T: TreeNode + Send + Sync + ?Sized,
+            F: Fn(&mut T) + Sync,
+        {
+            // Apply visitor before enqueuing children
+            visitor(node);
+
+            // Spawn tasks for all children
+            for child in node.children_mut().iter_mut().map(DerefMut::deref_mut) {
+                s.spawn_fifo(move |s| par_visit_mut_bfs_impl(child, s, visitor));
+            }
+        }
+
         let v = &visitor;
-        rayon::scope_fifo(move |s| self.visit_mut_bfs_par_impl(s, v));
+        rayon::scope_fifo(move |s| par_visit_mut_bfs_impl(self, s, v));
     }
 
     /// Visits a node and its children in depth-first post-order. The visitor is applied after processing each node's children. Parallel version.
-    fn visit_mut_dfs_post_par<F: Fn(&mut Self) + ThreadSafe>(&mut self, visitor: F)
+    fn visit_mut_dfs_post_par<F>(&mut self, visitor: F)
     where
-        Self: ThreadSafe,
+        Self: Send + Sync,
+        F: Fn(&mut Self) + Sync,
     {
-        let v = &visitor;
-        rayon::scope(move |s| self.visit_mut_dfs_post_par_impl(s, v));
-    }
+        fn visit_mut_dfs_post_par_impl<'scope, T, F>(
+            node: &'scope mut T,
+            _s: &Scope<'scope>,
+            visitor: &'scope F,
+        ) where
+            T: TreeNode + Send + Sync + ?Sized,
+            F: Fn(&mut T) + Sync,
+        {
+            // Create a new scope to ensure that tasks are completed before the visitor runs
+            rayon::scope(|s| {
+                for child in node.children_mut().iter_mut().map(DerefMut::deref_mut) {
+                    s.spawn(move |s| visit_mut_dfs_post_par_impl(child, s, visitor));
+                }
+            });
 
-    fn visit_mut_bfs_par_impl<'scope, F: Fn(&mut Self) + ThreadSafe>(
-        &'scope mut self,
-        s: &ScopeFifo<'scope>,
-        visitor: &'scope F,
-    ) where
-        Self: ThreadSafe,
-    {
-        visitor(self);
-
-        // Spawn tasks for all children
-        for child in self.children_mut().iter_mut() {
-            s.spawn_fifo(move |s| child.visit_mut_bfs_par_impl(s, visitor));
+            visitor(node);
         }
-    }
 
-    fn visit_mut_dfs_post_par_impl<'scope, F: Fn(&mut Self) + ThreadSafe>(
-        &'scope mut self,
-        _s: &Scope<'scope>,
-        visitor: &'scope F,
-    ) where
-        Self: ThreadSafe,
-    {
-        // Create a new scope to ensure that tasks are completed before the visitor runs
-        rayon::scope(|s| {
-            for child in self.children_mut().iter_mut() {
-                s.spawn(move |s| child.visit_mut_dfs_post_par_impl(s, visitor));
-            }
-        });
-
-        visitor(self);
+        let v = &visitor;
+        rayon::scope(move |s| visit_mut_dfs_post_par_impl(self, s, v));
     }
 }
 
 impl<T: TreeNode> VisitableTree for T {}
-impl<T: TreeNode + ThreadSafe> ParVisitableTree for T {}
+impl<T: TreeNode + Send + Sync> ParVisitableTree for T {}
