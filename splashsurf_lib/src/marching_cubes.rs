@@ -340,7 +340,7 @@ pub(crate) fn interpolate_points_to_cell_data_skip_boundary<I: Index, R: Real>(
         "Interpolation procedure with stitching support only works on grids & subdomains with more than 2 cells in each dimension!"
     );
 
-    profile!("interpolate_points_to_cell_data");
+    profile!("interpolate_points_to_cell_data_skip_boundary");
 
     // Note: This functions assumes that the default value for missing point data is below the iso-surface threshold
     info!("Starting interpolation of cell data for marching cubes...");
@@ -350,6 +350,12 @@ pub(crate) fn interpolate_points_to_cell_data_skip_boundary<I: Index, R: Real>(
 
     // New density map for the boundary layer of this patch
     let mut boundary_density_maps: DirectedAxisArray<MapType<I, R>> = Default::default();
+
+    // Closure to detect points that are on the outer boundary of the domain, edges towards these point should be skipped
+    let point_is_on_outer_boundary = |p: &PointIndex<I>| -> bool {
+        let point_boundary_flags = GridBoundaryFaceFlags::classify_point(subdomain_grid, p);
+        !point_boundary_flags.is_empty()
+    };
 
     // Generate iso-surface vertices and identify affected cells & edges
     {
@@ -411,41 +417,48 @@ pub(crate) fn interpolate_points_to_cell_data_skip_boundary<I: Index, R: Real>(
                     continue;
                 };
 
-                // Check if an edge crossing the iso-surface was found
-                if neighbor_value > iso_surface_threshold {
-                    // Interpolate iso-surface vertex on the edge
-                    let alpha =
-                        (iso_surface_threshold - point_value) / (neighbor_value - point_value);
-                    let point_coords = subdomain_grid.point_coordinates(&point);
-                    let neighbor_coords = subdomain_grid.point_coordinates(neighbor);
-                    let interpolated_coords =
-                        (point_coords) * (R::one() - alpha) + neighbor_coords * alpha;
+                // Skip edges that don't cross the iso-surface
+                if !(neighbor_value > iso_surface_threshold) {
+                    continue;
+                }
 
-                    // Store interpolated vertex and remember its index
-                    let vertex_index = vertices.len();
-                    vertices.push(interpolated_coords);
+                // Skip edges that go into the boundary layer
+                if point_is_on_outer_boundary(&neighbor) {
+                    continue;
+                }
 
-                    // Store the data required for the marching cubes triangulation for
-                    // each cell adjacent to the edge crossing the iso-surface.
-                    // This includes the above/below iso-surface flags and the interpolated vertex index.
-                    for cell in subdomain_grid.cells_adjacent_to_edge(&neighbor_edge).iter().flatten() {
-                        let flat_cell_index = subdomain_grid.flatten_cell_index(cell);
+                // Interpolate iso-surface vertex on the edge
+                let alpha =
+                    (iso_surface_threshold - point_value) / (neighbor_value - point_value);
+                let point_coords = subdomain_grid.point_coordinates(&point);
+                let neighbor_coords = subdomain_grid.point_coordinates(neighbor);
+                let interpolated_coords =
+                    (point_coords) * (R::one() - alpha) + neighbor_coords * alpha;
 
-                        let mut cell_data_entry = cell_data
-                            .entry(flat_cell_index)
-                            .or_insert_with(CellData::default);
+                // Store interpolated vertex and remember its index
+                let vertex_index = vertices.len();
+                vertices.push(interpolated_coords);
 
-                        // Store the index of the interpolated vertex on the corresponding local edge of the cell
-                        let local_edge_index = cell.local_edge_index_of(&neighbor_edge).unwrap();
-                        assert!(cell_data_entry.iso_surface_vertices[local_edge_index].is_none(), "Overwriting already existing vertex. This is a bug.");
-                        cell_data_entry.iso_surface_vertices[local_edge_index] = Some(vertex_index);
+                // Store the data required for the marching cubes triangulation for
+                // each cell adjacent to the edge crossing the iso-surface.
+                // This includes the above/below iso-surface flags and the interpolated vertex index.
+                for cell in subdomain_grid.cells_adjacent_to_edge(&neighbor_edge).iter().flatten() {
+                    let flat_cell_index = subdomain_grid.flatten_cell_index(cell);
 
-                        // Mark the neighbor as above the iso-surface threshold
-                        let local_vertex_index =
-                            cell.local_point_index_of(neighbor.index()).unwrap();
-                        cell_data_entry.corner_above_threshold[local_vertex_index] =
-                            RelativeToThreshold::Above;
-                    }
+                    let mut cell_data_entry = cell_data
+                        .entry(flat_cell_index)
+                        .or_insert_with(CellData::default);
+
+                    // Store the index of the interpolated vertex on the corresponding local edge of the cell
+                    let local_edge_index = cell.local_edge_index_of(&neighbor_edge).unwrap();
+                    assert!(cell_data_entry.iso_surface_vertices[local_edge_index].is_none(), "Overwriting already existing vertex. This is a bug.");
+                    cell_data_entry.iso_surface_vertices[local_edge_index] = Some(vertex_index);
+
+                    // Mark the neighbor as above the iso-surface threshold
+                    let local_vertex_index =
+                        cell.local_point_index_of(neighbor.index()).unwrap();
+                    cell_data_entry.corner_above_threshold[local_vertex_index] =
+                        RelativeToThreshold::Above;
                 }
             }
         });
@@ -516,7 +529,7 @@ pub(crate) fn interpolate_points_to_cell_data_stitching<I: Index, R: Real>(
     vertices: &mut Vec<Vector3<R>>,
     marching_cubes_input: &mut MarchingCubesInput<I>,
 ) {
-    profile!("interpolate_points_to_cell_data");
+    profile!("interpolate_points_to_cell_data_stitching");
 
     // Note: This functions assumes that the default value for missing point data is below the iso-surface threshold
     info!("Starting interpolation of cell data for marching cubes...");
@@ -524,11 +537,20 @@ pub(crate) fn interpolate_points_to_cell_data_stitching<I: Index, R: Real>(
     // Map from flat cell index to all data that is required per cell for the marching cubes triangulation
     let cell_data = &mut marching_cubes_input.cell_data;
 
-    let point_is_on_stitching_surface = |p: &PointIndex<I>| {
+    info!(
+        "Input: cell data for marching cubes with {} cells and {} vertices.",
+        cell_data.len(),
+        vertices.len()
+    );
+
+    // Closure to detect points that are on the positive/negative side of the stitching domain, along the stitching axis
+    let point_is_on_stitching_surface = |p: &PointIndex<I>| -> bool {
         let index = p.index();
         index[stitching_axis.dim()] == I::zero()
-            || index[stitching_axis.dim()] + I::one() == grid.cells_per_dim()[stitching_axis.dim()]
+            || index[stitching_axis.dim()] == grid.points_per_dim()[stitching_axis.dim()] - I::one()
     };
+
+    info!("Points per dim: {:?}", grid.points_per_dim());
 
     // Generate iso-surface vertices and identify affected cells & edges
     {
@@ -634,10 +656,12 @@ pub(crate) fn interpolate_points_to_cell_data_stitching<I: Index, R: Real>(
             for (local_point_index, flag_above) in
                 cell_data.corner_above_threshold.iter_mut().enumerate()
             {
+                /*
                 // If the point is already marked as above we can ignore it
                 if let RelativeToThreshold::Above = flag_above {
                     continue;
                 }
+                */
 
                 // Otherwise try to look up its value and potentially mark it as above the threshold
                 let point = cell.global_point_index_of(local_point_index).unwrap();
@@ -659,7 +683,7 @@ pub(crate) fn interpolate_points_to_cell_data_stitching<I: Index, R: Real>(
     assert_cell_data_point_data_consistency(density_map, &cell_data, grid, iso_surface_threshold);
 
     info!(
-        "Generated cell data for marching cubes with {} cells and {} vertices.",
+        "Output: cell data for marching cubes with {} cells and {} vertices.",
         cell_data.len(),
         vertices.len()
     );
@@ -683,7 +707,7 @@ fn collect_boundary_cell_data<I: Index, R: Real>(
         // Check which grid boundary faces this cell is part of
         let cell_grid_boundaries =
             GridBoundaryFaceFlags::classify_cell(subdomain_grid, &cell_index);
-        // Skip cells that are not part of any grid boundary
+        // Only process cells that are part of some boundary
         if !cell_grid_boundaries.is_empty() {
             for boundary in cell_grid_boundaries.iter_individual() {
                 boundary_cell_data
@@ -783,7 +807,14 @@ fn merge_boundary_data<I: Index, R: Real>(
                     *v += positive_vertex_offset;
                 }
 
-                merged_cell_map.insert(flat_result_cell_index, cell_data.clone());
+                merged_cell_map
+                    .entry(flat_result_cell_index)
+                    // The cell data interpolation function should only populate cells that are part of their subdomain
+                    .and_modify(|_| {
+                        panic!("Merge conflict: there is duplicate cell data for this cell index")
+                    })
+                    // Otherwise insert the additional cell data
+                    .or_insert(cell_data);
             }
         }
 
@@ -793,7 +824,7 @@ fn merge_boundary_data<I: Index, R: Real>(
     result_boundary_data
 }
 
-// Returns a grid for the stitching domain between two subdomains and the offset of this grid
+/// Computes the [SubdomainGrid] for stitching region between the two sides that has to be triangulated
 fn compute_stitching_domain<I: Index, R: Real>(
     stitching_axis: Axis,
     global_grid: &UniformGrid<I, R>,
@@ -894,6 +925,7 @@ fn compute_stitching_domain<I: Index, R: Real>(
     SubdomainGrid::new(global_grid.clone(), stitching_grid, stitching_grid_offset)
 }
 
+/// Computes the [SubdomainGrid] for the final combined domain of the two sides
 fn compute_stitching_result_domain<I: Index, R: Real>(
     stitching_axis: Axis,
     global_grid: &UniformGrid<I, R>,
@@ -947,7 +979,7 @@ pub(crate) fn stitch_meshes<I: Index, R: Real>(
         &positive_side.subdomain,
     );
 
-    // Merge the two input meshes and get vertex offset for the positive side
+    // Merge the two input meshes structures and get vertex offset for all vertices of the positive side
     let (mut output_mesh, positive_vertex_offset) = {
         let mut negative_mesh = std::mem::take(&mut negative_side.mesh);
         let mut positive_mesh = std::mem::take(&mut positive_side.mesh);
@@ -988,12 +1020,8 @@ pub(crate) fn stitch_meshes<I: Index, R: Real>(
         cell_data: boundary_cell_data,
     };
 
-    // Collect the boundary cell data of the stitching domain
-    let boundary_cell_data =
-        collect_boundary_cell_data(&stitching_subdomain, &marching_cubes_input);
-
     // Perform marching cubes on the stitching domain
-    {
+    let boundary_cell_data = {
         interpolate_points_to_cell_data_stitching(
             stitching_subdomain.subdomain_grid(),
             &boundary_density_map.into(),
@@ -1003,13 +1031,19 @@ pub(crate) fn stitch_meshes<I: Index, R: Real>(
             &mut marching_cubes_input,
         );
 
+        // Collect the boundary cell data of the stitching domain
+        let boundary_cell_data =
+            collect_boundary_cell_data(&stitching_subdomain, &marching_cubes_input);
+
         triangulate_with_criterion(
             &stitching_subdomain,
             marching_cubes_input,
             &mut output_mesh,
             TriangulationAssertCellInsideGrid,
         );
-    }
+
+        boundary_cell_data
+    };
 
     // Get domain for the whole stitched domain
     let output_subdomain_grid = compute_stitching_result_domain(
@@ -1042,9 +1076,18 @@ pub(crate) fn stitch_meshes<I: Index, R: Real>(
                 if let Some(flat_result_cell_index) = stitching_subdomain
                     .map_flat_cell_index_to(&output_subdomain_grid, *flat_cell_index)
                 {
+                    // TODO: How to merge this properly? Are we even getting all CellData that is needed for the next join?
+                    //  Might be ok, because we only add cells inside of the inner domain of the previous domains.
+                    //  These are required for averaging of the corners to the next stitching sides
                     merged_data
                         .boundary_cell_data
-                        .insert(flat_result_cell_index, cell_data.clone());
+                        .entry(flat_result_cell_index)
+                        .and_modify(|_| {
+                            panic!(
+                                "Merge conflict: there is duplicate cell data for this cell index"
+                            )
+                        })
+                        .or_insert(cell_data.clone());
                 }
             }
 
@@ -1141,11 +1184,14 @@ fn triangulate_with_criterion<I: Index, R: Real, C: TriangulationCriterion<I, R>
             continue;
         }
 
+        println!("cell_data: {:?}", cell_data);
+
         for triangle in marching_cubes_triangulation_iter(&cell_data.are_vertices_above()) {
             // Note: If the one of the following expect calls causes a panic, it is probably because
             //  a cell was added improperly to the marching cubes input, e.g. a cell was added to the
-            //  cell data map that is not part of the domain (such that only those edges of the cell
-            //  that are neighboring to the domain have correct iso surface vertices)
+            //  cell data map that is not part of the domain. This results in only those edges of the cell
+            //  that are neighboring to the domain having correct iso surface vertices. The remaining
+            //  edges would have missing iso-surface vertices and overall this results in an invalid triangulation
             //
             //  If this happens, it's a bug in the cell data map generation.
             let global_triangle = [
@@ -1167,87 +1213,6 @@ fn triangulate_with_criterion<I: Index, R: Real, C: TriangulationCriterion<I, R>
     );
     info!("Triangulation done.");
 }
-
-/*
-/// Converts the marching cubes input cell data into a triangle surface mesh, appends triangles to existing mesh
-#[inline(never)]
-pub(crate) fn triangulate_with_stitching_data<'a, 'b, I: Index, R: Real>(
-    subdomain: SubdomainGrid<I, R>,
-    input: MarchingCubesInput<I>,
-    mesh: &'b mut TriMesh3d<R>,
-) -> DirectedAxisArray<MapType<I, ArrayVec<[usize; 5]>>> {
-    profile!("triangulate");
-
-    let MarchingCubesInput { cell_data } = input;
-
-    info!(
-        "Starting marching cubes triangulation of {} cells...",
-        cell_data.len()
-    );
-
-    // Map containing triangle indices for each boundary cell
-    let mut boundary_triangles: DirectedAxisArray<MapType<_, _>> = Default::default();
-
-    // Triangulate affected cells
-    let subdomain_grid = subdomain.subdomain_grid();
-    for (&flat_cell_index, cell_data) in &cell_data {
-        let cell_index = subdomain_grid
-            .try_unflatten_cell_index(flat_cell_index)
-            .expect("Unable to unflatten cell index");
-
-        let mut triangle_indices: ArrayVec<[_; 5]> = ArrayVec::new();
-        for triangle in marching_cubes_triangulation_iter(&cell_data.are_vertices_above()) {
-            // Note: If the one of the following expect calls causes a panic, it is probably because
-            //  a cell was added improperly to the marching cubes input, e.g. a cell was added to the
-            //  cell data map that is not part of the domain (such that only those edges of the cell
-            //  that are neighboring to the domain have correct iso surface vertices)
-            //
-            //  If this happens, it's a bug in the cell data map generation.
-            let global_triangle = [
-                cell_data.iso_surface_vertices[triangle[0] as usize]
-                    .expect("Missing iso surface vertex. This is a bug."),
-                cell_data.iso_surface_vertices[triangle[1] as usize]
-                    .expect("Missing iso surface vertex. This is a bug."),
-                cell_data.iso_surface_vertices[triangle[2] as usize]
-                    .expect("Missing iso surface vertex. This is a bug."),
-            ];
-
-            triangle_indices.push(mesh.triangles.len());
-            mesh.triangles.push(global_triangle);
-        }
-
-        // Store triangles indices for all boundary cells
-        let cell_grid_boundaries =
-            GridBoundaryFaceFlags::classify_cell(subdomain_grid, &cell_index);
-        if !cell_grid_boundaries.is_empty() {
-            // Get the cell index on the global background grid
-            let global_cell_index = subdomain
-                .inv_map_cell(&cell_index)
-                .expect("Failed to map cell from subdomain into global grid");
-            // Flatten to use as hashmap index
-            let flat_global_cell_index = subdomain
-                .global_grid()
-                .flatten_cell_index(&global_cell_index);
-
-            // Store triangle indices to each boundary this cell is part of
-            for boundary in cell_grid_boundaries.iter_individual() {
-                boundary_triangles
-                    .get_mut(&boundary)
-                    .insert(flat_global_cell_index, triangle_indices.clone());
-            }
-        }
-    }
-
-    info!(
-        "Generated surface mesh with {} triangles and {} vertices.",
-        mesh.triangles.len(),
-        mesh.vertices.len()
-    );
-    info!("Triangulation done.");
-
-    boundary_triangles
-}
-*/
 
 #[allow(unused)]
 #[inline(never)]
