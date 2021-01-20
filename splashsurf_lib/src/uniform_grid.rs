@@ -650,6 +650,23 @@ impl<I: Index, R: Real> SubdomainGrid<I, R> {
         &self.subdomain_offset
     }
 
+    /// Returns the lower corner point index of the subdomain in the global grid
+    pub fn min_point(&self) -> PointIndex<I> {
+        self.global_grid()
+            .get_point(self.subdomain_offset)
+            .expect("Invalid subdomain")
+    }
+
+    /// Returns the upper corner point index of the subdomain in the global grid
+    pub fn max_point(&self) -> PointIndex<I> {
+        let max_point = Direction::Positive
+            .checked_apply_step_ijk(&self.subdomain_offset, &self.subdomain_grid.cells_per_dim())
+            .expect("Invalid subdomain");
+        self.global_grid()
+            .get_point(max_point)
+            .expect("Invalid subdomain")
+    }
+
     /// Maps the point index from the global grid into the subdomain grid
     pub fn map_point(&self, point: &PointIndex<I>) -> Option<PointIndex<I>> {
         let new_point =

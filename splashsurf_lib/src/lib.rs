@@ -61,7 +61,7 @@ use octree::Octree;
 use uniform_grid::PointIndex;
 use workspace::{LocalReconstructionWorkspace, ReconstructionWorkspace};
 
-use crate::generic_tree::{ParVisitableTree, VisitableTree};
+use crate::generic_tree::{ParVisitableTree, TreeNode, VisitableTree};
 use crate::marching_cubes::SurfacePatch;
 use crate::octree::{NodeData, OctreeNode};
 pub use aabb::{AxisAlignedBoundingBox, AxisAlignedBoundingBox2d, AxisAlignedBoundingBox3d};
@@ -281,7 +281,9 @@ impl<I: Index, R: Real> From<anyhow::Error> for ReconstructionError<I, R> {
 /// Therefore, if you call `initialize_thread_pool` a second time, it will return an error.
 /// An `Ok` result indicates that this is the first initialization of the thread pool.
 pub fn initialize_thread_pool(num_threads: usize) -> Result<(), anyhow::Error> {
-    rayon::ThreadPoolBuilder::new().num_threads(num_threads).build_global()?;
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(num_threads)
+        .build_global()?;
     Ok(())
 }
 
@@ -319,7 +321,7 @@ pub fn reconstruct_surface_inplace<'a, I: Index, R: Real>(
     log_grid_info(grid);
 
     if parameters.spatial_decomposition.is_some() {
-        reconstruct_surface_inplace_octree(particle_positions, parameters, output_surface)?
+        reconstruct_surface_octree_recursive(particle_positions, parameters, output_surface)?
     } else {
         profile!("reconstruct_surface_inplace");
 
@@ -551,6 +553,8 @@ fn reconstruct_surface_octree_recursive<'a, I: Index, R: Real>(
         let tl_workspaces = &output_surface.workspace;
 
         profile!("parallel domain decomposed surface reconstruction");
+        info!("Starting triangulation of surface patches.");
+
         octree
             .root_mut()
             .par_visit_mut_bfs(|octree_node: &mut OctreeNode<I, R>| {
@@ -611,7 +615,26 @@ fn reconstruct_surface_octree_recursive<'a, I: Index, R: Real>(
                 // Put back the particle position storage
                 tl_workspace.particle_positions = particle_positions;
             });
+
+        info!("Generation of surface patches is done.");
     };
+
+    // Merge meshes
+    {
+        profile!("parallel stitching of domains");
+        info!("Starting stitching of surface pathces.");
+
+        octree
+            .root_mut()
+            .par_visit_mut_dfs_post(|octree_node: &mut OctreeNode<I, R>| {
+                // Skip leaf nodes
+                if octree_node.children().is_empty() {
+                    return;
+                }
+
+                octree_node.stitch_surface_patches(parameters.iso_surface_threshold);
+            });
+    }
 
     // Merge meshes
     {

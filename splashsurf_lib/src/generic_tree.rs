@@ -124,12 +124,12 @@ pub trait ParVisitableTree: TreeNode {
     }
 
     /// Visits a node and its children in depth-first post-order. The visitor is applied after processing each node's children. Parallel version.
-    fn visit_mut_dfs_post_par<F>(&mut self, visitor: F)
+    fn par_visit_mut_dfs_post<F>(&mut self, visitor: F)
     where
         Self: Send + Sync,
         F: Fn(&mut Self) + Sync,
     {
-        fn visit_mut_dfs_post_par_impl<'scope, T, F>(
+        fn par_visit_mut_dfs_post_impl<'scope, T, F>(
             node: &'scope mut T,
             _s: &Scope<'scope>,
             visitor: &'scope F,
@@ -140,7 +140,7 @@ pub trait ParVisitableTree: TreeNode {
             // Create a new scope to ensure that tasks are completed before the visitor runs
             rayon::scope(|s| {
                 for child in node.children_mut().iter_mut().map(DerefMut::deref_mut) {
-                    s.spawn(move |s| visit_mut_dfs_post_par_impl(child, s, visitor));
+                    s.spawn(move |s| par_visit_mut_dfs_post_impl(child, s, visitor));
                 }
             });
 
@@ -148,7 +148,7 @@ pub trait ParVisitableTree: TreeNode {
         }
 
         let v = &visitor;
-        rayon::scope(move |s| visit_mut_dfs_post_par_impl(self, s, v));
+        rayon::scope(move |s| par_visit_mut_dfs_post_impl(self, s, v));
     }
 }
 

@@ -2,7 +2,10 @@ use crate::generic_tree::{ParVisitableTree, TreeNode, VisitableTree};
 use crate::mesh::HexMesh3d;
 use crate::uniform_grid::{PointIndex, UniformGrid};
 use crate::utils::{ChunkSize, ParallelPolicy};
-use crate::{AxisAlignedBoundingBox, AxisAlignedBoundingBox3d, GridConstructionError, Index, Real};
+use crate::{
+    marching_cubes, new_map, AxisAlignedBoundingBox, AxisAlignedBoundingBox3d,
+    GridConstructionError, Index, MapType, Real,
+};
 use arrayvec::ArrayVec;
 use log::info;
 use nalgebra::Vector3;
@@ -70,18 +73,6 @@ impl<I: Index, R: Real> Default for NodeData<I, R> {
     }
 }
 
-impl<I: Index, R: Real> NodeData<I, R> {
-    /// Returns the stored data and leaves `None` in its place
-    pub fn take(&mut self) -> Self {
-        std::mem::take(self)
-    }
-
-    /// Returns the stored data and leaves `None` in its place
-    pub fn replace(&mut self, new_data: Self) {
-        *self = new_data;
-    }
-}
-
 #[derive(Clone, Debug)]
 pub struct ParticleSet {
     // The particles belonging to this set
@@ -93,6 +84,7 @@ pub struct ParticleSet {
 type OctreeNodeParticleStorage = SmallVec<[usize; 6]>;
 
 use crate::marching_cubes::SurfacePatch;
+use crate::topology::{Axis, Direction};
 use split_criterion::{default_split_criterion, LeafSplitCriterion};
 
 impl<I: Index, R: Real> Octree<I, R> {
@@ -270,7 +262,7 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
             n_points[2] - I::one(),
         ];
 
-        Self::new_leaf(
+        Self::new_particle_set_node(
             grid.get_point(min_point)
                 .expect("Cannot get lower corner of grid"),
             grid.get_point(max_point)
@@ -280,7 +272,7 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
         )
     }
 
-    fn new_leaf(
+    fn new_particle_set_node(
         min_corner: PointIndex<I>,
         max_corner: PointIndex<I>,
         particles: OctreeNodeParticleStorage,
@@ -294,6 +286,19 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
                 particles,
                 ghost_particle_count,
             }),
+        }
+    }
+
+    fn new_surface_patch_node(
+        min_corner: PointIndex<I>,
+        max_corner: PointIndex<I>,
+        surface_patch: SurfacePatch<I, R>,
+    ) -> Self {
+        Self {
+            children: Default::default(),
+            min_corner,
+            max_corner,
+            data: NodeData::SurfacePatch(surface_patch),
         }
     }
 
@@ -423,7 +428,7 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
                 );
                 assert_eq!(octant_particles.len(), octant_particle_count);
 
-                let child = Box::new(OctreeNode::new_leaf(
+                let child = Box::new(OctreeNode::new_particle_set_node(
                     min_corner,
                     max_corner,
                     octant_particles,
@@ -556,7 +561,7 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
                         );
                         assert_eq!(octant_particles.len(), octant_particle_count);
 
-                        let child = Box::new(OctreeNode::new_leaf(
+                        let child = Box::new(OctreeNode::new_particle_set_node(
                             min_corner,
                             max_corner,
                             octant_particles,
@@ -573,6 +578,80 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
         } else {
             panic!("Only nodes with ParticleSet data can be subdivided");
         };
+    }
+
+    pub fn stitch_surface_patches(&mut self, iso_surface_threshold: R) {
+        // If this node has no children there is nothing to stitch
+        if self.children.is_empty() {
+            return;
+        }
+
+        // Don't try to stitch children that still have children
+        for child in self.children.iter() {
+            if !child.children.is_empty() {
+                return;
+            }
+        }
+
+        let mut old_children_map: MapType<_, Box<OctreeNode<I, R>>> = {
+            let old_children = std::mem::take(&mut self.children);
+
+            let mut children_map = new_map();
+            for (child, octant) in old_children.into_iter().zip(Octant::all().iter().copied()) {
+                let octant_directions = OctantAxisDirections::from(octant);
+                children_map.insert(octant_directions, child);
+            }
+
+            children_map
+        };
+
+        for mut octant in OctantAxisDirections::all().iter().copied() {
+            // Iterate over every octant pair only once
+            if octant.x_axis.is_positive() {
+                continue;
+            }
+
+            // Extract the surface patch on the negative and positive side
+            let (negative_surface, positive_surface) = {
+                let negative_child = old_children_map
+                    .remove(&octant)
+                    .expect("Child node missing!");
+
+                octant.x_axis = Direction::Positive;
+                let positive_child = old_children_map
+                    .remove(&octant)
+                    .expect("Child node missing!");
+
+                (
+                    negative_child
+                        .data
+                        .into_surface_patch()
+                        .expect("Surface patch missing!"),
+                    positive_child
+                        .data
+                        .into_surface_patch()
+                        .expect("Surface patch missing!"),
+                )
+            };
+
+            let stitched_patch = marching_cubes::stitch_meshes(
+                iso_surface_threshold,
+                Axis::X,
+                negative_surface,
+                positive_surface,
+            );
+
+            let min_corner = stitched_patch.subdomain.min_point();
+            let max_corner = stitched_patch.subdomain.max_point();
+
+            // Add stitched surface as child node
+            self.children
+                .push(Box::new(OctreeNode::new_surface_patch_node(
+                    min_corner,
+                    max_corner,
+                    stitched_patch,
+                )))
+        }
     }
 }
 
@@ -595,6 +674,43 @@ impl<I: Index, R: Real> NodeData<I, R> {
         } else {
             None
         }
+    }
+
+    /// Returns a reference to the contained particle set if it contains one
+    pub fn surface_patch(&self) -> Option<&SurfacePatch<I, R>> {
+        if let Self::SurfacePatch(surface_patch) = self {
+            Some(surface_patch)
+        } else {
+            None
+        }
+    }
+
+    /// Consumes self and returns the ParticleSet if it contained one
+    pub fn into_particle_set(self) -> Option<ParticleSet> {
+        if let Self::ParticleSet(particle_set) = self {
+            Some(particle_set)
+        } else {
+            None
+        }
+    }
+
+    /// Consumes self and returns the SurfacePatch if it contained one
+    pub fn into_surface_patch(self) -> Option<SurfacePatch<I, R>> {
+        if let Self::SurfacePatch(surface_patch) = self {
+            Some(surface_patch)
+        } else {
+            None
+        }
+    }
+
+    /// Returns the stored data and leaves `None` in its place
+    pub fn take(&mut self) -> Self {
+        std::mem::take(self)
+    }
+
+    /// Returns the stored data and leaves `None` in its place
+    pub fn replace(&mut self, new_data: Self) {
+        *self = new_data;
     }
 }
 
@@ -665,14 +781,14 @@ mod split_criterion {
     }
 
     impl<I: Index, R: Real> LeafSplitCriterion<I, R> for MinimumExtentSplitCriterion<I> {
-        /// Returns true only if all extents of the octree node are larger than 1 cell
+        /// Only returns true if a splitting of the node does not result in a node that is smaller than the allowed minimum extent
         fn split_leaf(&self, node: &OctreeNode<I, R>) -> bool {
             let lower = node.min_corner.index();
             let upper = node.max_corner.index();
 
-            upper[0] - lower[0] > self.minimum_extent
-                && upper[1] - lower[1] > self.minimum_extent
-                && upper[2] - lower[2] > self.minimum_extent
+            upper[0] - lower[0] >= self.minimum_extent + self.minimum_extent
+                && upper[1] - lower[1] >= self.minimum_extent + self.minimum_extent
+                && upper[2] - lower[2] >= self.minimum_extent + self.minimum_extent
         }
     }
 
@@ -704,7 +820,7 @@ mod split_criterion {
 
         info!(
             "Building octree with at most {} particles per leaf",
-            num_particles
+            particles_per_cell
         );
 
         (
