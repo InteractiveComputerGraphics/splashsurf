@@ -62,7 +62,7 @@ use octree::Octree;
 use uniform_grid::PointIndex;
 use workspace::{LocalReconstructionWorkspace, ReconstructionWorkspace};
 
-use crate::generic_tree::VisitableTree;
+use crate::generic_tree::{ParVisitableTree, VisitableTree};
 use crate::octree::OctreeNode;
 pub use aabb::{AxisAlignedBoundingBox, AxisAlignedBoundingBox2d, AxisAlignedBoundingBox3d};
 pub use density_map::DensityMap;
@@ -386,25 +386,8 @@ fn reconstruct_surface_inplace_octree<'a, I: Index, R: Real>(
             panic!("Called octree-based surface reconstruction without decomposition criterion");
         };
 
-    let octree = output_surface.octree.as_ref().expect("No octree generated");
-
-    // Collect references to the octree nodes with particles
-    let octree_leaves = {
-        let mut octree_leaves = Vec::new();
-        octree.root().visit_dfs(|octree_node| {
-            if !octree_node
-                .data()
-                .particle_set()
-                .map(|ps| ps.particles.is_empty())
-                .unwrap_or(true)
-            {
-                octree_leaves.push(octree_node)
-            }
-        });
-        octree_leaves
-    };
-
-    info!("Octree has {} leaf nodes", octree_leaves.len());
+    // Make a clone of the octree, as we want to preserve the particle lists for the user while this local octree gets merged later
+    let mut octree = output_surface.octree.clone().expect("No octree generated");
 
     // Disable all multi-threading in sub-tasks for now (sub-tasks are processed in parallel instead)
     let parameters = &{
@@ -433,15 +416,15 @@ fn reconstruct_surface_inplace_octree<'a, I: Index, R: Real>(
         let tl_workspaces = &output_surface.workspace;
 
         profile!("parallel domain decomposed surface reconstruction");
-        octree_leaves
-            .par_iter()
-            .copied()
-            .for_each(|octree_leaf: &OctreeNode<I, R>| {
-                let particles = &octree_leaf
-                    .data()
-                    .particle_set()
-                    .expect("Octree node has to be a leaf")
-                    .particles;
+        octree
+            .root_mut()
+            .par_visit_bfs(|octree_leaf: &OctreeNode<I, R>| {
+                let particles = if let Some(particle_set) = octree_leaf.data().particle_set() {
+                    &particle_set.particles
+                } else {
+                    // Skip non-leaf nodes
+                    return;
+                };
 
                 let mut tl_workspace = tl_workspaces
                     .get_local_with_capacity(particles.len())

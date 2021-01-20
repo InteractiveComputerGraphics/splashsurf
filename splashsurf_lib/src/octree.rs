@@ -137,6 +137,11 @@ impl<I: Index, R: Real> Octree<I, R> {
         &self.root
     }
 
+    /// Returns a mutable reference to the root node of the octree
+    pub fn root_mut(&mut self) -> &mut OctreeNode<I, R> {
+        &mut self.root
+    }
+
     /// Subdivide the octree recursively using the given splitting criterion and a margin to add ghost particles
     pub fn subdivide_recursively_margin(
         &mut self,

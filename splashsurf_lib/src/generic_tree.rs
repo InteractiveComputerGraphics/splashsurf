@@ -67,13 +67,41 @@ pub trait VisitableTree: TreeNode {
 }
 
 pub trait ParVisitableTree: TreeNode {
+    /// Visits a node and its children in breadth-first order. The visitor is applied in parallel to processing the children.
+    fn par_visit_bfs<F>(&self, visitor: F)
+    where
+        Self: Sync,
+        F: Fn(&Self) + Sync,
+    {
+        // Parallel implementation of recursive breadth-first visitation
+        fn par_visit_bfs_impl<'scope, T, F>(
+            node: &'scope T,
+            s: &ScopeFifo<'scope>,
+            visitor: &'scope F,
+        ) where
+            T: TreeNode + Sync + ?Sized,
+            F: Fn(&T) + Sync,
+        {
+            // Spawn task for visitor
+            s.spawn_fifo(move |s| visitor(node));
+
+            // Spawn tasks for all children
+            for child in node.children().iter().map(Deref::deref) {
+                s.spawn_fifo(move |s| par_visit_bfs_impl(child, s, visitor));
+            }
+        }
+
+        let v = &visitor;
+        rayon::scope_fifo(move |s| par_visit_bfs_impl(self, s, v));
+    }
+
     /// Visits a node and its children in breadth-first order. The visitor is applied before enqueuing each node's children. Parallel version.
     fn par_visit_mut_bfs<F>(&mut self, visitor: F)
     where
         Self: Send + Sync,
         F: Fn(&mut Self) + Sync,
     {
-        // Parallel implementation of recursive bread-first visitation
+        // Parallel implementation of recursive breadth-first visitation
         fn par_visit_mut_bfs_impl<'scope, T, F>(
             node: &'scope mut T,
             s: &ScopeFifo<'scope>,
