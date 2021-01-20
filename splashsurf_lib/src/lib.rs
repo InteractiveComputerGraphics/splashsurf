@@ -275,6 +275,16 @@ impl<I: Index, R: Real> From<anyhow::Error> for ReconstructionError<I, R> {
     }
 }
 
+/// Initializes the global thread pool used by this library with the given parameters.
+///
+/// Initialization of the global thread pool happens exactly once.
+/// Therefore, if you call `initialize_thread_pool` a second time, it will return an error.
+/// An `Ok` result indicates that this is the first initialization of the thread pool.
+pub fn initialize_thread_pool(num_threads: usize) -> Result<(), anyhow::Error> {
+    rayon::ThreadPoolBuilder::new().num_threads(num_threads).build_global()?;
+    Ok(())
+}
+
 /// Performs a marching cubes surface construction of the fluid represented by the given particle positions
 #[inline(never)]
 pub fn reconstruct_surface<I: Index, R: Real>(

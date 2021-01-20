@@ -97,6 +97,9 @@ struct CommandlineArgs {
     /// Flag to enable multi-threading for a single input file by processing chunks of particles in parallel, conflicts with --mt-files
     #[structopt(long = "mt-particles", conflicts_with = "parallelize-over-files")]
     parallelize_over_particles: bool,
+    /// Set the number of threads for the worker thread pool
+    #[structopt(long, short = "-n")]
+    num_threads: Option<usize>,
 }
 
 /// Prints an anyhow error and its full error chain using the log::error macro
@@ -235,6 +238,11 @@ impl TryFrom<&CommandlineArgs> for ReconstructionRunnerArgs {
             enable_multi_threading: args.parallelize_over_particles,
             spatial_decomposition,
         };
+
+        // Optionally initialize thread pool
+        if let Some(num_threads) = args.num_threads {
+            splashsurf_lib::initialize_thread_pool(num_threads)?;
+        }
 
         Ok(ReconstructionRunnerArgs {
             params,
