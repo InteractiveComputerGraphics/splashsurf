@@ -31,7 +31,7 @@ mod aabb;
 /// Computation of sparse density maps (evaluation of particle densities and mapping onto sparse grids)
 pub mod density_map;
 /// Generic octree implementation for basic algorithms
-pub mod generic_octree;
+pub mod generic_tree;
 /// SPH kernel function implementations
 pub mod kernel;
 /// Triangulation of density maps using marching cubes
@@ -62,7 +62,7 @@ use octree::Octree;
 use uniform_grid::PointIndex;
 use workspace::{LocalReconstructionWorkspace, ReconstructionWorkspace};
 
-use crate::generic_octree::VisitableTree;
+use crate::generic_tree::VisitableTree;
 use crate::octree::OctreeNode;
 pub use aabb::{AxisAlignedBoundingBox, AxisAlignedBoundingBox2d, AxisAlignedBoundingBox3d};
 pub use density_map::DensityMap;

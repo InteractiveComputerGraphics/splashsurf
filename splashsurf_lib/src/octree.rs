@@ -1,4 +1,4 @@
-use crate::generic_octree::{ParVisitableTree, TreeNode, VisitableTree};
+use crate::generic_tree::{ParVisitableTree, TreeNode, VisitableTree};
 use crate::mesh::{HexMesh3d, TriMesh3d};
 use crate::uniform_grid::{PointIndex, UniformGrid};
 use crate::utils::{ChunkSize, ParallelPolicy};
