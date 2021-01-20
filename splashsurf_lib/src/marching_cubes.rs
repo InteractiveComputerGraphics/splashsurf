@@ -801,8 +801,35 @@ fn compute_stitching_domain<I: Index, R: Real>(
     positive_subdomain: &SubdomainGrid<I, R>,
 ) -> SubdomainGrid<I, R> {
     // Ensure that global grids are equivalent
-    assert_eq!(negative_subdomain.global_grid(), global_grid);
-    assert_eq!(positive_subdomain.global_grid(), global_grid);
+    assert_eq!(
+        negative_subdomain.global_grid(),
+        global_grid,
+        "The global grid of the two subdomains that should be stitched is not identical!"
+    );
+    assert_eq!(
+        positive_subdomain.global_grid(),
+        global_grid,
+        "The global grid of the two subdomains that should be stitched is not identical!"
+    );
+
+    // Check that the two domains actually meet
+    {
+        // Starting at the offset of the negative subdomain and going along the stitching axis...
+        let lower_corner_end = stitching_axis
+            .with_direction(Direction::Positive)
+            .checked_apply_step_ijk(
+                negative_subdomain.subdomain_offset(),
+                negative_subdomain.subdomain_grid().cells_per_dim(),
+            )
+            .expect("Index type out of range?");
+
+        // ...we should arrive at the lower corner of the positive side
+        assert_eq!(
+            lower_corner_end,
+            *positive_subdomain.subdomain_offset(),
+            "The two subdomains that should be stitched do not meet directly!"
+        );
+    }
 
     // Get the number of cells of the stitching domain
     let n_cells_per_dim = {
@@ -814,35 +841,51 @@ fn compute_stitching_domain<I: Index, R: Real>(
         n_cells_per_dim_pos[stitching_axis.dim()] = I::one() + I::one();
 
         // Ensure that the stitching domain is identical from both sides
-        assert_eq!(n_cells_per_dim_neg, n_cells_per_dim_pos);
+        assert_eq!(
+            n_cells_per_dim_neg, n_cells_per_dim_pos,
+            "The cross sections of the two subdomains that should be stitched is not identical!"
+        );
 
-        n_cells_per_dim_neg
+        // Subtract boundary layers from stitching domain
+        let mut n_cells_per_dim = n_cells_per_dim_neg;
+        for axis in Axis::all_possible()
+            .iter()
+            .copied()
+            .filter(|&axis| axis != stitching_axis)
+        {
+            n_cells_per_dim[axis.dim()] -= I::one() + I::one();
+        }
+
+        n_cells_per_dim
     };
 
-    // Obtain offset of the stitching subdomain by walking along the stitching axis from negative side offset
-    let stitching_grid_offset = stitching_axis
-        .with_direction(Direction::Positive)
-        .checked_apply_step_ijk(
-            negative_subdomain.subdomain_offset(),
-            negative_subdomain.subdomain_grid().cells_per_dim(),
-        )
-        .expect("Index type out of range?");
+    info!("Stitching domain n_cells_per_dim: {:?}", n_cells_per_dim);
+
+    // Obtain the index of the lower corner of the stitching domain
+    let stitching_grid_offset = {
+        let axis_index = stitching_axis.dim();
+
+        // Start at offset of negative domain
+        let mut stitching_grid_offset = negative_subdomain.subdomain_offset().clone();
+
+        // Step into inner domain (excluding boundary layer)
+        stitching_grid_offset[0] += I::one();
+        stitching_grid_offset[1] += I::one();
+        stitching_grid_offset[2] += I::one();
+
+        // Go to the end of the negative domain along the stitching axis
+        stitching_grid_offset[axis_index] +=
+            negative_subdomain.subdomain_grid().cells_per_dim()[axis_index];
+        // Subtract the boundary layer included in the previous step
+        stitching_grid_offset[axis_index] -= I::one() + I::one();
+        stitching_grid_offset
+    };
     // Get coordinates of offset point
-    let lower_coorner_coords = global_grid.point_coordinates_array(&stitching_grid_offset);
-
-    // Check that there is actually a gap of two layers between the sides
-    {
-        let lower_corner_end = stitching_axis
-            .with_direction(Direction::Positive)
-            .checked_apply_step_ijk(negative_subdomain.subdomain_offset(), &n_cells_per_dim)
-            .expect("Index type out of range?");
-
-        assert_eq!(lower_corner_end, *positive_subdomain.subdomain_offset());
-    }
+    let lower_corner_coords = global_grid.point_coordinates_array(&stitching_grid_offset);
 
     // Build the grid for the stitching domain
     let stitching_grid = UniformGrid::new(
-        &lower_coorner_coords,
+        &lower_corner_coords,
         &n_cells_per_dim,
         global_grid.cell_size(),
     )
@@ -863,7 +906,7 @@ fn compute_stitching_result_domain<I: Index, R: Real>(
         let length_pos = positive_subdomain.subdomain_grid().cells_per_dim()[stitching_axis.dim()];
 
         let mut n_cells_per_dim = negative_subdomain.subdomain_grid().cells_per_dim().clone();
-        n_cells_per_dim[stitching_axis.dim()] = length_neg + length_pos + I::one() + I::one();
+        n_cells_per_dim[stitching_axis.dim()] = length_neg + length_pos;
 
         n_cells_per_dim
     };
@@ -889,10 +932,11 @@ pub(crate) fn stitch_meshes<I: Index, R: Real>(
     mut negative_side: SurfacePatch<I, R>,
     mut positive_side: SurfacePatch<I, R>,
 ) -> SurfacePatch<I, R> {
-    assert!(std::ptr::eq(
+    assert_eq!(
         negative_side.subdomain.global_grid(),
-        positive_side.subdomain.global_grid()
-    ));
+        positive_side.subdomain.global_grid(),
+        "The global grid of the two subdomains that should be stitched is not identical!"
+    );
     let global_grid = negative_side.subdomain.global_grid();
 
     // Construct domain for the triangulation of the boundary layer between the sides
