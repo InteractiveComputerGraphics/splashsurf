@@ -75,9 +75,12 @@ struct CommandlineArgs {
         requires = "domain-min"
     )]
     domain_max: Option<Vec<f64>>,
-    /// Whether to disable spatial decomposition using an octree and use a global approach instead
+    /// Whether to disable spatial decomposition using an octree and use a global approach instead (slower)
     #[structopt(long)]
     no_octree: bool,
+    /// Whether to disable stitching of the disjoint subdomain meshes when spatial decomposition is enabled (faster but does not result in manifold meshes)
+    #[structopt(long)]
+    no_stitching: bool,
     /// The maximum number of particles for leaf nodes of the octree, default is to compute it based on number of threads and particles
     octree_max_particles: Option<usize>,
     /// Safety factor applied to the kernel radius when it's used as a margin to collect ghost particles in the leaf nodes
@@ -217,12 +220,13 @@ impl TryFrom<&CommandlineArgs> for ReconstructionRunnerArgs {
             } else {
                 splashsurf_lib::SubdivisionCriterion::MaxParticleCountAuto
             };
-
             let ghost_particle_safety_factor = args.octree_ghost_margin_factor;
+            let enable_stitching = !args.no_stitching;
 
             Some(splashsurf_lib::SpatialDecompositionParameters {
                 subdivision_criterion,
                 ghost_particle_safety_factor,
+                enable_stitching,
             })
         };
 

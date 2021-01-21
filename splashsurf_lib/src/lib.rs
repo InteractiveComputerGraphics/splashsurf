@@ -61,7 +61,7 @@ use octree::Octree;
 use uniform_grid::PointIndex;
 use workspace::{LocalReconstructionWorkspace, ReconstructionWorkspace};
 
-use crate::generic_tree::{ParVisitableTree, TreeNode, VisitableTree};
+use crate::generic_tree::{ParVisitableTree, TreeNode};
 use crate::marching_cubes::SurfacePatch;
 use crate::octree::{NodeData, OctreeNode};
 pub use aabb::{AxisAlignedBoundingBox, AxisAlignedBoundingBox2d, AxisAlignedBoundingBox3d};
@@ -131,6 +131,8 @@ pub struct SpatialDecompositionParameters<R: Real> {
     pub subdivision_criterion: SubdivisionCriterion,
     /// Safety factor applied to the kernel radius when it's used as a margin to collect ghost particles in the leaf nodes
     pub ghost_particle_safety_factor: Option<R>,
+    /// Whether to enable stitching of all disjoint subdomain meshes to a global manifold mesh
+    pub enable_stitching: bool,
 }
 
 impl<R: Real> SpatialDecompositionParameters<R> {
@@ -142,6 +144,7 @@ impl<R: Real> SpatialDecompositionParameters<R> {
                 &self.ghost_particle_safety_factor,
                 r => r.try_convert()?
             ),
+            enable_stitching: self.enable_stitching,
         })
     }
 }
@@ -320,8 +323,12 @@ pub fn reconstruct_surface_inplace<'a, I: Index, R: Real>(
     let grid = &output_surface.grid;
     log_grid_info(grid);
 
-    if parameters.spatial_decomposition.is_some() {
-        reconstruct_surface_octree_recursive(particle_positions, parameters, output_surface)?
+    if let Some(spatial_decomposition) = &parameters.spatial_decomposition {
+        if spatial_decomposition.enable_stitching {
+            reconstruct_surface_octree_recursive(particle_positions, parameters, output_surface)?
+        } else {
+            reconstruct_surface_inplace_octree(particle_positions, parameters, output_surface)?
+        }
     } else {
         profile!("reconstruct_surface_inplace");
 
@@ -619,7 +626,7 @@ fn reconstruct_surface_octree_recursive<'a, I: Index, R: Real>(
         info!("Generation of surface patches is done.");
     };
 
-    // Merge meshes
+    // Merge meshes by stitching
     {
         profile!("parallel stitching of domains");
         info!("Starting stitching of surface pathces.");
@@ -636,18 +643,20 @@ fn reconstruct_surface_octree_recursive<'a, I: Index, R: Real>(
             });
     }
 
-    // Merge meshes
+    // Extract final mesh
     {
         // Clear the current global mesh
         output_surface.mesh.clear();
 
-        octree
+        // Move stitched mesh out of octree
+        let surface_path = octree
             .root_mut()
-            .visit_mut_bfs(|octree_node: &mut OctreeNode<I, R>| {
-                if let NodeData::SurfacePatch(surface_patch) = octree_node.data_mut() {
-                    output_surface.mesh.append(&mut surface_patch.mesh);
-                }
-            });
+            .data_mut()
+            .take()
+            .into_surface_patch()
+            .expect("Cannot extract stitched mesh from root")
+            .patch;
+        output_surface.mesh = surface_path.mesh;
 
         info!(
             "Global mesh has {} triangles and {} vertices.",
