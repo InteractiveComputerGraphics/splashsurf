@@ -8,6 +8,7 @@ use splashsurf_lib::{grid_for_reconstruction, Index, Real, SubdivisionCriterion,
 use vtkio::model::UnstructuredGridPiece;
 
 use super::io;
+use splashsurf_lib::generic_tree::VisitableTree;
 
 #[allow(dead_code)]
 fn particles_to_file<P: AsRef<Path>, R: Real>(particles: Vec<Vector3<R>>, path: P) {
@@ -22,7 +23,7 @@ fn particles_to_file<P: AsRef<Path>, R: Real>(particles: Vec<Vector3<R>>, path: 
 
 #[allow(dead_code)]
 fn octree_to_file<P: AsRef<Path>, I: Index, R: Real>(
-    octree: &Octree<I>,
+    octree: &Octree<I, R>,
     grid: &UniformGrid<I, R>,
     path: P,
 ) {
@@ -126,8 +127,9 @@ fn build_octree_from_vtk() {
 
     // Sum the number of particles per leaf
     let mut particle_count = 0;
-    for node in octree.depth_first_iter() {
-        if let Some(node_particles) = node.particles() {
+    for node in octree.root().dfs_iter() {
+        if let Some(particle_set) = node.data().particle_set() {
+            let node_particles = &particle_set.particles;
             println!("Leaf with: {} particles", node_particles.len());
             particle_count += node_particles.len();
 
@@ -179,11 +181,18 @@ fn build_octree_par_consistency() {
 
     let mut particle_count = 0;
     for (node_seq, node_par) in octree_seq
-        .depth_first_iter()
-        .zip(octree_par.depth_first_iter())
+        .root()
+        .dfs_iter()
+        .zip(octree_par.root().dfs_iter())
     {
-        match (node_seq.particles(), node_par.particles()) {
+        match (
+            node_seq.data().particle_set(),
+            node_par.data().particle_set(),
+        ) {
             (Some(particles_seq), Some(particles_par)) => {
+                let particles_seq = &particles_seq.particles;
+                let particles_par = &particles_par.particles;
+
                 // Ensure that we have the same number of particles for sequential and parallel result
                 assert_eq!(particles_seq.len(), particles_par.len());
                 particle_count += particles_seq.len();
