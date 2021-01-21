@@ -124,6 +124,11 @@ impl<I: Index, R: Real> Octree<I, R> {
         tree
     }
 
+    /// Creates a new octree with the given node as root
+    pub fn with_root(root: OctreeNode<I, R>) -> Self {
+        Self { root }
+    }
+
     /// Returns a reference to the root node of the octree
     pub fn root(&self) -> &OctreeNode<I, R> {
         &self.root
@@ -253,6 +258,15 @@ impl<I: Index, R: Real> Octree<I, R> {
 }
 
 impl<I: Index, R: Real> OctreeNode<I, R> {
+    pub fn new(min_corner: PointIndex<I>, max_corner: PointIndex<I>) -> Self {
+        Self {
+            children: Default::default(),
+            min_corner,
+            max_corner,
+            data: NodeData::None,
+        }
+    }
+
     fn new_root(grid: &UniformGrid<I, R>, n_particles: usize) -> Self {
         let n_points = grid.points_per_dim();
         let min_point = [I::zero(), I::zero(), I::zero()];
@@ -660,14 +674,6 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
             stitched_patch.stitching_level += 1;
             self.data = NodeData::SurfacePatch(stitched_patch);
             break;
-
-            /*
-            self.children.push(Box::new(OctreeNode::new_surface_patch_node(
-                stitched_patch.subdomain.min_point(),
-                stitched_patch.subdomain.max_point(),
-                stitched_patch,
-            )));
-             */
         }
 
         assert!(
