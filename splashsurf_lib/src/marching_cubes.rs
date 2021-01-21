@@ -110,6 +110,7 @@ pub(crate) fn triangulate_density_map_with_stitching_data<I: Index, R: Real>(
             boundary_density_map: std::mem::take(boundary_density_maps.get_mut(axis)),
             boundary_cell_data: std::mem::take(boundary_cell_data.get_mut(axis)),
         }),
+        stitching_level: 0,
     }
 }
 
@@ -543,11 +544,24 @@ pub(crate) fn interpolate_points_to_cell_data_stitching<I: Index, R: Real>(
         vertices.len()
     );
 
-    // Closure to detect points that are on the positive/negative side of the stitching domain, along the stitching axis
+    // Detects points that are on the positive/negative side of the stitching domain, along the stitching axis
     let point_is_on_stitching_surface = |p: &PointIndex<I>| -> bool {
         let index = p.index();
         index[stitching_axis.dim()] == I::zero()
             || index[stitching_axis.dim()] == grid.points_per_dim()[stitching_axis.dim()] - I::one()
+    };
+
+    // Detects points that are on a boundary other than the stitching surfaces
+    let point_is_outside_stitching = |p: &PointIndex<I>| -> bool {
+        let index = p.index();
+        stitching_axis
+            .orthogonal_axes()
+            .iter()
+            .copied()
+            .any(|axis| {
+                index[axis.dim()] == I::zero()
+                    || index[axis.dim()] == grid.points_per_dim()[axis.dim()] - I::one()
+            })
     };
 
     info!("Points per dim: {:?}", grid.points_per_dim());
@@ -570,8 +584,13 @@ pub(crate) fn interpolate_points_to_cell_data_stitching<I: Index, R: Real>(
 
             let point = grid.try_unflatten_point_index(flat_point_index)
                 .expect("Flat point index does not belong to grid. You have to supply the same grid that was used to create the density map.");
-            let neighborhood = grid.get_point_neighborhood(&point);
 
+            // Skip points on the outside of the stitching domain (except if they are on the stitching surface)
+            if point_is_outside_stitching(&point) {
+                return;
+            }
+
+            let neighborhood = grid.get_point_neighborhood(&point);
             // Iterate over all neighbors of the point to find edges crossing the iso-surface
             for neighbor_edge in neighborhood.neighbor_edge_iter() {
                 let neighbor = neighbor_edge.neighbor_index();
@@ -593,8 +612,13 @@ pub(crate) fn interpolate_points_to_cell_data_stitching<I: Index, R: Real>(
                     continue;
                 }
 
-                // Skip edges that are on the stitching surface
+                // Skip edges that are on the stitching surface (were already triangulated by the patches)
                 if point_is_on_stitching_surface(&point) && point_is_on_stitching_surface(neighbor) {
+                    continue;
+                }
+
+                // Skip edges that go out of the stitching domain
+                if point_is_outside_stitching(neighbor) {
                     continue;
                 }
 
@@ -656,6 +680,7 @@ pub(crate) fn interpolate_points_to_cell_data_stitching<I: Index, R: Real>(
             for (local_point_index, flag_above) in
                 cell_data.corner_above_threshold.iter_mut().enumerate()
             {
+                // Following is commented out because during stitching a node that was previously above might now be below
                 /*
                 // If the point is already marked as above we can ignore it
                 if let RelativeToThreshold::Above = flag_above {
@@ -737,8 +762,11 @@ pub(crate) struct SurfacePatch<I: Index, R: Real> {
     pub(crate) subdomain: SubdomainGrid<I, R>,
     /// All additional data required for stitching
     pub(crate) data: DirectedAxisArray<BoundaryData<I, R>>,
+    /// The maximum number of times parts of this patch where stitched together
+    pub(crate) stitching_level: usize,
 }
 
+// Merges boundary such that only density values and cell data in the result subdomain are part of the result
 fn merge_boundary_data<I: Index, R: Real>(
     result_subdomain: &SubdomainGrid<I, R>,
     negative_subdomain: &SubdomainGrid<I, R>,
@@ -877,16 +905,18 @@ fn compute_stitching_domain<I: Index, R: Real>(
             "The cross sections of the two subdomains that should be stitched is not identical!"
         );
 
+        /*
         // Subtract boundary layers from stitching domain
         let mut n_cells_per_dim = n_cells_per_dim_neg;
-        for axis in Axis::all_possible()
+        for axis in stitching_axis.orthogonal_axes()
             .iter()
             .copied()
-            .filter(|&axis| axis != stitching_axis)
         {
             n_cells_per_dim[axis.dim()] -= I::one() + I::one();
         }
+        */
 
+        let n_cells_per_dim = n_cells_per_dim_neg;
         n_cells_per_dim
     };
 
@@ -899,16 +929,19 @@ fn compute_stitching_domain<I: Index, R: Real>(
         // Start at offset of negative domain
         let mut stitching_grid_offset = negative_subdomain.subdomain_offset().clone();
 
+        /*
         // Step into inner domain (excluding boundary layer)
         stitching_grid_offset[0] += I::one();
         stitching_grid_offset[1] += I::one();
         stitching_grid_offset[2] += I::one();
+         */
 
         // Go to the end of the negative domain along the stitching axis
         stitching_grid_offset[axis_index] +=
             negative_subdomain.subdomain_grid().cells_per_dim()[axis_index];
         // Subtract the boundary layer included in the previous step
-        stitching_grid_offset[axis_index] -= I::one() + I::one();
+        //stitching_grid_offset[axis_index] -= I::one() + I::one();
+        stitching_grid_offset[axis_index] -= I::one();
         stitching_grid_offset
     };
     // Get coordinates of offset point
@@ -970,6 +1003,17 @@ pub(crate) fn stitch_meshes<I: Index, R: Real>(
         "The global grid of the two subdomains that should be stitched is not identical!"
     );
     let global_grid = negative_side.subdomain.global_grid();
+
+    info!(
+        "Starting stitching orthogonal to axis {:?} of negative side (cells_per_dim: {:?}, offset: {:?}, stitching_level: {:?}) and positive side (cells_per_dim: {:?}, offset: {:?}, stitching_level: {:?})",
+        stitching_axis,
+        negative_side.subdomain.subdomain_grid().cells_per_dim(),
+        negative_side.subdomain.subdomain_offset(),
+        negative_side.stitching_level,
+        positive_side.subdomain.subdomain_grid().cells_per_dim(),
+        positive_side.subdomain.subdomain_offset(),
+        positive_side.stitching_level,
+    );
 
     // Construct domain for the triangulation of the boundary layer between the sides
     let stitching_subdomain = compute_stitching_domain(
@@ -1039,7 +1083,7 @@ pub(crate) fn stitch_meshes<I: Index, R: Real>(
             &stitching_subdomain,
             marching_cubes_input,
             &mut output_mesh,
-            TriangulationAssertCellInsideGrid,
+            TriangulationStitchingInterior { stitching_axis },
         );
 
         boundary_cell_data
@@ -1076,16 +1120,27 @@ pub(crate) fn stitch_meshes<I: Index, R: Real>(
                 if let Some(flat_result_cell_index) = stitching_subdomain
                     .map_flat_cell_index_to(&output_subdomain_grid, *flat_cell_index)
                 {
-                    // TODO: How to merge this properly? Are we even getting all CellData that is needed for the next join?
-                    //  Might be ok, because we only add cells inside of the inner domain of the previous domains.
-                    //  These are required for averaging of the corners to the next stitching sides
                     merged_data
                         .boundary_cell_data
                         .entry(flat_result_cell_index)
-                        .and_modify(|_| {
-                            panic!(
-                                "Merge conflict: there is duplicate cell data for this cell index"
-                            )
+                        .and_modify(|exisiting_cell_data| {
+                            // Should be fine to just replace these values as they will be overwritten anyway in the next stitching process
+                            exisiting_cell_data.corner_above_threshold =
+                                cell_data.corner_above_threshold;
+                            // For the cell data we have to merge the vertices
+                            for (existing_vertex, new_vertex) in exisiting_cell_data
+                                .iso_surface_vertices
+                                .iter_mut()
+                                .zip(cell_data.iso_surface_vertices.iter())
+                            {
+                                if existing_vertex != new_vertex {
+                                    assert!(
+                                        existing_vertex.is_none(),
+                                        "Overwriting already existing vertex. This is a bug."
+                                    );
+                                    *existing_vertex = *new_vertex
+                                }
+                            }
                         })
                         .or_insert(cell_data.clone());
                 }
@@ -1099,6 +1154,9 @@ pub(crate) fn stitch_meshes<I: Index, R: Real>(
         subdomain: output_subdomain_grid,
         mesh: output_mesh,
         data: output_boundary_data,
+        stitching_level: negative_side
+            .stitching_level
+            .max(positive_side.stitching_level),
     }
 }
 
@@ -1141,6 +1199,34 @@ impl<I: Index, R: Real> TriangulationCriterion<I, R> for TriangulationSkipBounda
     }
 }
 
+struct TriangulationStitchingInterior {
+    stitching_axis: Axis,
+}
+
+/// A triangulation criterion that ensures that only the interior of the stitching domain is triangulated (boundary layer except in stitching direction is skipped)
+impl<I: Index, R: Real> TriangulationCriterion<I, R> for TriangulationStitchingInterior {
+    #[inline(always)]
+    fn triangulate_cell(&self, subdomain: &SubdomainGrid<I, R>, flat_cell_index: I) -> bool {
+        let grid = subdomain.subdomain_grid();
+        let cell_index = grid
+            .try_unflatten_cell_index(flat_cell_index)
+            .expect("Cell index is not part of the grid");
+
+        let index = cell_index.index();
+        // Skip only boundary cells in directions orthogonal to the stitching axis
+        !self
+            .stitching_axis
+            .orthogonal_axes()
+            .iter()
+            .copied()
+            .any(|axis| {
+                index[axis.dim()] == I::zero()
+                    || index[axis.dim()] == grid.cells_per_dim()[axis.dim()] - I::one()
+            })
+    }
+}
+
+/*
 /// A triangulation criterion that only asserts that every cell is part of the subdomain
 struct TriangulationAssertCellInsideGrid;
 
@@ -1159,6 +1245,7 @@ impl<I: Index, R: Real> TriangulationCriterion<I, R> for TriangulationAssertCell
         return true;
     }
 }
+*/
 
 /// Converts the marching cubes input cell data into a triangle surface mesh, appends triangles to existing mesh
 #[inline(never)]
@@ -1183,8 +1270,6 @@ fn triangulate_with_criterion<I: Index, R: Real, C: TriangulationCriterion<I, R>
         if !triangulation_criterion.triangulate_cell(subdomain, flat_cell_index) {
             continue;
         }
-
-        println!("cell_data: {:?}", cell_data);
 
         for triangle in marching_cubes_triangulation_iter(&cell_data.are_vertices_above()) {
             // Note: If the one of the following expect calls causes a panic, it is probably because

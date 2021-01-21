@@ -528,7 +528,7 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
                 },
             );
 
-            // TODO: Would be nice to collect directly into a SmallVec but that doesn't seem to be possible
+            // TODO: Would be nice to collect directly into a ArrayVec but that doesn't seem to be possible
             //  (at least without some unsafe magic with uninit)
             let mut children = Vec::with_capacity(8);
             // Construct the octree node for each octant
@@ -580,6 +580,41 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
         };
     }
 
+    fn stitch_children_orthogonal_to(
+        &mut self,
+        children_map: &mut MapType<OctantAxisDirections, SurfacePatch<I, R>>,
+        stitching_axis: Axis,
+        iso_surface_threshold: R,
+    ) {
+        for mut octant in OctantAxisDirections::all().iter().copied() {
+            // Iterate over every octant pair only once
+            if octant.direction(stitching_axis).is_positive() {
+                continue;
+            }
+
+            // First try to get negative side, it might not exist because children were already merged before to another octant in the map
+            let negative_side = if let Some(negative_patch) = children_map.remove(&octant) {
+                negative_patch
+            } else {
+                continue;
+            };
+
+            // If the negative side on the stitching axis exists, the positive side must also exist
+            octant.set_direction(stitching_axis, Direction::Positive);
+            let positive_side = children_map.remove(&octant).expect("Child node missing!");
+
+            let stitched_patch = marching_cubes::stitch_meshes(
+                iso_surface_threshold,
+                stitching_axis,
+                negative_side,
+                positive_side,
+            );
+
+            // Add stitched surface back to map, setting the direction of the octant of the stitched patch to positive
+            children_map.insert(octant, stitched_patch);
+        }
+    }
+
     pub fn stitch_surface_patches(&mut self, iso_surface_threshold: R) {
         // If this node has no children there is nothing to stitch
         if self.children.is_empty() {
@@ -593,65 +628,52 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
             }
         }
 
-        let mut old_children_map: MapType<_, Box<OctreeNode<I, R>>> = {
+        let mut children_map: MapType<_, SurfacePatch<I, R>> = {
             let old_children = std::mem::take(&mut self.children);
 
             let mut children_map = new_map();
             for (child, octant) in old_children.into_iter().zip(Octant::all().iter().copied()) {
                 let octant_directions = OctantAxisDirections::from(octant);
-                children_map.insert(octant_directions, child);
+                children_map.insert(
+                    octant_directions,
+                    child
+                        .data
+                        .into_surface_patch()
+                        .expect("Surface patch missing!"),
+                );
             }
 
             children_map
         };
 
-        for mut octant in OctantAxisDirections::all().iter().copied() {
-            // Iterate over every octant pair only once
-            if octant.x_axis.is_positive() {
-                continue;
-            }
+        self.stitch_children_orthogonal_to(&mut children_map, Axis::X, iso_surface_threshold);
+        self.stitch_children_orthogonal_to(&mut children_map, Axis::Y, iso_surface_threshold);
+        self.stitch_children_orthogonal_to(&mut children_map, Axis::Z, iso_surface_threshold);
 
-            // Extract the surface patch on the negative and positive side
-            let (negative_surface, positive_surface) = {
-                let negative_child = old_children_map
-                    .remove(&octant)
-                    .expect("Child node missing!");
+        assert_eq!(
+            children_map.len(),
+            1,
+            "After stitching, there should be only one child left."
+        );
 
-                octant.x_axis = Direction::Positive;
-                let positive_child = old_children_map
-                    .remove(&octant)
-                    .expect("Child node missing!");
+        for (_, mut stitched_patch) in children_map.into_iter() {
+            stitched_patch.stitching_level += 1;
+            self.data = NodeData::SurfacePatch(stitched_patch);
+            break;
 
-                (
-                    negative_child
-                        .data
-                        .into_surface_patch()
-                        .expect("Surface patch missing!"),
-                    positive_child
-                        .data
-                        .into_surface_patch()
-                        .expect("Surface patch missing!"),
-                )
-            };
-
-            let stitched_patch = marching_cubes::stitch_meshes(
-                iso_surface_threshold,
-                Axis::X,
-                negative_surface,
-                positive_surface,
-            );
-
-            let min_corner = stitched_patch.subdomain.min_point();
-            let max_corner = stitched_patch.subdomain.max_point();
-
-            // Add stitched surface as child node
-            self.children
-                .push(Box::new(OctreeNode::new_surface_patch_node(
-                    min_corner,
-                    max_corner,
-                    stitched_patch,
-                )))
+            /*
+            self.children.push(Box::new(OctreeNode::new_surface_patch_node(
+                stitched_patch.subdomain.min_point(),
+                stitched_patch.subdomain.max_point(),
+                stitched_patch,
+            )));
+             */
         }
+
+        assert!(
+            self.children.is_empty(),
+            "After stitching, the node should not have any children."
+        );
     }
 }
 
@@ -834,7 +856,7 @@ mod octant_helper {
     use bitflags::bitflags;
     use nalgebra::Vector3;
 
-    use crate::topology::Direction;
+    use crate::topology::{Axis, Direction};
     use crate::uniform_grid::{PointIndex, UniformGrid};
     use crate::{Index, Real};
 
@@ -975,6 +997,22 @@ mod octant_helper {
                 Octant::PosNegPos => Self::from_bool(true, false, true),
                 Octant::NegPosPos => Self::from_bool(false, true, true),
                 Octant::PosPosPos => Self::from_bool(true, true, true),
+            }
+        }
+
+        pub fn direction(&self, axis: Axis) -> Direction {
+            match axis {
+                Axis::X => self.x_axis,
+                Axis::Y => self.y_axis,
+                Axis::Z => self.z_axis,
+            }
+        }
+
+        pub fn set_direction(&mut self, axis: Axis, direction: Direction) {
+            match axis {
+                Axis::X => self.x_axis = direction,
+                Axis::Y => self.y_axis = direction,
+                Axis::Z => self.z_axis = direction,
             }
         }
 
