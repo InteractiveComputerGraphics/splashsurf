@@ -77,15 +77,10 @@ pub use uniform_grid::{GridConstructionError, UniformGrid};
 // TODO: Write more unit tests (e.g. AABB, UniformGrid, neighborhood search)
 // TODO: Write some integration tests
 // TODO: Test kernels with property based testing?
-// TODO: Investigate why reconstruction crashes with an AABB that is too small
 // TODO: Add free particles back again after triangulation as sphere meshes if they were removed
-// TODO: Check why, when particle density is erroneously initialized with zero, the cell interpolation crashes
 // TODO: Detect free particles by just comparing with the SPH density of a free particle? (no need for extra neighborhood search?)
-// TODO: Ensure that if an AABB is adapted for an operation (e.g. a margin is added), that it shrinks towards the original center of the AABB
 // TODO: More and better error messages with distinct types
 // TODO: Make flat indices strongly typed
-// TODO: Windowed approach that supports multi threading and dense operations without hashmap
-// TODO: Make deterministic ordering a feature flag / runtime option
 // TODO: Function that detects smallest usable index type
 
 pub(crate) type HashState = fxhash::FxBuildHasher;
@@ -564,12 +559,12 @@ fn reconstruct_surface_octree_recursive<'a, I: Index, R: Real>(
 
         octree
             .root_mut()
-            .par_visit_mut_bfs(|octree_node: &mut OctreeNode<I, R>| {
+            .par_visit_mut_dfs_post(|octree_node: &mut OctreeNode<I, R>| {
                 let particles = if let Some(particle_set) = octree_node.data().particle_set() {
                     &particle_set.particles
                 } else {
-                    // TODO: Instead of skipping use DFS and start stitching when children are done.
-                    // Skip non-leaf nodes
+                    // If node has no particles, its children were already processed so it can be stitched
+                    octree_node.stitch_surface_patches(parameters.iso_surface_threshold);
                     return;
                 };
 
@@ -626,10 +621,11 @@ fn reconstruct_surface_octree_recursive<'a, I: Index, R: Real>(
         info!("Generation of surface patches is done.");
     };
 
+    /*
     // Merge meshes by stitching
     {
         profile!("parallel stitching of domains");
-        info!("Starting stitching of surface pathces.");
+        info!("Starting stitching of surface patches.");
 
         octree
             .root_mut()
@@ -642,6 +638,7 @@ fn reconstruct_surface_octree_recursive<'a, I: Index, R: Real>(
                 octree_node.stitch_surface_patches(parameters.iso_surface_threshold);
             });
     }
+     */
 
     // Extract final mesh
     {
