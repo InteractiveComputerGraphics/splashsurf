@@ -1,5 +1,5 @@
 use crate::generic_tree::{ParVisitableTree, TreeNode, VisitableTree};
-use crate::mesh::HexMesh3d;
+use crate::mesh::{HexMesh3d, TriMesh3d};
 use crate::uniform_grid::{PointIndex, UniformGrid};
 use crate::utils::{ChunkSize, ParallelPolicy};
 use crate::{
@@ -57,13 +57,13 @@ impl<I: Index, R: Real> TreeNode for OctreeNode<I, R> {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) enum NodeData<I: Index, R: Real> {
+pub enum NodeData<I: Index, R: Real> {
     /// Empty variant
     None,
     /// Storage for a set of SPH particles
     ParticleSet(ParticleSet),
     /// A patch that was already meshed
-    SurfacePatch(SurfacePatch<I, R>),
+    SurfacePatch(SurfacePatchWrapper<I, R>),
 }
 
 impl<I: Index, R: Real> Default for NodeData<I, R> {
@@ -79,6 +79,24 @@ pub struct ParticleSet {
     pub particles: OctreeNodeParticleStorage,
     // Number of ghost particles in this particle set
     pub ghost_particle_count: usize,
+}
+
+/// Wrapper for a [SurfacePatch] to avoid leaking too much implementation details
+#[derive(Clone, Debug)]
+pub struct SurfacePatchWrapper<I: Index, R: Real> {
+    pub(crate) patch: SurfacePatch<I, R>,
+}
+
+impl<I: Index, R: Real> From<SurfacePatch<I, R>> for SurfacePatchWrapper<I, R> {
+    fn from(patch: SurfacePatch<I, R>) -> Self {
+        Self { patch }
+    }
+}
+
+impl<I: Index, R: Real> SurfacePatchWrapper<I, R> {
+    pub fn mesh(&self) -> &TriMesh3d<R> {
+        &self.patch.mesh
+    }
 }
 
 type OctreeNodeParticleStorage = SmallVec<[usize; 6]>;
@@ -259,12 +277,7 @@ impl<I: Index, R: Real> Octree<I, R> {
 
 impl<I: Index, R: Real> OctreeNode<I, R> {
     pub fn new(min_corner: PointIndex<I>, max_corner: PointIndex<I>) -> Self {
-        Self {
-            children: Default::default(),
-            min_corner,
-            max_corner,
-            data: NodeData::None,
-        }
+        Self::with_data(min_corner, max_corner, NodeData::None)
     }
 
     fn new_root(grid: &UniformGrid<I, R>, n_particles: usize) -> Self {
@@ -276,48 +289,30 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
             n_points[2] - I::one(),
         ];
 
-        Self::new_particle_set_node(
+        Self::with_data(
             grid.get_point(min_point)
                 .expect("Cannot get lower corner of grid"),
             grid.get_point(max_point)
                 .expect("Cannot get upper corner of grid"),
-            (0..n_particles).collect::<SmallVec<_>>(),
-            0,
+            NodeData::new_particle_set((0..n_particles).collect::<SmallVec<_>>(), 0),
         )
     }
 
-    fn new_particle_set_node(
+    fn with_data(
         min_corner: PointIndex<I>,
         max_corner: PointIndex<I>,
-        particles: OctreeNodeParticleStorage,
-        ghost_particle_count: usize,
+        data: NodeData<I, R>,
     ) -> Self {
         Self {
             children: Default::default(),
             min_corner,
             max_corner,
-            data: NodeData::ParticleSet(ParticleSet {
-                particles,
-                ghost_particle_count,
-            }),
-        }
-    }
-
-    fn new_surface_patch_node(
-        min_corner: PointIndex<I>,
-        max_corner: PointIndex<I>,
-        surface_patch: SurfacePatch<I, R>,
-    ) -> Self {
-        Self {
-            children: Default::default(),
-            min_corner,
-            max_corner,
-            data: NodeData::SurfacePatch(surface_patch),
+            data,
         }
     }
 
     /// Returns a reference to the data stored in the node
-    pub(crate) fn data(&self) -> &NodeData<I, R> {
+    pub fn data(&self) -> &NodeData<I, R> {
         &self.data
     }
 
@@ -442,11 +437,13 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
                 );
                 assert_eq!(octant_particles.len(), octant_particle_count);
 
-                let child = Box::new(OctreeNode::new_particle_set_node(
+                let child = Box::new(OctreeNode::with_data(
                     min_corner,
                     max_corner,
-                    octant_particles,
-                    octant_particle_count - octant_non_ghost_count,
+                    NodeData::new_particle_set(
+                        octant_particles,
+                        octant_particle_count - octant_non_ghost_count,
+                    ),
                 ));
 
                 children.push(child);
@@ -575,11 +572,13 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
                         );
                         assert_eq!(octant_particles.len(), octant_particle_count);
 
-                        let child = Box::new(OctreeNode::new_particle_set_node(
+                        let child = Box::new(OctreeNode::with_data(
                             min_corner,
                             max_corner,
-                            octant_particles,
-                            octant_particle_count - octant_non_ghost_count,
+                            NodeData::new_particle_set(
+                                octant_particles,
+                                octant_particle_count - octant_non_ghost_count,
+                            ),
                         ));
 
                         child
@@ -653,7 +652,8 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
                     child
                         .data
                         .into_surface_patch()
-                        .expect("Surface patch missing!"),
+                        .expect("Surface patch missing!")
+                        .patch,
                 );
             }
 
@@ -672,7 +672,7 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
 
         for (_, mut stitched_patch) in children_map.into_iter() {
             stitched_patch.stitching_level += 1;
-            self.data = NodeData::SurfacePatch(stitched_patch);
+            self.data = NodeData::SurfacePatch(stitched_patch.into());
             break;
         }
 
@@ -704,8 +704,8 @@ impl<I: Index, R: Real> NodeData<I, R> {
         }
     }
 
-    /// Returns a reference to the contained particle set if it contains one
-    pub fn surface_patch(&self) -> Option<&SurfacePatch<I, R>> {
+    /// Returns a reference to the contained surface patch if it contains one
+    pub fn surface_patch(&self) -> Option<&SurfacePatchWrapper<I, R>> {
         if let Self::SurfacePatch(surface_patch) = self {
             Some(surface_patch)
         } else {
@@ -723,7 +723,7 @@ impl<I: Index, R: Real> NodeData<I, R> {
     }
 
     /// Consumes self and returns the SurfacePatch if it contained one
-    pub fn into_surface_patch(self) -> Option<SurfacePatch<I, R>> {
+    pub fn into_surface_patch(self) -> Option<SurfacePatchWrapper<I, R>> {
         if let Self::SurfacePatch(surface_patch) = self {
             Some(surface_patch)
         } else {

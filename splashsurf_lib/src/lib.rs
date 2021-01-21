@@ -617,7 +617,7 @@ fn reconstruct_surface_octree_recursive<'a, I: Index, R: Real>(
                 // Store triangulation in the leaf
                 octree_node
                     .data_mut()
-                    .replace(NodeData::SurfacePatch(surface_patch));
+                    .replace(NodeData::SurfacePatch(surface_patch.into()));
 
                 // Put back the particle position storage
                 tl_workspace.particle_positions = particle_positions;
