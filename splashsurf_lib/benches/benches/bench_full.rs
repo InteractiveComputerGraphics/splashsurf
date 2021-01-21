@@ -29,10 +29,7 @@ pub fn surface_reconstruction_canyon(c: &mut Criterion) {
         iso_surface_threshold: 0.6,
         domain_aabb: None,
         enable_multi_threading: true,
-        spatial_decomposition: Some(SpatialDecompositionParameters {
-            subdivision_criterion: SubdivisionCriterion::MaxParticleCountAuto,
-            ghost_particle_safety_factor: Some(1.0),
-        }),
+        spatial_decomposition: None,
     };
 
     let mut group = c.benchmark_group("full surface reconstruction");
@@ -40,13 +37,51 @@ pub fn surface_reconstruction_canyon(c: &mut Criterion) {
     group.warm_up_time(Duration::from_secs(5));
     group.measurement_time(Duration::from_secs(30));
 
-    group.bench_function("surface_reconstruction_canyon", move |b| {
+    let mut reconstruction = SurfaceReconstruction::default();
+
+    group.bench_function("surface_reconstruction_canyon_par_global", |b| {
         b.iter(|| {
-            reconstruct_surface::<i64, _>(particle_positions.as_slice(), &parameters).unwrap()
+            reconstruction =
+                reconstruct_surface::<i64, _>(particle_positions.as_slice(), &parameters).unwrap()
+        })
+    });
+
+    group.bench_function("surface_reconstruction_canyon_par_octree", |b| {
+        b.iter(|| {
+            let mut parameters = parameters.clone();
+            parameters.spatial_decomposition = Some(SpatialDecompositionParameters {
+                subdivision_criterion: SubdivisionCriterion::MaxParticleCountAuto,
+                ghost_particle_safety_factor: Some(1.0),
+                enable_stitching: false,
+            });
+
+            reconstruction =
+                reconstruct_surface::<i64, _>(particle_positions.as_slice(), &parameters).unwrap()
+        })
+    });
+
+    group.bench_function("surface_reconstruction_canyon_par_octree_stitching", |b| {
+        b.iter(|| {
+            let mut parameters = parameters.clone();
+            parameters.spatial_decomposition = Some(SpatialDecompositionParameters {
+                subdivision_criterion: SubdivisionCriterion::MaxParticleCountAuto,
+                ghost_particle_safety_factor: Some(1.0),
+                enable_stitching: true,
+            });
+
+            reconstruction =
+                reconstruct_surface::<i64, _>(particle_positions.as_slice(), &parameters).unwrap()
         })
     });
 
     group.finish();
+
+    write_vtk(
+        reconstruction.mesh(),
+        "../out/bench_canyon_13353401_particles_surface.vtk",
+        "mesh",
+    )
+    .unwrap();
 }
 
 pub fn surface_reconstruction_dam_break(c: &mut Criterion) {
@@ -66,10 +101,7 @@ pub fn surface_reconstruction_dam_break(c: &mut Criterion) {
         iso_surface_threshold: 0.6,
         domain_aabb: None,
         enable_multi_threading: true,
-        spatial_decomposition: Some(SpatialDecompositionParameters {
-            subdivision_criterion: SubdivisionCriterion::MaxParticleCountAuto,
-            ghost_particle_safety_factor: Some(1.0),
-        }),
+        spatial_decomposition: None,
     };
 
     let mut group = c.benchmark_group("full surface reconstruction");
@@ -78,12 +110,45 @@ pub fn surface_reconstruction_dam_break(c: &mut Criterion) {
     group.measurement_time(Duration::from_secs(15));
 
     let mut reconstruction = SurfaceReconstruction::default();
-    group.bench_function("surface_reconstruction_dam_break", |b| {
+
+    group.bench_function("surface_reconstruction_dam_break_par_global", |b| {
         b.iter(|| {
             reconstruction =
                 reconstruct_surface::<i64, _>(particle_positions.as_slice(), &parameters).unwrap()
         })
     });
+
+    group.bench_function("surface_reconstruction_dam_break_par_octree", |b| {
+        b.iter(|| {
+            let mut parameters = parameters.clone();
+            parameters.spatial_decomposition = Some(SpatialDecompositionParameters {
+                subdivision_criterion: SubdivisionCriterion::MaxParticleCountAuto,
+                ghost_particle_safety_factor: Some(1.0),
+                enable_stitching: false,
+            });
+
+            reconstruction =
+                reconstruct_surface::<i64, _>(particle_positions.as_slice(), &parameters).unwrap()
+        })
+    });
+
+    group.bench_function(
+        "surface_reconstruction_dam_break_par_octree_stitching",
+        |b| {
+            b.iter(|| {
+                let mut parameters = parameters.clone();
+                parameters.spatial_decomposition = Some(SpatialDecompositionParameters {
+                    subdivision_criterion: SubdivisionCriterion::MaxParticleCountAuto,
+                    ghost_particle_safety_factor: Some(1.0),
+                    enable_stitching: true,
+                });
+
+                reconstruction =
+                    reconstruct_surface::<i64, _>(particle_positions.as_slice(), &parameters)
+                        .unwrap()
+            })
+        },
+    );
 
     group.finish();
 
@@ -114,10 +179,7 @@ pub fn surface_reconstruction_double_dam_break(c: &mut Criterion) {
         iso_surface_threshold: 0.6,
         domain_aabb: None,
         enable_multi_threading: true,
-        spatial_decomposition: Some(SpatialDecompositionParameters {
-            subdivision_criterion: SubdivisionCriterion::MaxParticleCountAuto,
-            ghost_particle_safety_factor: Some(1.0),
-        }),
+        spatial_decomposition: None,
     };
 
     let mut group = c.benchmark_group("full surface reconstruction");
@@ -126,12 +188,45 @@ pub fn surface_reconstruction_double_dam_break(c: &mut Criterion) {
     group.measurement_time(Duration::from_secs(25));
 
     let mut reconstruction = SurfaceReconstruction::default();
-    group.bench_function("surface_reconstruction_double_dam_break", |b| {
+
+    group.bench_function("surface_reconstruction_double_dam_break_par_global", |b| {
         b.iter(|| {
             reconstruction =
                 reconstruct_surface::<i64, _>(particle_positions.as_slice(), &parameters).unwrap()
         })
     });
+
+    group.bench_function("surface_reconstruction_double_dam_break_par_octree", |b| {
+        b.iter(|| {
+            let mut parameters = parameters.clone();
+            parameters.spatial_decomposition = Some(SpatialDecompositionParameters {
+                subdivision_criterion: SubdivisionCriterion::MaxParticleCountAuto,
+                ghost_particle_safety_factor: Some(1.0),
+                enable_stitching: false,
+            });
+
+            reconstruction =
+                reconstruct_surface::<i64, _>(particle_positions.as_slice(), &parameters).unwrap()
+        })
+    });
+
+    group.bench_function(
+        "surface_reconstruction_double_dam_break_par_octree_stitching",
+        |b| {
+            b.iter(|| {
+                let mut parameters = parameters.clone();
+                parameters.spatial_decomposition = Some(SpatialDecompositionParameters {
+                    subdivision_criterion: SubdivisionCriterion::MaxParticleCountAuto,
+                    ghost_particle_safety_factor: Some(1.0),
+                    enable_stitching: true,
+                });
+
+                reconstruction =
+                    reconstruct_surface::<i64, _>(particle_positions.as_slice(), &parameters)
+                        .unwrap()
+            })
+        },
+    );
 
     group.finish();
 
@@ -162,10 +257,7 @@ pub fn surface_reconstruction_double_dam_break_inplace(c: &mut Criterion) {
         iso_surface_threshold: 0.6,
         domain_aabb: None,
         enable_multi_threading: true,
-        spatial_decomposition: Some(SpatialDecompositionParameters {
-            subdivision_criterion: SubdivisionCriterion::MaxParticleCountAuto,
-            ghost_particle_safety_factor: Some(1.0),
-        }),
+        spatial_decomposition: None,
     };
 
     let mut group = c.benchmark_group("full surface reconstruction");
@@ -174,7 +266,8 @@ pub fn surface_reconstruction_double_dam_break_inplace(c: &mut Criterion) {
     group.measurement_time(Duration::from_secs(25));
 
     let mut reconstruction = SurfaceReconstruction::default();
-    group.bench_function("surface_reconstruction_double_dam_break_inplace", |b| {
+
+    group.bench_function("surface_reconstruction_double_dam_break_inplace_par_global", |b| {
         b.iter(|| {
             reconstruct_surface_inplace::<i64, _>(
                 particle_positions.as_slice(),
@@ -182,6 +275,42 @@ pub fn surface_reconstruction_double_dam_break_inplace(c: &mut Criterion) {
                 &mut reconstruction,
             )
             .unwrap()
+        })
+    });
+
+    group.bench_function("surface_reconstruction_double_dam_break_inplace_par_octree", |b| {
+        b.iter(|| {
+            let mut parameters = parameters.clone();
+            parameters.spatial_decomposition = Some(SpatialDecompositionParameters {
+                subdivision_criterion: SubdivisionCriterion::MaxParticleCountAuto,
+                ghost_particle_safety_factor: Some(1.0),
+                enable_stitching: false,
+            });
+
+            reconstruct_surface_inplace::<i64, _>(
+                particle_positions.as_slice(),
+                &parameters,
+                &mut reconstruction,
+            )
+                .unwrap()
+        })
+    });
+
+    group.bench_function("surface_reconstruction_double_dam_break_inplace_par_octree_stitching", |b| {
+        b.iter(|| {
+            let mut parameters = parameters.clone();
+            parameters.spatial_decomposition = Some(SpatialDecompositionParameters {
+                subdivision_criterion: SubdivisionCriterion::MaxParticleCountAuto,
+                ghost_particle_safety_factor: Some(1.0),
+                enable_stitching: true,
+            });
+
+            reconstruct_surface_inplace::<i64, _>(
+                particle_positions.as_slice(),
+                &parameters,
+                &mut reconstruction,
+            )
+                .unwrap()
         })
     });
 
