@@ -8,7 +8,7 @@ use thread_local::ThreadLocal;
 
 use crate::kernel::DiscreteSquaredDistanceCubicKernel;
 use crate::mesh::{HexMesh3d, MeshWithPointData};
-use crate::uniform_grid::{PointIndex, UniformGrid};
+use crate::uniform_grid::{SubdomainGrid, UniformGrid};
 use crate::utils::{ChunkSize, ParallelPolicy};
 use crate::{new_map, AxisAlignedBoundingBox3d, HashState, Index, MapType, ParallelMapType, Real};
 
@@ -214,8 +214,7 @@ impl<I: Index, R: Real> DensityMap<I, R> {
 #[inline(never)]
 pub fn generate_sparse_density_map<I: Index, R: Real>(
     grid: &UniformGrid<I, R>,
-    subdomain_offset: Option<&PointIndex<I>>,
-    subdomain_grid: Option<&UniformGrid<I, R>>,
+    subdomain_grid: Option<&SubdomainGrid<I, R>>,
     particle_positions: &[Vector3<R>],
     particle_densities: &[R],
     active_particles: Option<&[usize]>,
@@ -234,13 +233,11 @@ pub fn generate_sparse_density_map<I: Index, R: Real>(
         }
     );
 
-    if let (Some(subdomain_offset), Some(subdomain_grid)) = (subdomain_offset, subdomain_grid) {
+    if let Some(subdomain_grid) = subdomain_grid {
         if allow_threading {
             panic!("Multi threading not implemented for density map with subdomain");
         } else {
             sequential_generate_sparse_density_map_subdomain(
-                grid,
-                subdomain_offset,
                 subdomain_grid,
                 particle_positions,
                 particle_densities,
@@ -328,9 +325,7 @@ pub fn sequential_generate_sparse_density_map<I: Index, R: Real>(
 
 #[inline(never)]
 pub fn sequential_generate_sparse_density_map_subdomain<I: Index, R: Real>(
-    grid: &UniformGrid<I, R>,
-    subdomain_offset: &PointIndex<I>,
-    subdomain_grid: &UniformGrid<I, R>,
+    subdomain_grid: &SubdomainGrid<I, R>,
     particle_positions: &[Vector3<R>],
     particle_densities: &[R],
     active_particles: Option<&[usize]>,
@@ -344,14 +339,15 @@ pub fn sequential_generate_sparse_density_map_subdomain<I: Index, R: Real>(
     let mut sparse_densities = density_map.standard_or_insert_mut();
     sparse_densities.clear();
 
-    if let Some(processor) =
-        SparseDensityMapGenerator::new(&grid, kernel_radius, cube_size, particle_rest_mass)
-    {
+    if let Some(processor) = SparseDensityMapGenerator::new(
+        &subdomain_grid.global_grid(),
+        kernel_radius,
+        cube_size,
+        particle_rest_mass,
+    ) {
         let process_particle = |particle_data: (&Vector3<R>, R)| {
             let (particle, particle_density) = particle_data;
             processor.compute_particle_density_contribution_subdomain(
-                grid,
-                subdomain_offset,
                 subdomain_grid,
                 &mut sparse_densities,
                 particle,
@@ -617,19 +613,20 @@ impl<I: Index, R: Real> SparseDensityMapGenerator<I, R> {
     /// Computes all density contributions of a particle to a subdomain of the background grid into the given map
     fn compute_particle_density_contribution_subdomain(
         &self,
-        grid: &UniformGrid<I, R>,
-        subdomain_offset: &PointIndex<I>,
-        subdomain_grid: &UniformGrid<I, R>,
+        subdomain: &SubdomainGrid<I, R>,
         sparse_densities: &mut MapType<I, R>,
         particle: &Vector3<R>,
         particle_density: R,
     ) {
+        let grid = subdomain.global_grid();
+        let subdomain_grid = subdomain.subdomain_grid();
+        let subdomain_offset = subdomain.subdomain_offset();
+
         // Skip particles outside of allowed domain
         if !self.allowed_domain.contains_point(particle) {
             return;
         }
 
-        let subdomain_offset = subdomain_offset.index();
         let subdomain_points = subdomain_grid.points_per_dim();
 
         // Compute grid points affected by the particle

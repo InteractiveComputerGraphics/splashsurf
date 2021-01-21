@@ -32,30 +32,23 @@ pub fn triangulate_density_map<I: Index, R: Real>(
 /// Performs a marching cubes triangulation of a density map on the given background grid, appends triangles to the given mesh
 pub fn triangulate_density_map_append<I: Index, R: Real>(
     grid: &UniformGrid<I, R>,
-    subdomain_offset: Option<&PointIndex<I>>,
-    subdomain_grid: Option<&UniformGrid<I, R>>,
+    subdomain_grid: Option<&SubdomainGrid<I, R>>,
     density_map: &DensityMap<I, R>,
     iso_surface_threshold: R,
     mesh: &mut TriMesh3d<R>,
 ) {
     profile!("triangulate_density_map_append");
 
-    if let (Some(subdomain_grid), Some(subdomain_offset)) = (subdomain_grid, subdomain_offset) {
-        let subdomain = SubdomainGrid::new(
-            grid.clone(),
-            subdomain_grid.clone(),
-            subdomain_offset.index().clone(),
-        );
-
+    if let Some(subdomain) = subdomain_grid {
         let (marching_cubes_data, _) = interpolate_points_to_cell_data_skip_boundary::<I, R>(
-            &subdomain,
+            subdomain,
             &density_map,
             iso_surface_threshold,
             &mut mesh.vertices,
         );
 
         triangulate_with_criterion(
-            &subdomain,
+            subdomain,
             marching_cubes_data,
             mesh,
             TriangulationSkipBoundaryCells,
@@ -73,21 +66,14 @@ pub fn triangulate_density_map_append<I: Index, R: Real>(
 }
 
 pub(crate) fn triangulate_density_map_with_stitching_data<I: Index, R: Real>(
-    grid: &UniformGrid<I, R>,
-    subdomain_offset: &PointIndex<I>,
-    subdomain_grid: &UniformGrid<I, R>,
+    subdomain_grid: &SubdomainGrid<I, R>,
     density_map: &DensityMap<I, R>,
     iso_surface_threshold: R,
 ) -> SurfacePatch<I, R> {
     profile!("triangulate_density_map_append");
 
     let mut mesh = TriMesh3d::default();
-
-    let subdomain = SubdomainGrid::new(
-        grid.clone(),
-        subdomain_grid.clone(),
-        subdomain_offset.index().clone(),
-    );
+    let subdomain = subdomain_grid.clone();
 
     let (marching_cubes_data, mut boundary_density_maps) =
         interpolate_points_to_cell_data_skip_boundary::<I, R>(

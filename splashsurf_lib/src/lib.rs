@@ -56,14 +56,12 @@ use log::info;
 use nalgebra::Vector3;
 use thiserror::Error as ThisError;
 
-use mesh::TriMesh3d;
-use octree::Octree;
-use uniform_grid::PointIndex;
-use workspace::{LocalReconstructionWorkspace, ReconstructionWorkspace};
-
-use crate::generic_tree::{ParVisitableTree, TreeNode};
+use crate::generic_tree::ParVisitableTree;
 use crate::marching_cubes::SurfacePatch;
-use crate::octree::{NodeData, OctreeNode};
+use crate::mesh::TriMesh3d;
+use crate::octree::{NodeData, Octree, OctreeNode};
+use crate::uniform_grid::SubdomainGrid;
+use crate::workspace::{LocalReconstructionWorkspace, ReconstructionWorkspace};
 pub use aabb::{AxisAlignedBoundingBox, AxisAlignedBoundingBox2d, AxisAlignedBoundingBox3d};
 pub use density_map::DensityMap;
 pub use numeric_types::{Index, Real, ThreadSafe};
@@ -339,7 +337,6 @@ pub fn reconstruct_surface_inplace<'a, I: Index, R: Real>(
             &mut *workspace,
             grid,
             None,
-            None,
             particle_positions,
             parameters,
             &mut output_surface.mesh,
@@ -443,12 +440,16 @@ fn reconstruct_surface_inplace_octree<'a, I: Index, R: Real>(
                 info!("Processing octree leaf with {} particles", particles.len());
 
                 // Generate grid for the subdomain of this octree leaf
-                let leaf_aabb = octree_leaf.aabb(grid);
-                let subdomain_grid = &octree_leaf
-                    .grid(leaf_aabb.min(), grid.cell_size())
-                    .expect("Unable to construct Octree node grid");
-                let subdomain_offset = octree_leaf.min_corner();
-                log_grid_info(subdomain_grid);
+                let subdomain_grid = {
+                    let leaf_aabb = octree_leaf.aabb(grid);
+                    let subdomain_grid = octree_leaf
+                        .grid(leaf_aabb.min(), grid.cell_size())
+                        .expect("Unable to construct Octree node grid");
+                    let subdomain_offset = octree_leaf.min_corner();
+                    log_grid_info(&subdomain_grid);
+
+                    SubdomainGrid::new(grid.clone(), subdomain_grid, *subdomain_offset.index())
+                };
 
                 // Take particle position storage from workspace and fill it with positions of the leaf
                 let particle_positions = {
@@ -474,8 +475,7 @@ fn reconstruct_surface_inplace_octree<'a, I: Index, R: Real>(
                 reconstruct_single_surface_append(
                     &mut *tl_workspace,
                     grid,
-                    Some(subdomain_offset),
-                    Some(subdomain_grid),
+                    Some(&subdomain_grid),
                     particle_positions.as_slice(),
                     parameters,
                     &mut tl_mesh,
@@ -575,12 +575,16 @@ fn reconstruct_surface_octree_recursive<'a, I: Index, R: Real>(
                 info!("Processing octree leaf with {} particles", particles.len());
 
                 // Generate grid for the subdomain of this octree leaf
-                let leaf_aabb = octree_node.aabb(grid);
-                let subdomain_grid = &octree_node
-                    .grid(leaf_aabb.min(), grid.cell_size())
-                    .expect("Unable to construct Octree node grid");
-                let subdomain_offset = octree_node.min_corner();
-                log_grid_info(subdomain_grid);
+                let subdomain_grid = {
+                    let leaf_aabb = octree_node.aabb(grid);
+                    let subdomain_grid = octree_node
+                        .grid(leaf_aabb.min(), grid.cell_size())
+                        .expect("Unable to construct Octree node grid");
+                    let subdomain_offset = octree_node.min_corner().clone();
+                    log_grid_info(&subdomain_grid);
+
+                    SubdomainGrid::new(grid.clone(), subdomain_grid, *subdomain_offset.index())
+                };
 
                 // Take particle position storage from workspace and fill it with positions of the leaf
                 let particle_positions = {
@@ -602,9 +606,7 @@ fn reconstruct_surface_octree_recursive<'a, I: Index, R: Real>(
 
                 let surface_patch = reconstruct_surface_patch(
                     &mut *tl_workspace,
-                    grid,
-                    subdomain_offset,
-                    subdomain_grid,
+                    &subdomain_grid,
                     particle_positions.as_slice(),
                     parameters,
                 );
@@ -671,8 +673,7 @@ fn reconstruct_surface_octree_recursive<'a, I: Index, R: Real>(
 fn reconstruct_single_surface_append<'a, I: Index, R: Real>(
     workspace: &mut LocalReconstructionWorkspace<I, R>,
     grid: &UniformGrid<I, R>,
-    subdomain_offset: Option<&PointIndex<I>>,
-    subdomain_grid: Option<&UniformGrid<I, R>>,
+    subdomain_grid: Option<&SubdomainGrid<I, R>>,
     particle_positions: &[Vector3<R>],
     parameters: &Parameters<R>,
     output_mesh: &'a mut TriMesh3d<R>,
@@ -706,7 +707,6 @@ fn reconstruct_single_surface_append<'a, I: Index, R: Real>(
     let mut density_map = new_map().into();
     density_map::generate_sparse_density_map(
         grid,
-        subdomain_offset,
         subdomain_grid,
         particle_positions,
         workspace.particle_densities.as_slice(),
@@ -720,7 +720,6 @@ fn reconstruct_single_surface_append<'a, I: Index, R: Real>(
 
     marching_cubes::triangulate_density_map_append::<I, R>(
         grid,
-        subdomain_offset,
         subdomain_grid,
         &density_map,
         parameters.iso_surface_threshold,
@@ -731,9 +730,7 @@ fn reconstruct_single_surface_append<'a, I: Index, R: Real>(
 /// Reconstruct a surface, appends triangulation to the given mesh
 fn reconstruct_surface_patch<I: Index, R: Real>(
     workspace: &mut LocalReconstructionWorkspace<I, R>,
-    grid: &UniformGrid<I, R>,
-    subdomain_offset: &PointIndex<I>,
-    subdomain_grid: &UniformGrid<I, R>,
+    subdomain_grid: &SubdomainGrid<I, R>,
     particle_positions: &[Vector3<R>],
     parameters: &Parameters<R>,
 ) -> SurfacePatch<I, R> {
@@ -744,7 +741,7 @@ fn reconstruct_surface_patch<I: Index, R: Real>(
 
     info!("Starting neighborhood search...");
     neighborhood_search::search_inplace::<I, R>(
-        &grid.aabb(),
+        &subdomain_grid.global_grid().aabb(),
         particle_positions,
         parameters.kernel_radius,
         parameters.enable_multi_threading,
@@ -765,8 +762,7 @@ fn reconstruct_surface_patch<I: Index, R: Real>(
     // Alternatively one could reuse memory with a custom caching allocator
     let mut density_map = new_map().into();
     density_map::generate_sparse_density_map(
-        grid,
-        Some(subdomain_offset),
+        subdomain_grid.global_grid(),
         Some(subdomain_grid),
         particle_positions,
         workspace.particle_densities.as_slice(),
@@ -779,8 +775,6 @@ fn reconstruct_surface_patch<I: Index, R: Real>(
     );
 
     marching_cubes::triangulate_density_map_with_stitching_data::<I, R>(
-        grid,
-        subdomain_offset,
         subdomain_grid,
         &density_map,
         parameters.iso_surface_threshold,
