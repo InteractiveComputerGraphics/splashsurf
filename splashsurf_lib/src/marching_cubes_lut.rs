@@ -1,36 +1,38 @@
-// Classic marching cubes cases.
-// There are 256 possible combinations of the above/below iso-surface states for the 8 vertices
-// of a cube. The following lookup table maps each combination to the corresponding triangulation.
-//
-// The index for a case is obtained with a bitfield of size 8, where a bit value of 1
-// indicates that the corresponding vertex of the cube is above the iso-surface threshold.
-// Reversing the order of the bit pattern and interpreting it as an integer yields the case index.
-//
-// For each case, the triangulation is represented by a 16 element array containing successive
-// index triplets for each required triangle. The indices refer to the corresponding edges that
-// are intersected by the triangle. Each case has at most three triangles and unused entries of the
-// 16 element arrays are filled with -1 entries for padding.
-//
-// Example:
-//   - Vertex 0 and 2 are above the iso-surface threshold.
-//   - The corresponding bit pattern is `10100000`, the corresponding index is 5
-//   - The case with index 5 reads `[ 0,  8,  3,  1,  2, 10, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1]`
-//   - The triangulation is given by the two triangles `[0, 8, 3]` and `[1, 2, 10]`, with vertices
-//     on the edges identified by the given indices
-//
-// Cube description:
-//
-//         7 ________ 6           _____6__
-//         /|       /|         7/|       /|
-//       /  |     /  |        /  |     /5 |
-//   4 /_______ /    |      /__4____ /    10
-//    |     |  |5    |     |    11  |     |
-//    |    3|__|_____|2    |     |__|__2__|
-//    |    /   |    /      8   3/   9    /
-//    |  /     |  /        |  /     |  /1
-//    |/_______|/          |/___0___|/
-//   0          1
-//          Vertices              Edges
+//! Classic marching cubes cases.
+//! There are 256 possible combinations of the above/below iso-surface states for the 8 vertices
+//! of a cube. The following lookup table maps each combination to the corresponding triangulation.
+//!
+//! The index for a case is obtained with a bitfield of size 8, where a bit value of 1
+//! indicates that the corresponding vertex of the cube is above the iso-surface threshold.
+//! Reversing the order of the bit pattern and interpreting it as an integer yields the case index.
+//!
+//! For each case, the triangulation is represented by a 16 element array containing successive
+//! index triplets for each required triangle. The indices refer to the corresponding edges that
+//! are intersected by the triangle. Each case has at most three triangles and unused entries of the
+//! 16 element arrays are filled with -1 entries for padding.
+//!
+//! Example:
+//!   - Vertex 0 and 2 are above the iso-surface threshold.
+//!   - The corresponding bit pattern is `10100000`, the corresponding index is 5
+//!   - The case with index 5 reads `[ 0,  8,  3,  1,  2, 10, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1]`
+//!   - The triangulation is given by the two triangles `[0, 8, 3]` and `[1, 2, 10]`, with vertices
+//!     on the edges identified by the given indices
+//!
+//! Cube description:
+//!
+//! ```text
+//!         7 ________ 6           _____6__
+//!         /|       /|         7/|       /|
+//!       /  |     /  |        /  |     /5 |
+//!   4 /_______ /    |      /__4____ /    10
+//!    |     |  |5    |     |    11  |     |
+//!    |    3|__|_____|2    |     |__|__2__|
+//!    |    /   |    /      8   3/   9    /
+//!    |  /     |  /        |  /     |  /1
+//!    |/_______|/          |/___0___|/
+//!   0          1
+//!          Vertices              Edges
+//! ```
 
 /// The classic marching cubes table
 #[rustfmt::skip]

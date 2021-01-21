@@ -36,7 +36,7 @@ pub mod generic_tree;
 pub mod kernel;
 /// Triangulation of density maps using marching cubes
 pub mod marching_cubes;
-mod marching_cubes_lut;
+pub mod marching_cubes_lut;
 /// Basic mesh types used by the library and implementation of VTK export
 pub mod mesh;
 /// Simple neighborhood search based on spatial hashing
