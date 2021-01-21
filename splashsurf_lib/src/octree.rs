@@ -210,7 +210,7 @@ impl<I: Index, R: Real> Octree<I, R> {
             cells: Vec::new(),
         };
 
-        self.root.visit_dfs(|node| {
+        self.root.dfs_iter().for_each(|node| {
             if node.children().is_empty() {
                 if only_non_empty
                     && node
