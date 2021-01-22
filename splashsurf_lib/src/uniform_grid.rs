@@ -668,9 +668,9 @@ impl<I: Index, R: Real> SubdomainGrid<I, R> {
     }
 
     /// Maps the point index from the global grid into the subdomain grid
-    pub fn map_point(&self, point: &PointIndex<I>) -> Option<PointIndex<I>> {
-        let new_point =
-            Direction::Negative.checked_apply_step_ijk(point.index(), &self.subdomain_offset)?;
+    pub fn map_point(&self, global_point: &PointIndex<I>) -> Option<PointIndex<I>> {
+        let new_point = Direction::Negative
+            .checked_apply_step_ijk(global_point.index(), &self.subdomain_offset)?;
         self.subdomain_grid.get_point(new_point)
     }
 
@@ -714,16 +714,16 @@ impl<I: Index, R: Real> SubdomainGrid<I, R> {
     }
 
     /// Maps the cell index from the global grid into the subdomain grid
-    pub fn map_cell(&self, cell: &CellIndex<I>) -> Option<CellIndex<I>> {
-        let new_cell =
-            Direction::Negative.checked_apply_step_ijk(cell.index(), &self.subdomain_offset)?;
+    pub fn map_cell(&self, global_cell: &CellIndex<I>) -> Option<CellIndex<I>> {
+        let new_cell = Direction::Negative
+            .checked_apply_step_ijk(global_cell.index(), &self.subdomain_offset)?;
         self.subdomain_grid.get_cell(new_cell)
     }
 
     /// Maps the cell index from the subdomain grid to the global grid
-    pub fn inv_map_cell(&self, cell: &CellIndex<I>) -> Option<CellIndex<I>> {
-        let new_cell =
-            Direction::Positive.checked_apply_step_ijk(cell.index(), &self.subdomain_offset)?;
+    pub fn inv_map_cell(&self, subdomain_cell: &CellIndex<I>) -> Option<CellIndex<I>> {
+        let new_cell = Direction::Positive
+            .checked_apply_step_ijk(subdomain_cell.index(), &self.subdomain_offset)?;
         self.grid.get_cell(new_cell)
     }
 

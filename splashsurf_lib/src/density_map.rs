@@ -125,6 +125,7 @@ pub fn parallel_compute_particle_densities<I: Index, R: Real>(
 
     particle_positions
         .par_iter()
+        .with_min_len(8)
         .zip_eq(particle_neighbor_lists.par_iter())
         .zip_eq(particle_densities.par_iter_mut())
         .for_each(
