@@ -267,52 +267,61 @@ pub fn surface_reconstruction_double_dam_break_inplace(c: &mut Criterion) {
 
     let mut reconstruction = SurfaceReconstruction::default();
 
-    group.bench_function("surface_reconstruction_double_dam_break_inplace_par_global", |b| {
-        b.iter(|| {
-            reconstruct_surface_inplace::<i64, _>(
-                particle_positions.as_slice(),
-                &parameters,
-                &mut reconstruction,
-            )
-            .unwrap()
-        })
-    });
-
-    group.bench_function("surface_reconstruction_double_dam_break_inplace_par_octree", |b| {
-        b.iter(|| {
-            let mut parameters = parameters.clone();
-            parameters.spatial_decomposition = Some(SpatialDecompositionParameters {
-                subdivision_criterion: SubdivisionCriterion::MaxParticleCountAuto,
-                ghost_particle_safety_factor: Some(1.0),
-                enable_stitching: false,
-            });
-
-            reconstruct_surface_inplace::<i64, _>(
-                particle_positions.as_slice(),
-                &parameters,
-                &mut reconstruction,
-            )
+    group.bench_function(
+        "surface_reconstruction_double_dam_break_inplace_par_global",
+        |b| {
+            b.iter(|| {
+                reconstruct_surface_inplace::<i64, _>(
+                    particle_positions.as_slice(),
+                    &parameters,
+                    &mut reconstruction,
+                )
                 .unwrap()
-        })
-    });
+            })
+        },
+    );
 
-    group.bench_function("surface_reconstruction_double_dam_break_inplace_par_octree_stitching", |b| {
-        b.iter(|| {
-            let mut parameters = parameters.clone();
-            parameters.spatial_decomposition = Some(SpatialDecompositionParameters {
-                subdivision_criterion: SubdivisionCriterion::MaxParticleCountAuto,
-                ghost_particle_safety_factor: Some(1.0),
-                enable_stitching: true,
-            });
+    group.bench_function(
+        "surface_reconstruction_double_dam_break_inplace_par_octree",
+        |b| {
+            b.iter(|| {
+                let mut parameters = parameters.clone();
+                parameters.spatial_decomposition = Some(SpatialDecompositionParameters {
+                    subdivision_criterion: SubdivisionCriterion::MaxParticleCountAuto,
+                    ghost_particle_safety_factor: Some(1.0),
+                    enable_stitching: false,
+                });
 
-            reconstruct_surface_inplace::<i64, _>(
-                particle_positions.as_slice(),
-                &parameters,
-                &mut reconstruction,
-            )
+                reconstruct_surface_inplace::<i64, _>(
+                    particle_positions.as_slice(),
+                    &parameters,
+                    &mut reconstruction,
+                )
                 .unwrap()
-        })
-    });
+            })
+        },
+    );
+
+    group.bench_function(
+        "surface_reconstruction_double_dam_break_inplace_par_octree_stitching",
+        |b| {
+            b.iter(|| {
+                let mut parameters = parameters.clone();
+                parameters.spatial_decomposition = Some(SpatialDecompositionParameters {
+                    subdivision_criterion: SubdivisionCriterion::MaxParticleCountAuto,
+                    ghost_particle_safety_factor: Some(1.0),
+                    enable_stitching: true,
+                });
+
+                reconstruct_surface_inplace::<i64, _>(
+                    particle_positions.as_slice(),
+                    &parameters,
+                    &mut reconstruction,
+                )
+                .unwrap()
+            })
+        },
+    );
 
     group.finish();
 

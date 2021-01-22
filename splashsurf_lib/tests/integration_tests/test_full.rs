@@ -1,5 +1,7 @@
 use nalgebra::Vector3;
-use splashsurf_lib::{reconstruct_surface, Parameters, SpatialDecompositionParameters, SubdivisionCriterion};
+use splashsurf_lib::{
+    reconstruct_surface, Parameters, SpatialDecompositionParameters, SubdivisionCriterion,
+};
 
 use super::io::vtk::{particles_from_vtk, write_vtk};
 
@@ -80,6 +82,5 @@ pub fn surface_reconstruction_bunny_stitching() {
         "../out/reconstruct_surface_bunny_par_stitching.vtk",
         "mesh",
     )
-        .unwrap();
+    .unwrap();
 }
-
