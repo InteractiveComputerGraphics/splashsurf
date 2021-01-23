@@ -4,8 +4,9 @@ use crate::topology::{Axis, DirectedAxis, DirectedAxisArray, Direction};
 use crate::uniform_grid::{GridBoundaryFaceFlags, PointIndex, SubdomainGrid};
 use crate::{new_map, DensityMap, Index, MapType, Real, UniformGrid};
 use anyhow::Context;
-use log::info;
+use log::{info, trace};
 use nalgebra::Vector3;
+use std::marker::PhantomData;
 
 // TODO: Merge the three interpolate implementations
 // TODO: Avoid the index conversions by directly using global indices
@@ -119,7 +120,18 @@ impl RelativeToThreshold {
             RelativeToThreshold::Below => false,
             RelativeToThreshold::Above => true,
             // TODO: Replace with error?
-            RelativeToThreshold::Indeterminate => panic!(),
+            RelativeToThreshold::Indeterminate => {
+                panic!("Trying to evaluate cell data with indeterminate data!")
+            }
+        }
+    }
+
+    /// Returns if the value is above the iso-surface or `None` if the value is indeterminate
+    fn is_indeterminate(&self) -> bool {
+        if let RelativeToThreshold::Indeterminate = self {
+            true
+        } else {
+            false
         }
     }
 }
@@ -324,6 +336,7 @@ pub(crate) fn interpolate_points_to_cell_data_skip_boundary<I: Index, R: Real>(
     iso_surface_threshold: R,
     vertices: &mut Vec<Vector3<R>>,
 ) -> (MarchingCubesInput<I>, DirectedAxisArray<MapType<I, R>>) {
+    let grid = subdomain.global_grid();
     let subdomain_grid = subdomain.subdomain_grid();
 
     assert!(
@@ -352,12 +365,15 @@ pub(crate) fn interpolate_points_to_cell_data_skip_boundary<I: Index, R: Real>(
     {
         profile!("generate_iso_surface_vertices");
         density_map.for_each(|flat_point_index, point_value| {
-            let point = subdomain_grid.try_unflatten_point_index(flat_point_index)
-                .expect("Flat point index does not belong to grid. You have to supply the same grid that was used to create the density map.");
+            let global_point = grid.try_unflatten_point_index(flat_point_index).unwrap();
+            let point = subdomain
+                .map_point(&global_point)
+                .expect("Point cannot be mapped into subdomain.");
 
             // Skip points directly at the boundary but add them to the respective boundary density map
             {
-                let point_boundary_flags = GridBoundaryFaceFlags::classify_point(subdomain_grid, &point);
+                let point_boundary_flags =
+                    GridBoundaryFaceFlags::classify_point(subdomain_grid, &point);
                 if !point_boundary_flags.is_empty() {
                     // Insert the point into each boundary density map it belongs to
                     for boundary in point_boundary_flags.iter_individual() {
@@ -366,8 +382,12 @@ pub(crate) fn interpolate_points_to_cell_data_skip_boundary<I: Index, R: Real>(
 
                         // Also insert second row neighbor, if present
                         if let Some(flat_neighbor_index) = subdomain_grid
+                            // Get neighbor in subdomain
                             .get_point_neighbor(&point, boundary.opposite())
-                            .map(|index| subdomain_grid.flatten_point_index(&index))
+                            // Map neighbor from subdomain to global grid
+                            .and_then(|neighbor| subdomain.inv_map_point(&neighbor))
+                            // Flatten on global grid
+                            .map(|global_neighbor| grid.flatten_point_index(&global_neighbor))
                         {
                             if let Some(density_value) = density_map.get(flat_neighbor_index) {
                                 boundary_map.insert(flat_neighbor_index, density_value);
@@ -396,7 +416,10 @@ pub(crate) fn interpolate_points_to_cell_data_skip_boundary<I: Index, R: Real>(
             for neighbor_edge in neighborhood.neighbor_edge_iter() {
                 let neighbor = neighbor_edge.neighbor_index();
 
-                let flat_neighbor_index = subdomain_grid.flatten_point_index(neighbor);
+                // Get flat index of neighbor on global grid
+                let global_neighbor = subdomain.inv_map_point(neighbor).unwrap();
+                let flat_neighbor_index = grid.flatten_point_index(&global_neighbor);
+
                 // Try to read out the function value at the neighboring point
                 let neighbor_value = if let Some(v) = density_map.get(flat_neighbor_index) {
                     v
@@ -419,8 +442,7 @@ pub(crate) fn interpolate_points_to_cell_data_skip_boundary<I: Index, R: Real>(
                 }
 
                 // Interpolate iso-surface vertex on the edge
-                let alpha =
-                    (iso_surface_threshold - point_value) / (neighbor_value - point_value);
+                let alpha = (iso_surface_threshold - point_value) / (neighbor_value - point_value);
                 let point_coords = subdomain_grid.point_coordinates(&point);
                 let neighbor_coords = subdomain_grid.point_coordinates(neighbor);
                 let interpolated_coords =
@@ -433,8 +455,13 @@ pub(crate) fn interpolate_points_to_cell_data_skip_boundary<I: Index, R: Real>(
                 // Store the data required for the marching cubes triangulation for
                 // each cell adjacent to the edge crossing the iso-surface.
                 // This includes the above/below iso-surface flags and the interpolated vertex index.
-                for cell in subdomain_grid.cells_adjacent_to_edge(&neighbor_edge).iter().flatten() {
-                    let flat_cell_index = subdomain_grid.flatten_cell_index(cell);
+                for cell in subdomain_grid
+                    .cells_adjacent_to_edge(&neighbor_edge)
+                    .iter()
+                    .flatten()
+                {
+                    let global_cell = subdomain.inv_map_cell(cell).unwrap();
+                    let flat_cell_index = grid.flatten_cell_index(&global_cell);
 
                     let mut cell_data_entry = cell_data
                         .entry(flat_cell_index)
@@ -442,12 +469,14 @@ pub(crate) fn interpolate_points_to_cell_data_skip_boundary<I: Index, R: Real>(
 
                     // Store the index of the interpolated vertex on the corresponding local edge of the cell
                     let local_edge_index = cell.local_edge_index_of(&neighbor_edge).unwrap();
-                    assert!(cell_data_entry.iso_surface_vertices[local_edge_index].is_none(), "Overwriting already existing vertex. This is a bug.");
+                    assert!(
+                        cell_data_entry.iso_surface_vertices[local_edge_index].is_none(),
+                        "Overwriting already existing vertex. This is a bug."
+                    );
                     cell_data_entry.iso_surface_vertices[local_edge_index] = Some(vertex_index);
 
                     // Mark the neighbor as above the iso-surface threshold
-                    let local_vertex_index =
-                        cell.local_point_index_of(neighbor.index()).unwrap();
+                    let local_vertex_index = cell.local_point_index_of(neighbor.index()).unwrap();
                     cell_data_entry.corner_above_threshold[local_vertex_index] =
                         RelativeToThreshold::Above;
                 }
@@ -471,9 +500,7 @@ pub(crate) fn interpolate_points_to_cell_data_skip_boundary<I: Index, R: Real>(
     {
         profile!("relative_to_threshold_postprocessing");
         for (&flat_cell_index, cell_data) in cell_data.iter_mut() {
-            let cell = subdomain_grid
-                .try_unflatten_cell_index(flat_cell_index)
-                .unwrap();
+            let cell = grid.try_unflatten_cell_index(flat_cell_index).unwrap();
             for (local_point_index, flag_above) in
                 cell_data.corner_above_threshold.iter_mut().enumerate()
             {
@@ -484,7 +511,7 @@ pub(crate) fn interpolate_points_to_cell_data_skip_boundary<I: Index, R: Real>(
 
                 // Otherwise try to look up its value and potentially mark it as above the threshold
                 let point = cell.global_point_index_of(local_point_index).unwrap();
-                let flat_point_index = subdomain_grid.flatten_point_index(&point);
+                let flat_point_index = grid.flatten_point_index(&point);
                 if let Some(point_value) = density_map.get(flat_point_index) {
                     if point_value > iso_surface_threshold {
                         *flag_above = RelativeToThreshold::Above;
@@ -492,7 +519,7 @@ pub(crate) fn interpolate_points_to_cell_data_skip_boundary<I: Index, R: Real>(
                         *flag_above = RelativeToThreshold::Below;
                     }
                 } else {
-                    *flag_above = RelativeToThreshold::Below;
+                    *flag_above = RelativeToThreshold::Indeterminate;
                 }
             }
         }
@@ -513,23 +540,25 @@ pub(crate) fn interpolate_points_to_cell_data_skip_boundary<I: Index, R: Real>(
 
 #[inline(never)]
 pub(crate) fn interpolate_points_to_cell_data_stitching<I: Index, R: Real>(
-    grid: &UniformGrid<I, R>,
+    subdomain: &SubdomainGrid<I, R>,
     density_map: &DensityMap<I, R>,
     iso_surface_threshold: R,
     stitching_axis: Axis,
     vertices: &mut Vec<Vector3<R>>,
     marching_cubes_input: &mut MarchingCubesInput<I>,
 ) {
+    let grid = subdomain.global_grid();
+    let subdomain_grid = subdomain.subdomain_grid();
+
     profile!("interpolate_points_to_cell_data_stitching");
 
     // Note: This functions assumes that the default value for missing point data is below the iso-surface threshold
-    info!("Starting interpolation of cell data for marching cubes...");
 
     // Map from flat cell index to all data that is required per cell for the marching cubes triangulation
     let cell_data = &mut marching_cubes_input.cell_data;
 
-    info!(
-        "Input: cell data for marching cubes with {} cells and {} vertices.",
+    trace!(
+        "Starting interpolation of cell data for marching cubes in stitching domain... (Input: cell data for marching cubes with {} cells and {} vertices.)",
         cell_data.len(),
         vertices.len()
     );
@@ -538,7 +567,8 @@ pub(crate) fn interpolate_points_to_cell_data_stitching<I: Index, R: Real>(
     let point_is_on_stitching_surface = |p: &PointIndex<I>| -> bool {
         let index = p.index();
         index[stitching_axis.dim()] == I::zero()
-            || index[stitching_axis.dim()] == grid.points_per_dim()[stitching_axis.dim()] - I::one()
+            || index[stitching_axis.dim()]
+                == subdomain_grid.points_per_dim()[stitching_axis.dim()] - I::one()
     };
 
     // Detects points that are on a boundary other than the stitching surfaces
@@ -550,11 +580,9 @@ pub(crate) fn interpolate_points_to_cell_data_stitching<I: Index, R: Real>(
             .copied()
             .any(|axis| {
                 index[axis.dim()] == I::zero()
-                    || index[axis.dim()] == grid.points_per_dim()[axis.dim()] - I::one()
+                    || index[axis.dim()] == subdomain_grid.points_per_dim()[axis.dim()] - I::one()
             })
     };
-
-    info!("Points per dim: {:?}", grid.points_per_dim());
 
     // Generate iso-surface vertices and identify affected cells & edges
     {
@@ -572,20 +600,25 @@ pub(crate) fn interpolate_points_to_cell_data_stitching<I: Index, R: Real>(
                 return;
             }
 
-            let point = grid.try_unflatten_point_index(flat_point_index)
-                .expect("Flat point index does not belong to grid. You have to supply the same grid that was used to create the density map.");
+            let global_point = grid.try_unflatten_point_index(flat_point_index).unwrap();
+            let point = subdomain
+                .map_point(&global_point)
+                .expect("Point cannot be mapped into stitching domain.");
 
             // Skip points on the outside of the stitching domain (except if they are on the stitching surface)
             if point_is_outside_stitching(&point) {
                 return;
             }
 
-            let neighborhood = grid.get_point_neighborhood(&point);
+            let neighborhood = subdomain_grid.get_point_neighborhood(&point);
             // Iterate over all neighbors of the point to find edges crossing the iso-surface
             for neighbor_edge in neighborhood.neighbor_edge_iter() {
                 let neighbor = neighbor_edge.neighbor_index();
 
-                let flat_neighbor_index = grid.flatten_point_index(neighbor);
+                // Get flat index of neighbor on global grid
+                let global_neighbor = subdomain.inv_map_point(neighbor).unwrap();
+                let flat_neighbor_index = grid.flatten_point_index(&global_neighbor);
+
                 // Try to read out the function value at the neighboring point
                 let neighbor_value = if let Some(v) = density_map.get(flat_neighbor_index) {
                     v
@@ -603,7 +636,8 @@ pub(crate) fn interpolate_points_to_cell_data_stitching<I: Index, R: Real>(
                 }
 
                 // Skip edges that are on the stitching surface (were already triangulated by the patches)
-                if point_is_on_stitching_surface(&point) && point_is_on_stitching_surface(neighbor) {
+                if point_is_on_stitching_surface(&point) && point_is_on_stitching_surface(neighbor)
+                {
                     continue;
                 }
 
@@ -613,10 +647,9 @@ pub(crate) fn interpolate_points_to_cell_data_stitching<I: Index, R: Real>(
                 }
 
                 // Interpolate iso-surface vertex on the edge
-                let alpha =
-                    (iso_surface_threshold - point_value) / (neighbor_value - point_value);
-                let point_coords = grid.point_coordinates(&point);
-                let neighbor_coords = grid.point_coordinates(neighbor);
+                let alpha = (iso_surface_threshold - point_value) / (neighbor_value - point_value);
+                let point_coords = subdomain_grid.point_coordinates(&point);
+                let neighbor_coords = subdomain_grid.point_coordinates(neighbor);
                 let interpolated_coords =
                     (point_coords) * (R::one() - alpha) + neighbor_coords * alpha;
 
@@ -627,8 +660,13 @@ pub(crate) fn interpolate_points_to_cell_data_stitching<I: Index, R: Real>(
                 // Store the data required for the marching cubes triangulation for
                 // each cell adjacent to the edge crossing the iso-surface.
                 // This includes the above/below iso-surface flags and the interpolated vertex index.
-                for cell in grid.cells_adjacent_to_edge(&neighbor_edge).iter().flatten() {
-                    let flat_cell_index = grid.flatten_cell_index(cell);
+                for cell in subdomain_grid
+                    .cells_adjacent_to_edge(&neighbor_edge)
+                    .iter()
+                    .flatten()
+                {
+                    let global_cell = subdomain.inv_map_cell(cell).unwrap();
+                    let flat_cell_index = grid.flatten_cell_index(&global_cell);
 
                     let mut cell_data_entry = cell_data
                         .entry(flat_cell_index)
@@ -637,12 +675,14 @@ pub(crate) fn interpolate_points_to_cell_data_stitching<I: Index, R: Real>(
                     // Store the index of the interpolated vertex on the corresponding local edge of the cell
                     let local_edge_index = cell.local_edge_index_of(&neighbor_edge).unwrap();
 
-                    assert!(cell_data_entry.iso_surface_vertices[local_edge_index].is_none(), "Overwriting already existing vertex. This is a bug.");
+                    assert!(
+                        cell_data_entry.iso_surface_vertices[local_edge_index].is_none(),
+                        "Overwriting already existing vertex. This is a bug."
+                    );
                     cell_data_entry.iso_surface_vertices[local_edge_index] = Some(vertex_index);
 
                     // Mark the neighbor as above the iso-surface threshold
-                    let local_vertex_index =
-                        cell.local_point_index_of(neighbor.index()).unwrap();
+                    let local_vertex_index = cell.local_point_index_of(neighbor.index()).unwrap();
                     cell_data_entry.corner_above_threshold[local_vertex_index] =
                         RelativeToThreshold::Above;
                 }
@@ -688,21 +728,25 @@ pub(crate) fn interpolate_points_to_cell_data_stitching<I: Index, R: Real>(
                         *flag_above = RelativeToThreshold::Below;
                     }
                 } else {
-                    *flag_above = RelativeToThreshold::Below;
+                    *flag_above = RelativeToThreshold::Indeterminate;
                 }
             }
         }
     }
 
     #[cfg(debug_assertions)]
-    assert_cell_data_point_data_consistency(density_map, &cell_data, grid, iso_surface_threshold);
+    assert_cell_data_point_data_consistency(
+        density_map,
+        &cell_data,
+        subdomain_grid,
+        iso_surface_threshold,
+    );
 
-    info!(
-        "Output: cell data for marching cubes with {} cells and {} vertices.",
+    trace!(
+        "Interpolation done. (Output: cell data for marching cubes with {} cells and {} vertices.",
         cell_data.len(),
         vertices.len()
     );
-    info!("Interpolation done.");
 }
 
 /// Extracts the cell data of all cells on the boundary of the subdomain
@@ -713,15 +757,16 @@ fn collect_boundary_cell_data<I: Index, R: Real>(
 ) -> DirectedAxisArray<MapType<I, CellData>> {
     let mut boundary_cell_data: DirectedAxisArray<MapType<I, CellData>> = Default::default();
 
-    let subdomain_grid = subdomain.subdomain_grid();
     for (&flat_cell_index, cell_data) in &input.cell_data {
-        let cell_index = subdomain_grid
+        let global_cell = subdomain
+            .global_grid()
             .try_unflatten_cell_index(flat_cell_index)
-            .expect("Unable to unflatten cell index");
+            .unwrap();
+        let local_cell = subdomain.map_cell(&global_cell).unwrap();
 
         // Check which grid boundary faces this cell is part of
         let cell_grid_boundaries =
-            GridBoundaryFaceFlags::classify_cell(subdomain_grid, &cell_index);
+            GridBoundaryFaceFlags::classify_cell(subdomain.subdomain_grid(), &local_cell);
         // Only process cells that are part of some boundary
         if !cell_grid_boundaries.is_empty() {
             for boundary in cell_grid_boundaries.iter_individual() {
@@ -746,45 +791,142 @@ pub(crate) struct BoundaryData<I: Index, R: Real> {
 
 impl<I: Index, R: Real> BoundaryData<I, R> {
     /// Maps this boundary data to another domain by converting all indices to the new subdomain
-    fn to_domain(
-        self,
-        target_domain: &SubdomainGrid<I, R>,
+    fn map_to_domain(
+        mut self,
         source_domain: &SubdomainGrid<I, R>,
+        target_domain: &SubdomainGrid<I, R>,
         vertex_offset: Option<usize>,
     ) -> Self {
-        let mut new_density_map = new_map();
+        assert_eq!(
+            target_domain.global_grid(),
+            source_domain.global_grid(),
+            "The global grid of target and source domain has to match!"
+        );
+        let grid = target_domain.global_grid();
 
-        for (flat_point_index, density_contribution) in self.boundary_density_map.iter() {
-            // Only add points that can be mapped into the result subdomain
-            if let Some(flat_result_point_index) =
-                source_domain.map_flat_point_index_to(target_domain, *flat_point_index)
-            {
-                new_density_map.insert(flat_result_point_index, *density_contribution);
-            }
-        }
+        // Process density map
+        {
+            let mut points_to_remove = Vec::new();
+            for flat_point_index in self.boundary_density_map.keys().copied() {
+                let global_point = grid.try_unflatten_point_index(flat_point_index).unwrap();
 
-        let mut new_cell_map = new_map();
-
-        for (flat_cell_index, cell_data) in self.boundary_cell_data.iter() {
-            // Only add cells that can be mapped into the result subdomain
-            if let Some(flat_result_cell_index) =
-                source_domain.map_flat_cell_index_to(target_domain, *flat_cell_index)
-            {
-                let mut cell_data = cell_data.clone();
-                // Apply the vertex offset
-                if let Some(vertex_offset) = vertex_offset {
-                    for v in cell_data.iso_surface_vertices.iter_mut().flatten() {
-                        *v += vertex_offset;
-                    }
+                // If point is not part of the target domain, it is marked to be removed
+                if target_domain.map_point(&global_point).is_none() {
+                    points_to_remove.push(flat_point_index)
                 }
+            }
 
-                new_cell_map.insert(flat_result_cell_index, cell_data.clone());
+            // Remove all points not part of the target domain
+            for flat_point_index in points_to_remove {
+                info!("Removed point from density map");
+                self.boundary_density_map.remove(&flat_point_index);
             }
         }
 
-        Self {
-            boundary_density_map: new_density_map,
-            boundary_cell_data: new_cell_map,
+        // Process cell data
+        {
+            let mut cells_to_remove = Vec::new();
+            for flat_cell_index in self.boundary_cell_data.keys().copied() {
+                let global_cell = grid.try_unflatten_cell_index(flat_cell_index).unwrap();
+
+                // If cell is not part of the target domain, it is marked to be removed
+                if target_domain.map_cell(&global_cell).is_none() {
+                    cells_to_remove.push(flat_cell_index);
+                }
+            }
+
+            // Remove all cells not part of the target domain
+            for flat_cell_index in cells_to_remove {
+                self.boundary_cell_data.remove(&flat_cell_index);
+            }
+        }
+
+        // Apply vertex offset if required
+        self.apply_cell_data_vertex_offset(vertex_offset);
+
+        self
+    }
+
+    fn merge_with(
+        mut self,
+        mut other: BoundaryData<I, R>,
+        other_domain: &SubdomainGrid<I, R>,
+        target_domain: &SubdomainGrid<I, R>,
+        vertex_offset: Option<usize>,
+    ) -> Self {
+        assert_eq!(
+            target_domain.global_grid(),
+            other_domain.global_grid(),
+            "The global grid of target and source domain has to match!"
+        );
+        let grid = target_domain.global_grid();
+
+        // Apply vertex offset if required
+        other.apply_cell_data_vertex_offset(vertex_offset);
+
+        let BoundaryData {
+            boundary_density_map: other_boundary_density_map,
+            boundary_cell_data: other_boundary_cell_data,
+        } = other;
+
+        // Process density map
+        for (flat_point_index, density_contribution) in other_boundary_density_map {
+            let global_point = grid.try_unflatten_point_index(flat_point_index).unwrap();
+
+            // Skip points that are not part of the target domain
+            if target_domain.map_point(&global_point).is_none() {
+                continue;
+            }
+
+            // TODO: For a proper average we would have to keep track how often this point is merged with other domains
+            //  and use an incremental average over this number of contributions
+            self.boundary_density_map
+                .entry(flat_point_index)
+                // Compute average with existing value
+                .and_modify(|density| {
+                    *density += density_contribution;
+                    *density /= R::one() + R::one();
+                })
+                // Or just insert the new value
+                .or_insert(density_contribution);
+        }
+
+        // Process cell data
+        for (flat_cell_index, cell_data) in other_boundary_cell_data {
+            let global_cell = grid.try_unflatten_cell_index(flat_cell_index).unwrap();
+
+            // Skip points that are not part of the target domain
+            if target_domain.map_cell(&global_cell).is_none() {
+                continue;
+            }
+
+            self.boundary_cell_data
+                .entry(flat_cell_index)
+                // The cell data interpolation function should only populate cells that are part of their subdomain
+                .and_modify(|_| {
+                    panic!("Merge conflict: there is duplicate cell data for this cell index")
+                })
+                // Otherwise insert the additional cell data
+                .or_insert(cell_data);
+        }
+
+        self
+    }
+
+    /// Adds an offset to all iso-surface vertex indices stored in the cell data map
+    fn apply_cell_data_vertex_offset(&mut self, vertex_offset: Option<usize>) {
+        // Apply the vertex offset
+        if let Some(vertex_offset) = vertex_offset {
+            for v in self
+                .boundary_cell_data
+                .iter_mut()
+                // Iterate over all vertices in the cell data
+                .flat_map(|(_, cell_data)| cell_data.iso_surface_vertices.iter_mut())
+                // Skip missing vertices
+                .flatten()
+            {
+                *v += vertex_offset;
+            }
         }
     }
 }
@@ -803,88 +945,27 @@ pub(crate) struct SurfacePatch<I: Index, R: Real> {
 
 // Merges boundary such that only density values and cell data in the result subdomain are part of the result
 fn merge_boundary_data<I: Index, R: Real>(
-    target_subdomain: &SubdomainGrid<I, R>,
     negative_subdomain: &SubdomainGrid<I, R>,
-    negative_data: &BoundaryData<I, R>,
+    negative_data: BoundaryData<I, R>,
     positive_subdomain: &SubdomainGrid<I, R>,
-    positive_data: &BoundaryData<I, R>,
+    positive_data: BoundaryData<I, R>,
+    target_subdomain: &SubdomainGrid<I, R>,
     positive_vertex_offset: usize,
 ) -> BoundaryData<I, R> {
-    let mut result_boundary_data = BoundaryData::default();
+    trace!("Merging boundary data. Size of containers: (-) side (density map: {}, cell data map: {}), (+) side (density map: {}, cell data map: {})", negative_data.boundary_density_map.len(), negative_data.boundary_cell_data.len(), positive_data.boundary_density_map.len(), positive_data.boundary_cell_data.len());
 
-    // Merge density maps with averaging
-    {
-        let mut merged_density_map = new_map();
+    let merged_boundary_data =
+        negative_data.map_to_domain(negative_subdomain, target_subdomain, None);
+    let merged_boundary_data = merged_boundary_data.merge_with(
+        positive_data,
+        positive_subdomain,
+        target_subdomain,
+        Some(positive_vertex_offset),
+    );
 
-        // For negative side: only map the point index
-        for (flat_point_index, density_contribution) in negative_data.boundary_density_map.iter() {
-            // Only add points that can be mapped into the result subdomain
-            if let Some(flat_result_point_index) =
-                negative_subdomain.map_flat_point_index_to(target_subdomain, *flat_point_index)
-            {
-                merged_density_map.insert(flat_result_point_index, *density_contribution);
-            }
-        }
+    trace!("Finished merging boundary data. Size of containers: result (density map: {}, cell data map: {})", merged_boundary_data.boundary_density_map.len(), merged_boundary_data.boundary_cell_data.len());
 
-        // For positive side: map point index and average with already added density contributions
-        for (flat_point_index, density_contribution) in positive_data.boundary_density_map.iter() {
-            if let Some(flat_result_point_index) =
-                positive_subdomain.map_flat_point_index_to(target_subdomain, *flat_point_index)
-            {
-                merged_density_map
-                    .entry(flat_result_point_index)
-                    // Compute average with existing value
-                    .and_modify(|density| {
-                        *density += *density_contribution;
-                        *density /= R::one() + R::one();
-                    })
-                    // Or just insert the new value
-                    .or_insert(*density_contribution);
-            }
-        }
-
-        result_boundary_data.boundary_density_map = merged_density_map;
-    }
-
-    // Merge cell data maps
-    {
-        let mut merged_cell_map = new_map();
-
-        // For negative side: only map the cell index
-        for (flat_cell_index, cell_data) in negative_data.boundary_cell_data.iter() {
-            if let Some(flat_result_cell_index) =
-                negative_subdomain.map_flat_cell_index_to(target_subdomain, *flat_cell_index)
-            {
-                merged_cell_map.insert(flat_result_cell_index, cell_data.clone());
-            }
-        }
-
-        // For positive side: map cell index and adjust vertex indices in cell data
-        for (flat_cell_index, cell_data) in positive_data.boundary_cell_data.iter() {
-            if let Some(flat_result_cell_index) =
-                positive_subdomain.map_flat_cell_index_to(target_subdomain, *flat_cell_index)
-            {
-                // Apply the vertex offset
-                let mut cell_data = cell_data.clone();
-                for v in cell_data.iso_surface_vertices.iter_mut().flatten() {
-                    *v += positive_vertex_offset;
-                }
-
-                merged_cell_map
-                    .entry(flat_result_cell_index)
-                    // The cell data interpolation function should only populate cells that are part of their subdomain
-                    .and_modify(|_| {
-                        panic!("Merge conflict: there is duplicate cell data for this cell index")
-                    })
-                    // Otherwise insert the additional cell data
-                    .or_insert(cell_data);
-            }
-        }
-
-        result_boundary_data.boundary_cell_data = merged_cell_map;
-    }
-
-    result_boundary_data
+    merged_boundary_data
 }
 
 /// Computes the [SubdomainGrid] for stitching region between the two sides that has to be triangulated
@@ -940,22 +1021,9 @@ fn compute_stitching_domain<I: Index, R: Real>(
             "The cross sections of the two subdomains that should be stitched is not identical!"
         );
 
-        /*
-        // Subtract boundary layers from stitching domain
-        let mut n_cells_per_dim = n_cells_per_dim_neg;
-        for axis in stitching_axis.orthogonal_axes()
-            .iter()
-            .copied()
-        {
-            n_cells_per_dim[axis.dim()] -= I::one() + I::one();
-        }
-        */
-
         let n_cells_per_dim = n_cells_per_dim_neg;
         n_cells_per_dim
     };
-
-    info!("Stitching domain n_cells_per_dim: {:?}", n_cells_per_dim);
 
     // Obtain the index of the lower corner of the stitching domain
     let stitching_grid_offset = {
@@ -964,18 +1032,10 @@ fn compute_stitching_domain<I: Index, R: Real>(
         // Start at offset of negative domain
         let mut stitching_grid_offset = negative_subdomain.subdomain_offset().clone();
 
-        /*
-        // Step into inner domain (excluding boundary layer)
-        stitching_grid_offset[0] += I::one();
-        stitching_grid_offset[1] += I::one();
-        stitching_grid_offset[2] += I::one();
-         */
-
         // Go to the end of the negative domain along the stitching axis
         stitching_grid_offset[axis_index] +=
             negative_subdomain.subdomain_grid().cells_per_dim()[axis_index];
-        // Subtract the boundary layer included in the previous step
-        //stitching_grid_offset[axis_index] -= I::one() + I::one();
+        // Subtract one because the stitching domain starts in the boundary layer
         stitching_grid_offset[axis_index] -= I::one();
         stitching_grid_offset
     };
@@ -989,6 +1049,12 @@ fn compute_stitching_domain<I: Index, R: Real>(
         global_grid.cell_size(),
     )
     .expect("Unable to construct stitching domain grid");
+
+    trace!(
+        "Constructed domain for stitching. offset: {:?}, cells_per_dim: {:?}",
+        stitching_grid_offset,
+        n_cells_per_dim
+    );
 
     SubdomainGrid::new(global_grid.clone(), stitching_grid, stitching_grid_offset)
 }
@@ -1037,16 +1103,21 @@ pub(crate) fn stitch_meshes<I: Index, R: Real>(
         positive_side.subdomain.global_grid(),
         "The global grid of the two subdomains that should be stitched is not identical!"
     );
+
+    // Take out boundary data to satisfy borrow checker
+    let mut negative_data = std::mem::take(&mut negative_side.data);
+    let mut positive_data = std::mem::take(&mut positive_side.data);
+
     let global_grid = negative_side.subdomain.global_grid();
 
     info!(
-        "Starting stitching orthogonal to axis {:?} of negative side (cells_per_dim: {:?}, offset: {:?}, stitching_level: {:?}) and positive side (cells_per_dim: {:?}, offset: {:?}, stitching_level: {:?})",
+        "Stitching patches orthogonal to {:?}-axis. (-) side (offset: {:?}, cells_per_dim: {:?}, stitching_level: {:?}), (+) side (offset: {:?}, cells_per_dim: {:?}, stitching_level: {:?})",
         stitching_axis,
-        negative_side.subdomain.subdomain_grid().cells_per_dim(),
         negative_side.subdomain.subdomain_offset(),
+        negative_side.subdomain.subdomain_grid().cells_per_dim(),
         negative_side.stitching_level,
-        positive_side.subdomain.subdomain_grid().cells_per_dim(),
         positive_side.subdomain.subdomain_offset(),
+        positive_side.subdomain.subdomain_grid().cells_per_dim(),
         positive_side.stitching_level,
     );
 
@@ -1072,20 +1143,20 @@ pub(crate) fn stitch_meshes<I: Index, R: Real>(
     // Merge the boundary data at the stitching boundaries of the two patches
     let merged_boundary_data = {
         // On the negative side we need the data of its positive boundary and vice versa
-        let negative_data = negative_side
-            .data
-            .get(&DirectedAxis::new(stitching_axis, Direction::Positive));
-        let positive_data = positive_side
-            .data
-            .get(&DirectedAxis::new(stitching_axis, Direction::Negative));
+        let negative_data = std::mem::take(
+            negative_data.get_mut(&DirectedAxis::new(stitching_axis, Direction::Positive)),
+        );
+        let positive_data = std::mem::take(
+            positive_data.get_mut(&DirectedAxis::new(stitching_axis, Direction::Negative)),
+        );
 
         // Merge the boundary layer density and cell data maps of the two sides
         merge_boundary_data(
-            &stitching_subdomain,
             &negative_side.subdomain,
             negative_data,
             &positive_side.subdomain,
             positive_data,
+            &stitching_subdomain,
             positive_vertex_offset,
         )
     };
@@ -1100,9 +1171,9 @@ pub(crate) fn stitch_meshes<I: Index, R: Real>(
     };
 
     // Perform marching cubes on the stitching domain
-    let boundary_cell_data = {
+    let mut boundary_cell_data = {
         interpolate_points_to_cell_data_stitching(
-            stitching_subdomain.subdomain_grid(),
+            &stitching_subdomain,
             &boundary_density_map.into(),
             iso_surface_threshold,
             stitching_axis,
@@ -1136,13 +1207,12 @@ pub(crate) fn stitch_meshes<I: Index, R: Real>(
     // Merge all remaining boundary data
     let output_boundary_data = DirectedAxisArray::new_with(|&directed_axis| {
         // The positive and negative sides of the result domain can be taken directly from the inputs
-        //  ...but still, the indices have to be mapped...
         if directed_axis == stitching_axis.with_direction(Direction::Negative) {
-            let data = std::mem::take(negative_side.data.get_mut(&directed_axis));
-            data.to_domain(&output_subdomain_grid, &negative_side.subdomain, None)
+            let data = std::mem::take(negative_data.get_mut(&directed_axis));
+            data.map_to_domain(&output_subdomain_grid, &negative_side.subdomain, None)
         } else if directed_axis == stitching_axis.with_direction(Direction::Positive) {
-            let data = std::mem::take(positive_side.data.get_mut(&directed_axis));
-            data.to_domain(
+            let data = std::mem::take(positive_data.get_mut(&directed_axis));
+            data.map_to_domain(
                 &output_subdomain_grid,
                 &positive_side.subdomain,
                 Some(positive_vertex_offset),
@@ -1150,43 +1220,52 @@ pub(crate) fn stitch_meshes<I: Index, R: Real>(
         } else {
             // Otherwise, they have to be merged first
             let mut merged_data = merge_boundary_data(
-                &output_subdomain_grid,
                 &negative_side.subdomain,
-                negative_side.data.get(&directed_axis),
+                std::mem::take(negative_data.get_mut(&directed_axis)),
                 &positive_side.subdomain,
-                positive_side.data.get(&directed_axis),
+                std::mem::take(positive_data.get_mut(&directed_axis)),
+                &output_subdomain_grid,
                 positive_vertex_offset,
             );
 
             // Map cell indices from stitching domain to result domain and append to cell data map
-            for (flat_cell_index, cell_data) in boundary_cell_data.get(&directed_axis).iter() {
-                if let Some(flat_result_cell_index) = stitching_subdomain
-                    .map_flat_cell_index_to(&output_subdomain_grid, *flat_cell_index)
-                {
-                    merged_data
-                        .boundary_cell_data
-                        .entry(flat_result_cell_index)
-                        .and_modify(|existing_cell_data| {
-                            // Should be fine to just replace these values as they will be overwritten anyway in the next stitching process
-                            existing_cell_data.corner_above_threshold =
-                                cell_data.corner_above_threshold;
-                            // For the cell data we have to merge the vertices
-                            for (existing_vertex, new_vertex) in existing_cell_data
-                                .iso_surface_vertices
-                                .iter_mut()
-                                .zip(cell_data.iso_surface_vertices.iter())
-                            {
-                                if existing_vertex != new_vertex {
-                                    assert!(
-                                        existing_vertex.is_none(),
-                                        "Overwriting already existing vertex. This is a bug."
-                                    );
-                                    *existing_vertex = *new_vertex
-                                }
-                            }
-                        })
-                        .or_insert(cell_data.clone());
+            let current_boundary_cell_data =
+                std::mem::take(boundary_cell_data.get_mut(&directed_axis));
+            for (flat_cell_index, cell_data) in current_boundary_cell_data {
+                let global_cell = global_grid
+                    .try_unflatten_cell_index(flat_cell_index)
+                    .unwrap();
+
+                // Skip cells not part of the output grid
+                if output_subdomain_grid.map_cell(&global_cell).is_none() {
+                    continue;
                 }
+
+                merged_data
+                    .boundary_cell_data
+                    .entry(flat_cell_index)
+                    // Merge with existing cell data
+                    .and_modify(|existing_cell_data| {
+                        // Should be fine to just replace these values as they will be overwritten anyway in the next stitching process
+                        existing_cell_data.corner_above_threshold =
+                            cell_data.corner_above_threshold;
+                        // For the iso-surface vertices we need the union
+                        for (existing_vertex, new_vertex) in existing_cell_data
+                            .iso_surface_vertices
+                            .iter_mut()
+                            .zip(cell_data.iso_surface_vertices.iter())
+                        {
+                            if existing_vertex != new_vertex {
+                                assert!(
+                                    existing_vertex.is_none(),
+                                    "Overwriting already existing vertex. This is a bug."
+                                );
+                                *existing_vertex = *new_vertex
+                            }
+                        }
+                    })
+                    // Or insert new cell data
+                    .or_insert(cell_data.clone());
             }
 
             merged_data
@@ -1216,86 +1295,6 @@ fn triangulate<I: Index, R: Real>(input: MarchingCubesInput<I>, mesh: &mut TriMe
     );
 }
 
-/// Trait that is used by the marching cubes [triangulate_with_criterion] function to query whether a cell should be triangulated
-trait TriangulationCriterion<I: Index, R: Real> {
-    /// Returns whether the given cell should be triangulated
-    fn triangulate_cell(&self, subdomain: &SubdomainGrid<I, R>, flat_cell_index: I) -> bool;
-}
-
-/// An identity triangulation criterion that accepts all cells
-struct TriangulationIdentityCriterion;
-
-impl<I: Index, R: Real> TriangulationCriterion<I, R> for TriangulationIdentityCriterion {
-    #[inline(always)]
-    fn triangulate_cell(&self, _: &SubdomainGrid<I, R>, _: I) -> bool {
-        true
-    }
-}
-
-struct TriangulationSkipBoundaryCells;
-
-/// A triangulation criterion that ensures that every cell is part of the subdomain but skips one layer of boundary cells
-impl<I: Index, R: Real> TriangulationCriterion<I, R> for TriangulationSkipBoundaryCells {
-    #[inline(always)]
-    fn triangulate_cell(&self, subdomain: &SubdomainGrid<I, R>, flat_cell_index: I) -> bool {
-        let grid = subdomain.subdomain_grid();
-        let cell_index = grid
-            .try_unflatten_cell_index(flat_cell_index)
-            .expect("Cell index is not part of the grid");
-        let cell_grid_boundaries = GridBoundaryFaceFlags::classify_cell(grid, &cell_index);
-
-        return cell_grid_boundaries.is_empty();
-    }
-}
-
-struct TriangulationStitchingInterior {
-    stitching_axis: Axis,
-}
-
-/// A triangulation criterion that ensures that only the interior of the stitching domain is triangulated (boundary layer except in stitching direction is skipped)
-impl<I: Index, R: Real> TriangulationCriterion<I, R> for TriangulationStitchingInterior {
-    #[inline(always)]
-    fn triangulate_cell(&self, subdomain: &SubdomainGrid<I, R>, flat_cell_index: I) -> bool {
-        let grid = subdomain.subdomain_grid();
-        let cell_index = grid
-            .try_unflatten_cell_index(flat_cell_index)
-            .expect("Cell index is not part of the grid");
-
-        let index = cell_index.index();
-        // Skip only boundary cells in directions orthogonal to the stitching axis
-        !self
-            .stitching_axis
-            .orthogonal_axes()
-            .iter()
-            .copied()
-            .any(|axis| {
-                index[axis.dim()] == I::zero()
-                    || index[axis.dim()] == grid.cells_per_dim()[axis.dim()] - I::one()
-            })
-    }
-}
-
-/*
-/// A triangulation criterion that only asserts that every cell is part of the subdomain
-struct TriangulationAssertCellInsideGrid;
-
-impl<I: Index, R: Real> TriangulationCriterion<I, R> for TriangulationAssertCellInsideGrid {
-    #[inline(always)]
-    fn triangulate_cell(&self, subdomain: &SubdomainGrid<I, R>, flat_cell_index: I) -> bool {
-        // Ensure that cell is part of grid
-        assert!(
-            subdomain
-                .subdomain_grid()
-                .try_unflatten_cell_index(flat_cell_index)
-                .is_some(),
-            "Cell index is not part of the grid"
-        );
-
-        return true;
-    }
-}
-*/
-
 /// Converts the marching cubes input cell data into a triangle surface mesh, appends triangles to existing mesh
 #[inline(never)]
 fn triangulate_with_criterion<
@@ -1314,20 +1313,22 @@ fn triangulate_with_criterion<
 
     let MarchingCubesInput { cell_data } = input;
 
-    info!(
-        "Starting marching cubes triangulation of {} cells...",
-        cell_data.len()
+    trace!(
+        "Starting marching cubes triangulation (Input: cell data map with {} cells, surface mesh with {} triangles and {} vertices)",
+        cell_data.len(),
+        mesh.triangles.len(),
+        mesh.vertices.len(),
     );
 
     // Triangulate affected cells
     for (&flat_cell_index, cell_data) in &cell_data {
         // Skip cells that don't fulfill triangulation criterion
-        if !triangulation_criterion.triangulate_cell(subdomain, flat_cell_index) {
+        if !triangulation_criterion.triangulate_cell(subdomain, flat_cell_index, cell_data) {
             continue;
         }
 
         for triangle in marching_cubes_triangulation_iter(&cell_data.are_vertices_above()) {
-            // TODO: Promote this error, allow user to skip invalid triangles
+            // TODO: Promote this error, allow user to skip invalid triangles?
             let global_triangle = triangle_generator
                 .triangle_connectivity(subdomain, flat_cell_index, cell_data, triangle)
                 .expect("Failed to generate triangle");
@@ -1335,15 +1336,138 @@ fn triangulate_with_criterion<
         }
     }
 
-    info!(
-        "Generated surface mesh with {} triangles and {} vertices.",
+    trace!(
+        "Triangulation done. (Output: surface mesh with {} triangles and {} vertices)",
         mesh.triangles.len(),
         mesh.vertices.len()
     );
-    info!("Triangulation done.");
 }
 
-/// Trait to convert a marching cubes triangulation to actual triangle-vertex connectivity
+/// Trait that is used by the marching cubes [triangulate_with_criterion] function to query whether a cell should be triangulated
+trait TriangulationCriterion<I: Index, R: Real> {
+    /// Returns whether the given cell should be triangulated
+    fn triangulate_cell(
+        &self,
+        subdomain: &SubdomainGrid<I, R>,
+        flat_cell_index: I,
+        cell_data: &CellData,
+    ) -> bool;
+}
+
+struct TriangulationIdentityCriterion;
+
+/// An identity triangulation criterion that accepts all cells
+impl<I: Index, R: Real> TriangulationCriterion<I, R> for TriangulationIdentityCriterion {
+    #[inline(always)]
+    fn triangulate_cell(&self, _: &SubdomainGrid<I, R>, _: I, _: &CellData) -> bool {
+        true
+    }
+}
+
+/// A triangulation criterion that ensures that every cell is part of the subdomain but skips one layer of boundary cells
+struct TriangulationSkipBoundaryCells;
+
+impl<I: Index, R: Real> TriangulationCriterion<I, R> for TriangulationSkipBoundaryCells {
+    #[inline(always)]
+    fn triangulate_cell(
+        &self,
+        subdomain: &SubdomainGrid<I, R>,
+        flat_cell_index: I,
+        _: &CellData,
+    ) -> bool {
+        let global_cell = subdomain
+            .global_grid()
+            .try_unflatten_cell_index(flat_cell_index)
+            .unwrap();
+        let local_cell = subdomain
+            .map_cell(&global_cell)
+            .expect("Cell is not part of the subdomain");
+        let cell_grid_boundaries =
+            GridBoundaryFaceFlags::classify_cell(subdomain.subdomain_grid(), &local_cell);
+
+        return cell_grid_boundaries.is_empty();
+    }
+}
+
+/// A triangulation criterion that ensures that only the interior of the stitching domain is triangulated (boundary layer except in stitching direction is skipped)
+struct TriangulationStitchingInterior {
+    stitching_axis: Axis,
+}
+
+impl<I: Index, R: Real> TriangulationCriterion<I, R> for TriangulationStitchingInterior {
+    #[inline(always)]
+    fn triangulate_cell(
+        &self,
+        subdomain: &SubdomainGrid<I, R>,
+        flat_cell_index: I,
+        _: &CellData,
+    ) -> bool {
+        let global_cell = subdomain
+            .global_grid()
+            .try_unflatten_cell_index(flat_cell_index)
+            .unwrap();
+
+        let local_cell = subdomain
+            .map_cell(&global_cell)
+            .expect("Cell is not part of the subdomain");
+
+        let subdomain_grid = subdomain.subdomain_grid();
+        let index = local_cell.index();
+
+        // Skip only boundary cells in directions orthogonal to the stitching axis
+        !self
+            .stitching_axis
+            .orthogonal_axes()
+            .iter()
+            .copied()
+            .any(|axis| {
+                index[axis.dim()] == I::zero()
+                    || index[axis.dim()] == subdomain_grid.cells_per_dim()[axis.dim()] - I::one()
+            })
+    }
+}
+
+/// Forwards to the wrapped triangulation criterion but first makes some assertions on the cell data
+struct DebugTriangulationCriterion<I: Index, R: Real, C: TriangulationCriterion<I, R>> {
+    triangulation_criterion: C,
+    phantom: PhantomData<(I, R)>,
+}
+
+impl<I: Index, R: Real, C: TriangulationCriterion<I, R>> DebugTriangulationCriterion<I, R, C> {
+    #[allow(unused)]
+    fn new(triangulation_criterion: C) -> Self {
+        Self {
+            triangulation_criterion,
+            phantom: Default::default(),
+        }
+    }
+}
+
+impl<I: Index, R: Real, C: TriangulationCriterion<I, R>> TriangulationCriterion<I, R>
+    for DebugTriangulationCriterion<I, R, C>
+{
+    #[inline(always)]
+    fn triangulate_cell(
+        &self,
+        subdomain: &SubdomainGrid<I, R>,
+        flat_cell_index: I,
+        cell_data: &CellData,
+    ) -> bool {
+        assert!(
+            !cell_data
+                .corner_above_threshold
+                .iter()
+                .any(|c| c.is_indeterminate()),
+            "{}",
+            cell_debug_string(subdomain, flat_cell_index, cell_data)
+        );
+
+        self.triangulation_criterion
+            .triangulate_cell(subdomain, flat_cell_index, cell_data)
+    }
+}
+
+/// Trait that is used by the marching cubes [triangulate_with_criterion] function to convert a marching cubes triangulation to actual triangle-vertex connectivity
 trait TriangleGenerator<I: Index, R: Real> {
     fn triangle_connectivity(
         &self,
@@ -1408,31 +1532,39 @@ impl<I: Index, R: Real> TriangleGenerator<I, R> for DebugTriangleGenerator {
                 })?,
             ])
         };
-        let global_triangle = get_triangle().with_context(|| {
-            let cell_index = subdomain
-                .subdomain_grid()
-                .try_unflatten_cell_index(flat_cell_index)
-                .expect("Failed to get cell index");
-
-            let global_cell_index = subdomain
-                .inv_map_cell(&cell_index)
-                .expect("Failed to map cell index to global grid");
-
-            let point_index = subdomain.global_grid().get_point(*global_cell_index.index()).expect("Unable to get point index of cell");
-            let cell_center = subdomain.global_grid().point_coordinates(&point_index) + &Vector3::repeat(subdomain.global_grid().cell_size().times_f64(0.5));
-
-            format!(
-                "Unable to construct triangle for cell {:?}, with center coordinates {:?} and edge length {}.\n{:?}\nStitching domain: (offset: {:?}, cells_per_dim: {:?})",
-                global_cell_index.index(),
-                cell_center,
-                subdomain.global_grid().cell_size(),
-                cell_data,
-                subdomain.subdomain_offset(),
-                subdomain.subdomain_grid().cells_per_dim(),
-            )
-        })?;
+        let global_triangle = get_triangle()
+            .with_context(|| cell_debug_string(subdomain, flat_cell_index, cell_data))?;
         Ok(global_triangle)
     }
+}
+
+/// Helper function that returns a formatted string to debug triangulation failures
+fn cell_debug_string<I: Index, R: Real>(
+    subdomain: &SubdomainGrid<I, R>,
+    flat_cell_index: I,
+    cell_data: &CellData,
+) -> String {
+    let global_cell_index = subdomain
+        .global_grid()
+        .try_unflatten_cell_index(flat_cell_index)
+        .expect("Failed to get cell index");
+
+    let point_index = subdomain
+        .global_grid()
+        .get_point(*global_cell_index.index())
+        .expect("Unable to get point index of cell");
+    let cell_center = subdomain.global_grid().point_coordinates(&point_index)
+        + &Vector3::repeat(subdomain.global_grid().cell_size().times_f64(0.5));
+
+    format!(
+        "Unable to construct triangle for cell {:?}, with center coordinates {:?} and edge length {}.\n{:?}\nStitching domain: (offset: {:?}, cells_per_dim: {:?})",
+        global_cell_index.index(),
+        cell_center,
+        subdomain.global_grid().cell_size(),
+        cell_data,
+        subdomain.subdomain_offset(),
+        subdomain.subdomain_grid().cells_per_dim(),
+    )
 }
 
 #[allow(unused)]

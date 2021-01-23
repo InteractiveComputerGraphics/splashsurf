@@ -18,12 +18,12 @@ pub trait VisitableTree: TreeNode {
 
     /// Visits a node and its children in depth-first order. The visitor is applied before enqueuing each node's children.
     fn visit_mut_dfs<F: FnMut(&mut Self)>(&mut self, mut visitor: F) {
-        let mut queue_down = Vec::new();
-        queue_down.push(self);
+        let mut stack = Vec::new();
+        stack.push(self);
 
-        while let Some(current_node) = queue_down.pop() {
+        while let Some(current_node) = stack.pop() {
             visitor(current_node);
-            queue_down.extend(
+            stack.extend(
                 current_node
                     .children_mut()
                     .iter_mut()
@@ -80,34 +80,6 @@ impl<'a, T: TreeNode + ?Sized> Iterator for DfsIter<'a, T> {
 }
 
 impl<'a, T: TreeNode + ?Sized> FusedIterator for DfsIter<'a, T> {}
-
-/*
-pub struct DfsIterMut<'a, T: ?Sized> {
-    stack: Vec<&'a mut T>,
-}
-
-impl<'a, T: ?Sized> DfsIterMut<'a, T> {
-    fn new(start: &'a mut T) -> Self {
-        Self {
-            stack: vec![start]
-        }
-    }
-}
-
-impl<'a, T: TreeNode + ?Sized> Iterator for DfsIterMut<'a, T> {
-    type Item = &'a mut T;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if let Some(current_node) = self.stack.pop() {
-            self.stack
-                .extend(current_node.children().iter().rev().map(Deref::deref));
-            Some(current_node)
-        } else {
-            None
-        }
-    }
-}
-*/
 
 pub struct BfsIter<'a, T: ?Sized> {
     queue: VecDeque<&'a T>,

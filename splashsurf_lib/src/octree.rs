@@ -631,13 +631,13 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
     pub fn stitch_surface_patches(&mut self, iso_surface_threshold: R) {
         // If this node has no children there is nothing to stitch
         if self.children.is_empty() {
-            return;
+            panic!("A node can only be stitched if it has children!");
         }
 
-        // Don't try to stitch children that still have children
+        // Don't try to stitch if there are children that still have children
         for child in self.children.iter() {
             if !child.children.is_empty() {
-                return;
+                panic!("A node can only be stitched if all children are leaf nodes!");
             }
         }
 

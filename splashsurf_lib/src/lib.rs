@@ -70,6 +70,7 @@ pub use uniform_grid::{GridConstructionError, UniformGrid};
 
 // TODO: Add documentation of feature flags
 // TODO: Feature flag for multi threading
+// TODO: Feature flag to disable trace level logging?
 
 // TODO: Remove anyhow/thiserror from lib?
 // TODO: Write more unit tests (e.g. AABB, UniformGrid, neighborhood search)
@@ -317,6 +318,7 @@ pub fn reconstruct_surface_inplace<'a, I: Index, R: Real>(
     log_grid_info(grid);
 
     if let Some(spatial_decomposition) = &parameters.spatial_decomposition {
+        // TODO: Merge these into a single function
         if spatial_decomposition.enable_stitching {
             reconstruct_surface_octree_recursive(particle_positions, parameters, output_surface)?
         } else {
@@ -563,10 +565,18 @@ fn reconstruct_surface_octree_recursive<'a, I: Index, R: Real>(
                 let particles = if let Some(particle_set) = octree_node.data().particle_set() {
                     &particle_set.particles
                 } else {
-                    // If node has no particles, its children were already processed so it can be stitched
+                    // If node has no particle set, its children were already processed so it can be stitched
                     octree_node.stitch_surface_patches(parameters.iso_surface_threshold);
                     return;
                 };
+
+                // TODO: Nodes with `particles.is_empty()` cannot be skipped directly, we still need to create the respective SurfacePatch for stitching
+                /*
+                if particles.is_empty() {
+                    info!("Skipping octree leaf with zero particles");
+                    return;
+                }
+                */
 
                 let mut tl_workspace = tl_workspaces
                     .get_local_with_capacity(particles.len())
@@ -653,7 +663,7 @@ fn reconstruct_surface_octree_recursive<'a, I: Index, R: Real>(
             .data_mut()
             .take()
             .into_surface_patch()
-            .expect("Cannot extract stitched mesh from root")
+            .expect("Cannot extract stitched mesh from root node")
             .patch;
         output_surface.mesh = surface_path.mesh;
 
@@ -759,7 +769,7 @@ fn reconstruct_surface_patch<I: Index, R: Real>(
     );
 
     // Create a new density map, reusing memory with the workspace is bad for cache efficiency
-    // Alternatively one could reuse memory with a custom caching allocator
+    // Alternatively, one could reuse memory with a custom caching allocator
     let mut density_map = new_map().into();
     density_map::generate_sparse_density_map(
         subdomain_grid.global_grid(),
