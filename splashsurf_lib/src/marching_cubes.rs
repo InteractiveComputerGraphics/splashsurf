@@ -9,7 +9,6 @@ use nalgebra::Vector3;
 use std::marker::PhantomData;
 
 // TODO: Merge the three interpolate implementations
-// TODO: Avoid the index conversions by directly using global indices
 
 /// Performs a marching cubes triangulation of a density map on the given background grid
 pub fn triangulate_density_map<I: Index, R: Real>(
@@ -793,9 +792,9 @@ impl<I: Index, R: Real> BoundaryData<I, R> {
     /// Maps this boundary data to another domain by converting all indices to the new subdomain
     fn map_to_domain(
         mut self,
-        source_domain: &SubdomainGrid<I, R>,
         target_domain: &SubdomainGrid<I, R>,
-        vertex_offset: Option<usize>,
+        source_domain: &SubdomainGrid<I, R>,
+        source_offset: Option<usize>,
     ) -> Self {
         assert_eq!(
             target_domain.global_grid(),
@@ -842,17 +841,17 @@ impl<I: Index, R: Real> BoundaryData<I, R> {
         }
 
         // Apply vertex offset if required
-        self.apply_cell_data_vertex_offset(vertex_offset);
+        self.apply_cell_data_vertex_offset(source_offset);
 
         self
     }
 
     fn merge_with(
         mut self,
+        target_domain: &SubdomainGrid<I, R>,
         mut other: BoundaryData<I, R>,
         other_domain: &SubdomainGrid<I, R>,
-        target_domain: &SubdomainGrid<I, R>,
-        vertex_offset: Option<usize>,
+        other_vertex_offset: Option<usize>,
     ) -> Self {
         assert_eq!(
             target_domain.global_grid(),
@@ -862,7 +861,7 @@ impl<I: Index, R: Real> BoundaryData<I, R> {
         let grid = target_domain.global_grid();
 
         // Apply vertex offset if required
-        other.apply_cell_data_vertex_offset(vertex_offset);
+        other.apply_cell_data_vertex_offset(other_vertex_offset);
 
         let BoundaryData {
             boundary_density_map: other_boundary_density_map,
@@ -945,23 +944,46 @@ pub(crate) struct SurfacePatch<I: Index, R: Real> {
 
 // Merges boundary such that only density values and cell data in the result subdomain are part of the result
 fn merge_boundary_data<I: Index, R: Real>(
+    target_subdomain: &SubdomainGrid<I, R>,
     negative_subdomain: &SubdomainGrid<I, R>,
     negative_data: BoundaryData<I, R>,
+    negative_vertex_offset: Option<usize>,
     positive_subdomain: &SubdomainGrid<I, R>,
     positive_data: BoundaryData<I, R>,
-    target_subdomain: &SubdomainGrid<I, R>,
-    positive_vertex_offset: usize,
+    positive_vertex_offset: Option<usize>,
 ) -> BoundaryData<I, R> {
     trace!("Merging boundary data. Size of containers: (-) side (density map: {}, cell data map: {}), (+) side (density map: {}, cell data map: {})", negative_data.boundary_density_map.len(), negative_data.boundary_cell_data.len(), positive_data.boundary_density_map.len(), positive_data.boundary_cell_data.len());
 
-    let merged_boundary_data =
-        negative_data.map_to_domain(negative_subdomain, target_subdomain, None);
-    let merged_boundary_data = merged_boundary_data.merge_with(
-        positive_data,
-        positive_subdomain,
-        target_subdomain,
-        Some(positive_vertex_offset),
-    );
+    let negative_len =
+        negative_data.boundary_density_map.len() + negative_data.boundary_cell_data.len();
+    let positive_len =
+        positive_data.boundary_density_map.len() + positive_data.boundary_cell_data.len();
+
+    let merged_boundary_data = if negative_len > positive_len {
+        let merged_boundary_data = negative_data.map_to_domain(
+            target_subdomain,
+            negative_subdomain,
+            negative_vertex_offset,
+        );
+        merged_boundary_data.merge_with(
+            target_subdomain,
+            positive_data,
+            positive_subdomain,
+            positive_vertex_offset,
+        )
+    } else {
+        let merged_boundary_data = positive_data.map_to_domain(
+            target_subdomain,
+            positive_subdomain,
+            positive_vertex_offset,
+        );
+        merged_boundary_data.merge_with(
+            target_subdomain,
+            negative_data,
+            negative_subdomain,
+            negative_vertex_offset,
+        )
+    };
 
     trace!("Finished merging boundary data. Size of containers: result (density map: {}, cell data map: {})", merged_boundary_data.boundary_density_map.len(), merged_boundary_data.boundary_cell_data.len());
 
@@ -1130,14 +1152,19 @@ pub(crate) fn stitch_meshes<I: Index, R: Real>(
     );
 
     // Merge the two input meshes structures and get vertex offset for all vertices of the positive side
-    let (mut output_mesh, positive_vertex_offset) = {
+    let (mut output_mesh, negative_vertex_offset, positive_vertex_offset) = {
         let mut negative_mesh = std::mem::take(&mut negative_side.mesh);
         let mut positive_mesh = std::mem::take(&mut positive_side.mesh);
 
-        let positive_vertex_offset = negative_mesh.vertices.len();
-        negative_mesh.append(&mut positive_mesh);
-
-        (negative_mesh, positive_vertex_offset)
+        if negative_mesh.vertices.len() > positive_mesh.vertices.len() {
+            let positive_vertex_offset = negative_mesh.vertices.len();
+            negative_mesh.append(&mut positive_mesh);
+            (negative_mesh, None, Some(positive_vertex_offset))
+        } else {
+            let negative_vertex_offset = positive_mesh.vertices.len();
+            positive_mesh.append(&mut negative_mesh);
+            (positive_mesh, Some(negative_vertex_offset), None)
+        }
     };
 
     // Merge the boundary data at the stitching boundaries of the two patches
@@ -1152,11 +1179,12 @@ pub(crate) fn stitch_meshes<I: Index, R: Real>(
 
         // Merge the boundary layer density and cell data maps of the two sides
         merge_boundary_data(
+            &stitching_subdomain,
             &negative_side.subdomain,
             negative_data,
+            negative_vertex_offset,
             &positive_side.subdomain,
             positive_data,
-            &stitching_subdomain,
             positive_vertex_offset,
         )
     };
@@ -1209,22 +1237,27 @@ pub(crate) fn stitch_meshes<I: Index, R: Real>(
         // The positive and negative sides of the result domain can be taken directly from the inputs
         if directed_axis == stitching_axis.with_direction(Direction::Negative) {
             let data = std::mem::take(negative_data.get_mut(&directed_axis));
-            data.map_to_domain(&output_subdomain_grid, &negative_side.subdomain, None)
+            data.map_to_domain(
+                &output_subdomain_grid,
+                &negative_side.subdomain,
+                negative_vertex_offset,
+            )
         } else if directed_axis == stitching_axis.with_direction(Direction::Positive) {
             let data = std::mem::take(positive_data.get_mut(&directed_axis));
             data.map_to_domain(
                 &output_subdomain_grid,
                 &positive_side.subdomain,
-                Some(positive_vertex_offset),
+                positive_vertex_offset,
             )
         } else {
             // Otherwise, they have to be merged first
             let mut merged_data = merge_boundary_data(
+                &output_subdomain_grid,
                 &negative_side.subdomain,
                 std::mem::take(negative_data.get_mut(&directed_axis)),
+                negative_vertex_offset,
                 &positive_side.subdomain,
                 std::mem::take(positive_data.get_mut(&directed_axis)),
-                &output_subdomain_grid,
                 positive_vertex_offset,
             );
 
