@@ -524,9 +524,6 @@ pub(crate) fn interpolate_points_to_cell_data_skip_boundary<I: Index, R: Real>(
         }
     }
 
-    //#[cfg(debug_assertions)]
-    //assert_cell_data_point_data_consistency(density_map, &cell_data, grid, iso_surface_threshold);
-
     info!(
         "Generated cell data for marching cubes with {} cells and {} vertices.",
         cell_data.len(),
@@ -732,14 +729,6 @@ pub(crate) fn interpolate_points_to_cell_data_stitching<I: Index, R: Real>(
             }
         }
     }
-
-    #[cfg(debug_assertions)]
-    assert_cell_data_point_data_consistency(
-        density_map,
-        &cell_data,
-        subdomain_grid,
-        iso_surface_threshold,
-    );
 
     trace!(
         "Interpolation done. (Output: cell data for marching cubes with {} cells and {} vertices.",
