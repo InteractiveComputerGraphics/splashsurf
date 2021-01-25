@@ -55,15 +55,26 @@ pub fn particles_from_bgeo<R: Real, P: AsRef<Path>>(
 
 /// Loads and parses a BGEO file to memory
 pub fn load_bgeo_file<P: AsRef<Path>>(bgeo_file: P) -> Result<BgeoFile, anyhow::Error> {
-    let file = File::open(bgeo_file).context("Unable to open file for reading")?;
-
-    let mut gz = GzDecoder::new(file);
     let mut buf = Vec::new();
-    gz.read_to_end(&mut buf)
-        .context("Error during gzip decompression")?;
+    let mut is_compressed = false;
 
-    //buf[3] = b'V';
-    println!("{}", String::from_utf8_lossy(&buf[0..100]));
+    // First check if the file is gzip compressed
+    {
+        let file = File::open(bgeo_file.as_ref()).context("Unable to open file for reading")?;
+        let mut gz = GzDecoder::new(file);
+        if gz.header().is_some() {
+            is_compressed = true;
+            gz.read_to_end(&mut buf)
+                .context("Error during gzip decompression")?;
+        }
+    }
+
+    // Otherwise just read the raw file
+    if !is_compressed {
+        // File has to be opened again because the Gz header check already reads parts of the file
+        let mut file = File::open(bgeo_file).context("Unable to open file for reading")?;
+        file.read_to_end(&mut buf).context("Error while loading the file content")?;
+    }
 
     let (_, file) = bgeo_parser()
         .parse(&buf[..])
