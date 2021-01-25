@@ -32,14 +32,15 @@ pub fn triangulate_density_map<I: Index, R: Real>(
 /// Performs a marching cubes triangulation of a density map on the given background grid, appends triangles to the given mesh
 pub fn triangulate_density_map_append<I: Index, R: Real>(
     grid: &UniformGrid<I, R>,
-    subdomain_grid: Option<&SubdomainGrid<I, R>>,
+    subdomain: Option<&SubdomainGrid<I, R>>,
     density_map: &DensityMap<I, R>,
     iso_surface_threshold: R,
     mesh: &mut TriMesh3d<R>,
 ) {
     profile!("triangulate_density_map_append");
 
-    if let Some(subdomain) = subdomain_grid {
+    if let Some(subdomain) = subdomain {
+        // TODO: Don't skip boundary, but still use subdomain to restrict triangulation
         let (marching_cubes_data, _) = interpolate_points_to_cell_data_skip_boundary::<I, R>(
             subdomain,
             &density_map,
@@ -1385,18 +1386,29 @@ trait TriangulationCriterion<I: Index, R: Real> {
     ) -> bool;
 }
 
+/// An identity triangulation criterion that accepts all cells
 struct TriangulationIdentityCriterion;
 
-/// An identity triangulation criterion that accepts all cells
+/// A triangulation criterion that ensures that every cell is part of the subdomain but skips one layer of boundary cells
+struct TriangulationSkipBoundaryCells;
+
+/// A triangulation criterion that ensures that only the interior of the stitching domain is triangulated (boundary layer except in stitching direction is skipped)
+struct TriangulationStitchingInterior {
+    stitching_axis: Axis,
+}
+
+/// Forwards to the wrapped triangulation criterion but first makes some assertions on the cell data
+struct DebugTriangulationCriterion<I: Index, R: Real, C: TriangulationCriterion<I, R>> {
+    triangulation_criterion: C,
+    phantom: PhantomData<(I, R)>,
+}
+
 impl<I: Index, R: Real> TriangulationCriterion<I, R> for TriangulationIdentityCriterion {
     #[inline(always)]
     fn triangulate_cell(&self, _: &SubdomainGrid<I, R>, _: I, _: &CellData) -> bool {
         true
     }
 }
-
-/// A triangulation criterion that ensures that every cell is part of the subdomain but skips one layer of boundary cells
-struct TriangulationSkipBoundaryCells;
 
 impl<I: Index, R: Real> TriangulationCriterion<I, R> for TriangulationSkipBoundaryCells {
     #[inline(always)]
@@ -1418,11 +1430,6 @@ impl<I: Index, R: Real> TriangulationCriterion<I, R> for TriangulationSkipBounda
 
         return cell_grid_boundaries.is_empty();
     }
-}
-
-/// A triangulation criterion that ensures that only the interior of the stitching domain is triangulated (boundary layer except in stitching direction is skipped)
-struct TriangulationStitchingInterior {
-    stitching_axis: Axis,
 }
 
 impl<I: Index, R: Real> TriangulationCriterion<I, R> for TriangulationStitchingInterior {
@@ -1456,12 +1463,6 @@ impl<I: Index, R: Real> TriangulationCriterion<I, R> for TriangulationStitchingI
                     || index[axis.dim()] == subdomain_grid.cells_per_dim()[axis.dim()] - I::one()
             })
     }
-}
-
-/// Forwards to the wrapped triangulation criterion but first makes some assertions on the cell data
-struct DebugTriangulationCriterion<I: Index, R: Real, C: TriangulationCriterion<I, R>> {
-    triangulation_criterion: C,
-    phantom: PhantomData<(I, R)>,
 }
 
 impl<I: Index, R: Real, C: TriangulationCriterion<I, R>> DebugTriangulationCriterion<I, R, C> {
@@ -1509,7 +1510,10 @@ trait TriangleGenerator<I: Index, R: Real> {
     ) -> Result<[usize; 3], anyhow::Error>;
 }
 
+/// Maps the edges indices directly to the vertex indices in the cell data, panics if vertices are missing
 struct DefaultTriangleGenerator;
+/// Tries to map the edge indices to the vertex indices in the cell data, returns an error with debug information if vertices are missing
+struct DebugTriangleGenerator;
 
 impl<I: Index, R: Real> TriangleGenerator<I, R> for DefaultTriangleGenerator {
     #[inline(always)]
@@ -1538,8 +1542,6 @@ impl<I: Index, R: Real> TriangleGenerator<I, R> for DefaultTriangleGenerator {
         Ok(global_triangle)
     }
 }
-
-struct DebugTriangleGenerator;
 
 impl<I: Index, R: Real> TriangleGenerator<I, R> for DebugTriangleGenerator {
     #[inline(always)]
