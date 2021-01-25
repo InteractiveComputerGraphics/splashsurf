@@ -73,7 +73,8 @@ pub fn load_bgeo_file<P: AsRef<Path>>(bgeo_file: P) -> Result<BgeoFile, anyhow::
     if !is_compressed {
         // File has to be opened again because the Gz header check already reads parts of the file
         let mut file = File::open(bgeo_file).context("Unable to open file for reading")?;
-        file.read_to_end(&mut buf).context("Error while loading the file content")?;
+        file.read_to_end(&mut buf)
+            .context("Error while loading the file content")?;
     }
 
     let (_, file) = bgeo_parser()
