@@ -40,11 +40,13 @@ pub fn triangulate_density_map_append<I: Index, R: Real>(
     profile!("triangulate_density_map_append");
 
     let marching_cubes_data = if let Some(subdomain) = subdomain {
-        let (marching_cubes_data, _) = interpolate_points_to_cell_data_generic::<I, R, _>(
+        let mut marching_cubes_data = MarchingCubesInput::default();
+        let _ = interpolate_points_to_cell_data_generic::<I, R, _>(
             subdomain,
             &density_map,
             iso_surface_threshold,
             &mut mesh.vertices,
+            &mut marching_cubes_data,
             IdentityDensityMapFilter,
         );
 
@@ -71,11 +73,13 @@ pub(crate) fn triangulate_density_map_with_stitching_data<I: Index, R: Real>(
     let mut mesh = TriMesh3d::default();
     let subdomain = subdomain.clone();
 
-    let (marching_cubes_data, boundary_filter) = interpolate_points_to_cell_data_generic(
+    let mut marching_cubes_data = MarchingCubesInput::default();
+    let boundary_filter = interpolate_points_to_cell_data_generic(
         &subdomain,
         &density_map,
         iso_surface_threshold,
         &mut mesh.vertices,
+        &mut marching_cubes_data,
         SkipBoundaryLayerFilter::new(),
     );
 
@@ -171,6 +175,14 @@ impl Default for CellData {
 pub(crate) struct MarchingCubesInput<I: Index> {
     /// Data for all cells that marching cubes has to visit
     cell_data: MapType<I, CellData>,
+}
+
+impl<I: Index> Default for MarchingCubesInput<I> {
+    fn default() -> Self {
+        Self {
+            cell_data: new_map(),
+        }
+    }
 }
 
 /// Generates input data for performing the actual marching cubes triangulation
@@ -470,8 +482,9 @@ fn interpolate_points_to_cell_data_generic<I: Index, R: Real, F: DensityMapFilte
     density_map: &DensityMap<I, R>,
     iso_surface_threshold: R,
     vertices: &mut Vec<Vector3<R>>,
+    marching_cubes_data: &mut MarchingCubesInput<I>,
     mut filter: F,
-) -> (MarchingCubesInput<I>, F) {
+) -> F {
     let grid = subdomain.global_grid();
     let subdomain_grid = subdomain.subdomain_grid();
 
@@ -486,7 +499,7 @@ fn interpolate_points_to_cell_data_generic<I: Index, R: Real, F: DensityMapFilte
     trace!("Starting interpolation of cell data for marching cubes (excluding boundary layer)... (Input: {} existing vertices)", vertices.len());
 
     // Map from flat cell index to all data that is required per cell for the marching cubes triangulation
-    let mut cell_data: MapType<I, CellData> = new_map();
+    let cell_data: &mut MapType<I, CellData> = &mut marching_cubes_data.cell_data;
 
     // Generate iso-surface vertices and identify affected cells & edges
     {
@@ -645,7 +658,7 @@ fn interpolate_points_to_cell_data_generic<I: Index, R: Real, F: DensityMapFilte
         vertices.len()
     );
 
-    (MarchingCubesInput { cell_data }, filter)
+    filter
 }
 
 #[inline(never)]
