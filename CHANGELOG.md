@@ -1,5 +1,8 @@
 ## Master
 
+ - CLI: Support for reading uncompressed BGEO files (previously only compressed BGEO files were supported)
+ - Lib: Add functions to approximate the vertex normals and vertex normal directions based on are-weighted averages of the adjacent triangles 
+
 ## Version 0.4.0
 
  - CLI: Add support for reading BGEO files

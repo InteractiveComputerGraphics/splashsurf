@@ -170,7 +170,7 @@ Files with the "`.vtk`" extension are loaded using [`vtkio`](https://crates.io/c
 
 ### BGEO
 
-Files with the "`.bgeo`" extension are loaded using a custom parser. Note, that only the "old" `BGEOV` format is supported (which is the format supported by "Partio"). Only points and their implicit position vector attributes are loaded from the file. All other entities (e.g. vertices) and other attributes are ignored/discarded. Notably, the parser supports BGEO files written by [SPlisHSPlasH](https://github.com/InteractiveComputerGraphics/SPlisHSPlasH) ("Partio export"). 
+Files with the "`.bgeo`" extension are loaded using a custom parser. Note, that only the "old" `BGEOV` format is supported (which is the format supported by "Partio"). Both uncompressed and (gzip) compressed files are supported. Only points and their implicit position vector attributes are loaded from the file. All other entities (e.g. vertices) and other attributes are ignored/discarded. Notably, the parser supports BGEO files written by [SPlisHSPlasH](https://github.com/InteractiveComputerGraphics/SPlisHSPlasH) ("Partio export"). 
 
 ### PLY
 
