@@ -105,6 +105,41 @@ struct CommandlineArgs {
     /// Set the number of threads for the worker thread pool
     #[structopt(long, short = "-n")]
     num_threads: Option<usize>,
+    /// Enable quiet mode (no output except for severe panic messages), overrides verbosity level
+    #[structopt(long, short = "-q")]
+    quiet: bool,
+    /// Print more verbose output, use multiple "v"s for even more verbose output (-v, -vv)
+    #[structopt(short, parse(from_occurrences))]
+    verbosity: u64,
+}
+
+#[derive(Copy, Clone, Debug)]
+enum VerbosityLevel {
+    None,
+    Verbose,
+    VeryVerbose,
+}
+
+impl From<u64> for VerbosityLevel {
+    fn from(value: u64) -> Self {
+        match value {
+            0 => VerbosityLevel::None,
+            1 => VerbosityLevel::Verbose,
+            2 => VerbosityLevel::VeryVerbose,
+            _ => VerbosityLevel::VeryVerbose,
+        }
+    }
+}
+
+impl VerbosityLevel {
+    /// Maps this verbosity level to a log filter
+    fn into_filter(self) -> Option<log::LevelFilter> {
+        match self {
+            VerbosityLevel::None => None,
+            VerbosityLevel::Verbose => Some(log::LevelFilter::Debug),
+            VerbosityLevel::VeryVerbose => Some(log::LevelFilter::Trace),
+        }
+    }
 }
 
 /// Prints an anyhow error and its full error chain using the log::error macro
@@ -116,10 +151,14 @@ fn log_error(err: &anyhow::Error) {
 }
 
 fn run_splashsurf() -> Result<(), anyhow::Error> {
-    initialize_logging().context("Failed to initialize logging")?;
+    let cmd_args = CommandlineArgs::from_args();
+
+    let verbosity = VerbosityLevel::from(cmd_args.verbosity);
+    let is_quiet = cmd_args.quiet;
+
+    initialize_logging(verbosity, is_quiet).context("Failed to initialize logging")?;
     log_program_info();
 
-    let cmd_args = CommandlineArgs::from_args();
     let paths = ReconstrunctionRunnerPathCollection::try_from(&cmd_args)
         .context("Failed parsing input file path(s) from command line")?
         .collect();
@@ -485,26 +524,34 @@ impl ReconstructionRunnerPaths {
 }
 
 /// Initializes logging with fern
-fn initialize_logging() -> Result<(), anyhow::Error> {
-    // Try to load log filter level from env
+fn initialize_logging(verbosity: VerbosityLevel, quiet_mode: bool) -> Result<(), anyhow::Error> {
     let mut unknown_log_filter_level = None;
-    let log_filter_level = if let Some(log_level) = std::env::var_os("RUST_LOG") {
-        let log_level = log_level.to_string_lossy().to_ascii_lowercase();
-        match log_level.as_str() {
-            "off" => log::LevelFilter::Off,
-            "error" => log::LevelFilter::Error,
-            "warn" => log::LevelFilter::Warn,
-            "info" => log::LevelFilter::Info,
-            "debug" => log::LevelFilter::Debug,
-            "trace" => log::LevelFilter::Trace,
-            _ => {
-                unknown_log_filter_level = Some(log_level);
+    let log_filter_level = if quiet_mode {
+        // First option: disable logging in quiet mode
+        log::LevelFilter::Off
+    } else {
+        // Second option: use verbosity level
+        verbosity.into_filter().unwrap_or_else(|| {
+            // Third option: use log level from env
+            if let Some(log_level) = std::env::var_os("RUST_LOG") {
+                let log_level = log_level.to_string_lossy().to_ascii_lowercase();
+                match log_level.as_str() {
+                    "off" => log::LevelFilter::Off,
+                    "error" => log::LevelFilter::Error,
+                    "warn" => log::LevelFilter::Warn,
+                    "info" => log::LevelFilter::Info,
+                    "debug" => log::LevelFilter::Debug,
+                    "trace" => log::LevelFilter::Trace,
+                    _ => {
+                        unknown_log_filter_level = Some(log_level);
+                        log::LevelFilter::Info
+                    }
+                }
+            } else {
+                // Fourth option: use default level
                 log::LevelFilter::Info
             }
-        }
-    } else {
-        // Default log level
-        log::LevelFilter::Info
+        })
     };
 
     fern::Dispatch::new()
