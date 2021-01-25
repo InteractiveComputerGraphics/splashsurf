@@ -931,6 +931,17 @@ pub(crate) struct SurfacePatch<I: Index, R: Real> {
     pub(crate) stitching_level: usize,
 }
 
+impl<I: Index, R: Real> SurfacePatch<I, R> {
+    pub(crate) fn new_empty(subdomain: SubdomainGrid<I, R>) -> Self {
+        Self {
+            mesh: Default::default(),
+            subdomain,
+            data: Default::default(),
+            stitching_level: 0,
+        }
+    }
+}
+
 // Merges boundary such that only density values and cell data in the result subdomain are part of the result
 fn merge_boundary_data<I: Index, R: Real>(
     target_subdomain: &SubdomainGrid<I, R>,

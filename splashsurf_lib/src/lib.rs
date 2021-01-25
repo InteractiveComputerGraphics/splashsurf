@@ -52,7 +52,7 @@ mod utils;
 /// Workspace for reusing allocated memory between multiple reconstructions
 pub(crate) mod workspace;
 
-use log::info;
+use log::{info, trace};
 use nalgebra::Vector3;
 use thiserror::Error as ThisError;
 
@@ -570,14 +570,6 @@ fn reconstruct_surface_octree_recursive<'a, I: Index, R: Real>(
                     return;
                 };
 
-                // TODO: Nodes with `particles.is_empty()` cannot be skipped directly, we still need to create the respective SurfacePatch for stitching
-                /*
-                if particles.is_empty() {
-                    info!("Skipping octree leaf with zero particles");
-                    return;
-                }
-                */
-
                 let mut tl_workspace = tl_workspaces
                     .get_local_with_capacity(particles.len())
                     .borrow_mut();
@@ -596,38 +588,46 @@ fn reconstruct_surface_octree_recursive<'a, I: Index, R: Real>(
                     SubdomainGrid::new(grid.clone(), subdomain_grid, *subdomain_offset.index())
                 };
 
-                // Take particle position storage from workspace and fill it with positions of the leaf
-                let particle_positions = {
-                    let mut leaf_particle_positions =
-                        std::mem::take(&mut tl_workspace.particle_positions);
-                    leaf_particle_positions.clear();
-                    utils::reserve_total(&mut leaf_particle_positions, particles.len());
+                let surface_patch = if particles.is_empty() {
+                    SurfacePatch::new_empty(subdomain_grid)
+                } else {
+                    // Take particle position storage from workspace and fill it with positions of the leaf
+                    let particle_positions = {
+                        let mut leaf_particle_positions =
+                            std::mem::take(&mut tl_workspace.particle_positions);
+                        leaf_particle_positions.clear();
+                        utils::reserve_total(&mut leaf_particle_positions, particles.len());
 
-                    // Extract the particle positions of the leaf
-                    leaf_particle_positions.extend(
-                        particles
-                            .iter()
-                            .copied()
-                            .map(|idx| global_particle_positions[idx]),
+                        // Extract the particle positions of the leaf
+                        leaf_particle_positions.extend(
+                            particles
+                                .iter()
+                                .copied()
+                                .map(|idx| global_particle_positions[idx]),
+                        );
+
+                        leaf_particle_positions
+                    };
+
+                    let surface_patch = reconstruct_surface_patch(
+                        &mut *tl_workspace,
+                        &subdomain_grid,
+                        particle_positions.as_slice(),
+                        parameters,
                     );
 
-                    leaf_particle_positions
+                    // Put back the particle position storage
+                    tl_workspace.particle_positions = particle_positions;
+
+                    surface_patch
                 };
 
-                let surface_patch = reconstruct_surface_patch(
-                    &mut *tl_workspace,
-                    &subdomain_grid,
-                    particle_positions.as_slice(),
-                    parameters,
-                );
+                trace!("Surface patch successfully processed.");
 
                 // Store triangulation in the leaf
                 octree_node
                     .data_mut()
                     .replace(NodeData::SurfacePatch(surface_patch.into()));
-
-                // Put back the particle position storage
-                tl_workspace.particle_positions = particle_positions;
             });
 
         info!("Generation of surface patches is done.");
@@ -793,7 +793,7 @@ fn reconstruct_surface_patch<I: Index, R: Real>(
 
 /// Logs the information about the given grid
 fn log_grid_info<I: Index, R: Real>(grid: &UniformGrid<I, R>) {
-    info!(
+    trace!(
         "Using a grid with {:?}x{:?}x{:?} points and {:?}x{:?}x{:?} cells of edge length {}.",
         grid.points_per_dim()[0],
         grid.points_per_dim()[1],
@@ -803,7 +803,7 @@ fn log_grid_info<I: Index, R: Real>(grid: &UniformGrid<I, R>) {
         grid.cells_per_dim()[2],
         grid.cell_size()
     );
-    info!("The resulting domain size is: {:?}", grid.aabb());
+    trace!("The resulting domain size is: {:?}", grid.aabb());
 }
 
 /// Constructs the background grid for marching cubes based on the parameters supplied to the surface reconstruction
