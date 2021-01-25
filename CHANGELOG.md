@@ -7,12 +7,13 @@ As the library uses task based parallelism, a task for stitching can be enqueued
 Depending on the number of available threads and the particle data, this approach results in a speedup of 4-10x in comparison to the global parallel approach in selected benchmarks.
 At the moment, this domain decomposition approach is only available when allowing to parallelize over particles using thr `--mt-particles` flag.
 
+ - CLI: Add flags to enable/disable spatial decomposition and control octree usage
+ - CLI: Add flag to control number of threads for the worker thread pool
+ - CLI: Support for reading uncompressed BGEO files (previously only compressed BGEO files were supported)
  - Lib: Implement localized reconstruction approach using octree spatial decomposition, the leaves of the octree are processed in parallel.
- - Lib: Implement stitching of local meshes resulting from the domain decomposed reconstruction. The resulting meshes appear to be manifold in limited testing with a couple of examples. 
- - CLI: Add flags to control octree usage
+ - Lib: Implement stitching of local meshes resulting from the domain decomposed reconstruction. The resulting meshes appear to be manifold in limited testing with a couple of examples.
  - Lib: Introduce thread local "workspaces" to reuse allocated memory. The workspace will be stored in the `SurfaceReconstruction` result object and can be reused to reduce allocations in subsequent surface reconstructions.
  - Lib: Add benchmarks using Criterion
- - CLI: Support for reading uncompressed BGEO files (previously only compressed BGEO files were supported)
  - Lib: Add functions to approximate the vertex normals and vertex normal directions based on are-weighted averages of the adjacent triangles
  - Updated dependencies
 
