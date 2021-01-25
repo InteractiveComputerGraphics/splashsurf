@@ -1,5 +1,6 @@
 use bitflags::bitflags;
 use itertools::iproduct;
+use log::trace;
 use nalgebra::Vector3;
 use std::iter::Iterator;
 use thiserror::Error as ThisError;
@@ -609,6 +610,21 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
         n_points_per_dim[0]
             .checked_mul(&n_points_per_dim[1])?
             .checked_mul(&n_points_per_dim[2])
+    }
+
+    /// Logs the information about the given grid
+    pub(crate) fn log_grid_info(&self) {
+        trace!(
+            "Using a grid with {:?}x{:?}x{:?} points and {:?}x{:?}x{:?} cells of edge length {}.",
+            self.points_per_dim()[0],
+            self.points_per_dim()[1],
+            self.points_per_dim()[2],
+            self.cells_per_dim()[0],
+            self.cells_per_dim()[1],
+            self.cells_per_dim()[2],
+            self.cell_size()
+        );
+        trace!("The resulting domain size is: {:?}", self.aabb());
     }
 }
 
