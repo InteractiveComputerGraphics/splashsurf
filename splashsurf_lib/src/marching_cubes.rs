@@ -4,7 +4,7 @@ use crate::topology::{Axis, DirectedAxis, DirectedAxisArray, Direction};
 use crate::uniform_grid::{GridBoundaryFaceFlags, PointIndex, SubdomainGrid};
 use crate::{new_map, DensityMap, Index, MapType, Real, UniformGrid};
 use anyhow::Context;
-use log::{info, trace};
+use log::{debug, info, trace};
 use nalgebra::Vector3;
 use std::marker::PhantomData;
 
@@ -193,7 +193,7 @@ pub(crate) fn interpolate_points_to_cell_data<I: Index, R: Real>(
     profile!("interpolate_points_to_cell_data");
 
     // Note: This functions assumes that the default value for missing point data is below the iso-surface threshold
-    info!("Starting interpolation of cell data for marching cubes...");
+    trace!("Starting interpolation of cell data for marching cubes (excluding boundary layer)... (Input: {} existing vertices)", vertices.len());
 
     // Map from flat cell index to all data that is required per cell for the marching cubes triangulation
     let mut cell_data: MapType<I, CellData> = new_map();
@@ -318,12 +318,11 @@ pub(crate) fn interpolate_points_to_cell_data<I: Index, R: Real>(
     #[cfg(debug_assertions)]
     assert_cell_data_point_data_consistency(density_map, &cell_data, grid, iso_surface_threshold);
 
-    info!(
-        "Generated cell data for marching cubes with {} cells and {} vertices.",
+    trace!(
+        "Cell data interpolation done. (Output: cell data for marching cubes with {} cells and {} vertices)",
         cell_data.len(),
         vertices.len()
     );
-    info!("Interpolation done.");
 
     MarchingCubesInput { cell_data }
 }
@@ -346,7 +345,7 @@ pub(crate) fn interpolate_points_to_cell_data_skip_boundary<I: Index, R: Real>(
     profile!("interpolate_points_to_cell_data_skip_boundary");
 
     // Note: This functions assumes that the default value for missing point data is below the iso-surface threshold
-    info!("Starting interpolation of cell data for marching cubes...");
+    trace!("Starting interpolation of cell data for marching cubes (excluding boundary layer)... (Input: {} existing vertices)", vertices.len());
 
     // Map from flat cell index to all data that is required per cell for the marching cubes triangulation
     let mut cell_data: MapType<I, CellData> = new_map();
@@ -524,12 +523,11 @@ pub(crate) fn interpolate_points_to_cell_data_skip_boundary<I: Index, R: Real>(
         }
     }
 
-    info!(
-        "Generated cell data for marching cubes with {} cells and {} vertices.",
+    trace!(
+        "Cell data interpolation done. (Output: cell data for marching cubes with {} cells and {} vertices)",
         cell_data.len(),
         vertices.len()
     );
-    info!("Interpolation done.");
 
     (MarchingCubesInput { cell_data }, boundary_density_maps)
 }
@@ -554,7 +552,7 @@ pub(crate) fn interpolate_points_to_cell_data_stitching<I: Index, R: Real>(
     let cell_data = &mut marching_cubes_input.cell_data;
 
     trace!(
-        "Starting interpolation of cell data for marching cubes in stitching domain... (Input: cell data for marching cubes with {} cells and {} vertices.)",
+        "Starting interpolation of cell data for marching cubes in stitching domain... (Input: cell data for marching cubes with {} cells and {} existing vertices)",
         cell_data.len(),
         vertices.len()
     );
@@ -731,7 +729,7 @@ pub(crate) fn interpolate_points_to_cell_data_stitching<I: Index, R: Real>(
     }
 
     trace!(
-        "Interpolation done. (Output: cell data for marching cubes with {} cells and {} vertices.",
+        "Interpolation done. (Output: cell data for marching cubes with {} cells and {} vertices)",
         cell_data.len(),
         vertices.len()
     );
@@ -1132,7 +1130,7 @@ pub(crate) fn stitch_meshes<I: Index, R: Real>(
 
     let global_grid = negative_side.subdomain.global_grid();
 
-    info!(
+    debug!(
         "Stitching patches orthogonal to {:?}-axis. (-) side (offset: {:?}, cells_per_dim: {:?}, stitching_level: {:?}), (+) side (offset: {:?}, cells_per_dim: {:?}, stitching_level: {:?})",
         stitching_axis,
         negative_side.subdomain.subdomain_offset(),

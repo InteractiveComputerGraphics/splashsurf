@@ -52,7 +52,7 @@ mod utils;
 /// Workspace for reusing allocated memory between multiple reconstructions
 pub(crate) mod workspace;
 
-use log::{info, trace};
+use log::{debug, info, trace};
 use nalgebra::Vector3;
 use thiserror::Error as ThisError;
 
@@ -70,7 +70,7 @@ pub use uniform_grid::{GridConstructionError, UniformGrid};
 
 // TODO: Add documentation of feature flags
 // TODO: Feature flag for multi threading
-// TODO: Feature flag to disable trace level logging?
+// TODO: Feature flag to disable debug level logging?
 
 // TODO: Remove anyhow/thiserror from lib?
 // TODO: Write more unit tests (e.g. AABB, UniformGrid, neighborhood search)
@@ -439,7 +439,7 @@ fn reconstruct_surface_inplace_octree<'a, I: Index, R: Real>(
                     .get_local_with_capacity(particles.len())
                     .borrow_mut();
 
-                info!("Processing octree leaf with {} particles", particles.len());
+                trace!("Processing octree leaf with {} particles", particles.len());
 
                 // Generate grid for the subdomain of this octree leaf
                 let subdomain_grid = {
@@ -474,6 +474,12 @@ fn reconstruct_surface_inplace_octree<'a, I: Index, R: Real>(
                 // Take the thread local mesh (don't clear just append)
                 let mut tl_mesh = std::mem::take(&mut tl_workspace.mesh);
 
+                info!(
+                    "Surface reconstruction of local patch with {} particles. (offset: {:?}, cells_per_dim: {:?})",
+                    particle_positions.len(),
+                    subdomain_grid.subdomain_offset(),
+                    subdomain_grid.subdomain_grid().cells_per_dim());
+
                 reconstruct_single_surface_append(
                     &mut *tl_workspace,
                     grid,
@@ -482,6 +488,8 @@ fn reconstruct_surface_inplace_octree<'a, I: Index, R: Real>(
                     parameters,
                     &mut tl_mesh,
                 );
+
+                trace!("Surface patch successfully processed.");
 
                 // Put back the particle position and mesh storage
                 tl_workspace.particle_positions = particle_positions;
@@ -574,7 +582,7 @@ fn reconstruct_surface_octree_recursive<'a, I: Index, R: Real>(
                     .get_local_with_capacity(particles.len())
                     .borrow_mut();
 
-                info!("Processing octree leaf with {} particles", particles.len());
+                trace!("Processing octree leaf with {} particles", particles.len());
 
                 // Generate grid for the subdomain of this octree leaf
                 let subdomain_grid = {
@@ -608,6 +616,12 @@ fn reconstruct_surface_octree_recursive<'a, I: Index, R: Real>(
 
                         leaf_particle_positions
                     };
+
+                    debug!(
+                        "Reconstructing surface of local patch with {} particles. (offset: {:?}, cells_per_dim: {:?})",
+                        particle_positions.len(),
+                        subdomain_grid.subdomain_offset(),
+                        subdomain_grid.subdomain_grid().cells_per_dim());
 
                     let surface_patch = reconstruct_surface_patch(
                         &mut *tl_workspace,
@@ -749,7 +763,7 @@ fn reconstruct_surface_patch<I: Index, R: Real>(
         * parameters.particle_radius.powi(3);
     let particle_rest_mass = particle_rest_volume * particle_rest_density;
 
-    info!("Starting neighborhood search...");
+    trace!("Starting neighborhood search...");
     neighborhood_search::search_inplace::<I, R>(
         &subdomain_grid.global_grid().aabb(),
         particle_positions,
@@ -758,7 +772,7 @@ fn reconstruct_surface_patch<I: Index, R: Real>(
         &mut workspace.particle_neighbor_lists,
     );
 
-    info!("Computing particle densities...");
+    trace!("Computing particle densities...");
     density_map::compute_particle_densities_inplace::<I, R>(
         particle_positions,
         workspace.particle_neighbor_lists.as_slice(),

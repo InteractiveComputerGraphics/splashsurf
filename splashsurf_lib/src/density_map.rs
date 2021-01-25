@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 
 use dashmap::ReadOnlyView as ReadDashMap;
-use log::{info, warn};
+use log::{info, trace, warn};
 use nalgebra::Vector3;
 use rayon::prelude::*;
 use thread_local::ThreadLocal;
@@ -225,8 +225,8 @@ pub fn generate_sparse_density_map<I: Index, R: Real>(
     allow_threading: bool,
     density_map: &mut DensityMap<I, R>,
 ) {
-    info!(
-        "Starting construction of sparse density map for {} particles...",
+    trace!(
+        "Starting construction of sparse density map... (Input: {} particles)",
         if let Some(active_particles) = active_particles {
             active_particles.len()
         } else {
@@ -273,11 +273,10 @@ pub fn generate_sparse_density_map<I: Index, R: Real>(
         }
     };
 
-    info!(
-        "Sparse density map with {} grid point data values was constructed.",
+    trace!(
+        "Sparse density map was constructed. (Output: density map with {} grid point data entries)",
         density_map.len()
     );
-    info!("Construction of sparse density map done.");
 }
 
 /// Computes a sparse density map for the fluid based on the specified background grid, sequential implementation
