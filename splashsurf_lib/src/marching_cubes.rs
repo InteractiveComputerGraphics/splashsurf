@@ -39,51 +39,47 @@ pub fn triangulate_density_map_append<I: Index, R: Real>(
 ) {
     profile!("triangulate_density_map_append");
 
-    if let Some(subdomain) = subdomain {
-        // TODO: Don't skip boundary, but still use subdomain to restrict triangulation
-        let (marching_cubes_data, _) = interpolate_points_to_cell_data_skip_boundary::<I, R>(
+    let marching_cubes_data = if let Some(subdomain) = subdomain {
+        let (marching_cubes_data, _) = interpolate_points_to_cell_data_generic::<I, R, _>(
             subdomain,
             &density_map,
             iso_surface_threshold,
             &mut mesh.vertices,
+            IdentityDensityMapFilter,
         );
 
-        triangulate_with_criterion(
-            subdomain,
-            marching_cubes_data,
-            mesh,
-            TriangulationSkipBoundaryCells,
-            DefaultTriangleGenerator,
-        );
+        marching_cubes_data
     } else {
-        let marching_cubes_data = interpolate_points_to_cell_data::<I, R>(
+        interpolate_points_to_cell_data::<I, R>(
             &grid,
             &density_map,
             iso_surface_threshold,
             &mut mesh.vertices,
-        );
-        triangulate::<I, R>(marching_cubes_data, mesh);
-    }
+        )
+    };
+
+    triangulate::<I, R>(marching_cubes_data, mesh);
 }
 
 pub(crate) fn triangulate_density_map_with_stitching_data<I: Index, R: Real>(
-    subdomain_grid: &SubdomainGrid<I, R>,
+    subdomain: &SubdomainGrid<I, R>,
     density_map: &DensityMap<I, R>,
     iso_surface_threshold: R,
 ) -> SurfacePatch<I, R> {
     profile!("triangulate_density_map_append");
 
     let mut mesh = TriMesh3d::default();
-    let subdomain = subdomain_grid.clone();
+    let subdomain = subdomain.clone();
 
-    let (marching_cubes_data, mut boundary_density_maps) =
-        interpolate_points_to_cell_data_skip_boundary::<I, R>(
-            &subdomain,
-            &density_map,
-            iso_surface_threshold,
-            &mut mesh.vertices,
-        );
+    let (marching_cubes_data, boundary_filter) = interpolate_points_to_cell_data_generic(
+        &subdomain,
+        &density_map,
+        iso_surface_threshold,
+        &mut mesh.vertices,
+        SkipBoundaryLayerFilter::new(),
+    );
 
+    let mut boundary_density_maps = boundary_filter.into_inner();
     let mut boundary_cell_data = collect_boundary_cell_data(&subdomain, &marching_cubes_data);
 
     triangulate_with_criterion(
@@ -328,13 +324,154 @@ pub(crate) fn interpolate_points_to_cell_data<I: Index, R: Real>(
     MarchingCubesInput { cell_data }
 }
 
+trait DensityMapFilter<I: Index, R: Real> {
+    fn process_point(
+        &mut self,
+        density_map: &DensityMap<I, R>,
+        subdomain: &SubdomainGrid<I, R>,
+        flat_point_index: I,
+        subdomain_point: &PointIndex<I>,
+        point_value: R,
+    ) -> bool;
+
+    fn process_edge(
+        &mut self,
+        density_map: &DensityMap<I, R>,
+        subdomain: &SubdomainGrid<I, R>,
+        flat_point_index: I,
+        subdomain_point: &PointIndex<I>,
+        flat_neighbor_index: I,
+        subdomain_neighbor: &PointIndex<I>,
+    ) -> bool;
+}
+
+/// Cell data interpolation filter that accepts all points and edges
+struct IdentityDensityMapFilter;
+
+impl<I: Index, R: Real> DensityMapFilter<I, R> for IdentityDensityMapFilter {
+    #[inline(always)]
+    fn process_point(
+        &mut self,
+        _density_map: &DensityMap<I, R>,
+        _subdomain: &SubdomainGrid<I, R>,
+        _flat_point_index: I,
+        _subdomain_point: &PointIndex<I>,
+        _point_value: R,
+    ) -> bool {
+        return true;
+    }
+
+    #[inline(always)]
+    fn process_edge(
+        &mut self,
+        _density_map: &DensityMap<I, R>,
+        _subdomain: &SubdomainGrid<I, R>,
+        _flat_point_index: I,
+        _subdomain_point: &PointIndex<I>,
+        _flat_neighbor_index: I,
+        _subdomain_neighbor: &PointIndex<I>,
+    ) -> bool {
+        return true;
+    }
+}
+
+/// Cell data interpolation filter that skips the boundary layer of cells and builds the boundary density maps
+struct SkipBoundaryLayerFilter<I: Index, R: Real> {
+    boundary_density_maps: DirectedAxisArray<MapType<I, R>>,
+}
+
+impl<I: Index, R: Real> SkipBoundaryLayerFilter<I, R> {
+    fn new() -> Self {
+        Self {
+            boundary_density_maps: Default::default(),
+        }
+    }
+
+    fn into_inner(self) -> DirectedAxisArray<MapType<I, R>> {
+        self.boundary_density_maps
+    }
+}
+
+impl<I: Index, R: Real> DensityMapFilter<I, R> for SkipBoundaryLayerFilter<I, R> {
+    #[inline(always)]
+    fn process_point(
+        &mut self,
+        density_map: &DensityMap<I, R>,
+        subdomain: &SubdomainGrid<I, R>,
+        flat_point_index: I,
+        subdomain_point: &PointIndex<I>,
+        point_value: R,
+    ) -> bool {
+        let grid = subdomain.global_grid();
+        let subdomain_grid = subdomain.subdomain_grid();
+
+        // Skip points directly at the boundary but add them to the respective boundary density map
+        {
+            let point_boundary_flags =
+                GridBoundaryFaceFlags::classify_point(subdomain_grid, &subdomain_point);
+            if !point_boundary_flags.is_empty() {
+                // Insert the point into each boundary density map it belongs to
+                for boundary in point_boundary_flags.iter_individual() {
+                    let boundary_map = self.boundary_density_maps.get_mut(&boundary);
+                    boundary_map.insert(flat_point_index, point_value);
+
+                    // Also insert second row neighbor, if present
+                    if let Some(flat_neighbor_index) = subdomain_grid
+                        // Get neighbor in subdomain
+                        .get_point_neighbor(&subdomain_point, boundary.opposite())
+                        // Map neighbor from subdomain to global grid
+                        .and_then(|neighbor| subdomain.inv_map_point(&neighbor))
+                        // Flatten on global grid
+                        .map(|global_neighbor| grid.flatten_point_index(&global_neighbor))
+                    {
+                        if let Some(density_value) = density_map.get(flat_neighbor_index) {
+                            boundary_map.insert(flat_neighbor_index, density_value);
+                        }
+                    }
+                }
+                // Skip this point for interpolation
+                return false;
+            }
+        }
+
+        // Otherwise the point can be processed
+        return true;
+    }
+
+    #[inline(always)]
+    fn process_edge(
+        &mut self,
+        _density_map: &DensityMap<I, R>,
+        subdomain: &SubdomainGrid<I, R>,
+        _flat_point_index: I,
+        _subdomain_point: &PointIndex<I>,
+        _flat_neighbor_index: I,
+        subdomain_neighbor: &PointIndex<I>,
+    ) -> bool {
+        let subdomain_grid = subdomain.subdomain_grid();
+
+        // Check if the neighbor is on the boundary of the subdomain
+        let point_boundary_flags =
+            GridBoundaryFaceFlags::classify_point(subdomain_grid, subdomain_neighbor);
+        let point_is_on_outer_boundary = !point_boundary_flags.is_empty();
+
+        // Skip edges that go into the boundary layer
+        if point_is_on_outer_boundary {
+            return false;
+        }
+
+        return true;
+    }
+}
+
 #[inline(never)]
-pub(crate) fn interpolate_points_to_cell_data_skip_boundary<I: Index, R: Real>(
+fn interpolate_points_to_cell_data_generic<I: Index, R: Real, F: DensityMapFilter<I, R>>(
     subdomain: &SubdomainGrid<I, R>,
     density_map: &DensityMap<I, R>,
     iso_surface_threshold: R,
     vertices: &mut Vec<Vector3<R>>,
-) -> (MarchingCubesInput<I>, DirectedAxisArray<MapType<I, R>>) {
+    mut filter: F,
+) -> (MarchingCubesInput<I>, F) {
     let grid = subdomain.global_grid();
     let subdomain_grid = subdomain.subdomain_grid();
 
@@ -351,15 +488,6 @@ pub(crate) fn interpolate_points_to_cell_data_skip_boundary<I: Index, R: Real>(
     // Map from flat cell index to all data that is required per cell for the marching cubes triangulation
     let mut cell_data: MapType<I, CellData> = new_map();
 
-    // New density map for the boundary layer of this patch
-    let mut boundary_density_maps: DirectedAxisArray<MapType<I, R>> = Default::default();
-
-    // Closure to detect points that are on the outer boundary of the domain, edges towards these point should be skipped
-    let point_is_on_outer_boundary = |p: &PointIndex<I>| -> bool {
-        let point_boundary_flags = GridBoundaryFaceFlags::classify_point(subdomain_grid, p);
-        !point_boundary_flags.is_empty()
-    };
-
     // Generate iso-surface vertices and identify affected cells & edges
     {
         profile!("generate_iso_surface_vertices");
@@ -369,33 +497,14 @@ pub(crate) fn interpolate_points_to_cell_data_skip_boundary<I: Index, R: Real>(
                 .map_point(&global_point)
                 .expect("Point cannot be mapped into subdomain.");
 
-            // Skip points directly at the boundary but add them to the respective boundary density map
-            {
-                let point_boundary_flags =
-                    GridBoundaryFaceFlags::classify_point(subdomain_grid, &point);
-                if !point_boundary_flags.is_empty() {
-                    // Insert the point into each boundary density map it belongs to
-                    for boundary in point_boundary_flags.iter_individual() {
-                        let boundary_map = boundary_density_maps.get_mut(&boundary);
-                        boundary_map.insert(flat_point_index, point_value);
-
-                        // Also insert second row neighbor, if present
-                        if let Some(flat_neighbor_index) = subdomain_grid
-                            // Get neighbor in subdomain
-                            .get_point_neighbor(&point, boundary.opposite())
-                            // Map neighbor from subdomain to global grid
-                            .and_then(|neighbor| subdomain.inv_map_point(&neighbor))
-                            // Flatten on global grid
-                            .map(|global_neighbor| grid.flatten_point_index(&global_neighbor))
-                        {
-                            if let Some(density_value) = density_map.get(flat_neighbor_index) {
-                                boundary_map.insert(flat_neighbor_index, density_value);
-                            }
-                        }
-                    }
-                    // Skip this point for interpolation
-                    return;
-                }
+            if !filter.process_point(
+                density_map,
+                subdomain,
+                flat_point_index,
+                &point,
+                point_value,
+            ) {
+                return;
             }
 
             // We want to find edges that cross the iso-surface,
@@ -405,7 +514,7 @@ pub(crate) fn interpolate_points_to_cell_data_skip_boundary<I: Index, R: Real>(
             // below the threshold, as it contains the whole fluid interior, whereas areas completely
             // devoid of fluid are not part of the density map.
             //
-            // Therefore, we choose to skip points with densities above the threshold to improve efficiency
+            // Skip points with densities above the threshold to improve efficiency
             if point_value > iso_surface_threshold {
                 return;
             }
@@ -435,8 +544,14 @@ pub(crate) fn interpolate_points_to_cell_data_skip_boundary<I: Index, R: Real>(
                     continue;
                 }
 
-                // Skip edges that go into the boundary layer
-                if point_is_on_outer_boundary(&neighbor) {
+                if !filter.process_edge(
+                    density_map,
+                    subdomain,
+                    flat_point_index,
+                    &point,
+                    flat_neighbor_index,
+                    neighbor,
+                ) {
                     continue;
                 }
 
@@ -530,7 +645,7 @@ pub(crate) fn interpolate_points_to_cell_data_skip_boundary<I: Index, R: Real>(
         vertices.len()
     );
 
-    (MarchingCubesInput { cell_data }, boundary_density_maps)
+    (MarchingCubesInput { cell_data }, filter)
 }
 
 #[inline(never)]
