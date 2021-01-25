@@ -32,10 +32,10 @@ struct CommandlineArgs {
     /// Path to the input file where the particle positions are stored (supported formats: VTK, binary f32 XYZ, PLY, BGEO)
     #[structopt(parse(from_os_str))]
     input_file: PathBuf,
-    /// Filename for writing the reconstructed surface to disk
+    /// Filename for writing the reconstructed surface to disk (default: "[original_filename]_surface.vtk")
     #[structopt(short = "-o", parse(from_os_str))]
     output_file: Option<PathBuf>,
-    /// Optional base directory for all output files
+    /// Optional base directory for all output files (default: current working directory)
     #[structopt(long, parse(from_os_str))]
     output_dir: Option<PathBuf>,
     /// The particle radius of the input data
@@ -44,10 +44,10 @@ struct CommandlineArgs {
     /// The rest density of the fluid
     #[structopt(long, default_value = "1000.0")]
     rest_density: f64,
-    /// The kernel radius used for building the density map in multiplies of the particle radius
+    /// The kernel radius (more specifically its compact support radius) used for building the density map in multiplies of the particle radius
     #[structopt(long)]
     kernel_radius: f64,
-    /// If a particle has no neighbors in this radius (in multiplies of the particle radius) it is considered as a free particles
+    /// If a particle has no neighbors in this radius (in multiplies of the particle radius) it is considered as a free particle
     #[structopt(long)]
     splash_detection_radius: Option<f64>,
     /// The marching cubes grid size in multiplies of the particle radius
@@ -82,8 +82,10 @@ struct CommandlineArgs {
     #[structopt(long)]
     no_stitching: bool,
     /// The maximum number of particles for leaf nodes of the octree, default is to compute it based on number of threads and particles
+    #[structopt(long)]
     octree_max_particles: Option<usize>,
     /// Safety factor applied to the kernel radius when it's used as a margin to collect ghost particles in the leaf nodes
+    #[structopt(long)]
     octree_ghost_margin_factor: Option<f64>,
     /// Optional filename for writing the point cloud representation of the intermediate density map to disk
     #[structopt(long, parse(from_os_str))]

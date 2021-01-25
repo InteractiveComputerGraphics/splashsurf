@@ -15,15 +15,11 @@ pub(crate) fn entry_point(
     args: &ReconstructionRunnerArgs,
 ) -> Result<(), anyhow::Error> {
     if args.use_double_precision {
-        type I = i64;
-        type R = f64;
-
-        entry_point_generic::<I, R>(paths, &args.params, &args.io_params)?;
+        info!("Using double precision (f64) for surface reconstruction.");
+        entry_point_generic::<i64, f64>(paths, &args.params, &args.io_params)?;
     } else {
-        type I = i64;
-        type R = f32;
-
-        entry_point_generic::<I, R>(
+        info!("Using single precision (f32) for surface reconstruction.");
+        entry_point_generic::<i64, f32>(
             paths,
             &args.params.try_convert().ok_or(anyhow!(
                 "Unable to convert surface reconstruction parameters from f64 to f32."
