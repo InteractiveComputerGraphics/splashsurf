@@ -1,17 +1,25 @@
 ## Master
- - Lib: Implement localized reconstruction approach using octree spatial decomposition, the leaves of the octree are processed in parallel. Note: there is currently no procedure to stitch the resulting mesh. The resulting mesh will be a collection of local triangle meshes.
+
+The biggest new feature is a domain decomposed approach to the surface reconstruction using spatial decomposition of the particle set with an octree.
+The resulting local patches can then be processed in parallel (leaving a single layer of boundary cells untriangulated to avoid incompatible boundaries).
+Afterwards, a stitching procedure walks the octree back upwards and merges the octree leaves. 
+As the library uses task based parallelism, a task for stitching can be enqueued as soon as all children of an octree node are processed.
+Depending on the number of available threads and the particle data, this approach results in a speedup of 4-10x in comparison to the global parallel approach in selected benchmarks.
+At the moment, this domain decomposition approach is only available when allowing to parallelize over particles using thr `--mt-particles` flag.
+
+ - Lib: Implement localized reconstruction approach using octree spatial decomposition, the leaves of the octree are processed in parallel.
+ - Lib: Implement stitching of local meshes resulting from the domain decomposed reconstruction. The resulting meshes appear to be manifold in limited testing with a couple of examples. 
  - CLI: Add flags to control octree usage
  - Lib: Introduce thread local "workspaces" to reuse allocated memory. The workspace will be stored in the `SurfaceReconstruction` result object and can be reused to reduce allocations in subsequent surface reconstructions.
- - Lib: Add benchmarks with Criterion 
+ - Lib: Add benchmarks using Criterion
+ - CLI: Support for reading uncompressed BGEO files (previously only compressed BGEO files were supported)
+ - Lib: Add functions to approximate the vertex normals and vertex normal directions based on are-weighted averages of the adjacent triangles
  - Updated dependencies
 
-**Release blockers:**
- - Don't make octree approach default until we have stitching?  
+**Release blockers:** 
+ - Check what to make part of the public interface!
  - Reimplement proper splash detection
  - Reimplement density map output for global surface reconstruction
-
- - CLI: Support for reading uncompressed BGEO files (previously only compressed BGEO files were supported)
- - Lib: Add functions to approximate the vertex normals and vertex normal directions based on are-weighted averages of the adjacent triangles 
 
 ## Version 0.4.0
 
