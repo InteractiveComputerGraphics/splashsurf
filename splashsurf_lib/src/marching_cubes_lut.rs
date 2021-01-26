@@ -18,6 +18,9 @@
 //!   - The triangulation is given by the two triangles `[0, 8, 3]` and `[1, 2, 10]`, with vertices
 //!     on the edges identified by the given indices
 //!
+//! Note that it looks like the winding order of the triangles is apparently in the wrong direction.
+//! This is taken into account by the evaluation functions.
+//!
 //! Cube description:
 //!
 //! ```text
@@ -311,10 +314,11 @@ fn triangulation_to_triangle(triangulation: &[i32; 16], triangle_index: usize) -
     if triangulation[3 * i] == -1 {
         None
     } else {
+        // Reverse the vertex index order to fix winding order (so that normals point outwards)
         Some([
-            triangulation[3 * i + 0],
-            triangulation[3 * i + 1],
             triangulation[3 * i + 2],
+            triangulation[3 * i + 1],
+            triangulation[3 * i + 0],
         ])
     }
 }
@@ -364,14 +368,7 @@ mod test_lut {
     /// Inverts all bools in a flag array
     fn inverse_flags(flags: &[bool; 8]) -> [bool; 8] {
         [
-            !flags[0],
-            !flags[1],
-            !flags[2],
-            !flags[3],
-            !flags[4],
-            !flags[5],
-            !flags[6],
-            !flags[7],
+            !flags[0], !flags[1], !flags[2], !flags[3], !flags[4], !flags[5], !flags[6], !flags[7],
         ]
     }
 
@@ -440,19 +437,26 @@ mod test_lut {
     #[test]
     fn test_marching_cubes_triangulation_iter() {
         assert!(marching_cubes_triangulation_iter(&[
-        false, false, false, false, false, false, false, false
-    ])
-    .next()
-    .is_none(),);
+            false, false, false, false, false, false, false, false
+        ])
+        .next()
+        .is_none(),);
+
         assert_eq!(
-            marching_cubes_triangulation_iter(&[true, false, false, false, false, false, false, false])
-                .collect::<Vec<_>>(),
-            vec![[0, 8, 3]]
+            marching_cubes_triangulation_iter(&[
+                true, false, false, false, false, false, false, false
+            ])
+            .collect::<Vec<_>>(),
+            //vec![[0, 8, 3]]
+            vec![[3, 8, 0]]
         );
+
         assert_eq!(
-            marching_cubes_triangulation_iter(&[false, false, true, false, true, false, false, false])
-                .collect::<Vec<_>>(),
-            vec![[1, 2, 10], [8, 4, 7]]
+            marching_cubes_triangulation_iter(&[
+                false, false, true, false, true, false, false, false
+            ])
+            .collect::<Vec<_>>(),
+            vec![[10, 2, 1], [7, 4, 8]]
         );
     }
 }

@@ -164,7 +164,7 @@ pub(crate) struct CellData {
 
 impl CellData {
     /// Returns an boolean array indicating for each corner vertex of the cell whether it's above the iso-surface
-    fn are_vertices_above(&self) -> [bool; 8] {
+    fn are_vertices_inside(&self) -> [bool; 8] {
         [
             self.corner_above_threshold[0].is_above(),
             self.corner_above_threshold[1].is_above(),
@@ -1511,7 +1511,7 @@ fn triangulate_with_criterion<
             continue;
         }
 
-        for triangle in marching_cubes_triangulation_iter(&cell_data.are_vertices_above()) {
+        for triangle in marching_cubes_triangulation_iter(&cell_data.are_vertices_inside()) {
             // TODO: Promote this error, allow user to skip invalid triangles?
             let global_triangle = triangle_generator
                 .triangle_connectivity(subdomain, flat_cell_index, cell_data, triangle)
