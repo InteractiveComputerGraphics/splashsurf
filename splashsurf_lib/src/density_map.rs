@@ -1,16 +1,14 @@
-use std::cell::RefCell;
-
+use crate::kernel::DiscreteSquaredDistanceCubicKernel;
+use crate::mesh::{HexMesh3d, MeshWithPointData};
+use crate::uniform_grid::{OwnedSubdomainGrid, Subdomain, UniformGrid};
+use crate::utils::{ChunkSize, ParallelPolicy};
+use crate::{new_map, AxisAlignedBoundingBox3d, HashState, Index, MapType, ParallelMapType, Real};
 use dashmap::ReadOnlyView as ReadDashMap;
 use log::{info, trace, warn};
 use nalgebra::Vector3;
 use rayon::prelude::*;
+use std::cell::RefCell;
 use thread_local::ThreadLocal;
-
-use crate::kernel::DiscreteSquaredDistanceCubicKernel;
-use crate::mesh::{HexMesh3d, MeshWithPointData};
-use crate::uniform_grid::{SubdomainGrid, UniformGrid};
-use crate::utils::{ChunkSize, ParallelPolicy};
-use crate::{new_map, AxisAlignedBoundingBox3d, HashState, Index, MapType, ParallelMapType, Real};
 
 /// Computes the individual densities of particles using a standard SPH sum
 #[inline(never)]
@@ -215,7 +213,7 @@ impl<I: Index, R: Real> DensityMap<I, R> {
 #[inline(never)]
 pub fn generate_sparse_density_map<I: Index, R: Real>(
     grid: &UniformGrid<I, R>,
-    subdomain: Option<&SubdomainGrid<I, R>>,
+    subdomain: Option<&OwnedSubdomainGrid<I, R>>,
     particle_positions: &[Vector3<R>],
     particle_densities: &[R],
     active_particles: Option<&[usize]>,
@@ -325,7 +323,7 @@ pub fn sequential_generate_sparse_density_map<I: Index, R: Real>(
 
 #[inline(never)]
 pub fn sequential_generate_sparse_density_map_subdomain<I: Index, R: Real>(
-    subdomain: &SubdomainGrid<I, R>,
+    subdomain: &OwnedSubdomainGrid<I, R>,
     particle_positions: &[Vector3<R>],
     particle_densities: &[R],
     active_particles: Option<&[usize]>,
@@ -613,7 +611,7 @@ impl<I: Index, R: Real> SparseDensityMapGenerator<I, R> {
     /// Computes all density contributions of a particle to a subdomain of the background grid into the given map
     fn compute_particle_density_contribution_subdomain(
         &self,
-        subdomain: &SubdomainGrid<I, R>,
+        subdomain: &OwnedSubdomainGrid<I, R>,
         sparse_densities: &mut MapType<I, R>,
         particle: &Vector3<R>,
         particle_density: R,

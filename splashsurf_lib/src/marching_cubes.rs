@@ -1,7 +1,9 @@
 use crate::marching_cubes_lut::marching_cubes_triangulation_iter;
 use crate::mesh::TriMesh3d;
 use crate::topology::{Axis, DirectedAxis, DirectedAxisArray, Direction};
-use crate::uniform_grid::{GridBoundaryFaceFlags, PointIndex, SubdomainGrid};
+use crate::uniform_grid::{
+    DummySubdomain, GridBoundaryFaceFlags, OwnedSubdomainGrid, PointIndex, Subdomain,
+};
 use crate::{new_map, DensityMap, Index, MapType, Real, UniformGrid};
 use anyhow::Context;
 use log::{debug, info, trace};
@@ -32,7 +34,7 @@ pub fn triangulate_density_map<I: Index, R: Real>(
 /// Performs a marching cubes triangulation of a density map on the given background grid, appends triangles to the given mesh
 pub fn triangulate_density_map_append<I: Index, R: Real>(
     grid: &UniformGrid<I, R>,
-    subdomain: Option<&SubdomainGrid<I, R>>,
+    subdomain: Option<&OwnedSubdomainGrid<I, R>>,
     density_map: &DensityMap<I, R>,
     iso_surface_threshold: R,
     mesh: &mut TriMesh3d<R>,
@@ -41,7 +43,7 @@ pub fn triangulate_density_map_append<I: Index, R: Real>(
 
     let marching_cubes_data = if let Some(subdomain) = subdomain {
         let mut marching_cubes_data = MarchingCubesInput::default();
-        let _ = interpolate_points_to_cell_data_generic::<I, R, _>(
+        let _ = interpolate_points_to_cell_data_generic::<I, R, _, _>(
             subdomain,
             &density_map,
             iso_surface_threshold,
@@ -52,19 +54,34 @@ pub fn triangulate_density_map_append<I: Index, R: Real>(
 
         marching_cubes_data
     } else {
+        let subdomain = DummySubdomain::new(grid);
+        let mut marching_cubes_data = MarchingCubesInput::default();
+        let _ = interpolate_points_to_cell_data_generic::<I, R, _, _>(
+            &subdomain,
+            &density_map,
+            iso_surface_threshold,
+            &mut mesh.vertices,
+            &mut marching_cubes_data,
+            IdentityDensityMapFilter,
+        );
+
+        marching_cubes_data
+
+        /*
         interpolate_points_to_cell_data::<I, R>(
             &grid,
             &density_map,
             iso_surface_threshold,
             &mut mesh.vertices,
         )
+         */
     };
 
     triangulate::<I, R>(marching_cubes_data, mesh);
 }
 
 pub(crate) fn triangulate_density_map_with_stitching_data<I: Index, R: Real>(
-    subdomain: &SubdomainGrid<I, R>,
+    subdomain: &OwnedSubdomainGrid<I, R>,
     density_map: &DensityMap<I, R>,
     iso_surface_threshold: R,
 ) -> SurfacePatch<I, R> {
@@ -336,11 +353,11 @@ pub(crate) fn interpolate_points_to_cell_data<I: Index, R: Real>(
     MarchingCubesInput { cell_data }
 }
 
-trait DensityMapFilter<I: Index, R: Real> {
+trait DensityMapFilter<I: Index, R: Real, S: Subdomain<I, R>> {
     fn process_point(
         &mut self,
         density_map: &DensityMap<I, R>,
-        subdomain: &SubdomainGrid<I, R>,
+        subdomain: &S,
         flat_point_index: I,
         subdomain_point: &PointIndex<I>,
         point_value: R,
@@ -349,7 +366,7 @@ trait DensityMapFilter<I: Index, R: Real> {
     fn process_edge(
         &mut self,
         density_map: &DensityMap<I, R>,
-        subdomain: &SubdomainGrid<I, R>,
+        subdomain: &S,
         flat_point_index: I,
         subdomain_point: &PointIndex<I>,
         flat_neighbor_index: I,
@@ -360,12 +377,12 @@ trait DensityMapFilter<I: Index, R: Real> {
 /// Cell data interpolation filter that accepts all points and edges
 struct IdentityDensityMapFilter;
 
-impl<I: Index, R: Real> DensityMapFilter<I, R> for IdentityDensityMapFilter {
+impl<I: Index, R: Real, S: Subdomain<I, R>> DensityMapFilter<I, R, S> for IdentityDensityMapFilter {
     #[inline(always)]
     fn process_point(
         &mut self,
         _density_map: &DensityMap<I, R>,
-        _subdomain: &SubdomainGrid<I, R>,
+        _subdomain: &S,
         _flat_point_index: I,
         _subdomain_point: &PointIndex<I>,
         _point_value: R,
@@ -377,7 +394,7 @@ impl<I: Index, R: Real> DensityMapFilter<I, R> for IdentityDensityMapFilter {
     fn process_edge(
         &mut self,
         _density_map: &DensityMap<I, R>,
-        _subdomain: &SubdomainGrid<I, R>,
+        _subdomain: &S,
         _flat_point_index: I,
         _subdomain_point: &PointIndex<I>,
         _flat_neighbor_index: I,
@@ -404,12 +421,14 @@ impl<I: Index, R: Real> SkipBoundaryLayerFilter<I, R> {
     }
 }
 
-impl<I: Index, R: Real> DensityMapFilter<I, R> for SkipBoundaryLayerFilter<I, R> {
+impl<I: Index, R: Real, S: Subdomain<I, R>> DensityMapFilter<I, R, S>
+    for SkipBoundaryLayerFilter<I, R>
+{
     #[inline(always)]
     fn process_point(
         &mut self,
         density_map: &DensityMap<I, R>,
-        subdomain: &SubdomainGrid<I, R>,
+        subdomain: &S,
         flat_point_index: I,
         subdomain_point: &PointIndex<I>,
         point_value: R,
@@ -454,7 +473,7 @@ impl<I: Index, R: Real> DensityMapFilter<I, R> for SkipBoundaryLayerFilter<I, R>
     fn process_edge(
         &mut self,
         _density_map: &DensityMap<I, R>,
-        subdomain: &SubdomainGrid<I, R>,
+        subdomain: &S,
         _flat_point_index: I,
         _subdomain_point: &PointIndex<I>,
         _flat_neighbor_index: I,
@@ -477,8 +496,13 @@ impl<I: Index, R: Real> DensityMapFilter<I, R> for SkipBoundaryLayerFilter<I, R>
 }
 
 #[inline(never)]
-fn interpolate_points_to_cell_data_generic<I: Index, R: Real, F: DensityMapFilter<I, R>>(
-    subdomain: &SubdomainGrid<I, R>,
+fn interpolate_points_to_cell_data_generic<
+    I: Index,
+    R: Real,
+    S: Subdomain<I, R>,
+    F: DensityMapFilter<I, R, S>,
+>(
+    subdomain: &S,
     density_map: &DensityMap<I, R>,
     iso_surface_threshold: R,
     vertices: &mut Vec<Vector3<R>>,
@@ -663,7 +687,7 @@ fn interpolate_points_to_cell_data_generic<I: Index, R: Real, F: DensityMapFilte
 
 #[inline(never)]
 pub(crate) fn interpolate_points_to_cell_data_stitching<I: Index, R: Real>(
-    subdomain: &SubdomainGrid<I, R>,
+    subdomain: &OwnedSubdomainGrid<I, R>,
     density_map: &DensityMap<I, R>,
     iso_surface_threshold: R,
     stitching_axis: Axis,
@@ -867,7 +891,7 @@ pub(crate) fn interpolate_points_to_cell_data_stitching<I: Index, R: Real>(
 /// Extracts the cell data of all cells on the boundary of the subdomain
 #[inline(never)]
 fn collect_boundary_cell_data<I: Index, R: Real>(
-    subdomain: &SubdomainGrid<I, R>,
+    subdomain: &OwnedSubdomainGrid<I, R>,
     input: &MarchingCubesInput<I>,
 ) -> DirectedAxisArray<MapType<I, CellData>> {
     let mut boundary_cell_data: DirectedAxisArray<MapType<I, CellData>> = Default::default();
@@ -908,8 +932,8 @@ impl<I: Index, R: Real> BoundaryData<I, R> {
     /// Maps this boundary data to another domain by converting all indices to the new subdomain
     fn map_to_domain(
         mut self,
-        target_domain: &SubdomainGrid<I, R>,
-        source_domain: &SubdomainGrid<I, R>,
+        target_domain: &OwnedSubdomainGrid<I, R>,
+        source_domain: &OwnedSubdomainGrid<I, R>,
         source_offset: Option<usize>,
     ) -> Self {
         assert_eq!(
@@ -964,9 +988,9 @@ impl<I: Index, R: Real> BoundaryData<I, R> {
 
     fn merge_with(
         mut self,
-        target_domain: &SubdomainGrid<I, R>,
+        target_domain: &OwnedSubdomainGrid<I, R>,
         mut other: BoundaryData<I, R>,
-        other_domain: &SubdomainGrid<I, R>,
+        other_domain: &OwnedSubdomainGrid<I, R>,
         other_vertex_offset: Option<usize>,
     ) -> Self {
         assert_eq!(
@@ -1051,7 +1075,7 @@ pub(crate) struct SurfacePatch<I: Index, R: Real> {
     /// The local surface mesh of this side
     pub(crate) mesh: TriMesh3d<R>,
     /// The subdomain of this local mesh
-    pub(crate) subdomain: SubdomainGrid<I, R>,
+    pub(crate) subdomain: OwnedSubdomainGrid<I, R>,
     /// All additional data required for stitching
     pub(crate) data: DirectedAxisArray<BoundaryData<I, R>>,
     /// The maximum number of times parts of this patch where stitched together
@@ -1059,7 +1083,7 @@ pub(crate) struct SurfacePatch<I: Index, R: Real> {
 }
 
 impl<I: Index, R: Real> SurfacePatch<I, R> {
-    pub(crate) fn new_empty(subdomain: SubdomainGrid<I, R>) -> Self {
+    pub(crate) fn new_empty(subdomain: OwnedSubdomainGrid<I, R>) -> Self {
         Self {
             mesh: Default::default(),
             subdomain,
@@ -1071,11 +1095,11 @@ impl<I: Index, R: Real> SurfacePatch<I, R> {
 
 // Merges boundary such that only density values and cell data in the result subdomain are part of the result
 fn merge_boundary_data<I: Index, R: Real>(
-    target_subdomain: &SubdomainGrid<I, R>,
-    negative_subdomain: &SubdomainGrid<I, R>,
+    target_subdomain: &OwnedSubdomainGrid<I, R>,
+    negative_subdomain: &OwnedSubdomainGrid<I, R>,
     negative_data: BoundaryData<I, R>,
     negative_vertex_offset: Option<usize>,
-    positive_subdomain: &SubdomainGrid<I, R>,
+    positive_subdomain: &OwnedSubdomainGrid<I, R>,
     positive_data: BoundaryData<I, R>,
     positive_vertex_offset: Option<usize>,
 ) -> BoundaryData<I, R> {
@@ -1121,9 +1145,9 @@ fn merge_boundary_data<I: Index, R: Real>(
 fn compute_stitching_domain<I: Index, R: Real>(
     stitching_axis: Axis,
     global_grid: &UniformGrid<I, R>,
-    negative_subdomain: &SubdomainGrid<I, R>,
-    positive_subdomain: &SubdomainGrid<I, R>,
-) -> SubdomainGrid<I, R> {
+    negative_subdomain: &OwnedSubdomainGrid<I, R>,
+    positive_subdomain: &OwnedSubdomainGrid<I, R>,
+) -> OwnedSubdomainGrid<I, R> {
     // Ensure that global grids are equivalent
     assert_eq!(
         negative_subdomain.global_grid(),
@@ -1205,16 +1229,16 @@ fn compute_stitching_domain<I: Index, R: Real>(
         n_cells_per_dim
     );
 
-    SubdomainGrid::new(global_grid.clone(), stitching_grid, stitching_grid_offset)
+    OwnedSubdomainGrid::new(global_grid.clone(), stitching_grid, stitching_grid_offset)
 }
 
 /// Computes the [SubdomainGrid] for the final combined domain of the two sides
 fn compute_stitching_result_domain<I: Index, R: Real>(
     stitching_axis: Axis,
     global_grid: &UniformGrid<I, R>,
-    negative_subdomain: &SubdomainGrid<I, R>,
-    positive_subdomain: &SubdomainGrid<I, R>,
-) -> SubdomainGrid<I, R> {
+    negative_subdomain: &OwnedSubdomainGrid<I, R>,
+    positive_subdomain: &OwnedSubdomainGrid<I, R>,
+) -> OwnedSubdomainGrid<I, R> {
     // Get the number of cells of the result domain by adding all cells in stitching direction
     let n_cells_per_dim = {
         let length_neg = negative_subdomain.subdomain_grid().cells_per_dim()[stitching_axis.dim()];
@@ -1234,7 +1258,7 @@ fn compute_stitching_result_domain<I: Index, R: Real>(
     )
     .expect("Unable to construct stitching domain grid");
 
-    SubdomainGrid::new(
+    OwnedSubdomainGrid::new(
         global_grid.clone(),
         subdomain_grid,
         negative_subdomain.subdomain_offset().clone(),
@@ -1445,9 +1469,8 @@ pub(crate) fn stitch_meshes<I: Index, R: Real>(
 /// Converts the marching cubes input cell data into a triangle surface mesh, appends triangles to existing mesh
 #[inline(never)]
 fn triangulate<I: Index, R: Real>(input: MarchingCubesInput<I>, mesh: &mut TriMesh3d<R>) {
-    let dummy_domain = SubdomainGrid::new_dummy(UniformGrid::new_zero());
     triangulate_with_criterion(
-        &dummy_domain,
+        &DummySubdomain::new(&UniformGrid::new_zero()),
         input,
         mesh,
         TriangulationIdentityCriterion,
@@ -1455,15 +1478,16 @@ fn triangulate<I: Index, R: Real>(input: MarchingCubesInput<I>, mesh: &mut TriMe
     );
 }
 
-/// Converts the marching cubes input cell data into a triangle surface mesh, appends triangles to existing mesh
+/// Converts the marching cubes input cell data into a triangle surface mesh, appends triangles to existing mesh with custom criterion to filter out cells during triangulation
 #[inline(never)]
 fn triangulate_with_criterion<
     I: Index,
     R: Real,
-    C: TriangulationCriterion<I, R>,
-    G: TriangleGenerator<I, R>,
+    S: Subdomain<I, R>,
+    C: TriangulationCriterion<I, R, S>,
+    G: TriangleGenerator<I, R, S>,
 >(
-    subdomain: &SubdomainGrid<I, R>,
+    subdomain: &S,
     input: MarchingCubesInput<I>,
     mesh: &mut TriMesh3d<R>,
     triangulation_criterion: C,
@@ -1504,14 +1528,9 @@ fn triangulate_with_criterion<
 }
 
 /// Trait that is used by the marching cubes [triangulate_with_criterion] function to query whether a cell should be triangulated
-trait TriangulationCriterion<I: Index, R: Real> {
+trait TriangulationCriterion<I: Index, R: Real, S: Subdomain<I, R>> {
     /// Returns whether the given cell should be triangulated
-    fn triangulate_cell(
-        &self,
-        subdomain: &SubdomainGrid<I, R>,
-        flat_cell_index: I,
-        cell_data: &CellData,
-    ) -> bool;
+    fn triangulate_cell(&self, subdomain: &S, flat_cell_index: I, cell_data: &CellData) -> bool;
 }
 
 /// An identity triangulation criterion that accepts all cells
@@ -1526,26 +1545,30 @@ struct TriangulationStitchingInterior {
 }
 
 /// Forwards to the wrapped triangulation criterion but first makes some assertions on the cell data
-struct DebugTriangulationCriterion<I: Index, R: Real, C: TriangulationCriterion<I, R>> {
+struct DebugTriangulationCriterion<
+    I: Index,
+    R: Real,
+    S: Subdomain<I, R>,
+    C: TriangulationCriterion<I, R, S>,
+> {
     triangulation_criterion: C,
-    phantom: PhantomData<(I, R)>,
+    phantom: PhantomData<(I, R, S)>,
 }
 
-impl<I: Index, R: Real> TriangulationCriterion<I, R> for TriangulationIdentityCriterion {
+impl<I: Index, R: Real, S: Subdomain<I, R>> TriangulationCriterion<I, R, S>
+    for TriangulationIdentityCriterion
+{
     #[inline(always)]
-    fn triangulate_cell(&self, _: &SubdomainGrid<I, R>, _: I, _: &CellData) -> bool {
+    fn triangulate_cell(&self, _: &S, _: I, _: &CellData) -> bool {
         true
     }
 }
 
-impl<I: Index, R: Real> TriangulationCriterion<I, R> for TriangulationSkipBoundaryCells {
+impl<I: Index, R: Real, S: Subdomain<I, R>> TriangulationCriterion<I, R, S>
+    for TriangulationSkipBoundaryCells
+{
     #[inline(always)]
-    fn triangulate_cell(
-        &self,
-        subdomain: &SubdomainGrid<I, R>,
-        flat_cell_index: I,
-        _: &CellData,
-    ) -> bool {
+    fn triangulate_cell(&self, subdomain: &S, flat_cell_index: I, _: &CellData) -> bool {
         let global_cell = subdomain
             .global_grid()
             .try_unflatten_cell_index(flat_cell_index)
@@ -1560,14 +1583,11 @@ impl<I: Index, R: Real> TriangulationCriterion<I, R> for TriangulationSkipBounda
     }
 }
 
-impl<I: Index, R: Real> TriangulationCriterion<I, R> for TriangulationStitchingInterior {
+impl<I: Index, R: Real, S: Subdomain<I, R>> TriangulationCriterion<I, R, S>
+    for TriangulationStitchingInterior
+{
     #[inline(always)]
-    fn triangulate_cell(
-        &self,
-        subdomain: &SubdomainGrid<I, R>,
-        flat_cell_index: I,
-        _: &CellData,
-    ) -> bool {
+    fn triangulate_cell(&self, subdomain: &S, flat_cell_index: I, _: &CellData) -> bool {
         let global_cell = subdomain
             .global_grid()
             .try_unflatten_cell_index(flat_cell_index)
@@ -1593,7 +1613,9 @@ impl<I: Index, R: Real> TriangulationCriterion<I, R> for TriangulationStitchingI
     }
 }
 
-impl<I: Index, R: Real, C: TriangulationCriterion<I, R>> DebugTriangulationCriterion<I, R, C> {
+impl<I: Index, R: Real, S: Subdomain<I, R>, C: TriangulationCriterion<I, R, S>>
+    DebugTriangulationCriterion<I, R, S, C>
+{
     #[allow(unused)]
     fn new(triangulation_criterion: C) -> Self {
         Self {
@@ -1603,16 +1625,11 @@ impl<I: Index, R: Real, C: TriangulationCriterion<I, R>> DebugTriangulationCrite
     }
 }
 
-impl<I: Index, R: Real, C: TriangulationCriterion<I, R>> TriangulationCriterion<I, R>
-    for DebugTriangulationCriterion<I, R, C>
+impl<I: Index, R: Real, S: Subdomain<I, R>, C: TriangulationCriterion<I, R, S>>
+    TriangulationCriterion<I, R, S> for DebugTriangulationCriterion<I, R, S, C>
 {
     #[inline(always)]
-    fn triangulate_cell(
-        &self,
-        subdomain: &SubdomainGrid<I, R>,
-        flat_cell_index: I,
-        cell_data: &CellData,
-    ) -> bool {
+    fn triangulate_cell(&self, subdomain: &S, flat_cell_index: I, cell_data: &CellData) -> bool {
         assert!(
             !cell_data
                 .corner_above_threshold
@@ -1628,10 +1645,10 @@ impl<I: Index, R: Real, C: TriangulationCriterion<I, R>> TriangulationCriterion<
 }
 
 /// Trait that is used by the marching cubes [triangulate_with_criterion] function to convert a marching cubes triangulation to actual triangle-vertex connectivity
-trait TriangleGenerator<I: Index, R: Real> {
+trait TriangleGenerator<I: Index, R: Real, S: Subdomain<I, R>> {
     fn triangle_connectivity(
         &self,
-        subdomain: &SubdomainGrid<I, R>,
+        subdomain: &S,
         flat_cell_index: I,
         cell_data: &CellData,
         edge_indices: [i32; 3],
@@ -1643,11 +1660,13 @@ struct DefaultTriangleGenerator;
 /// Tries to map the edge indices to the vertex indices in the cell data, returns an error with debug information if vertices are missing
 struct DebugTriangleGenerator;
 
-impl<I: Index, R: Real> TriangleGenerator<I, R> for DefaultTriangleGenerator {
+impl<I: Index, R: Real, S: Subdomain<I, R>> TriangleGenerator<I, R, S>
+    for DefaultTriangleGenerator
+{
     #[inline(always)]
     fn triangle_connectivity(
         &self,
-        _subdomain: &SubdomainGrid<I, R>,
+        _subdomain: &S,
         _flat_cell_index: I,
         cell_data: &CellData,
         edge_indices: [i32; 3],
@@ -1671,11 +1690,11 @@ impl<I: Index, R: Real> TriangleGenerator<I, R> for DefaultTriangleGenerator {
     }
 }
 
-impl<I: Index, R: Real> TriangleGenerator<I, R> for DebugTriangleGenerator {
+impl<I: Index, R: Real, S: Subdomain<I, R>> TriangleGenerator<I, R, S> for DebugTriangleGenerator {
     #[inline(always)]
     fn triangle_connectivity(
         &self,
-        subdomain: &SubdomainGrid<I, R>,
+        subdomain: &S,
         flat_cell_index: I,
         cell_data: &CellData,
         edge_indices: [i32; 3],
@@ -1700,8 +1719,8 @@ impl<I: Index, R: Real> TriangleGenerator<I, R> for DebugTriangleGenerator {
 }
 
 /// Helper function that returns a formatted string to debug triangulation failures
-fn cell_debug_string<I: Index, R: Real>(
-    subdomain: &SubdomainGrid<I, R>,
+fn cell_debug_string<I: Index, R: Real, S: Subdomain<I, R>>(
+    subdomain: &S,
     flat_cell_index: I,
     cell_data: &CellData,
 ) -> String {
