@@ -295,14 +295,33 @@ static MARCHING_CUBES_TABLE: [[i32; 16]; 256] = [
 /* 255: 0, 1, 2, 3, 4, 5, 6, 7,  */  [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
 ];
 
-/// Returns a reference into the marching cubes LUT to the case corresponding to a vertex configuration
-pub fn get_marching_cubes_triangulation_raw(vertices_inside: &[bool; 8]) -> &'static [i32; 16] {
+/// Converts an array of bool representing bits to the corresponding usize, the order of the bits is least to most significant
+fn flags_to_index(flags: &[bool; 8]) -> usize {
     let mut index = 0;
-    for bit in vertices_inside.iter().rev().copied() {
+    for bit in flags.iter().rev().copied() {
         index = (index << 1) | bit as usize
     }
 
-    &MARCHING_CUBES_TABLE[index]
+    index
+}
+
+/// Extracts the triangle with the given index from the triangulation
+fn triangulation_to_triangle(triangulation: &[i32; 16], triangle_index: usize) -> Option<[i32; 3]> {
+    let i = triangle_index;
+    if triangulation[3 * i] == -1 {
+        None
+    } else {
+        Some([
+            triangulation[3 * i + 0],
+            triangulation[3 * i + 1],
+            triangulation[3 * i + 2],
+        ])
+    }
+}
+
+/// Returns a reference into the marching cubes LUT to the case corresponding to a vertex configuration
+pub fn get_marching_cubes_triangulation_raw(vertices_inside: &[bool; 8]) -> &'static [i32; 16] {
+    &MARCHING_CUBES_TABLE[flags_to_index(vertices_inside)]
 }
 
 /// Returns the marching cubes triangulation corresponding to the given vertex configuration
@@ -314,37 +333,126 @@ pub fn marching_cubes_triangulation_iter(
     vertices_inside: &[bool; 8],
 ) -> impl Iterator<Item = [i32; 3]> {
     let triangulation = get_marching_cubes_triangulation_raw(vertices_inside);
-
-    let get_triangle = move |i: usize| -> Option<[i32; 3]> {
-        if triangulation[3 * i] == -1 {
-            None
-        } else {
-            Some([
-                triangulation[3 * i + 0],
-                triangulation[3 * i + 1],
-                triangulation[3 * i + 2],
-            ])
-        }
-    };
-
-    (0..4).into_iter().map(get_triangle).flatten()
+    (0..4)
+        .into_iter()
+        .map(move |i| triangulation_to_triangle(triangulation, i))
+        .flatten()
 }
 
-#[test]
-fn test_marching_cubes_triangulation_iter() {
-    assert!(marching_cubes_triangulation_iter(&[
+#[cfg(test)]
+#[allow(unused)]
+mod test_lut {
+    use super::*;
+
+    /// A dumb integer -> bit flags conversion using format!
+    fn index_to_flags(index: usize) -> [bool; 8] {
+        assert!(index <= 256);
+
+        let b: Vec<char> = format!("{:08b}", index).chars().collect();
+        [
+            b[7] == '1',
+            b[6] == '1',
+            b[5] == '1',
+            b[4] == '1',
+            b[3] == '1',
+            b[2] == '1',
+            b[1] == '1',
+            b[0] == '1',
+        ]
+    }
+
+    /// Inverts all bools in a flag array
+    fn inverse_flags(flags: &[bool; 8]) -> [bool; 8] {
+        [
+            !flags[0],
+            !flags[1],
+            !flags[2],
+            !flags[3],
+            !flags[4],
+            !flags[5],
+            !flags[6],
+            !flags[7],
+        ]
+    }
+
+    #[test]
+    fn test_flag_conversion_roundtrip() {
+        assert_eq!(MARCHING_CUBES_TABLE.len(), 256);
+
+        for i in 0..256 {
+            let flags = index_to_flags(i);
+            let index = flags_to_index(&flags);
+
+            assert_eq!(i, index);
+        }
+    }
+
+    #[test]
+    fn test_get_marching_cubes_triangulation_raw() {
+        assert_eq!(MARCHING_CUBES_TABLE.len(), 256);
+
+        for i in 0..256 {
+            assert_eq!(
+                MARCHING_CUBES_TABLE[i],
+                *get_marching_cubes_triangulation_raw(&index_to_flags(i))
+            )
+        }
+    }
+
+    /*
+    #[test]
+    fn test_marching_cubes_cases() {
+        assert_eq!(MARCHING_CUBES_TABLE.len(), 256);
+
+        for i in 0..256 {
+            let flags = index_to_flags(i);
+            let flags_inverse = inverse_flags(&flags);
+            let i_inverse = flags_to_index(&flags_inverse);
+
+            let case = MARCHING_CUBES_TABLE[i];
+            let case_inverse = MARCHING_CUBES_TABLE[i_inverse];
+
+            let triangles: Vec<_> = (0..4)
+                .into_iter()
+                .map(|i| triangulation_to_triangle(&case, i))
+                .flatten()
+                .collect();
+
+            let triangles_inverse: Vec<_> = (0..4)
+                .into_iter()
+                .map(|i| triangulation_to_triangle(&case_inverse, i))
+                .flatten()
+                .collect();
+
+            assert_eq!(
+                triangles.len(),
+                triangles_inverse.len(),
+                "Case {} and inverse case {} don't have the same number of triangles ({:?} vs {:?})",
+                i,
+                i_inverse,
+                triangles,
+                triangles_inverse
+            );
+        }
+    }
+    */
+
+    #[test]
+    fn test_marching_cubes_triangulation_iter() {
+        assert!(marching_cubes_triangulation_iter(&[
         false, false, false, false, false, false, false, false
     ])
     .next()
     .is_none(),);
-    assert_eq!(
-        marching_cubes_triangulation_iter(&[true, false, false, false, false, false, false, false])
-            .collect::<Vec<_>>(),
-        vec![[0, 8, 3]]
-    );
-    assert_eq!(
-        marching_cubes_triangulation_iter(&[false, false, true, false, true, false, false, false])
-            .collect::<Vec<_>>(),
-        vec![[1, 2, 10], [8, 4, 7]]
-    );
+        assert_eq!(
+            marching_cubes_triangulation_iter(&[true, false, false, false, false, false, false, false])
+                .collect::<Vec<_>>(),
+            vec![[0, 8, 3]]
+        );
+        assert_eq!(
+            marching_cubes_triangulation_iter(&[false, false, true, false, true, false, false, false])
+                .collect::<Vec<_>>(),
+            vec![[1, 2, 10], [8, 4, 7]]
+        );
+    }
 }
