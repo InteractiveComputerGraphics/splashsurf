@@ -711,24 +711,6 @@ impl<I: Index, R: Real> SubdomainGrid<I, R> {
         other_subdomain.map_point(&global_point)
     }
 
-    /// Maps a flat cell index from this subdomain to the other
-    pub fn map_flat_point_index_to(
-        &self,
-        other_subdomain: &Self,
-        flat_point_index: I,
-    ) -> Option<I> {
-        let point_index = self
-            .subdomain_grid()
-            .try_unflatten_point_index(flat_point_index)?;
-        let mapped_point_index = self.map_point_to(&other_subdomain, &point_index)?;
-
-        Some(
-            other_subdomain
-                .subdomain_grid()
-                .flatten_point_index(&mapped_point_index),
-        )
-    }
-
     /// Maps the cell index from the global grid into the subdomain grid
     pub fn map_cell(&self, global_cell: &CellIndex<I>) -> Option<CellIndex<I>> {
         let new_cell = Direction::Negative
@@ -755,20 +737,6 @@ impl<I: Index, R: Real> SubdomainGrid<I, R> {
 
         let global_point = self.inv_map_cell(subdomain_cell)?;
         other_subdomain.map_cell(&global_point)
-    }
-
-    /// Maps a flat cell index from this subdomain to the other
-    pub fn map_flat_cell_index_to(&self, other_subdomain: &Self, flat_cell_index: I) -> Option<I> {
-        let cell_index = self
-            .subdomain_grid()
-            .try_unflatten_cell_index(flat_cell_index)?;
-        let mapped_cell_index = self.map_cell_to(&other_subdomain, &cell_index)?;
-
-        Some(
-            other_subdomain
-                .subdomain_grid()
-                .flatten_cell_index(&mapped_cell_index),
-        )
     }
 }
 
