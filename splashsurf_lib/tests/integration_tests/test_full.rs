@@ -128,5 +128,5 @@ pub fn surface_reconstruction_bunny_stitching() {
     );
 
     // Ensure that the mesh does not have a boundary
-    assert!(reconstruction.mesh().find_boundary_edges().is_empty());
+    assert_eq!(reconstruction.mesh().find_boundary_edges(), vec![]);
 }

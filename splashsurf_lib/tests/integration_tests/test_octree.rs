@@ -77,7 +77,7 @@ fn build_octree() {
     ];
 
     let grid = UniformGrid::new(&lower_corner, &n_cubes, cube_size).unwrap();
-    println!("{:?}", grid);
+    //println!("{:?}", grid);
 
     let mut octree = Octree::new(&grid, particles.as_slice().len());
     octree.subdivide_recursively_margin(
@@ -87,13 +87,16 @@ fn build_octree() {
         0.0,
     );
 
+    /*
     let root = octree.root();
+
     println!("min: {:?}, max: {:?}", root.min_corner(), root.max_corner());
     println!(
         "min coord: {:?}, max coord: {:?}",
         grid.point_coordinates(root.min_corner()),
         grid.point_coordinates(root.max_corner())
     );
+    */
 
     //particles_to_file(particles, "U:\\particles.vtk");
     //octree_to_file(&octree, &grid, "U:\\octree.vtk");
@@ -104,7 +107,7 @@ fn build_octree() {
 fn build_octree_from_vtk() {
     let file = "../data/double_dam_break_frame_26_4732_particles.vtk";
     let particles = io::vtk::particles_from_vtk::<f64, _>(file).unwrap();
-    println!("Loaded {} particles from {}", particles.len(), file);
+    //println!("Loaded {} particles from {}", particles.len(), file);
 
     let grid = grid_for_reconstruction::<i64, _>(
         particles.as_slice(),
@@ -115,7 +118,7 @@ fn build_octree_from_vtk() {
         true,
     )
     .unwrap();
-    println!("{:?}", grid);
+    //println!("{:?}", grid);
 
     let mut octree = Octree::new(&grid, particles.as_slice().len());
     octree.subdivide_recursively_margin(
@@ -130,7 +133,7 @@ fn build_octree_from_vtk() {
     for node in octree.root().dfs_iter() {
         if let Some(particle_set) = node.data().particle_set() {
             let node_particles = &particle_set.particles;
-            println!("Leaf with: {} particles", node_particles.len());
+            //println!("Leaf with: {} particles", node_particles.len());
             particle_count += node_particles.len();
 
             // Ensure that all particles are within extents of octree cell
@@ -151,7 +154,7 @@ fn build_octree_from_vtk() {
 fn build_octree_par_consistency() {
     let file = "../data/double_dam_break_frame_26_4732_particles.vtk";
     let particles = io::vtk::particles_from_vtk::<f64, _>(file).unwrap();
-    println!("Loaded {} particles from {}", particles.len(), file);
+    //println!("Loaded {} particles from {}", particles.len(), file);
 
     let grid = grid_for_reconstruction::<i64, _>(
         particles.as_slice(),
