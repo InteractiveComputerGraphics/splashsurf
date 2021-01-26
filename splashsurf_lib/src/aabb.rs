@@ -89,7 +89,7 @@ where
         let mut point_iter = points.iter();
         if let Some(first_point) = point_iter.next().cloned() {
             let mut aabb = Self::from_point(first_point);
-            while let Some(next_point) = point_iter.next() {
+            for next_point in point_iter {
                 aabb.join_with_point(next_point)
             }
             aabb

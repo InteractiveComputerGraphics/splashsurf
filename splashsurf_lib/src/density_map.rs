@@ -783,7 +783,7 @@ pub fn sparse_density_map_to_hex_mesh<I: Index, R: Real>(
 
             let cell_connectivity_entry = cells
                 .entry(flat_cell_index)
-                .or_insert([None, None, None, None, None, None, None, None]);
+                .or_insert_with(|| [None, None, None, None, None, None, None, None]);
 
             let local_point_index = cell.local_point_index_of(point.index()).unwrap();
             cell_connectivity_entry[local_point_index] = Some(vertex_index);

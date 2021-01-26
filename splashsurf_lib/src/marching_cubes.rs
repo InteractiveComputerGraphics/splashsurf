@@ -1302,7 +1302,7 @@ pub(crate) fn stitch_meshes<I: Index, R: Real>(
                         }
                     })
                     // Or insert new cell data
-                    .or_insert(cell_data.clone());
+                    .or_insert_with(|| cell_data.clone());
             }
 
             merged_data
