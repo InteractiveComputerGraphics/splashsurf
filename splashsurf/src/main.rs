@@ -1,3 +1,4 @@
+mod convert;
 mod io;
 mod reconstruction;
 
@@ -14,23 +15,42 @@ use splashsurf_lib::nalgebra::Vector3;
 use splashsurf_lib::AxisAlignedBoundingBox3d;
 use structopt::StructOpt;
 
-// TODO: Reduce most info! calls to lower level
 // TODO: Use different logging when processing multiple files in parallel
 // TODO: Add start and end index for input file sequences
 // TODO: Does coarse_prof work with multiple threads?
 // TODO: Check if all paths supplied using the cmd args are valid
 // TODO: Clean up the parameter structs and conversions
-// TODO: Append context to more error messages, e.g. when writing output files fails
 
-#[derive(Debug, StructOpt)]
+#[derive(Clone, Debug, StructOpt)]
 #[structopt(
     name = "splashsurf",
     author = "Fabian Löschner <loeschner@cs.rwth-aachen.de>",
     about = "Surface reconstruction for particle data from SPH simulations (https://github.com/w1th0utnam3/splashsurf)"
 )]
 struct CommandlineArgs {
+    /// Enable quiet mode (no output except for severe panic messages), overrides verbosity level
+    #[structopt(long, short = "-q")]
+    quiet: bool,
+    /// Print more verbose output, use multiple "v"s for even more verbose output (-v, -vv)
+    #[structopt(short, parse(from_occurrences))]
+    verbosity: u64,
+    /// Subcommands
+    #[structopt(subcommand)]
+    subcommand: Subcommand,
+}
+
+#[derive(Clone, Debug, StructOpt)]
+enum Subcommand {
+    /// Reconstruct a surface from particle data
+    Reconstruct(ReconstructSubcommandArgs),
+    /// Convert between particle formats (supports the same input and output formats as the reconstruction)
+    Convert(convert::ConvertSubcommandArgs),
+}
+
+#[derive(Clone, Debug, StructOpt)]
+struct ReconstructSubcommandArgs {
     /// Path to the input file where the particle positions are stored (supported formats: VTK, binary f32 XYZ, PLY, BGEO)
-    #[structopt(parse(from_os_str))]
+    #[structopt(short = "-i", parse(from_os_str))]
     input_file: PathBuf,
     /// Filename for writing the reconstructed surface to disk (default: "[original_filename]_surface.vtk")
     #[structopt(short = "-o", parse(from_os_str))]
@@ -105,12 +125,6 @@ struct CommandlineArgs {
     /// Set the number of threads for the worker thread pool
     #[structopt(long, short = "-n")]
     num_threads: Option<usize>,
-    /// Enable quiet mode (no output except for severe panic messages), overrides verbosity level
-    #[structopt(long, short = "-q")]
-    quiet: bool,
-    /// Print more verbose output, use multiple "v"s for even more verbose output (-v, -vv)
-    #[structopt(short, parse(from_occurrences))]
-    verbosity: u64,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -142,14 +156,6 @@ impl VerbosityLevel {
     }
 }
 
-/// Prints an anyhow error and its full error chain using the log::error macro
-fn log_error(err: &anyhow::Error) {
-    error!("Error occured: {}", err);
-    err.chain()
-        .skip(1)
-        .for_each(|cause| error!("  caused by: {}", cause));
-}
-
 fn run_splashsurf() -> Result<(), anyhow::Error> {
     let cmd_args = CommandlineArgs::from_args();
 
@@ -159,10 +165,51 @@ fn run_splashsurf() -> Result<(), anyhow::Error> {
     initialize_logging(verbosity, is_quiet).context("Failed to initialize logging")?;
     log_program_info();
 
-    let paths = ReconstrunctionRunnerPathCollection::try_from(&cmd_args)
+    match &cmd_args.subcommand {
+        Subcommand::Reconstruct(cmd_args) => reconstruct_subcommand(cmd_args)?,
+        Subcommand::Convert(cmd_args) => convert::convert_subcommand(cmd_args)?,
+    }
+
+    coarse_prof_write_string()?
+        .split("\n")
+        .filter(|l| l.len() > 0)
+        .for_each(|l| info!("{}", l));
+
+    Ok(())
+}
+
+fn main() -> Result<(), anyhow::Error> {
+    /*
+    // Panic hook for easier debugging
+    panic::set_hook(Box::new(|panic_info| {
+        println!("Panic occurred: {}", panic_info);
+        println!("Add breakpoint here for debugging.");
+    }));
+    */
+
+    std::process::exit(match run_splashsurf() {
+        Ok(_) => 0,
+        Err(err) => {
+            log_error(&err);
+            1
+        }
+    });
+}
+
+/// Prints an anyhow error and its full error chain using the log::error macro
+fn log_error(err: &anyhow::Error) {
+    error!("Error occurred: {}", err);
+    err.chain()
+        .skip(1)
+        .for_each(|cause| error!("  caused by: {}", cause));
+}
+
+/// Executes the `reconstruct` subcommand
+fn reconstruct_subcommand(cmd_args: &ReconstructSubcommandArgs) -> Result<(), anyhow::Error> {
+    let paths = ReconstructionRunnerPathCollection::try_from(cmd_args)
         .context("Failed parsing input file path(s) from command line")?
         .collect();
-    let args = ReconstructionRunnerArgs::try_from(&cmd_args)
+    let args = ReconstructionRunnerArgs::try_from(cmd_args)
         .context("Failed processing parameters from command line")?;
 
     let result = if cmd_args.parallelize_over_files {
@@ -190,30 +237,7 @@ fn run_splashsurf() -> Result<(), anyhow::Error> {
         info!("Successfully finished processing all inputs.");
     }
 
-    coarse_prof_write_string()?
-        .split("\n")
-        .filter(|l| l.len() > 0)
-        .for_each(|l| info!("{}", l));
-
     result
-}
-
-fn main() -> Result<(), anyhow::Error> {
-    /*
-    // Panic hook for easier debugging
-    panic::set_hook(Box::new(|panic_info| {
-        println!("Panic occurred: {}", panic_info);
-        println!("Add breakpoint here for debugging.");
-    }));
-    */
-
-    std::process::exit(match run_splashsurf() {
-        Ok(_) => 0,
-        Err(err) => {
-            log_error(&err);
-            1
-        }
-    });
 }
 
 /// All arguments that can be supplied to the surface reconstruction tool converted to useful types
@@ -224,16 +248,16 @@ pub struct ReconstructionRunnerArgs {
 }
 
 // Convert raw command line arguments to more useful types
-impl TryFrom<&CommandlineArgs> for ReconstructionRunnerArgs {
+impl TryFrom<&ReconstructSubcommandArgs> for ReconstructionRunnerArgs {
     type Error = anyhow::Error;
 
-    fn try_from(args: &CommandlineArgs) -> Result<Self, Self::Error> {
+    fn try_from(args: &ReconstructSubcommandArgs) -> Result<Self, Self::Error> {
         // Convert domain args to aabb
         let domain_aabb = match (&args.domain_min, &args.domain_max) {
             (Some(domain_min), Some(domain_max)) => {
                 // This should already be ensured by StructOpt parsing
-                assert!(domain_min.len() == 3);
-                assert!(domain_max.len() == 3);
+                assert_eq!(domain_min.len(), 3);
+                assert_eq!(domain_max.len(), 3);
 
                 // TODO: Check that domain_min < domain_max
                 let to_na_vec = |v: &Vec<f64>| -> Vector3<f64> { Vector3::new(v[0], v[1], v[2]) };
@@ -298,7 +322,7 @@ impl TryFrom<&CommandlineArgs> for ReconstructionRunnerArgs {
 }
 
 #[derive(Clone, Debug)]
-struct ReconstrunctionRunnerPathCollection {
+struct ReconstructionRunnerPathCollection {
     is_sequence: bool,
     input_file: PathBuf,
     output_file: PathBuf,
@@ -307,7 +331,7 @@ struct ReconstrunctionRunnerPathCollection {
     output_octree_file: Option<PathBuf>,
 }
 
-impl ReconstrunctionRunnerPathCollection {
+impl ReconstructionRunnerPathCollection {
     fn try_new<P: Into<PathBuf>>(
         is_sequence: bool,
         input_file: P,
@@ -416,10 +440,10 @@ impl ReconstrunctionRunnerPathCollection {
 }
 
 // Convert input file command line arguments to internal representation
-impl TryFrom<&CommandlineArgs> for ReconstrunctionRunnerPathCollection {
+impl TryFrom<&ReconstructSubcommandArgs> for ReconstructionRunnerPathCollection {
     type Error = anyhow::Error;
 
-    fn try_from(args: &CommandlineArgs) -> Result<Self, Self::Error> {
+    fn try_from(args: &ReconstructSubcommandArgs) -> Result<Self, Self::Error> {
         let output_suffix = "surface";
 
         // If the input file exists, a single input file should be processed
@@ -471,6 +495,7 @@ impl TryFrom<&CommandlineArgs> for ReconstrunctionRunnerPathCollection {
             // Make sure that we have a placeholder '{}' in the filename part of the sequence pattern
             if input_filename.contains("{}") {
                 let input_stem = args.input_file.file_stem().unwrap().to_string_lossy();
+                // Currently, only VTK files are supported for output
                 let output_filename = format!(
                     "{}.vtk",
                     input_stem.replace("{}", &format!("{}_{{}}", output_suffix))
@@ -495,7 +520,7 @@ impl TryFrom<&CommandlineArgs> for ReconstrunctionRunnerPathCollection {
     }
 }
 
-/// All paths that are relevant for running a single surface reconstruction task
+/// All file paths that are relevant for running a single surface reconstruction task
 #[derive(Clone, Debug)]
 pub(crate) struct ReconstructionRunnerPaths {
     pub input_file: PathBuf,
@@ -571,7 +596,7 @@ fn initialize_logging(verbosity: VerbosityLevel, quiet_mode: bool) -> Result<(),
 
     if let Some(filter_level) = unknown_log_filter_level {
         error!(
-            "Unkown log filter level '{}' defined in 'RUST_LOG' env variable, using INFO instead.",
+            "Unknown log filter level '{}' defined in 'RUST_LOG' env variable, using INFO instead.",
             filter_level
         );
     }
@@ -579,6 +604,7 @@ fn initialize_logging(verbosity: VerbosityLevel, quiet_mode: bool) -> Result<(),
     Ok(())
 }
 
+/// Prints program name, version etc. and command line arguments to log
 fn log_program_info() {
     info!(
         "{} v{} ({})",

@@ -38,7 +38,7 @@ pub(crate) fn entry_point_generic<I: Index, R: Real>(
 ) -> Result<(), anyhow::Error> {
     profile!("surface reconstruction cli");
 
-    let particle_positions = io::load_particle_positions(&paths.input_file, &io_params.input)
+    let particle_positions = io::read_particle_positions(&paths.input_file, &io_params.input)
         .with_context(|| {
             format!(
                 "Failed to load particle positions from file '{}'",

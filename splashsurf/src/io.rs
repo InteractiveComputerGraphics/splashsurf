@@ -41,19 +41,22 @@ impl Default for OutputFormatParameters {
 }
 
 /// Loads particles positions form the given file path, automatically detects the file format
-pub fn load_particle_positions<R: Real, P: AsRef<Path>>(
+pub fn read_particle_positions<R: Real, P: AsRef<Path>>(
     input_file: P,
     _format_params: &InputFormatParameters,
 ) -> Result<Vec<Vector3<R>>, anyhow::Error> {
     let input_file = input_file.as_ref();
-    info!("Loading dataset from \"{}\"...", input_file.display());
+    info!(
+        "Reading particle dataset from \"{}\"...",
+        input_file.display()
+    );
 
     let particle_positions = if let Some(extension) = input_file.extension() {
         profile!("loading particle positions");
 
         let extension = extension
             .to_str()
-            .ok_or(anyhow!("Invalid extension of particle file"))?;
+            .ok_or(anyhow!("Invalid extension of input file"))?;
 
         match extension.to_lowercase().as_str() {
             "vtk" => vtk_format::particles_from_vtk(&input_file)?,
@@ -62,23 +65,62 @@ pub fn load_particle_positions<R: Real, P: AsRef<Path>>(
             "bgeo" => bgeo_format::particles_from_bgeo(&input_file)?,
             _ => {
                 return Err(anyhow!(
-                    "Unsupported file format extension \"{}\" of particle file",
+                    "Unsupported file format extension \"{}\" for reading particles",
                     extension
                 ));
             }
         }
     } else {
         return Err(anyhow!(
-            "Unable to detect file format of particle file (file name has to end with supported extension)",
+            "Unable to detect file format of particle input file (file name has to end with supported extension)",
         ));
     };
 
     info!(
-        "Loaded dataset with {} particle positions.",
+        "Successfully read dataset with {} particle positions.",
         particle_positions.len()
     );
 
     Ok(particle_positions)
+}
+
+/// Stores particles positions in the given file path, automatically detects the file format
+pub fn write_particle_positions<R: Real, P: AsRef<Path>>(
+    particles: &[Vector3<R>],
+    output_file: P,
+    _format_params: &OutputFormatParameters,
+) -> Result<(), anyhow::Error> {
+    let output_file = output_file.as_ref();
+    info!(
+        "Writing {} particles to \"{}\"...",
+        particles.len(),
+        output_file.display()
+    );
+
+    if let Some(extension) = output_file.extension() {
+        profile!("writing particle positions");
+
+        let extension = extension
+            .to_str()
+            .ok_or(anyhow!("Invalid extension of output file"))?;
+
+        match extension.to_lowercase().as_str() {
+            "vtk" => vtk_format::particles_to_vtk(particles, &output_file)?,
+            _ => {
+                return Err(anyhow!(
+                    "Unsupported file format extension \"{}\" for writing particles",
+                    extension
+                ));
+            }
+        }
+    } else {
+        return Err(anyhow!(
+            "Unable to detect file format of particle output file (file name has to end with supported extension)",
+        ));
+    };
+
+    info!("Successfully wrote particles to file.");
+    Ok(())
 }
 
 #[allow(dead_code)]
