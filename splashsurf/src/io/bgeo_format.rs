@@ -11,7 +11,7 @@ use splashsurf_lib::Real;
 
 use parser::bgeo_parser;
 
-// TODO: Find out why there is a 1.0 float value between position vector and id int in Splishsplash output
+// TODO: Find out why there is a 1.0 float value between position vector and id int in splishsplash output
 // TODO: Better error messages, skip nom errors
 
 pub fn particles_from_bgeo<R: Real, P: AsRef<Path>>(
@@ -21,8 +21,8 @@ pub fn particles_from_bgeo<R: Real, P: AsRef<Path>>(
     let position_storage = {
         let mut bgeo_file = load_bgeo_file(bgeo_file).context("Error while loading BGEO file")?;
 
-        println!("header: {:?}", bgeo_file.header);
-        println!("attrs: {:?}", bgeo_file.point_attributes);
+        //println!("header: {:?}", bgeo_file.header);
+        //println!("attrs: {:?}", bgeo_file.point_attributes);
 
         let storage = bgeo_file
             .points
