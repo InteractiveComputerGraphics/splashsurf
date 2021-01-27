@@ -1,11 +1,17 @@
 mod convert;
 mod io;
 mod reconstruction;
+#[macro_use]
+mod allocator;
 
+use crate::allocator::GetPeakAllocatedMemory;
 use anyhow::{anyhow, Context};
 use log::{error, info};
 use std::env;
 use structopt::StructOpt;
+
+// Register allocator to track memory usage, might decrease performance if enabled
+register_counting_allocator!(GLOBAL_ALLOCATOR, enable = false);
 
 // TODO: Use different logging approach when processing multiple files in parallel
 // TODO: Add start and end index for input file sequences
@@ -73,10 +79,20 @@ fn run_splashsurf() -> Result<(), anyhow::Error> {
     }
 
     // Write coarse_prof stats using log::info
+    info!("Timings:");
     coarse_prof_write_string()?
         .split("\n")
         .filter(|l| l.len() > 0)
         .for_each(|l| info!("{}", l));
+
+    // Print memory stats if available
+    if let Some(peak_allocation_bytes) = GLOBAL_ALLOCATOR.get_peak_allocated_memory() {
+        info!(
+            "Peak memory usage: {} bytes ({:.2}MB)",
+            peak_allocation_bytes,
+            peak_allocation_bytes as f64 * 1e-6
+        );
+    }
 
     Ok(())
 }
