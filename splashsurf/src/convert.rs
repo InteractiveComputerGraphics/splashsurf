@@ -8,8 +8,9 @@ use structopt::StructOpt;
 
 // TODO: Support double input/output
 
+/// Command line arguments for the `convert` subcommand
 #[derive(Clone, Debug, StructOpt)]
-pub(crate) struct ConvertSubcommandArgs {
+pub struct ConvertSubcommandArgs {
     /// Path to the input file with particles to read
     #[structopt(short = "-i", parse(from_os_str))]
     input_file: PathBuf,
@@ -22,7 +23,7 @@ pub(crate) struct ConvertSubcommandArgs {
 }
 
 /// Executes the `convert` subcommand
-pub(crate) fn convert_subcommand(cmd_args: &ConvertSubcommandArgs) -> Result<(), anyhow::Error> {
+pub fn convert_subcommand(cmd_args: &ConvertSubcommandArgs) -> Result<(), anyhow::Error> {
     profile!("particle file conversion cli");
 
     let io_params = io::FormatParameters::default();
