@@ -393,7 +393,7 @@ pub(crate) fn reconstruct_surface_patch<I: Index, R: Real>(
     );
 
     // Run marching cubes and get boundary data
-    marching_cubes::triangulate_density_map_with_stitching_data::<I, R>(
+    marching_cubes::triangulate_density_map_to_surface_patch::<I, R>(
         subdomain_grid,
         &density_map,
         parameters.iso_surface_threshold,
