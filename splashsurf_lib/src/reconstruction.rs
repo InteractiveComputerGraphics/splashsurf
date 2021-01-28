@@ -39,7 +39,7 @@ impl<I: Index, R: Real> SurfaceReconstructionOctreeVisitor<I, R> {
                 &grid,
                 global_particle_positions,
                 decomposition_parameters.subdivision_criterion.clone(),
-                parameters.kernel_radius * margin_factor,
+                parameters.compact_support_radius * margin_factor,
                 parameters.enable_multi_threading,
             )
         } else {
@@ -307,7 +307,7 @@ pub(crate) fn reconstruct_single_surface_append<'a, I: Index, R: Real>(
     neighborhood_search::search_inplace::<I, R>(
         &grid.aabb(),
         particle_positions,
-        parameters.kernel_radius,
+        parameters.compact_support_radius,
         parameters.enable_multi_threading,
         &mut workspace.particle_neighbor_lists,
     );
@@ -316,7 +316,7 @@ pub(crate) fn reconstruct_single_surface_append<'a, I: Index, R: Real>(
     density_map::compute_particle_densities_inplace::<I, R>(
         particle_positions,
         workspace.particle_neighbor_lists.as_slice(),
-        parameters.kernel_radius,
+        parameters.compact_support_radius,
         particle_rest_mass,
         parameters.enable_multi_threading,
         &mut workspace.particle_densities,
@@ -332,7 +332,7 @@ pub(crate) fn reconstruct_single_surface_append<'a, I: Index, R: Real>(
         workspace.particle_densities.as_slice(),
         None,
         particle_rest_mass,
-        parameters.kernel_radius,
+        parameters.compact_support_radius,
         parameters.cube_size,
         parameters.enable_multi_threading,
         &mut density_map,
@@ -363,7 +363,7 @@ pub(crate) fn reconstruct_surface_patch<I: Index, R: Real>(
     neighborhood_search::search_inplace::<I, R>(
         &subdomain_grid.global_grid().aabb(),
         particle_positions,
-        parameters.kernel_radius,
+        parameters.compact_support_radius,
         parameters.enable_multi_threading,
         &mut workspace.particle_neighbor_lists,
     );
@@ -372,7 +372,7 @@ pub(crate) fn reconstruct_surface_patch<I: Index, R: Real>(
     density_map::compute_particle_densities_inplace::<I, R>(
         particle_positions,
         workspace.particle_neighbor_lists.as_slice(),
-        parameters.kernel_radius,
+        parameters.compact_support_radius,
         particle_rest_mass,
         parameters.enable_multi_threading,
         &mut workspace.particle_densities,
@@ -388,7 +388,7 @@ pub(crate) fn reconstruct_surface_patch<I: Index, R: Real>(
         workspace.particle_densities.as_slice(),
         None,
         particle_rest_mass,
-        parameters.kernel_radius,
+        parameters.compact_support_radius,
         parameters.cube_size,
         parameters.enable_multi_threading,
         &mut density_map,

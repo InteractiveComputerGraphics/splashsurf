@@ -12,13 +12,13 @@ pub fn subdivide_recursively_benchmark(c: &mut Criterion) {
     let particles_per_cell = 20000;
 
     let particle_radius = 0.011;
-    let kernel_radius = 4.0 * particle_radius;
+    let compact_support_radius = 4.0 * particle_radius;
 
     let cube_size = 1.5 * particle_radius;
     let grid: &UniformGrid<i64, _> = &grid_for_reconstruction(
         particle_positions.as_slice(),
         particle_radius,
-        kernel_radius,
+        compact_support_radius,
         cube_size,
         None,
         true,
@@ -40,7 +40,7 @@ pub fn subdivide_recursively_benchmark(c: &mut Criterion) {
                     grid,
                     particle_positions.as_slice(),
                     SubdivisionCriterion::MaxParticleCount(particles_per_cell),
-                    kernel_radius,
+                    compact_support_radius,
                 )
             },
             BatchSize::LargeInput,

@@ -33,17 +33,17 @@ pub struct ReconstructSubcommandArgs {
     /// The rest density of the fluid
     #[structopt(long, default_value = "1000.0")]
     rest_density: f64,
-    /// The kernel radius (more specifically its compact support radius) used for building the density map in multiplies of the particle radius
+    /// The smoothing length radius used for the SPH kernel, the kernel compact support radius will be twice the smoothing length (in multiplies of the particle radius)
     #[structopt(long)]
-    kernel_radius: f64,
+    smoothing_length: f64,
     /// If a particle has no neighbors in this radius (in multiplies of the particle radius) it is considered as a free particle
     #[structopt(long)]
     splash_detection_radius: Option<f64>,
     /// The marching cubes grid size in multiplies of the particle radius
     #[structopt(long)]
     cube_size: f64,
-    /// The iso-surface threshold for the density, i.e. value of the reconstructed density that indicates the fluid surface
-    #[structopt(long)]
+    /// The iso-surface threshold for the density, i.e. value of the reconstructed density that indicates the fluid surface (in multiplies of the rest density)
+    #[structopt(long, default_value = "0.6")]
     surface_threshold: f64,
     /// Whether to enable the use of double precision for all computations (disabled by default)
     #[structopt(short = "-d")]
@@ -73,7 +73,7 @@ pub struct ReconstructSubcommandArgs {
     /// The maximum number of particles for leaf nodes of the octree, default is to compute it based on number of threads and particles
     #[structopt(long)]
     octree_max_particles: Option<usize>,
-    /// Safety factor applied to the kernel radius when it's used as a margin to collect ghost particles in the leaf nodes
+    /// Safety factor applied to the kernel compact support radius when it's used as a margin to collect ghost particles in the leaf nodes
     #[structopt(long)]
     octree_ghost_margin_factor: Option<f64>,
     /// Optional filename for writing the point cloud representation of the intermediate density map to disk
@@ -176,7 +176,7 @@ mod arguments {
             };
 
             // Scale kernel radius and cube size by particle radius
-            let kernel_radius = args.particle_radius * args.kernel_radius;
+            let compact_support_radius = args.particle_radius * 2.0 * args.smoothing_length;
             let splash_detection_radius = args
                 .splash_detection_radius
                 .map(|r| args.particle_radius * r);
@@ -204,7 +204,7 @@ mod arguments {
             let params = splashsurf_lib::Parameters {
                 particle_radius: args.particle_radius,
                 rest_density: args.rest_density,
-                kernel_radius,
+                compact_support_radius,
                 splash_detection_radius,
                 cube_size,
                 iso_surface_threshold: args.surface_threshold,

@@ -17,17 +17,17 @@ enum Strategy {
 
 fn params(
     particle_radius: f32,
-    kernel_radius: f32,
+    compact_support_radius: f32,
     cube_size: f32,
     strategy: Strategy,
 ) -> Parameters<f32> {
-    let kernel_radius = particle_radius * kernel_radius;
+    let compact_support_radius = particle_radius * compact_support_radius;
     let cube_size = particle_radius * cube_size;
 
     let mut parameters = Parameters {
         particle_radius,
         rest_density: 1000.0,
-        kernel_radius,
+        compact_support_radius,
         splash_detection_radius: None,
         cube_size,
         iso_surface_threshold: 0.6,

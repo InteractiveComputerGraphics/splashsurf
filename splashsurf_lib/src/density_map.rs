@@ -38,7 +38,7 @@ use thread_local::ThreadLocal;
 pub fn compute_particle_densities<I: Index, R: Real>(
     particle_positions: &[Vector3<R>],
     particle_neighbor_lists: &[Vec<usize>],
-    kernel_radius: R,
+    compact_support_radius: R,
     particle_rest_mass: R,
     enable_multi_threading: bool,
 ) -> Vec<R> {
@@ -47,7 +47,7 @@ pub fn compute_particle_densities<I: Index, R: Real>(
         parallel_compute_particle_densities::<I, R>(
             particle_positions,
             particle_neighbor_lists,
-            kernel_radius,
+            compact_support_radius,
             particle_rest_mass,
             &mut densities,
         )
@@ -55,7 +55,7 @@ pub fn compute_particle_densities<I: Index, R: Real>(
         sequential_compute_particle_densities::<I, R>(
             particle_positions,
             particle_neighbor_lists,
-            kernel_radius,
+            compact_support_radius,
             particle_rest_mass,
             &mut densities,
         )
@@ -68,7 +68,7 @@ pub fn compute_particle_densities<I: Index, R: Real>(
 pub fn compute_particle_densities_inplace<I: Index, R: Real>(
     particle_positions: &[Vector3<R>],
     particle_neighbor_lists: &[Vec<usize>],
-    kernel_radius: R,
+    compact_support_radius: R,
     particle_rest_mass: R,
     enable_multi_threading: bool,
     densities: &mut Vec<R>,
@@ -77,7 +77,7 @@ pub fn compute_particle_densities_inplace<I: Index, R: Real>(
         parallel_compute_particle_densities::<I, R>(
             particle_positions,
             particle_neighbor_lists,
-            kernel_radius,
+            compact_support_radius,
             particle_rest_mass,
             densities,
         )
@@ -85,7 +85,7 @@ pub fn compute_particle_densities_inplace<I: Index, R: Real>(
         sequential_compute_particle_densities::<I, R>(
             particle_positions,
             particle_neighbor_lists,
-            kernel_radius,
+            compact_support_radius,
             particle_rest_mass,
             densities,
         )
@@ -102,7 +102,7 @@ fn init_density_storage<R: Real>(densities: &mut Vec<R>, new_len: usize) {
 pub fn sequential_compute_particle_densities<I: Index, R: Real>(
     particle_positions: &[Vector3<R>],
     particle_neighbor_lists: &[Vec<usize>],
-    kernel_radius: R,
+    compact_support_radius: R,
     particle_rest_mass: R,
     particle_densities: &mut Vec<R>,
 ) {
@@ -111,7 +111,7 @@ pub fn sequential_compute_particle_densities<I: Index, R: Real>(
     init_density_storage(particle_densities, particle_positions.len());
 
     // Pre-compute the kernel which can be queried using squared distances
-    let kernel = DiscreteSquaredDistanceCubicKernel::new(1000, kernel_radius);
+    let kernel = DiscreteSquaredDistanceCubicKernel::new(1000, compact_support_radius);
 
     for (i, (particle_i_position, particle_i_neighbors)) in particle_positions
         .iter()
@@ -133,7 +133,7 @@ pub fn sequential_compute_particle_densities<I: Index, R: Real>(
 pub fn parallel_compute_particle_densities<I: Index, R: Real>(
     particle_positions: &[Vector3<R>],
     particle_neighbor_lists: &[Vec<usize>],
-    kernel_radius: R,
+    compact_support_radius: R,
     particle_rest_mass: R,
     particle_densities: &mut Vec<R>,
 ) {
@@ -142,7 +142,7 @@ pub fn parallel_compute_particle_densities<I: Index, R: Real>(
     init_density_storage(particle_densities, particle_positions.len());
 
     // Pre-compute the kernel which can be queried using squared distances
-    let kernel = DiscreteSquaredDistanceCubicKernel::new(1000, kernel_radius);
+    let kernel = DiscreteSquaredDistanceCubicKernel::new(1000, compact_support_radius);
 
     particle_positions
         .par_iter()
@@ -241,7 +241,7 @@ pub fn generate_sparse_density_map<I: Index, R: Real>(
     particle_densities: &[R],
     active_particles: Option<&[usize]>,
     particle_rest_mass: R,
-    kernel_radius: R,
+    compact_support_radius: R,
     cube_size: R,
     allow_threading: bool,
     density_map: &mut DensityMap<I, R>,
@@ -265,7 +265,7 @@ pub fn generate_sparse_density_map<I: Index, R: Real>(
                 particle_densities,
                 active_particles,
                 particle_rest_mass,
-                kernel_radius,
+                compact_support_radius,
                 cube_size,
                 density_map,
             );
@@ -278,7 +278,7 @@ pub fn generate_sparse_density_map<I: Index, R: Real>(
                 particle_densities,
                 active_particles,
                 particle_rest_mass,
-                kernel_radius,
+                compact_support_radius,
                 cube_size,
             );
         } else {
@@ -288,7 +288,7 @@ pub fn generate_sparse_density_map<I: Index, R: Real>(
                 particle_densities,
                 active_particles,
                 particle_rest_mass,
-                kernel_radius,
+                compact_support_radius,
                 cube_size,
             );
         }
@@ -308,7 +308,7 @@ pub fn sequential_generate_sparse_density_map<I: Index, R: Real>(
     particle_densities: &[R],
     active_particles: Option<&[usize]>,
     particle_rest_mass: R,
-    kernel_radius: R,
+    compact_support_radius: R,
     cube_size: R,
 ) -> DensityMap<I, R> {
     profile!("sequential_generate_sparse_density_map");
@@ -316,7 +316,7 @@ pub fn sequential_generate_sparse_density_map<I: Index, R: Real>(
     let mut sparse_densities = new_map();
 
     if let Some(processor) =
-        SparseDensityMapGenerator::new(grid, kernel_radius, cube_size, particle_rest_mass)
+        SparseDensityMapGenerator::new(grid, compact_support_radius, cube_size, particle_rest_mass)
     {
         let process_particle = |particle_data: (&Vector3<R>, R)| {
             let (particle, particle_density) = particle_data;
@@ -352,7 +352,7 @@ pub fn sequential_generate_sparse_density_map_subdomain<I: Index, R: Real>(
     particle_densities: &[R],
     active_particles: Option<&[usize]>,
     particle_rest_mass: R,
-    kernel_radius: R,
+    compact_support_radius: R,
     cube_size: R,
     density_map: &mut DensityMap<I, R>,
 ) {
@@ -363,7 +363,7 @@ pub fn sequential_generate_sparse_density_map_subdomain<I: Index, R: Real>(
 
     if let Some(processor) = SparseDensityMapGenerator::new(
         &subdomain.global_grid(),
-        kernel_radius,
+        compact_support_radius,
         cube_size,
         particle_rest_mass,
     ) {
@@ -399,7 +399,7 @@ pub fn parallel_generate_sparse_density_map<I: Index, R: Real>(
     particle_densities: &[R],
     active_particles: Option<&[usize]>,
     particle_rest_mass: R,
-    kernel_radius: R,
+    compact_support_radius: R,
     cube_size: R,
 ) -> DensityMap<I, R> {
     profile!("parallel_generate_sparse_density_map");
@@ -409,7 +409,7 @@ pub fn parallel_generate_sparse_density_map<I: Index, R: Real>(
 
     // Generate thread local density maps
     if let Some(processor) =
-        SparseDensityMapGenerator::new(grid, kernel_radius, cube_size, particle_rest_mass)
+        SparseDensityMapGenerator::new(grid, compact_support_radius, cube_size, particle_rest_mass)
     {
         profile!("generate thread local maps");
 
@@ -524,11 +524,11 @@ pub(crate) struct GridKernelExtents<I: Index, R: Real> {
 }
 
 pub(crate) fn compute_kernel_evaluation_radius<I: Index, R: Real>(
-    kernel_radius: R,
+    compact_support_radius: R,
     cube_size: R,
 ) -> GridKernelExtents<I, R> {
     // The number of cells in each direction from a particle that can be affected by its compact support
-    let half_supported_cells_real = (kernel_radius / cube_size).ceil();
+    let half_supported_cells_real = (compact_support_radius / cube_size).ceil();
     // Convert to index type for cell and point indexing
     let half_supported_cells: I = half_supported_cells_real.to_index_unchecked();
     // The total number of points per dimension that can be affected by a particle's compact support
@@ -548,7 +548,7 @@ pub(crate) fn compute_kernel_evaluation_radius<I: Index, R: Real>(
 impl<I: Index, R: Real> SparseDensityMapGenerator<I, R> {
     fn new(
         grid: &UniformGrid<I, R>,
-        kernel_radius: R,
+        compact_support_radius: R,
         cube_size: R,
         particle_rest_mass: R,
     ) -> Option<Self> {
@@ -556,11 +556,11 @@ impl<I: Index, R: Real> SparseDensityMapGenerator<I, R> {
             half_supported_cells,
             supported_points,
             kernel_evaluation_radius,
-        } = compute_kernel_evaluation_radius(kernel_radius, cube_size);
+        } = compute_kernel_evaluation_radius(compact_support_radius, cube_size);
 
         // Pre-compute the kernel which can be queried using squared distances
         let kernel_evaluation_radius_sq = kernel_evaluation_radius * kernel_evaluation_radius;
-        let kernel = DiscreteSquaredDistanceCubicKernel::new(1000, kernel_radius);
+        let kernel = DiscreteSquaredDistanceCubicKernel::new(1000, compact_support_radius);
 
         // Shrink the allowed domain for particles by the kernel evaluation radius. This ensures that all cells/points
         // that are affected by a particle are actually part of the domain/grid, so it does not have to be checked in the loops below.

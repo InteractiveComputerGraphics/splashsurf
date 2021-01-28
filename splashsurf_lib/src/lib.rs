@@ -142,7 +142,7 @@ pub struct Parameters<R: Real> {
     /// Rest density of the fluid
     pub rest_density: R,
     /// Compact support radius of the kernel, i.e. distance from the particle where kernel reaches zero (in distance units, not relative to particle radius)
-    pub kernel_radius: R,
+    pub compact_support_radius: R,
     /// Particles without neighbors within the splash detection radius are considered "splash" or "free particles".
     /// They are filtered out and processed separately. Currently they are only skipped during the surface reconstruction.
     pub splash_detection_radius: Option<R>,
@@ -166,7 +166,7 @@ impl<R: Real> Parameters<R> {
         Some(Parameters {
             particle_radius: self.particle_radius.try_convert()?,
             rest_density: self.rest_density.try_convert()?,
-            kernel_radius: self.kernel_radius.try_convert()?,
+            compact_support_radius: self.compact_support_radius.try_convert()?,
             splash_detection_radius: map_option!(
                 &self.splash_detection_radius,
                 r => r.try_convert()?
@@ -300,7 +300,7 @@ pub fn reconstruct_surface_inplace<'a, I: Index, R: Real>(
     output_surface.grid = grid_for_reconstruction(
         particle_positions,
         parameters.particle_radius,
-        parameters.kernel_radius,
+        parameters.compact_support_radius,
         parameters.cube_size,
         parameters.domain_aabb.as_ref(),
         parameters.enable_multi_threading,
@@ -363,7 +363,7 @@ pub fn reconstruct_surface_inplace<'a, I: Index, R: Real>(
 pub fn grid_for_reconstruction<I: Index, R: Real>(
     particle_positions: &[Vector3<R>],
     particle_radius: R,
-    kernel_radius: R,
+    compact_support_radius: R,
     cube_size: R,
     domain_aabb: Option<&AxisAlignedBoundingBox3d<R>>,
     enable_multi_threading: bool,
@@ -390,7 +390,7 @@ pub fn grid_for_reconstruction<I: Index, R: Real>(
 
         // Ensure that we have enough margin around the particles such that the every particle's kernel support is completely in the domain
         let kernel_margin =
-            density_map::compute_kernel_evaluation_radius::<I, R>(kernel_radius, cube_size)
+            density_map::compute_kernel_evaluation_radius::<I, R>(compact_support_radius, cube_size)
                 .kernel_evaluation_radius;
         domain_aabb.grow_uniformly(kernel_margin);
 

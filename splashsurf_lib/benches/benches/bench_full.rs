@@ -17,13 +17,13 @@ pub fn surface_reconstruction_canyon(c: &mut Criterion) {
         &particles_from_xyz("../data/canyon_13353401_particles.xyz").unwrap();
 
     let particle_radius = 0.011;
-    let kernel_radius = 4.0 * particle_radius;
+    let compact_support_radius = 4.0 * particle_radius;
     let cube_size = 1.5 * particle_radius;
 
     let parameters = Parameters {
         particle_radius,
         rest_density: 1000.0,
-        kernel_radius,
+        compact_support_radius: compact_support_radius,
         splash_detection_radius: None,
         cube_size,
         iso_surface_threshold: 0.6,
@@ -89,13 +89,13 @@ pub fn surface_reconstruction_dam_break(c: &mut Criterion) {
         &particles_from_vtk("../data/dam_break_frame_23_24389_particles.vtk").unwrap();
 
     let particle_radius = 0.025;
-    let kernel_radius = 4.0 * particle_radius;
+    let compact_support_radius = 4.0 * particle_radius;
     let cube_size = 0.3 * particle_radius;
 
     let parameters = Parameters {
         particle_radius,
         rest_density: 1000.0,
-        kernel_radius,
+        compact_support_radius: compact_support_radius,
         splash_detection_radius: None,
         cube_size,
         iso_surface_threshold: 0.6,
@@ -167,13 +167,13 @@ pub fn surface_reconstruction_double_dam_break(c: &mut Criterion) {
         &particles_from_vtk("../data/double_dam_break_frame_26_4732_particles.vtk").unwrap();
 
     let particle_radius = 0.025;
-    let kernel_radius = 4.0 * particle_radius;
+    let compact_support_radius = 4.0 * particle_radius;
     let cube_size = 0.3 * particle_radius;
 
     let parameters = Parameters {
         particle_radius,
         rest_density: 1000.0,
-        kernel_radius,
+        compact_support_radius: compact_support_radius,
         splash_detection_radius: None,
         cube_size,
         iso_surface_threshold: 0.6,
@@ -245,13 +245,13 @@ pub fn surface_reconstruction_double_dam_break_inplace(c: &mut Criterion) {
         &particles_from_vtk("../data/double_dam_break_frame_26_4732_particles.vtk").unwrap();
 
     let particle_radius = 0.025;
-    let kernel_radius = 4.0 * particle_radius;
+    let compact_support_radius = 4.0 * particle_radius;
     let cube_size = 0.3 * particle_radius;
 
     let parameters = Parameters {
         particle_radius,
         rest_density: 1000.0,
-        kernel_radius,
+        compact_support_radius: compact_support_radius,
         splash_detection_radius: None,
         cube_size,
         iso_surface_threshold: 0.6,
