@@ -11,7 +11,6 @@ pub struct CountingAllocator<A: GlobalAlloc> {
 // TODO: Is Ordering::AcqRel ok to use?
 
 unsafe impl<A: GlobalAlloc> GlobalAlloc for CountingAllocator<A> {
-    #[inline(always)]
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         let ret = self.allocator.alloc(layout);
         if !ret.is_null() {
@@ -25,7 +24,6 @@ unsafe impl<A: GlobalAlloc> GlobalAlloc for CountingAllocator<A> {
         return ret;
     }
 
-    #[inline(always)]
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
         self.allocator.dealloc(ptr, layout);
         self.current_allocation
