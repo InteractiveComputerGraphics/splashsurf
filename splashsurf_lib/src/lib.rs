@@ -16,7 +16,7 @@ pub use vtkio;
 
 pub use aabb::{AxisAlignedBoundingBox, AxisAlignedBoundingBox2d, AxisAlignedBoundingBox3d};
 pub use density_map::DensityMap;
-pub use numeric_types::{Index, Real, ThreadSafe};
+pub use traits::{Index, Real, ThreadSafe};
 pub use octree::SubdivisionCriterion;
 pub use uniform_grid::{GridConstructionError, UniformGrid};
 
