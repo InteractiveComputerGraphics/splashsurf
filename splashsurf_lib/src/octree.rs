@@ -616,7 +616,7 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
             octant.set_direction(stitching_axis, Direction::Positive);
             let positive_side = children_map.remove(&octant).expect("Child node missing!");
 
-            let stitched_patch = marching_cubes::stitch_meshes(
+            let stitched_patch = marching_cubes::stitch_surface_patches(
                 iso_surface_threshold,
                 stitching_axis,
                 negative_side,

@@ -5,11 +5,27 @@
 /// Re-export the version of coarse_prof used by this crate, if profiling is enabled
 #[cfg(feature = "profiling")]
 pub use coarse_prof;
+use log::info;
 /// Re-export the version of nalgebra used by this crate
 pub use nalgebra;
+use nalgebra::Vector3;
+use thiserror::Error as ThisError;
 /// Re-export the version of vtkio used by this crate, if vtk support is enabled
 #[cfg(feature = "vtk_extras")]
 pub use vtkio;
+
+pub use aabb::{AxisAlignedBoundingBox, AxisAlignedBoundingBox2d, AxisAlignedBoundingBox3d};
+pub use density_map::DensityMap;
+pub use numeric_types::{Index, Real, ThreadSafe};
+pub use octree::SubdivisionCriterion;
+pub use uniform_grid::{GridConstructionError, UniformGrid};
+
+use crate::mesh::TriMesh3d;
+use crate::octree::Octree;
+use crate::reconstruction::{
+    reconstruct_single_surface_append, SurfaceReconstructionOctreeVisitor,
+};
+use crate::workspace::ReconstructionWorkspace;
 
 #[cfg(feature = "profiling")]
 /// Invokes coarse_prof::profile! with the given expression
@@ -36,7 +52,6 @@ pub mod generic_tree;
 pub mod kernel;
 /// Triangulation of density maps using marching cubes
 pub mod marching_cubes;
-pub mod marching_cubes_lut;
 /// Basic mesh types used by the library and implementation of VTK export
 pub mod mesh;
 /// Simple neighborhood search based on spatial hashing
@@ -55,29 +70,12 @@ mod utils;
 /// Workspace for reusing allocated memory between multiple reconstructions
 pub(crate) mod workspace;
 
-use log::info;
-use nalgebra::Vector3;
-use thiserror::Error as ThisError;
-
-use crate::mesh::TriMesh3d;
-use crate::octree::Octree;
-use crate::reconstruction::{
-    reconstruct_single_surface_append, SurfaceReconstructionOctreeVisitor,
-};
-use crate::workspace::ReconstructionWorkspace;
-pub use aabb::{AxisAlignedBoundingBox, AxisAlignedBoundingBox2d, AxisAlignedBoundingBox3d};
-pub use density_map::DensityMap;
-pub use numeric_types::{Index, Real, ThreadSafe};
-pub use octree::SubdivisionCriterion;
-pub use uniform_grid::{GridConstructionError, UniformGrid};
-
 // TODO: Add documentation of feature flags
 // TODO: Feature flag for multi threading
 // TODO: Feature flag to disable (debug level) logging?
 
 // TODO: Remove anyhow/thiserror from lib?
 // TODO: Write more unit tests (e.g. AABB, UniformGrid, neighborhood search)
-// TODO: Write some integration tests
 // TODO: Test kernels with property based testing?
 // TODO: Add free particles back again after triangulation as sphere meshes if they were removed
 // TODO: Detect free particles by just comparing with the SPH density of a free particle? (no need for extra neighborhood search?)
