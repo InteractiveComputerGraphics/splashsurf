@@ -5,7 +5,7 @@ use crate::marching_cubes::triangulation::{
 use crate::marching_cubes::{CellData, MarchingCubesInput};
 use crate::mesh::TriMesh3d;
 use crate::topology::{Axis, DirectedAxis, DirectedAxisArray, Direction};
-use crate::uniform_grid::{GridBoundaryFaceFlags, OwnedSubdomainGrid, Subdomain};
+use crate::uniform_grid::{GridBoundaryFaceFlags, OwningSubdomainGrid, Subdomain};
 use crate::{Index, MapType, Real, UniformGrid};
 use log::{debug, trace};
 
@@ -217,7 +217,7 @@ pub(crate) struct SurfacePatch<I: Index, R: Real> {
     /// The local surface mesh of this side
     pub(crate) mesh: TriMesh3d<R>,
     /// The subdomain of this local mesh
-    pub(crate) subdomain: OwnedSubdomainGrid<I, R>,
+    pub(crate) subdomain: OwningSubdomainGrid<I, R>,
     /// All additional data required for stitching
     pub(crate) data: DirectedAxisArray<BoundaryData<I, R>>,
     /// The maximum number of times parts of this patch where stitched together
@@ -226,7 +226,7 @@ pub(crate) struct SurfacePatch<I: Index, R: Real> {
 
 impl<I: Index, R: Real> SurfacePatch<I, R> {
     /// Creates an empty surface patch for the given subdomain
-    pub(crate) fn new_empty(subdomain: OwnedSubdomainGrid<I, R>) -> Self {
+    pub(crate) fn new_empty(subdomain: OwningSubdomainGrid<I, R>) -> Self {
         Self {
             mesh: Default::default(),
             subdomain,
@@ -280,8 +280,8 @@ impl<I: Index, R: Real> BoundaryData<I, R> {
     /// Maps this boundary data to another domain by converting all indices to the new subdomain
     fn map_to_domain(
         mut self,
-        target_domain: &OwnedSubdomainGrid<I, R>,
-        source_domain: &OwnedSubdomainGrid<I, R>,
+        target_domain: &OwningSubdomainGrid<I, R>,
+        source_domain: &OwningSubdomainGrid<I, R>,
         source_offset: Option<usize>,
     ) -> Self {
         assert_eq!(
@@ -336,9 +336,9 @@ impl<I: Index, R: Real> BoundaryData<I, R> {
     /// Merges another boundary data object into this object
     fn merge_with(
         mut self,
-        target_domain: &OwnedSubdomainGrid<I, R>,
+        target_domain: &OwningSubdomainGrid<I, R>,
         mut other: BoundaryData<I, R>,
-        other_domain: &OwnedSubdomainGrid<I, R>,
+        other_domain: &OwningSubdomainGrid<I, R>,
         other_vertex_offset: Option<usize>,
     ) -> Self {
         assert_eq!(
@@ -420,11 +420,11 @@ impl<I: Index, R: Real> BoundaryData<I, R> {
 
 /// Merges boundary such that only density values and cell data in the result subdomain are part of the result
 fn merge_boundary_data<I: Index, R: Real>(
-    target_subdomain: &OwnedSubdomainGrid<I, R>,
-    negative_subdomain: &OwnedSubdomainGrid<I, R>,
+    target_subdomain: &OwningSubdomainGrid<I, R>,
+    negative_subdomain: &OwningSubdomainGrid<I, R>,
     negative_data: BoundaryData<I, R>,
     negative_vertex_offset: Option<usize>,
-    positive_subdomain: &OwnedSubdomainGrid<I, R>,
+    positive_subdomain: &OwningSubdomainGrid<I, R>,
     positive_data: BoundaryData<I, R>,
     positive_vertex_offset: Option<usize>,
 ) -> BoundaryData<I, R> {
@@ -466,13 +466,13 @@ fn merge_boundary_data<I: Index, R: Real>(
     merged_boundary_data
 }
 
-/// Computes the [SubdomainGrid] for stitching region between the two sides that has to be triangulated
+/// Computes the [OwningSubdomainGrid] for stitching region between the two sides that has to be triangulated
 fn compute_stitching_domain<I: Index, R: Real>(
     stitching_axis: Axis,
     global_grid: &UniformGrid<I, R>,
-    negative_subdomain: &OwnedSubdomainGrid<I, R>,
-    positive_subdomain: &OwnedSubdomainGrid<I, R>,
-) -> OwnedSubdomainGrid<I, R> {
+    negative_subdomain: &OwningSubdomainGrid<I, R>,
+    positive_subdomain: &OwningSubdomainGrid<I, R>,
+) -> OwningSubdomainGrid<I, R> {
     // Ensure that global grids are equivalent
     assert_eq!(
         negative_subdomain.global_grid(),
@@ -554,16 +554,16 @@ fn compute_stitching_domain<I: Index, R: Real>(
         n_cells_per_dim
     );
 
-    OwnedSubdomainGrid::new(global_grid.clone(), stitching_grid, stitching_grid_offset)
+    OwningSubdomainGrid::new(global_grid.clone(), stitching_grid, stitching_grid_offset)
 }
 
-/// Computes the [SubdomainGrid] for the final combined domain of the two sides
+/// Computes the [OwningSubdomainGrid] for the final combined domain of the two sides
 fn compute_stitching_result_domain<I: Index, R: Real>(
     stitching_axis: Axis,
     global_grid: &UniformGrid<I, R>,
-    negative_subdomain: &OwnedSubdomainGrid<I, R>,
-    positive_subdomain: &OwnedSubdomainGrid<I, R>,
-) -> OwnedSubdomainGrid<I, R> {
+    negative_subdomain: &OwningSubdomainGrid<I, R>,
+    positive_subdomain: &OwningSubdomainGrid<I, R>,
+) -> OwningSubdomainGrid<I, R> {
     // Get the number of cells of the result domain by adding all cells in stitching direction
     let n_cells_per_dim = {
         let length_neg = negative_subdomain.subdomain_grid().cells_per_dim()[stitching_axis.dim()];
@@ -583,7 +583,7 @@ fn compute_stitching_result_domain<I: Index, R: Real>(
     )
     .expect("Unable to construct stitching domain grid");
 
-    OwnedSubdomainGrid::new(
+    OwningSubdomainGrid::new(
         global_grid.clone(),
         subdomain_grid,
         negative_subdomain.subdomain_offset().clone(),

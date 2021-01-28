@@ -21,7 +21,7 @@ pub struct ReconstructSubcommandArgs {
     /// Path to the input file where the particle positions are stored (supported formats: VTK, binary f32 XYZ, PLY, BGEO)
     #[structopt(short = "-i", parse(from_os_str))]
     input_file: PathBuf,
-    /// Filename for writing the reconstructed surface to disk (default: "[original_filename]_surface.vtk")
+    /// Filename for writing the reconstructed surface to disk (default: "\[original_filename\]_surface.vtk")
     #[structopt(short = "-o", parse(from_os_str))]
     output_file: Option<PathBuf>,
     /// Optional base directory for all output files (default: current working directory)

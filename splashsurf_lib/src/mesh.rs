@@ -1,3 +1,5 @@
+//! Basic mesh types used by the library and implementation of VTK export
+
 use crate::{new_map, Real};
 use nalgebra::{Unit, Vector3};
 use std::fmt::Debug;
@@ -18,7 +20,11 @@ impl<R: Real> TriMesh3d<R> {
         self.triangles.clear();
     }
 
-    /// Appends the other mesh to this mesh by simply appending all vertices and triangles of the other mesh and adjusting indices accordingly
+    /// Appends the other mesh to this mesh
+    ///
+    /// This operation appends the content of the other mesh's vertex and triangle storage tho this mesh.
+    /// The vertex indices of the appended triangles are adjusted accordingly.
+    /// The other mesh will be empty after this operation.
     pub fn append(&mut self, other: &mut TriMesh3d<R>) {
         let TriMesh3d {
             vertices: ref mut new_verts,
@@ -39,7 +45,7 @@ impl<R: Real> TriMesh3d<R> {
         }
     }
 
-    /// Same as [Self::vertex_normal_directions_inplace] but assumes that the output is already zeroed
+    /// Same as [`Self::vertex_normal_directions_inplace`] but assumes that the output is already zeroed
     fn vertex_normal_directions_inplace_assume_zeroed(&self, normal_directions: &mut [Vector3<R>]) {
         assert_eq!(normal_directions.len(), self.vertices.len());
 
@@ -58,7 +64,7 @@ impl<R: Real> TriMesh3d<R> {
     /// Computes the mesh's vertex normal directions inplace using an area weighted average of the adjacent triangle faces
     ///
     /// Note that this function only computes the normal directions, these vectors are **not normalized**!
-    /// See [Self::vertex_normals_inplace] if actual normal vectors are needed.
+    /// See [`Self::vertex_normals_inplace`] if actual normal vectors are needed.
     ///
     /// The method will panic if the length of the output slice is different from the number of vertices of the mesh.
     ///
@@ -76,14 +82,14 @@ impl<R: Real> TriMesh3d<R> {
     /// Computes the mesh's vertex normal directions using an area weighted average of the adjacent triangle faces
     ///
     /// Note that this function only computes the normal directions, these vectors are **not normalized**!
-    /// See [Self::vertex_normals] if actual normal vectors are needed.
+    /// See [`Self::vertex_normals`] if actual normal vectors are needed.
     pub fn vertex_normal_directions(&self) -> Vec<Vector3<R>> {
         let mut normal_directions = vec![Vector3::zeros(); self.vertices.len()];
         self.vertex_normal_directions_inplace_assume_zeroed(normal_directions.as_mut_slice());
         normal_directions
     }
 
-    /// Same as [Self::vertex_normals_inplace] but assumes that the output is already zeroed
+    /// Same as [`Self::vertex_normals_inplace`] but assumes that the output is already zeroed
     fn vertex_normals_inplace_assume_zeroed<'a>(&self, normals: &'a mut [Unit<Vector3<R>>]) {
         assert_eq!(normals.len(), self.vertices.len());
 
@@ -127,10 +133,12 @@ impl<R: Real> TriMesh3d<R> {
         normals
     }
 
-    /// Finds edges which are only connected to exactly one triangle, along with the connected triangle
+    /// Returns all boundary edges of the mesh
+    ///
+    /// Returns edges which are only connected to exactly one triangle, along with the connected triangle
     /// index and the local index of the edge within that triangle.
     ///
-    /// Note that the output order is not necessarily deterministic due to the use of hash maps.
+    /// Note that the output order is not necessarily deterministic due to the internal use of hashmaps.
     pub fn find_boundary_edges(&self) -> Vec<([usize; 2], usize, usize)> {
         let mut sorted_edges = Vec::new();
         let mut face_info = Vec::new();

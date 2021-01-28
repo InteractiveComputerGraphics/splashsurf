@@ -1,3 +1,5 @@
+//! Triangulation of [`DensityMap`](crate::density_map::DensityMap)s using marching cubes
+
 use crate::marching_cubes::narrow_band_extraction::{
     construct_mc_input, construct_mc_input_with_stitching_data,
 };
@@ -6,7 +8,7 @@ use crate::marching_cubes::triangulation::{
     TriangulationSkipBoundaryCells,
 };
 use crate::mesh::TriMesh3d;
-use crate::uniform_grid::{DummySubdomain, OwnedSubdomainGrid, Subdomain};
+use crate::uniform_grid::{DummySubdomain, OwningSubdomainGrid, Subdomain};
 use crate::{new_map, DensityMap, Index, MapType, Real, UniformGrid};
 
 pub mod marching_cubes_lut;
@@ -112,7 +114,7 @@ pub fn triangulate_density_map<I: Index, R: Real>(
 /// Performs a marching cubes triangulation of a density map on the given background grid, appends triangles to the given mesh
 pub fn triangulate_density_map_append<I: Index, R: Real>(
     grid: &UniformGrid<I, R>,
-    subdomain: Option<&OwnedSubdomainGrid<I, R>>,
+    subdomain: Option<&OwningSubdomainGrid<I, R>>,
     density_map: &DensityMap<I, R>,
     iso_surface_threshold: R,
     mesh: &mut TriMesh3d<R>,
@@ -141,7 +143,7 @@ pub fn triangulate_density_map_append<I: Index, R: Real>(
 
 /// Performs triangulation of the given density map to a surface patch
 pub(crate) fn triangulate_density_map_to_surface_patch<I: Index, R: Real>(
-    subdomain: &OwnedSubdomainGrid<I, R>,
+    subdomain: &OwningSubdomainGrid<I, R>,
     density_map: &DensityMap<I, R>,
     iso_surface_threshold: R,
 ) -> SurfacePatch<I, R> {

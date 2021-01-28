@@ -1,11 +1,12 @@
+//! Workspace for reusing allocated memory between multiple surface reconstructions
+
+use crate::mesh::TriMesh3d;
+use crate::{new_map, DensityMap, Index, Real};
 use nalgebra::Vector3;
 use std::cell::RefCell;
 use std::fmt;
 use std::fmt::Debug;
 use thread_local::ThreadLocal;
-
-use crate::mesh::TriMesh3d;
-use crate::{new_map, DensityMap, Index, Real};
 
 /// Collection of all thread local workspaces used to reduce allocations on subsequent surface reconstructions
 #[derive(Default)]
@@ -45,7 +46,7 @@ impl<I: Index, R: Real> Debug for ReconstructionWorkspace<I, R> {
     }
 }
 
-/// Workspace used by [crate::reconstruct_single_surface] for the reconstruction of a single surface patch
+/// Workspace used by [crate::reconstruct_surface_inplace] internally to re-use allocated memory
 pub struct LocalReconstructionWorkspace<I: Index, R: Real> {
     /// Storage for the particle positions (only used in octree based approach)
     pub particle_positions: Vec<Vector3<R>>,

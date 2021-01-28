@@ -6,11 +6,11 @@ use nalgebra::allocator::Allocator;
 use nalgebra::{DefaultAllocator, DimName, RealField, VectorN};
 use num::{Bounded, CheckedAdd, CheckedMul, CheckedSub, FromPrimitive, Integer, ToPrimitive};
 
-/// Trait that has to be implemented by [Index] and [Real] types to use them in parallelized algorithms
+/// Convenience trait that combines `Send` and `Sync`
 pub trait ThreadSafe: Sync + Send {}
 impl<T> ThreadSafe for T where T: Sync + Send {}
 
-/// Trait that has to be implemented for types to be used as grid cell indices in the context of the library
+/// Trait that has to be implemented for types to be used as background grid cell indices in the context of the library
 pub trait Index:
     Copy
     + Hash

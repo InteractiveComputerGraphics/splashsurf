@@ -1,11 +1,17 @@
-use nalgebra::Vector3;
-use rayon::prelude::*;
+//! Simple neighborhood search based on spatial hashing
+//!
+//! This module provides basic sequential and parallel neighborhood search implementations using
+//! spatial hashing. The algorithms return per-particle neighborhood list with indices of all particles
+//! that are within the given radius of the particle.
 
 use crate::uniform_grid::UniformGrid;
 use crate::utils::SendSyncWrapper;
 use crate::{new_map, AxisAlignedBoundingBox3d, HashState, Index, MapType, ParallelMapType, Real};
+use nalgebra::Vector3;
+use rayon::prelude::*;
 
 // TODO: Replace some unwrap() calls with errors
+// TODO: Check if input parameters are valid (valid domain, valid search radius)
 
 /// Performs a neighborhood search, returning the indices of all neighboring particles in the given search radius per particle
 #[inline(never)]
@@ -60,6 +66,7 @@ pub fn search_inplace<I: Index, R: Real>(
     }
 }
 
+/// Allocates enough storage for the given number of particles and clears all existing neighborhood lists
 fn init_neighborhood_list(neighborhood_list: &mut Vec<Vec<usize>>, new_len: usize) {
     let old_len = neighborhood_list.len();
     if old_len != new_len {
@@ -73,7 +80,8 @@ fn init_neighborhood_list(neighborhood_list: &mut Vec<Vec<usize>>, new_len: usiz
     neighborhood_list.resize_with(new_len, || Vec::with_capacity(15));
 }
 
-fn init_neighborhood_list_par(neighborhood_list: &mut Vec<Vec<usize>>, new_len: usize) {
+/// Allocates enough storage for the given number of particles and clears all existing neighborhood lists in parallel
+fn par_init_neighborhood_list(neighborhood_list: &mut Vec<Vec<usize>>, new_len: usize) {
     let old_len = neighborhood_list.len();
     if old_len != new_len {
         // Reset all neighbor lists that won't be truncated
@@ -101,10 +109,24 @@ pub fn sequential_search<I: Index, R: Real>(
     // FIXME: Replace unwraps?
     profile!("neighborhood_search");
 
+    assert!(
+        search_radius > R::zero(),
+        "Search radius for neighborhood search has to be positive!"
+    );
+    assert!(
+        domain.is_consistent(),
+        "Domain for neighborhood search has to be consistent!"
+    );
+    assert!(
+        !domain.is_degenerate(),
+        "Domain for neighborhood search cannot be degenerate!"
+    );
+
     let search_radius_squared = search_radius * search_radius;
 
     // Create a new grid for neighborhood search
-    let grid = UniformGrid::from_aabb(&domain, search_radius).unwrap();
+    let grid = UniformGrid::from_aabb(&domain, search_radius)
+        .expect("Failed to construct grid for neighborhood search!");
     // Map for spatially hashed storage of all particles (map from cell -> enclosed particles)
     let particles_per_cell =
         sequential_generate_cell_to_particle_map::<I, R>(&grid, particle_positions);
@@ -165,12 +187,26 @@ pub fn parallel_search<I: Index, R: Real>(
     search_radius: R,
     neighborhood_list: &mut Vec<Vec<usize>>,
 ) {
-    profile!("neighborhood_search");
+    profile!("par_neighborhood_search");
+
+    assert!(
+        search_radius > R::zero(),
+        "Search radius for neighborhood search has to be positive!"
+    );
+    assert!(
+        domain.is_consistent(),
+        "Domain for neighborhood search has to be consistent!"
+    );
+    assert!(
+        !domain.is_degenerate(),
+        "Domain for neighborhood search cannot be degenerate!"
+    );
 
     let search_radius_squared = search_radius * search_radius;
 
     // Create a new grid for neighborhood search
-    let grid = UniformGrid::from_aabb(&domain, search_radius).unwrap();
+    let grid = UniformGrid::from_aabb(&domain, search_radius)
+        .expect("Failed to construct grid for neighborhood search!");
 
     // Map for spatially hashed storage of all particles (map from cell -> enclosed particles)
     let particles_per_cell_map =
@@ -202,7 +238,7 @@ pub fn parallel_search<I: Index, R: Real>(
     };
 
     // TODO: Compute the default capacity of neighborhood lists from rest volume of particles
-    init_neighborhood_list_par(neighborhood_list, particle_positions.len());
+    par_init_neighborhood_list(neighborhood_list, particle_positions.len());
     // We are ok with making the ptr Send+Sync because we are only going to write into disjoint fields of the Vec
     let neighborhood_list_mut_ptr = unsafe { SendSyncWrapper::new(neighborhood_list.as_mut_ptr()) };
 
@@ -263,7 +299,7 @@ pub struct NeighborhoodStats {
     pub avg_neighbors: f64,
 }
 
-/// Computes stats of the given neighborhood list
+/// Computes stats (avg. neighbors, histogram) of the given neighborhood list
 pub fn compute_neigborhood_stats(neighborhood_list: &Vec<Vec<usize>>) -> NeighborhoodStats {
     let mut max_neighbors = 0;
     let mut total_neighbors = 0;

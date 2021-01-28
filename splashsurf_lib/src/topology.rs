@@ -1,3 +1,5 @@
+//! Helper types for cartesian coordinate system topology
+
 use num::{CheckedAdd, CheckedSub, One};
 use std::ops::{Add, Sub};
 
@@ -14,8 +16,11 @@ pub type Axis = CartesianAxis3d;
 /// The cartesian coordinate axes in 3D
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub enum CartesianAxis3d {
+    /// The x-axis
     X = 0,
+    /// The y-axis
     Y = 1,
+    /// The z-axis
     Z = 2,
 }
 
@@ -26,7 +31,7 @@ pub struct DirectedAxis {
     pub direction: Direction,
 }
 
-/// Collection that stores one value per unique [DirectedAxis]
+/// Collection that stores one value per unique [`DirectedAxis`], can be used e.g. to store neighbors in a cartesian grid
 #[derive(Copy, Clone, PartialEq, Eq, Default, Debug)]
 pub struct DirectedAxisArray<T> {
     data: [T; 6],
@@ -158,7 +163,7 @@ const ALL_DIRECTIONS: [Direction; 2] = [Direction::Negative, Direction::Positive
 impl CartesianAxis3d {
     /// Returns a reference to an array containing all 3D cartesian axes
     /// ```
-    /// use crate::splashsurf_lib::topology::CartesianAxis3d as Axis;
+    /// use crate::splashsurf_lib::topology::Axis;
     /// assert_eq!(Axis::all_possible()[0], Axis::X);
     /// assert_eq!(Axis::all_possible()[2], Axis::Z);
     /// assert_eq!(Axis::all_possible().len(), 3);
@@ -170,7 +175,7 @@ impl CartesianAxis3d {
 
     /// Converts the cartesian axis into the corresponding 3D dimension index (X=0, Y=1, Z=2)
     /// ```
-    /// use crate::splashsurf_lib::topology::CartesianAxis3d as Axis;
+    /// use crate::splashsurf_lib::topology::Axis;
     /// assert_eq!(Axis::X.dim(), 0);
     /// assert_eq!(Axis::Y.dim(), 1);
     /// assert_eq!(Axis::Z.dim(), 2);
@@ -182,7 +187,7 @@ impl CartesianAxis3d {
 
     /// Returns the other two axes that are orthogonal to the current axis
     /// ```
-    /// use crate::splashsurf_lib::topology::CartesianAxis3d as Axis;
+    /// use crate::splashsurf_lib::topology::Axis;
     /// assert_eq!(Axis::X.orthogonal_axes(), [Axis::Y, Axis::Z]);
     /// ```
     #[inline(always)]
@@ -192,8 +197,7 @@ impl CartesianAxis3d {
 
     /// Combines this coordinate axis with a direction into a DirectedAxis
     /// ```
-    /// use crate::splashsurf_lib::topology::CartesianAxis3d as Axis;
-    /// use crate::splashsurf_lib::topology::{DirectedAxis, Direction};
+    /// use crate::splashsurf_lib::topology::{Axis, DirectedAxis, Direction};
     /// assert_eq!(Axis::X.with_direction(Direction::Positive), DirectedAxis::new(Axis::X, Direction::Positive));
     /// ```
     #[inline(always)]
@@ -237,30 +241,47 @@ impl DirectedAxis {
     }
 
     /// Constructs a new directed axis
+    /// ```
+    /// use crate::splashsurf_lib::topology::{Axis, DirectedAxis, Direction};
+    /// assert_eq!(DirectedAxis::new(Axis::X, Direction::Positive),
+    ///            Axis::X.with_direction(Direction::Positive));
+    /// ```
     #[inline(always)]
     pub const fn new(axis: Axis, direction: Direction) -> Self {
         Self { axis, direction }
     }
 
     /// Returns a directed axis with the opposite direction
+    /// ```
+    /// use crate::splashsurf_lib::topology::{Axis, DirectedAxis, Direction};
+    /// assert_eq!(DirectedAxis::new(Axis::X, Direction::Positive)
+    ///                 .opposite(), DirectedAxis::new(Axis::X, Direction::Negative));
+    /// assert_eq!(DirectedAxis::new(Axis::Z, Direction::Negative)
+    ///                 .opposite(), DirectedAxis::new(Axis::Z, Direction::Positive));
+    /// ```
     #[inline(always)]
     pub const fn opposite(&self) -> Self {
         Self::new(self.axis, self.direction.opposite())
     }
 
-    /// Converts the directed axis into a unique index in the range (0..5)
+    /// Converts the directed axis into a unique index in the range `(0..=5)`
     #[inline(always)]
     pub const fn to_usize(&self) -> usize {
         self.axis as usize + (self.direction as usize * 3)
     }
 
-    /// Converts an index in the range (0..5) to the corresponding directed axis, panics if the index is out of range
+    /// Converts an index in the range `(0..=5)` to the corresponding directed axis, panics if the index is out of range
     #[inline(always)]
     pub const fn from_usize(n: usize) -> Self {
         Self::all_possible()[n]
     }
 
-    /// Applies an increment of 1 in the direction of this directed axis to the given index array
+    /// Applies an increment of `1` in the direction of this directed axis to the given index array, returns `None` on overflow
+    /// ```
+    /// use crate::splashsurf_lib::topology::{Axis, DirectedAxis, Direction};
+    /// assert_eq!(DirectedAxis::new(Axis::X, Direction::Positive)
+    ///                 .apply_single_step(&[1,2,3]), Some([2,2,3]));
+    /// ```
     #[inline(always)]
     pub fn apply_single_step<N: Clone + CheckedAdd<Output = N> + CheckedSub<Output = N> + One>(
         &self,
@@ -269,7 +290,14 @@ impl DirectedAxis {
         self.checked_apply_step(index, N::one())
     }
 
-    /// Applies the given step in the direction of this directed axis to the given index array
+    /// Applies the given step in the direction of this directed axis to the given index array, returns `None` on overflow
+    /// ```
+    /// use crate::splashsurf_lib::topology::{Axis, DirectedAxis, Direction};
+    /// assert_eq!(DirectedAxis::new(Axis::X, Direction::Positive)
+    ///                 .checked_apply_step(&[1,2,3], 6), Some([7,2,3]));
+    /// assert_eq!(DirectedAxis::new(Axis::Z, Direction::Negative)
+    ///                 .checked_apply_step(&[1,2,3], 10), Some([1,2,-7]));
+    /// ```
     #[inline(always)]
     pub fn checked_apply_step<N: Clone + CheckedAdd<Output = N> + CheckedSub<Output = N>>(
         &self,
@@ -283,7 +311,14 @@ impl DirectedAxis {
         Some(index)
     }
 
-    /// Applies the given step in the direction of this directed axis to the given index array
+    /// Applies the corresponding component of the step in the direction of this directed axis to the given index array, returns `None` on overflow
+    /// ```
+    /// use crate::splashsurf_lib::topology::{Axis, DirectedAxis, Direction};
+    /// assert_eq!(DirectedAxis::new(Axis::X, Direction::Positive)
+    ///                 .checked_apply_step_ijk(&[1,2,3], &[6,8,10]), Some([7,2,3]));
+    /// assert_eq!(DirectedAxis::new(Axis::Z, Direction::Negative)
+    ///                 .checked_apply_step_ijk(&[1,2,3], &[6,8,10]), Some([1,2,-7]));
+    /// ```
     #[inline(always)]
     pub fn checked_apply_step_ijk<N: Clone + CheckedAdd<Output = N> + CheckedSub<Output = N>>(
         &self,

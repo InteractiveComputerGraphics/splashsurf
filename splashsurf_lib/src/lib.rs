@@ -1,23 +1,25 @@
 //!
-//! Library for surface reconstruction using marching cubes for SPH particle data. Entry point is the [reconstruct_surface] function.
+//! Library for surface reconstruction of SPH particle data using marching cubes.
+//!
+//! Entry points are the [`reconstruct_surface`] or [`reconstruct_surface_inplace`] functions.
 //!
 
-/// Re-export the version of coarse_prof used by this crate, if profiling is enabled
+/// Re-export the version of `coarse_prof` used by this crate, if profiling is enabled
 #[cfg(feature = "profiling")]
 pub use coarse_prof;
 use log::info;
-/// Re-export the version of nalgebra used by this crate
+/// Re-export the version of `nalgebra` used by this crate
 pub use nalgebra;
 use nalgebra::Vector3;
 use thiserror::Error as ThisError;
-/// Re-export the version of vtkio used by this crate, if vtk support is enabled
+/// Re-export the version of `vtkio` used by this crate, if vtk support is enabled
 #[cfg(feature = "vtk_extras")]
 pub use vtkio;
 
 pub use aabb::{AxisAlignedBoundingBox, AxisAlignedBoundingBox2d, AxisAlignedBoundingBox3d};
 pub use density_map::DensityMap;
-pub use traits::{Index, Real, ThreadSafe};
 pub use octree::SubdivisionCriterion;
+pub use traits::{Index, Real, ThreadSafe};
 pub use uniform_grid::{GridConstructionError, UniformGrid};
 
 use crate::mesh::TriMesh3d;
@@ -44,30 +46,18 @@ macro_rules! profile {
 }
 
 mod aabb;
-/// Computation of sparse density maps (evaluation of particle densities and mapping onto sparse grids)
 pub mod density_map;
-/// Generic octree implementation for basic algorithms
 pub mod generic_tree;
-/// SPH kernel function implementations
 pub mod kernel;
-/// Triangulation of density maps using marching cubes
 pub mod marching_cubes;
-/// Basic mesh types used by the library and implementation of VTK export
 pub mod mesh;
-/// Simple neighborhood search based on spatial hashing
 pub mod neighborhood_search;
-mod numeric_types;
-/// Octree implementation to spatially partition particle sets
 pub mod octree;
-/// Functions calling the individual steps of the reconstruction pipeline
 mod reconstruction;
-/// Helper types for cartesian coordinate system topology
 pub mod topology;
-/// Types related to the virtual background grid used for marching cubes
+mod traits;
 pub mod uniform_grid;
-/// Internal helper functions and types
 mod utils;
-/// Workspace for reusing allocated memory between multiple reconstructions
 pub(crate) mod workspace;
 
 // TODO: Add documentation of feature flags
@@ -260,14 +250,14 @@ pub enum ReconstructionError<I: Index, R: Real> {
 }
 
 impl<I: Index, R: Real> From<GridConstructionError<I, R>> for ReconstructionError<I, R> {
-    /// Allows automatic conversion of a [GridConstructionError] to a [ReconstructionError]
+    /// Allows automatic conversion of a [`GridConstructionError`] to a [`ReconstructionError`]
     fn from(error: GridConstructionError<I, R>) -> Self {
         ReconstructionError::GridConstructionError(error)
     }
 }
 
 impl<I: Index, R: Real> From<anyhow::Error> for ReconstructionError<I, R> {
-    /// Allows automatic conversion of an anyhow::Error to a [ReconstructionError]
+    /// Allows automatic conversion of an `anyhow::Error` to a [`ReconstructionError`]
     fn from(error: anyhow::Error) -> Self {
         ReconstructionError::Unknown(error)
     }

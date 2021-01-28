@@ -1,3 +1,5 @@
+//! Axis-aligned bounding boxes
+
 use std::fmt;
 use std::fmt::Debug;
 
@@ -8,7 +10,7 @@ use rayon::prelude::*;
 use crate::{Real, ThreadSafe};
 
 /// Type representing an axis aligned bounding box in arbitrary dimensions
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct AxisAlignedBoundingBox<R: Real, D: DimName>
 where
     DefaultAllocator: Allocator<R, D>,

@@ -1,3 +1,5 @@
+//! Internal helper functions and types
+
 use log::info;
 
 /// Wrapper type to make any type Send + Sync

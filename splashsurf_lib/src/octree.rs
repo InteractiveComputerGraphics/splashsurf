@@ -1,4 +1,6 @@
-use crate::generic_tree::{ParVisitableTree, TreeNode, VisitableTree};
+//! Octree for spatially partitioning particle sets
+
+use crate::generic_tree::*;
 use crate::mesh::{HexMesh3d, TriMesh3d};
 use crate::uniform_grid::{PointIndex, UniformGrid};
 use crate::utils::{ChunkSize, ParallelPolicy};
@@ -26,12 +28,13 @@ pub enum SubdivisionCriterion {
     MaxParticleCount(usize),
 }
 
-/// Octree for the spatial decomposition of a set of particles and parallel surface reconstruction
+/// Data structure for octree based spatial subdivision of particles sets, for tree iteration/visitation use the [`root`](Self::root) [`OctreeNode`]
 #[derive(Clone, Debug)]
 pub struct Octree<I: Index, R: Real> {
     root: OctreeNode<I, R>,
 }
 
+/// Represents a node in the octree hierarchy and stores child nodes, implements tree iteration/visitation from the [`generic_tree`](crate::generic_tree) module
 #[derive(Clone, Debug)]
 pub struct OctreeNode<I: Index, R: Real> {
     /// All child nodes of this octree node
@@ -49,13 +52,16 @@ impl<I: Index, R: Real> TreeNode for OctreeNode<I, R> {
     fn children(&self) -> &[Box<Self>] {
         self.children.as_slice()
     }
+}
 
+impl<I: Index, R: Real> TreeNodeMut for OctreeNode<I, R> {
     /// Returns a mutable slice of all child nodes
     fn children_mut(&mut self) -> &mut [Box<Self>] {
         self.children.as_mut_slice()
     }
 }
 
+/// Optional data that may be stored in [`OctreeNode`]s
 #[derive(Clone, Debug)]
 pub enum NodeData<I: Index, R: Real> {
     /// Empty variant
@@ -73,6 +79,7 @@ impl<I: Index, R: Real> Default for NodeData<I, R> {
     }
 }
 
+/// Stores the particle ids and the number of ghost particles inside an octree leaf
 #[derive(Clone, Debug)]
 pub struct ParticleSet {
     // The particles belonging to this set
@@ -81,7 +88,7 @@ pub struct ParticleSet {
     pub ghost_particle_count: usize,
 }
 
-/// Wrapper for a [SurfacePatch] to avoid leaking too much implementation details
+/// Wrapper for an internal `SurfacePatch` to avoid leaking too much implementation details
 #[derive(Clone, Debug)]
 pub struct SurfacePatchWrapper<I: Index, R: Real> {
     pub(crate) patch: SurfacePatch<I, R>,
@@ -114,6 +121,10 @@ impl<I: Index, R: Real> Octree<I, R> {
     }
 
     /// Create a new octree and perform subdivision with the specified margin
+    ///
+    /// The margin is used to assign ghost particles to octree nodes. Each octant resulting
+    /// from the subdivision gets assigned all particles that are directly inside it plus all
+    /// particles from its parent that are within the given margin around the octant.
     pub fn new_subdivided(
         grid: &UniformGrid<I, R>,
         particle_positions: &[Vector3<R>],
@@ -321,12 +332,12 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
         &mut self.data
     }
 
-    /// Returns the [PointIndex] of the lower corner of the octree node
+    /// Returns the [`PointIndex`] of the lower corner of the octree node
     pub fn min_corner(&self) -> &PointIndex<I> {
         &self.min_corner
     }
 
-    /// Returns the [PointIndex] of the upper corner of the octree node
+    /// Returns the [`PointIndex`] of the upper corner of the octree node
     pub fn max_corner(&self) -> &PointIndex<I> {
         &self.max_corner
     }
@@ -339,7 +350,7 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
         )
     }
 
-    /// Constructs a [crate::UniformGrid] that represents the domain of this octree node
+    /// Constructs a [`UniformGrid`](crate::UniformGrid) that represents the domain of this octree node
     pub fn grid(
         &self,
         min: &Vector3<R>,
@@ -357,7 +368,7 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
         UniformGrid::new(min, &n_cells_per_dim, cell_size)
     }
 
-    /// Performs a subdivision of this [OctreeNode] while considering a margin with "ghost particles" around each octant
+    /// Performs a subdivision of this node while considering a margin for "ghost particles" around each octant
     pub fn subdivide_with_margin(
         &mut self,
         grid: &UniformGrid<I, R>,
@@ -456,6 +467,7 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
         };
     }
 
+    /// Parallel subdivision of this node while considering a margin for "ghost particles" around each octant
     pub fn subdivide_with_margin_par(
         &mut self,
         grid: &UniformGrid<I, R>,
@@ -628,7 +640,8 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
         }
     }
 
-    pub fn stitch_surface_patches(&mut self, iso_surface_threshold: R) {
+    /// Stitches together the [`SurfacePatch`]es stored in the children of this node if this is the direct parent of only leaf nodes
+    pub(crate) fn stitch_surface_patches(&mut self, iso_surface_threshold: R) {
         // If this node has no children there is nothing to stitch
         if self.children.is_empty() {
             panic!("A node can only be stitched if it has children!");

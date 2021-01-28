@@ -18,8 +18,9 @@
 //!   - The triangulation is given by the two triangles `[0, 8, 3]` and `[1, 2, 10]`, with vertices
 //!     on the edges identified by the given indices
 //!
-//! Note that it looks like the winding order of the triangles is apparently in the wrong direction.
-//! This is taken into account by the evaluation functions.
+//! Note that it looks like the winding order of the triangles in the raw table is apparently
+//! inverted implying that normals point *into* the volume surrounded by the iso-surface.
+//! This is already taken into account by the [`marching_cubes_triangulation_iter`] function.
 //!
 //! Cube description:
 //!
@@ -298,6 +299,26 @@ static MARCHING_CUBES_TABLE: [[i32; 16]; 256] = [
 /* 255: 0, 1, 2, 3, 4, 5, 6, 7,  */  [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
 ];
 
+/// Returns a reference into the marching cubes LUT to the case corresponding to the given vertex configuration
+pub fn get_marching_cubes_triangulation_raw(vertices_inside: &[bool; 8]) -> &'static [i32; 16] {
+    &MARCHING_CUBES_TABLE[flags_to_index(vertices_inside)]
+}
+
+/// Returns the marching cubes triangulation corresponding to the given vertex configuration
+///
+/// In the vertex configuration, a `true` value indicates that the given vertex is inside the
+/// iso-surface, i.e. above the iso-surface threshold value. The returned iterator yields
+/// at most 5 triangles defined by the indices of the edges of their corner vertices.
+pub fn marching_cubes_triangulation_iter(
+    vertices_inside: &[bool; 8],
+) -> impl Iterator<Item = [i32; 3]> {
+    let triangulation = get_marching_cubes_triangulation_raw(vertices_inside);
+    (0..4)
+        .into_iter()
+        .map(move |i| triangulation_to_triangle(triangulation, i))
+        .flatten()
+}
+
 /// Converts an array of bool representing bits to the corresponding usize, the order of the bits is least to most significant
 fn flags_to_index(flags: &[bool; 8]) -> usize {
     let mut index = 0;
@@ -321,26 +342,6 @@ fn triangulation_to_triangle(triangulation: &[i32; 16], triangle_index: usize) -
             triangulation[3 * i + 0],
         ])
     }
-}
-
-/// Returns a reference into the marching cubes LUT to the case corresponding to a vertex configuration
-pub fn get_marching_cubes_triangulation_raw(vertices_inside: &[bool; 8]) -> &'static [i32; 16] {
-    &MARCHING_CUBES_TABLE[flags_to_index(vertices_inside)]
-}
-
-/// Returns the marching cubes triangulation corresponding to the given vertex configuration
-///
-/// In the vertex configuration, a `true` value indicates that the given vertex is inside the
-/// iso-surface, i.e. above the iso-surface threshold value. The returned iterator yields
-/// at most 5 triangles defined by the indices of the edges of their corner vertices.
-pub fn marching_cubes_triangulation_iter(
-    vertices_inside: &[bool; 8],
-) -> impl Iterator<Item = [i32; 3]> {
-    let triangulation = get_marching_cubes_triangulation_raw(vertices_inside);
-    (0..4)
-        .into_iter()
-        .map(move |i| triangulation_to_triangle(triangulation, i))
-        .flatten()
 }
 
 #[cfg(test)]

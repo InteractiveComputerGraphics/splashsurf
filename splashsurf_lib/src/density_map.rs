@@ -1,6 +1,26 @@
+//! Computation of sparse density maps (evaluation of particle densities and mapping onto sparse grids)
+//!
+//! This module provides functions for the computation of per-particle densities and the discretization
+//! of the resulting fluid density field by mapping onto a discrete background grid.
+//!
+//! Currently, only sparse density maps are implemented.
+//!
+//! ## Sparse density maps
+//! The [`DensityMap`] stores fluid density values for each point of an implicit background grid
+//! where the density is not trivially zero. This is the case for all points that are inside or at
+//! least within some tolerance to the compact support radius of a particle.
+//! In case of a sparse density map, the values are stored in a hashmap. The keys are so called
+//! "flat point indices". These are computed from the background grid point coordinates `(i,j,k)`
+//! analogous to multidimensional array index flattening. That means for a grid with dimensions
+//! `[n_x, n_y, n_z]`, the flat point index is given by the expression `i*n_x + j*n_y + k*n_z`.
+//! For these point index operations, the [`UniformGrid`](crate::UniformGrid) is used.
+//!
+//! Note that all density mapping functions always use the global background grid for flat point
+//! indices, even if the density map is only generated for a smaller subdomain.
+
 use crate::kernel::DiscreteSquaredDistanceCubicKernel;
 use crate::mesh::{HexMesh3d, MeshWithPointData};
-use crate::uniform_grid::{OwnedSubdomainGrid, Subdomain, UniformGrid};
+use crate::uniform_grid::{OwningSubdomainGrid, Subdomain, UniformGrid};
 use crate::utils::{ChunkSize, ParallelPolicy};
 use crate::{new_map, AxisAlignedBoundingBox3d, HashState, Index, MapType, ParallelMapType, Real};
 use dashmap::ReadOnlyView as ReadDashMap;
@@ -9,6 +29,9 @@ use nalgebra::Vector3;
 use rayon::prelude::*;
 use std::cell::RefCell;
 use thread_local::ThreadLocal;
+
+// TODO: Document formulas for the computation of the values
+// TODO: Document that we actually evaluate the SPH interpolation of the constant function f(x) = 1
 
 /// Computes the individual densities of particles using a standard SPH sum
 #[inline(never)]
@@ -199,7 +222,7 @@ impl<I: Index, R: Real> DensityMap<I, R> {
         self.standard_or_insert_mut()
     }
 
-    /// Calls a closure for each (flat_point_index, density_value) tuple in the map
+    /// Calls a closure for each `(flat_point_index, density_value)` tuple in the map
     pub fn for_each<F: FnMut(I, R)>(&self, f: F) {
         let mut f = f;
         match self {
@@ -213,7 +236,7 @@ impl<I: Index, R: Real> DensityMap<I, R> {
 #[inline(never)]
 pub fn generate_sparse_density_map<I: Index, R: Real>(
     grid: &UniformGrid<I, R>,
-    subdomain: Option<&OwnedSubdomainGrid<I, R>>,
+    subdomain: Option<&OwningSubdomainGrid<I, R>>,
     particle_positions: &[Vector3<R>],
     particle_densities: &[R],
     active_particles: Option<&[usize]>,
@@ -321,9 +344,10 @@ pub fn sequential_generate_sparse_density_map<I: Index, R: Real>(
     sparse_densities.into()
 }
 
+/// Computes a sparse density map for the fluid restricted to the specified subdomain
 #[inline(never)]
 pub fn sequential_generate_sparse_density_map_subdomain<I: Index, R: Real>(
-    subdomain: &OwnedSubdomainGrid<I, R>,
+    subdomain: &OwningSubdomainGrid<I, R>,
     particle_positions: &[Vector3<R>],
     particle_densities: &[R],
     active_particles: Option<&[usize]>,
@@ -611,7 +635,7 @@ impl<I: Index, R: Real> SparseDensityMapGenerator<I, R> {
     /// Computes all density contributions of a particle to a subdomain of the background grid into the given map
     fn compute_particle_density_contribution_subdomain(
         &self,
-        subdomain: &OwnedSubdomainGrid<I, R>,
+        subdomain: &OwningSubdomainGrid<I, R>,
         sparse_densities: &mut MapType<I, R>,
         particle: &Vector3<R>,
         particle_density: R,

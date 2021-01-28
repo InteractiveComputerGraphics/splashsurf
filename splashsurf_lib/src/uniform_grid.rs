@@ -1,12 +1,13 @@
+//! Helper types for the implicit background grid used for marching cubes
+
+use crate::topology::{Axis, DirectedAxis, DirectedAxisArray, Direction};
+use crate::{AxisAlignedBoundingBox3d, Index, Real};
 use bitflags::bitflags;
 use itertools::iproduct;
 use log::trace;
 use nalgebra::Vector3;
 use std::iter::Iterator;
 use thiserror::Error as ThisError;
-
-use crate::topology::{Axis, DirectedAxis, DirectedAxisArray, Direction};
-use crate::{AxisAlignedBoundingBox3d, Index, Real};
 
 // TODO: Reduce mess with all array and scalar indexing functions
 
@@ -24,7 +25,7 @@ use crate::{AxisAlignedBoundingBox3d, Index, Real};
  *   0          1
  */
 
-/// Unique identifier for a point on a grid, represented by an index triplet on the 3D cartesian grid
+/// Unique identifier for a point in a grid, represented by an index triplet on the 3D cartesian grid
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct PointIndex<I: Index> {
     index: [I; 3],
@@ -64,9 +65,9 @@ pub struct NeighborEdge<'a, 'b: 'a, I: Index> {
     connectivity: DirectedAxis,
 }
 
-/// A [UniformGrid] that represents a subdomain with an offset inside a global grid
+/// A [`UniformGrid`] that represents a subdomain with an offset inside of a global grid, can be used for mapping between the grids using the [`Subdomain`] trait
 #[derive(Clone, Debug)]
-pub struct OwnedSubdomainGrid<I: Index, R: Real> {
+pub struct OwningSubdomainGrid<I: Index, R: Real> {
     /// The global or outer grid
     global_grid: UniformGrid<I, R>,
     /// The smaller subdomain grid inside of the global grid
@@ -75,7 +76,7 @@ pub struct OwnedSubdomainGrid<I: Index, R: Real> {
     subdomain_offset: [I; 3],
 }
 
-/// A dummy subdomain grid that is actually identical to its global grid, note that this type assume that all point and cell indices are valid for this grid
+/// A dummy subdomain grid that is actually identical to its global grid, note that this type assumes that any point and cell indices are valid for this grid
 #[derive(Clone, Debug)]
 pub struct DummySubdomain<'a, I: Index, R: Real> {
     /// The global or outer grid
@@ -84,7 +85,7 @@ pub struct DummySubdomain<'a, I: Index, R: Real> {
     subdomain_offset: [I; 3],
 }
 
-/// Trait for subdomains of a global grid, allowing to map point and cell indices between them
+/// Trait for subdomains of a global grid, providing mappings of indices between the grids
 pub trait Subdomain<I: Index, R: Real> {
     /// Returns a reference to the global grid corresponding to the subdomain
     fn global_grid(&self) -> &UniformGrid<I, R>;
@@ -191,19 +192,21 @@ pub type UniformGrid<I, R> = UniformCartesianCubeGrid3d<I, R>;
 /// It provides helper functions to access connectivity of points (vertices), edges and cells on
 /// the virtual grid.
 ///
-/// **Grid construction** The origin of the grid is placed on the min coordinates of its AABB.
+/// ## Grid construction
+/// The origin of the grid is placed on the min coordinates of its AABB.
 /// Then, the supplied AABB is filled with uniformly sized cubes. The final size of the grid may be
 /// larger than the AABB: the last layer of cubes that may not fit entirely within the upper
 /// extents of the AABB is still considered part of the grid.
 ///
-/// **Connectivity information** The grid then provides helper functions e.g. to find valid neighbors
+/// ## Connectivity information
+/// The grid then provides helper functions e.g. to find valid neighbors
 /// of points, edges and cells on the grid. These entities can either be indexed using index triplets `(i,j,k)` along
 /// the cartesian axes or using a flattened index `i*n_x + j*n_y + k*n_z` that is used e.g. for lookup
-/// in the [DensityMap](crate::DensityMap). This struct provides helper functions to convert between these representations.
-/// For some functions, strongly typed [PointIndex] and [CellIndex] indices are used, these can be
-/// obtained using the [get_point](UniformCartesianCubeGrid3d::get_point) and [get_cell](UniformCartesianCubeGrid3d::get_cell) functions respectively.
-/// These functions check if the specified indices are in the valid index range of the grid (as computed during construction based
-/// on the extents of the grid).
+/// in the [`DensityMap`](crate::DensityMap). This struct provides helper functions to convert between these representations.
+/// For some functions, strongly typed [`PointIndex`] and [`CellIndex`] indices are used, these can be
+/// obtained using the [`get_point`](UniformCartesianCubeGrid3d::get_point) and [`get_cell`](UniformCartesianCubeGrid3d::get_cell)
+/// functions respectively. These functions check if the specified indices are in the valid index range
+/// of the grid (as computed during construction based on the extents of the grid).
 #[derive(Clone, PartialEq, Debug)]
 pub struct UniformCartesianCubeGrid3d<I: Index, R: Real> {
     /// AABB of the grid. Note that the grid may extend beyond the max coordinate of the AABB by less than the `cell_size`.
@@ -217,7 +220,7 @@ pub struct UniformCartesianCubeGrid3d<I: Index, R: Real> {
     n_cells_per_dim: [I; 3],
 }
 
-/// Error type for the construction of a [UniformGrid]
+/// Error type for the construction of a [`UniformGrid`]
 #[rustfmt::skip]
 #[derive(Copy, Clone, Eq, PartialEq, Debug, ThisError)]
 pub enum GridConstructionError<I: Index, R: Real> {
@@ -716,14 +719,14 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
     }
 }
 
-impl<I: Index, R: Real> OwnedSubdomainGrid<I, R> {
+impl<I: Index, R: Real> OwningSubdomainGrid<I, R> {
     /// Creates a new subdomain grid
     pub(crate) fn new(
         global_grid: UniformGrid<I, R>,
         subdomain_grid: UniformGrid<I, R>,
         subdomain_offset: [I; 3],
     ) -> Self {
-        OwnedSubdomainGrid {
+        OwningSubdomainGrid {
             global_grid,
             subdomain_grid,
             subdomain_offset,
@@ -731,7 +734,7 @@ impl<I: Index, R: Real> OwnedSubdomainGrid<I, R> {
     }
 }
 
-impl<I: Index, R: Real> Subdomain<I, R> for OwnedSubdomainGrid<I, R> {
+impl<I: Index, R: Real> Subdomain<I, R> for OwningSubdomainGrid<I, R> {
     /// Returns a reference to the global grid corresponding to the subdomain
     #[inline(always)]
     fn global_grid(&self) -> &UniformGrid<I, R> {
@@ -750,7 +753,8 @@ impl<I: Index, R: Real> Subdomain<I, R> for OwnedSubdomainGrid<I, R> {
 }
 
 impl<'a, I: Index, R: Real> DummySubdomain<'a, I, R> {
-    pub(crate) fn new(global_grid: &'a UniformGrid<I, R>) -> Self {
+    /// Construct a dummy subdomain without any offset from the given global grid
+    pub fn new(global_grid: &'a UniformGrid<I, R>) -> Self {
         Self {
             global_grid,
             subdomain_offset: [I::zero(), I::zero(), I::zero()],
@@ -758,6 +762,7 @@ impl<'a, I: Index, R: Real> DummySubdomain<'a, I, R> {
     }
 }
 
+/// Provide more efficient implementations specific for a dummy grid, note that this type assumes that any point and cell indices provided for mapping are valid for this grid
 impl<'a, I: Index, R: Real> Subdomain<I, R> for DummySubdomain<'a, I, R> {
     #[inline(always)]
     fn global_grid(&self) -> &UniformGrid<I, R> {

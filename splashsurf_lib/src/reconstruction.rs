@@ -1,8 +1,10 @@
-use crate::generic_tree::ParVisitableTree;
+//! Helper functions calling the individual steps of the reconstruction pipeline
+
+use crate::generic_tree::*;
 use crate::marching_cubes::SurfacePatch;
 use crate::mesh::TriMesh3d;
 use crate::octree::{NodeData, Octree, OctreeNode};
-use crate::uniform_grid::{OwnedSubdomainGrid, Subdomain, UniformGrid};
+use crate::uniform_grid::{OwningSubdomainGrid, Subdomain, UniformGrid};
 use crate::workspace::LocalReconstructionWorkspace;
 use crate::{
     density_map, marching_cubes, neighborhood_search, new_map, utils, Index, Parameters, Real,
@@ -254,7 +256,7 @@ impl<I: Index, R: Real> SurfaceReconstructionOctreeVisitor<I, R> {
     }
 
     /// Computes the subdomain grid for the given octree node
-    fn extract_node_subdomain(&self, octree_node: &OctreeNode<I, R>) -> OwnedSubdomainGrid<I, R> {
+    fn extract_node_subdomain(&self, octree_node: &OctreeNode<I, R>) -> OwningSubdomainGrid<I, R> {
         let grid = &self.grid;
 
         let leaf_aabb = octree_node.aabb(grid);
@@ -264,7 +266,7 @@ impl<I: Index, R: Real> SurfaceReconstructionOctreeVisitor<I, R> {
         let subdomain_offset = octree_node.min_corner();
         subdomain_grid.log_grid_info();
 
-        OwnedSubdomainGrid::new(grid.clone(), subdomain_grid, *subdomain_offset.index())
+        OwningSubdomainGrid::new(grid.clone(), subdomain_grid, *subdomain_offset.index())
     }
 
     /// Collects the particle positions of all particles in the node
@@ -291,7 +293,7 @@ impl<I: Index, R: Real> SurfaceReconstructionOctreeVisitor<I, R> {
 pub(crate) fn reconstruct_single_surface_append<'a, I: Index, R: Real>(
     workspace: &mut LocalReconstructionWorkspace<I, R>,
     grid: &UniformGrid<I, R>,
-    subdomain_grid: Option<&OwnedSubdomainGrid<I, R>>,
+    subdomain_grid: Option<&OwningSubdomainGrid<I, R>>,
     particle_positions: &[Vector3<R>],
     parameters: &Parameters<R>,
     output_mesh: &'a mut TriMesh3d<R>,
@@ -348,7 +350,7 @@ pub(crate) fn reconstruct_single_surface_append<'a, I: Index, R: Real>(
 /// Reconstruct a surface, appends triangulation to the given mesh
 pub(crate) fn reconstruct_surface_patch<I: Index, R: Real>(
     workspace: &mut LocalReconstructionWorkspace<I, R>,
-    subdomain_grid: &OwnedSubdomainGrid<I, R>,
+    subdomain_grid: &OwningSubdomainGrid<I, R>,
     particle_positions: &[Vector3<R>],
     parameters: &Parameters<R>,
 ) -> SurfacePatch<I, R> {
