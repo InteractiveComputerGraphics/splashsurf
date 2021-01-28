@@ -66,7 +66,11 @@ fn default_params() -> Parameters<f32> {
 }
 
 fn test_for_boundary(params: &Parameters<f32>) -> bool {
-    params.spatial_decomposition.as_ref().map(|s| s.enable_stitching).unwrap_or(true)
+    params
+        .spatial_decomposition
+        .as_ref()
+        .map(|s| s.enable_stitching)
+        .unwrap_or(true)
 }
 
 macro_rules! generate_test {
@@ -83,12 +87,7 @@ macro_rules! generate_test {
             let reconstruction =
                 reconstruct_surface::<i64, _>(particle_positions.as_slice(), &parameters).unwrap();
 
-            write_vtk(
-                reconstruction.mesh(),
-                output_file,
-                "mesh",
-            )
-            .unwrap();
+            write_vtk(reconstruction.mesh(), output_file, "mesh").unwrap();
 
             // Ensure that the number of triangles is roughly correct
             assert!(
@@ -102,7 +101,11 @@ macro_rules! generate_test {
 
             if test_for_boundary(&parameters) {
                 // Ensure that the mesh does not have a boundary
-                assert_eq!(reconstruction.mesh().find_boundary_edges(), vec![], "Mesh boundary is not empty");
+                assert_eq!(
+                    reconstruction.mesh().find_boundary_edges(),
+                    vec![],
+                    "Mesh boundary is not empty"
+                );
             }
         }
     };
