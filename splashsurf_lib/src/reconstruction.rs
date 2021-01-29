@@ -41,6 +41,7 @@ impl<I: Index, R: Real> SurfaceReconstructionOctreeVisitor<I, R> {
                 decomposition_parameters.subdivision_criterion.clone(),
                 parameters.compact_support_radius * margin_factor,
                 parameters.enable_multi_threading,
+                decomposition_parameters.enable_stitching,
             )
         } else {
             // TODO: Use default values instead?

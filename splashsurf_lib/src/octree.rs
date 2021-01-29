@@ -131,6 +131,7 @@ impl<I: Index, R: Real> Octree<I, R> {
         subdivision_criterion: SubdivisionCriterion,
         margin: R,
         enable_multi_threading: bool,
+        enable_stitching: bool,
     ) -> Self {
         let mut tree = Octree::new(&grid, particle_positions.len());
 
@@ -140,6 +141,7 @@ impl<I: Index, R: Real> Octree<I, R> {
                 particle_positions,
                 subdivision_criterion,
                 margin,
+                enable_stitching,
             );
         } else {
             tree.subdivide_recursively_margin(
@@ -147,6 +149,7 @@ impl<I: Index, R: Real> Octree<I, R> {
                 particle_positions,
                 subdivision_criterion,
                 margin,
+                enable_stitching,
             );
         }
 
@@ -175,11 +178,15 @@ impl<I: Index, R: Real> Octree<I, R> {
         particle_positions: &[Vector3<R>],
         subdivision_criterion: SubdivisionCriterion,
         margin: R,
+        enable_stitching: bool,
     ) {
         profile!("octree subdivide_recursively_margin");
 
-        let split_criterion =
-            default_split_criterion(subdivision_criterion, particle_positions.len());
+        let split_criterion = default_split_criterion(
+            subdivision_criterion,
+            particle_positions.len(),
+            enable_stitching,
+        );
 
         self.root.visit_mut_bfs(|node| {
             // Stop recursion if split criterion is not fulfilled
@@ -199,11 +206,15 @@ impl<I: Index, R: Real> Octree<I, R> {
         particle_positions: &[Vector3<R>],
         subdivision_criterion: SubdivisionCriterion,
         margin: R,
+        enable_stitching: bool,
     ) {
         profile!("octree subdivide_recursively_margin_par");
 
-        let split_criterion =
-            default_split_criterion(subdivision_criterion, particle_positions.len());
+        let split_criterion = default_split_criterion(
+            subdivision_criterion,
+            particle_positions.len(),
+            enable_stitching,
+        );
         let parallel_policy = ParallelPolicy::default();
 
         let visitor = move |node: &mut OctreeNode<I, R>| {
@@ -846,6 +857,7 @@ mod split_criterion {
     pub(super) fn default_split_criterion<I: Index>(
         subdivision_criterion: SubdivisionCriterion,
         num_particles: usize,
+        enable_stitching: bool,
     ) -> (
         MaxNonGhostParticleLeafSplitCriterion,
         MinimumExtentSplitCriterion<I>,
@@ -866,7 +878,11 @@ mod split_criterion {
 
         (
             MaxNonGhostParticleLeafSplitCriterion::new(particles_per_cell),
-            MinimumExtentSplitCriterion::new(I::one()),
+            MinimumExtentSplitCriterion::new(if enable_stitching {
+                I::one() + I::one() + I::one()
+            } else {
+                I::one()
+            }),
         )
     }
 }
