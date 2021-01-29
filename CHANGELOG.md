@@ -5,7 +5,7 @@
 
 ## Version 0.5.1
 
- - Lib: Fix bug in triangulation that at most 4 out 5 possible triangles were emitted. This may lead in non-closed meshes.
+ - Lib: Fixed bug in triangulation that resulted in at most 4 out 5 possible triangles being emitted. This resulted in holes in surface meshes in some cases.
 
 ## Version 0.5.0
 
