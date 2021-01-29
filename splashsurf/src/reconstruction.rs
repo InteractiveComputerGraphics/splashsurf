@@ -20,8 +20,16 @@ use structopt::StructOpt;
 #[derive(Clone, Debug, StructOpt)]
 pub struct ReconstructSubcommandArgs {
     /// Path to the input file where the particle positions are stored (supported formats: VTK, binary f32 XYZ, PLY, BGEO)
-    #[structopt(short = "-i", parse(from_os_str))]
-    input_file: PathBuf,
+    #[structopt(short = "-i", long, parse(from_os_str))]
+    input_file: Option<PathBuf>,
+    /// Path to a sequence of particle files that should be processed, use `{}` in the filename to indicated a placeholder
+    #[structopt(
+        name = "input_sequence_pattern",
+        short = "-s",
+        long,
+        parse(from_os_str)
+    )]
+    input_sequence: Option<PathBuf>,
     /// Filename for writing the reconstructed surface to disk (default: "{original_filename}_surface.vtk")
     #[structopt(short = "-o", parse(from_os_str))]
     output_file: Option<PathBuf>,
@@ -158,7 +166,7 @@ mod arguments {
     use super::ReconstructSubcommandArgs;
     use crate::io;
     use anyhow::{anyhow, Context};
-    use log::{info, warn};
+    use log::info;
     use splashsurf_lib::nalgebra::Vector3;
     use splashsurf_lib::AxisAlignedBoundingBox3d;
     use std::convert::TryFrom;
@@ -374,55 +382,58 @@ mod arguments {
         fn try_from(args: &ReconstructSubcommandArgs) -> Result<Self, Self::Error> {
             let output_suffix = "surface";
 
-            // If the input file exists, a single input file should be processed
-            if args.input_file.is_file() {
-                // Use the user defined output file name if provided...
-                let output_file = if let Some(output_file) = &args.output_file {
-                    output_file.clone()
-                // ...otherwise, generate one based on the input filename
+            if let Some(input_file) = &args.input_file {
+                if input_file.is_file() {
+                    // Use the user defined output file name if provided...
+                    let output_file = if let Some(output_file) = &args.output_file {
+                        output_file.clone()
+                    // ...otherwise, generate one based on the input filename
+                    } else {
+                        let input_stem = input_file.file_stem().unwrap().to_string_lossy();
+                        format!("{}_{}.vtk", input_stem, output_suffix).into()
+                    };
+
+                    Self::try_new(
+                        false,
+                        input_file.clone(),
+                        args.output_dir.clone(),
+                        output_file,
+                        args.output_dm_points.clone(),
+                        args.output_dm_grid.clone(),
+                        args.output_octree.clone(),
+                    )
                 } else {
-                    let input_stem = args.input_file.file_stem().unwrap().to_string_lossy();
-                    format!("{}_{}.vtk", input_stem, output_suffix).into()
-                };
-
-                Self::try_new(
-                    false,
-                    args.input_file.clone(),
-                    args.output_dir.clone(),
-                    output_file,
-                    args.output_dm_points.clone(),
-                    args.output_dm_grid.clone(),
-                    args.output_octree.clone(),
-                )
-            // If the input file does not exist, its possible that a sequence of files should be processed
-            } else {
-                warn!("The input file '{}' does not exist. Assuming this is a pattern for a sequence of files.", args.input_file.display());
-
-                // Make sure that the supposed sequence pattern ends with a filename (and not with a path separator)
-                let input_filename = match args.input_file.file_name() {
+                    return Err(anyhow!(
+                        "Input file does not exist: \"{}\"",
+                        input_file.display()
+                    ));
+                }
+            } else if let Some(input_pattern) = &args.input_sequence {
+                // Make sure that the sequence pattern ends with a filename (and not with a path separator)
+                let input_filename = match input_pattern.file_name() {
                     Some(input_filename) => input_filename.to_string_lossy(),
                     None => {
                         return Err(anyhow!(
                             "The input file path '{}' does not end with a filename",
-                            args.input_file.display()
+                            input_pattern.display()
                         ))
                     }
                 };
 
                 // Make sure that the parent directory of the sequence pattern exists
-                if let Some(input_dir) = args.input_file.parent() {
+                if let Some(input_dir) = input_pattern.parent() {
                     if !input_dir.is_dir() && input_dir != Path::new("") {
                         return Err(anyhow!(
                             "The parent directory '{}' of the input file path '{}' does not exist",
                             input_dir.display(),
-                            args.input_file.display()
+                            input_pattern.display()
                         ));
                     }
                 }
 
                 // Make sure that we have a placeholder '{}' in the filename part of the sequence pattern
                 if input_filename.contains("{}") {
-                    let input_stem = args.input_file.file_stem().unwrap().to_string_lossy();
+                    let input_stem = input_pattern.file_stem().unwrap().to_string_lossy();
                     // Currently, only VTK files are supported for output
                     let output_filename = format!(
                         "{}.vtk",
@@ -431,7 +442,7 @@ mod arguments {
 
                     Self::try_new(
                         true,
-                        args.input_file.clone(),
+                        input_pattern.clone(),
                         args.output_dir.clone(),
                         output_filename.into(),
                         args.output_dm_points.clone(),
@@ -440,10 +451,13 @@ mod arguments {
                     )
                 } else {
                     return Err(anyhow!(
-                    "Input file does not exist or invalid file sequence pattern in input file path '{}'",
-                    args.input_file.display()
-                ));
+                        "The input sequence pattern \"{}\" does not contain a place holder \"{{}}\"", input_pattern.display()
+                    ));
                 }
+            } else {
+                return Err(anyhow!(
+                    "Neither an input file path or input sequence pattern was provided"
+                ));
             }
         }
     }
