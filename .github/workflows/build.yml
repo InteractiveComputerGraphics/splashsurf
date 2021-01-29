@@ -25,6 +25,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
+      with:
+        lfs: true
     - name: Build
       run: cargo build --verbose
     - name: Run tests
@@ -36,6 +38,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v2
+        with:
+          lfs: true
       - name: Build
         run: |
           cd splashsurf_lib
@@ -51,6 +55,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v2
+        with:
+          lfs: true
       - name: Build
         run: |
           cd splashsurf_lib
