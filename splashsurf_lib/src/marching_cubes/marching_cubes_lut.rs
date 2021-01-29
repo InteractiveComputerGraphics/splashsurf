@@ -18,9 +18,10 @@
 //!   - The triangulation is given by the two triangles `[0, 8, 3]` and `[1, 2, 10]`, with vertices
 //!     on the edges identified by the given indices
 //!
-//! Note that it looks like the winding order of the triangles in the raw table is apparently
-//! inverted implying that normals point *into* the volume surrounded by the iso-surface.
-//! This is already taken into account by the [`marching_cubes_triangulation_iter`] function.
+//! Note that the raw table apparently uses a left-handed coordinate system and accordingly a
+//! clockwise winding order of the triangles. To avoid producing meshes with normals pointing into
+//! the reconstructed surface, the resulting triangles have to be flipped. This is already taken
+//! into account by the [`marching_cubes_triangulation_iter`] function.
 //!
 //! Cube description:
 //!
