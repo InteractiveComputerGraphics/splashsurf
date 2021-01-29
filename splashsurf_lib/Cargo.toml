@@ -46,4 +46,5 @@ criterion = "0.3"
 
 [[bench]]
 name = "splashsurf_lib_benches"
+path = "benches/splashsurf_lib_benches.rs"
 harness = false
