@@ -424,12 +424,6 @@ mod arguments {
                         input_stem.replace("{}", &format!("{}_{{}}", output_suffix))
                     );
 
-                    if args.parallelize_over_files.into_bool()
-                        && args.parallelize_over_particles.into_bool()
-                    {
-                        return Err(anyhow!("Multi-threading can only be enabled for EITHER files OR particles, not both at the same time."));
-                    }
-
                     Self::try_new(
                         true,
                         args.input_file.clone(),
