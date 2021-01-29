@@ -3,6 +3,10 @@
 ### Short-term goals
  - Implement export of surface normals via the CLI
 
+## Version 0.5.1
+
+ - Lib: Fix bug in triangulation that at most 4 out 5 possible triangles were emitted. This may lead in non-closed meshes.
+
 ## Version 0.5.0
 
 The biggest new feature is a domain decomposed approach for the surface reconstruction by performing a spatial decomposition of the particle set with an octree.
