@@ -3,7 +3,7 @@ use anyhow::{anyhow, Context};
 use arguments::{
     ReconstructionRunnerArgs, ReconstructionRunnerPathCollection, ReconstructionRunnerPaths,
 };
-use log::{error, info};
+use log::info;
 use rayon::prelude::*;
 use splashsurf_lib::coarse_prof::profile;
 use splashsurf_lib::mesh::PointCloud3d;
@@ -544,14 +544,6 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
     let grid = reconstruction.grid();
     let mesh = reconstruction.mesh();
 
-    if check_mesh {
-        if let Err(err) = splashsurf_lib::marching_cubes::check_mesh_consistency(grid, mesh) {
-            error!("{}", err);
-        } else {
-            info!("Checked mesh for problems (holes, etc.), no problems were found.");
-        }
-    }
-
     // Store the surface mesh
     {
         profile!("write surface mesh to file");
@@ -638,6 +630,14 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
         )?;
 
         info!("Done.");
+    }
+
+    if check_mesh {
+        if let Err(err) = splashsurf_lib::marching_cubes::check_mesh_consistency(grid, mesh) {
+            return Err(anyhow!("{}", err));
+        } else {
+            info!("Checked mesh for problems (holes, etc.), no problems were found.");
+        }
     }
 
     Ok(())
