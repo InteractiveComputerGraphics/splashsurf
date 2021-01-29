@@ -3,7 +3,7 @@ use anyhow::{anyhow, Context};
 use arguments::{
     ReconstructionRunnerArgs, ReconstructionRunnerPathCollection, ReconstructionRunnerPaths,
 };
-use log::info;
+use log::{error, info};
 use rayon::prelude::*;
 use splashsurf_lib::coarse_prof::profile;
 use splashsurf_lib::mesh::PointCloud3d;
@@ -95,6 +95,9 @@ pub struct ReconstructSubcommandArgs {
     /// Set the number of threads for the worker thread pool
     #[structopt(long, short = "-n")]
     num_threads: Option<usize>,
+    /// Whether to check the final mesh for problems such as holes (note that when stitching is disabled this will lead to a lot of reported problems)
+    #[structopt(long, default_value = "off", possible_values = &["on", "off"], case_insensitive = true)]
+    check_mesh: Switch,
 }
 
 arg_enum! {
@@ -124,7 +127,7 @@ pub fn reconstruct_subcommand(cmd_args: &ReconstructSubcommandArgs) -> Result<()
 
     let result = if cmd_args.parallelize_over_files.into_bool() {
         paths.par_iter().try_for_each(|path| {
-            reconstruction_entry_point(path, &args)
+            reconstruction_pipeline(path, &args)
                 .with_context(|| {
                     format!(
                         "Error while processing input file '{}' from a file sequence",
@@ -140,7 +143,7 @@ pub fn reconstruct_subcommand(cmd_args: &ReconstructSubcommandArgs) -> Result<()
     } else {
         paths
             .iter()
-            .try_for_each(|path| reconstruction_entry_point(path, &args))
+            .try_for_each(|path| reconstruction_pipeline(path, &args))
     };
 
     if result.is_ok() {
@@ -166,6 +169,7 @@ mod arguments {
     pub struct ReconstructionRunnerArgs {
         pub params: splashsurf_lib::Parameters<f64>,
         pub use_double_precision: bool,
+        pub check_mesh: bool,
         pub io_params: io::FormatParameters,
     }
 
@@ -239,6 +243,7 @@ mod arguments {
             Ok(ReconstructionRunnerArgs {
                 params,
                 use_double_precision: args.use_double_precision.into_bool(),
+                check_mesh: args.check_mesh.into_bool(),
                 io_params: io::FormatParameters::default(),
             })
         }
@@ -473,21 +478,27 @@ mod arguments {
 }
 
 /// Calls the reconstruction pipeline for single or double precision depending on the runtime parameters
-pub(crate) fn reconstruction_entry_point(
+pub(crate) fn reconstruction_pipeline(
     paths: &ReconstructionRunnerPaths,
     args: &ReconstructionRunnerArgs,
 ) -> Result<(), anyhow::Error> {
     if args.use_double_precision {
         info!("Using double precision (f64) for surface reconstruction.");
-        reconstruction_entry_point_generic::<i64, f64>(paths, &args.params, &args.io_params)?;
+        reconstruction_pipeline_generic::<i64, f64>(
+            paths,
+            &args.params,
+            &args.io_params,
+            args.check_mesh,
+        )?;
     } else {
         info!("Using single precision (f32) for surface reconstruction.");
-        reconstruction_entry_point_generic::<i64, f32>(
+        reconstruction_pipeline_generic::<i64, f32>(
             paths,
             &args.params.try_convert().ok_or(anyhow!(
                 "Unable to convert surface reconstruction parameters from f64 to f32."
             ))?,
             &args.io_params,
+            args.check_mesh,
         )?;
     }
 
@@ -495,10 +506,11 @@ pub(crate) fn reconstruction_entry_point(
 }
 
 /// Wrapper for the reconstruction pipeline: loads input file, runs reconstructions, stores output files
-pub(crate) fn reconstruction_entry_point_generic<I: Index, R: Real>(
+pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
     paths: &ReconstructionRunnerPaths,
     params: &splashsurf_lib::Parameters<R>,
     io_params: &io::FormatParameters,
+    check_mesh: bool,
 ) -> Result<(), anyhow::Error> {
     profile!("surface reconstruction cli");
 
@@ -517,6 +529,14 @@ pub(crate) fn reconstruction_entry_point_generic<I: Index, R: Real>(
 
     let grid = reconstruction.grid();
     let mesh = reconstruction.mesh();
+
+    if check_mesh {
+        if let Err(err) = splashsurf_lib::marching_cubes::check_mesh_consistency(grid, mesh) {
+            error!("{}", err);
+        } else {
+            info!("Checked mesh for problems (holes, etc.), no problems were found.");
+        }
+    }
 
     // Store the surface mesh
     {

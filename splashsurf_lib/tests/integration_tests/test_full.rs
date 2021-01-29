@@ -1,4 +1,5 @@
 use nalgebra::Vector3;
+use splashsurf_lib::marching_cubes::check_mesh_consistency;
 use splashsurf_lib::{
     reconstruct_surface, Parameters, Real, SpatialDecompositionParameters, SubdivisionCriterion,
 };
@@ -107,11 +108,11 @@ macro_rules! generate_test {
 
             if test_for_boundary(&parameters) {
                 // Ensure that the mesh does not have a boundary
-                assert_eq!(
-                    reconstruction.mesh().find_boundary_edges(),
-                    vec![],
-                    "Mesh boundary is not empty"
-                );
+                if let Err(e) = check_mesh_consistency(reconstruction.grid(), reconstruction.mesh())
+                {
+                    eprintln!("{}", e);
+                    panic!("Mesh contains boundary edges");
+                }
             }
         }
     };
