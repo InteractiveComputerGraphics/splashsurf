@@ -1,3 +1,4 @@
+#[cfg(feature = "vtk_extras")]
 pub mod vtk {
     use splashsurf_lib::nalgebra::Vector3;
     use splashsurf_lib::Real;
