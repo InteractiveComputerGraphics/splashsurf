@@ -141,13 +141,14 @@ impl<R: Real> TriMesh3d<R> {
     /// Note that the output order is not necessarily deterministic due to the internal use of hashmaps.
     pub fn find_boundary_edges(&self) -> Vec<([usize; 2], usize, usize)> {
         let mut sorted_edges = Vec::new();
-        let mut face_info = Vec::new();
+        let mut edge_info = Vec::new();
 
         // Local indices into the triangle connectivity to obtain all edges
         let tri_edges: [(usize, usize); 3] = [(0, 1), (1, 2), (2, 0)];
 
-        // We want to use (sorted) slices as keys in a hash map, so we need to store
-        // and sort the slices first
+        // For each triangle collect
+        //  - each edge (with sorted vertices to use as unique key)
+        //  - each edge with the index of the triangle and local index in the triangle
         for (tri_idx, tri_conn) in self.triangles.iter().enumerate() {
             for (local_idx, (v0, v1)) in tri_edges
                 .iter()
@@ -162,7 +163,7 @@ impl<R: Real> TriMesh3d<R> {
                     sorted_edges.push([v1, v0])
                 };
 
-                face_info.push(([v0, v1], tri_idx, local_idx));
+                edge_info.push(([v0, v1], tri_idx, local_idx));
             }
         }
 
@@ -181,7 +182,7 @@ impl<R: Real> TriMesh3d<R> {
             .into_iter()
             .map(|(_edge, value)| value)
             .filter(|&(_, count)| count == 1)
-            .map(move |(edge_idx, _)| face_info[edge_idx].clone())
+            .map(move |(edge_idx, _)| edge_info[edge_idx].clone())
             .collect()
     }
 }
