@@ -66,7 +66,7 @@ cargo install splashsurf
 ### Basic usage
 
 ```
-splashsurf-reconstruct 0.4.0
+splashsurf-reconstruct 0.5.0
 Reconstruct a surface from particle data
 
 USAGE:
@@ -147,7 +147,7 @@ splashsurf reconstruct -i data/canyon_13353401_particles.xyz --output-dir=out --
 ```
 With these parameters, a scene with 13353401 particles is reconstructed in less than 3.5 seconds on a Ryzen 9 5950X. The output is a mesh with 6022105 triangles.
 ```
-[2021-01-29T15:14:18.738806+01:00][splashsurf][INFO] splashsurf v0.4.0 (splashsurf)
+[2021-01-29T15:14:18.738806+01:00][splashsurf][INFO] splashsurf v0.5.0 (splashsurf)
 [2021-01-29T15:14:18.738828+01:00][splashsurf][INFO] Called with command line: target/release/splashsurf reconstruct -i data/canyon_13353401_particles.xyz --output-dir=out --particle-radius=0.011 --smoothing-length=2.0 --cube-size=1.5 --surface-threshold=0.6
 [2021-01-29T15:14:18.738839+01:00][splashsurf::reconstruction][INFO] Using single precision (f32) for surface reconstruction.
 [2021-01-29T15:14:18.738841+01:00][splashsurf::io][INFO] Reading particle dataset from "data/canyon_13353401_particles.xyz"...

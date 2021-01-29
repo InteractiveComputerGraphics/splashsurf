@@ -1,5 +1,10 @@
 ## Master
 
+### Short-term goals
+ - Implement export of surface normals via the CLI
+
+## Version 0.5.0
+
 The biggest new feature is a domain decomposed approach for the surface reconstruction by performing a spatial decomposition of the particle set with an octree.
 The resulting local patches can then be processed in parallel (leaving a single layer of boundary cells per patch untriangulated to avoid incompatible boundaries).
 Afterwards, a stitching procedure walks the octree back upwards and merges the octree leaves by averaging density values on the boundaries. 
@@ -35,10 +40,6 @@ At the moment, this domain decomposition approach is only available when allowin
 ### Regressions
  - "Splash detection" currently does nothing
  - The density map is currently not returned by the reconstruction
-
-### Short-term goals
- - Implement export of surface normals via the CLI
- - 
 
 ## Version 0.4.0
 
