@@ -11,6 +11,7 @@ use splashsurf_lib::vtkio::model::UnstructuredGridPiece;
 use splashsurf_lib::{density_map, Index, Real};
 use std::convert::TryFrom;
 use std::path::PathBuf;
+use structopt::clap::arg_enum;
 use structopt::StructOpt;
 
 // TODO: Detect smallest index type (i.e. check if ok to use i32 as index)
@@ -21,7 +22,7 @@ pub struct ReconstructSubcommandArgs {
     /// Path to the input file where the particle positions are stored (supported formats: VTK, binary f32 XYZ, PLY, BGEO)
     #[structopt(short = "-i", parse(from_os_str))]
     input_file: PathBuf,
-    /// Filename for writing the reconstructed surface to disk (default: "\[original_filename\]_surface.vtk")
+    /// Filename for writing the reconstructed surface to disk (default: "{original_filename}_surface.vtk")
     #[structopt(short = "-o", parse(from_os_str))]
     output_file: Option<PathBuf>,
     /// Optional base directory for all output files (default: current working directory)
@@ -45,9 +46,9 @@ pub struct ReconstructSubcommandArgs {
     /// The iso-surface threshold for the density, i.e. value of the reconstructed density that indicates the fluid surface (in multiplies of the rest density)
     #[structopt(long, default_value = "0.6")]
     surface_threshold: f64,
-    /// Whether to enable the use of double precision for all computations (disabled by default)
-    #[structopt(short = "-d")]
-    use_double_precision: bool,
+    /// Whether to enable the use of double precision for all computations
+    #[structopt(short = "-d", long, default_value = "off", possible_values = &["on", "off"], case_insensitive = true)]
+    use_double_precision: Switch,
     /// Lower corner of the domain where surface reconstruction should be performed, format: domain-min=x_min;y_min;z_min (requires domain-max to be specified)
     #[structopt(
         long,
@@ -64,12 +65,12 @@ pub struct ReconstructSubcommandArgs {
         requires = "domain-min"
     )]
     domain_max: Option<Vec<f64>>,
-    /// Whether to disable spatial decomposition using an octree and use a global approach instead (slower)
-    #[structopt(long)]
-    no_octree: bool,
-    /// Whether to disable stitching of the disjoint subdomain meshes when spatial decomposition is enabled (faster but does not result in manifold meshes)
-    #[structopt(long)]
-    no_stitching: bool,
+    /// Whether to enable spatial decomposition using an octree (faster) instead of a global approach
+    #[structopt(long, default_value = "on", possible_values = &["on", "off"], case_insensitive = true)]
+    use_octree: Switch,
+    /// Whether to enable stitching of the disjoint subdomain meshes when spatial decomposition is enabled (slower but results in closed meshes)
+    #[structopt(long, default_value = "on", possible_values = &["on", "off"], case_insensitive = true)]
+    use_stitching: Switch,
     /// The maximum number of particles for leaf nodes of the octree, default is to compute it based on number of threads and particles
     #[structopt(long)]
     octree_max_particles: Option<usize>,
@@ -85,15 +86,32 @@ pub struct ReconstructSubcommandArgs {
     /// Optional filename for writing the octree used to partition the particles to disk
     #[structopt(long, parse(from_os_str))]
     output_octree: Option<PathBuf>,
-    /// Flag to enable multi-threading to process multiple input files in parallel, conflicts with --mt-particles
-    #[structopt(long = "mt-files", conflicts_with = "parallelize-over-particles")]
-    parallelize_over_files: bool,
-    /// Flag to enable multi-threading for a single input file by processing chunks of particles in parallel, conflicts with --mt-files
-    #[structopt(long = "mt-particles", conflicts_with = "parallelize-over-files")]
-    parallelize_over_particles: bool,
+    /// Flag to enable multi-threading to process multiple input files in parallel
+    #[structopt(long = "mt-files", default_value = "off", possible_values = &["on", "off"], case_insensitive = true)]
+    parallelize_over_files: Switch,
+    /// Flag to enable multi-threading for a single input file by processing chunks of particles in parallel
+    #[structopt(long = "mt-particles", default_value = "on", possible_values = &["on", "off"], case_insensitive = true)]
+    parallelize_over_particles: Switch,
     /// Set the number of threads for the worker thread pool
     #[structopt(long, short = "-n")]
     num_threads: Option<usize>,
+}
+
+arg_enum! {
+    #[derive(Copy, Clone, Debug)]
+    pub enum Switch {
+        Off,
+        On
+    }
+}
+
+impl Switch {
+    fn into_bool(self) -> bool {
+        match self {
+            Switch::Off => false,
+            Switch::On => true,
+        }
+    }
 }
 
 /// Executes the `reconstruct` subcommand
@@ -104,7 +122,7 @@ pub fn reconstruct_subcommand(cmd_args: &ReconstructSubcommandArgs) -> Result<()
     let args = ReconstructionRunnerArgs::try_from(cmd_args)
         .context("Failed processing parameters from command line")?;
 
-    let result = if cmd_args.parallelize_over_files {
+    let result = if cmd_args.parallelize_over_files.into_bool() {
         paths.par_iter().try_for_each(|path| {
             reconstruction_entry_point(path, &args)
                 .with_context(|| {
@@ -182,7 +200,7 @@ mod arguments {
                 .map(|r| args.particle_radius * r);
             let cube_size = args.particle_radius * args.cube_size;
 
-            let spatial_decomposition = if args.no_octree {
+            let spatial_decomposition = if !args.use_octree.into_bool() {
                 None
             } else {
                 let subdivision_criterion = if let Some(max_particles) = args.octree_max_particles {
@@ -191,7 +209,7 @@ mod arguments {
                     splashsurf_lib::SubdivisionCriterion::MaxParticleCountAuto
                 };
                 let ghost_particle_safety_factor = args.octree_ghost_margin_factor;
-                let enable_stitching = !args.no_stitching;
+                let enable_stitching = args.use_stitching.into_bool();
 
                 Some(splashsurf_lib::SpatialDecompositionParameters {
                     subdivision_criterion,
@@ -209,7 +227,7 @@ mod arguments {
                 cube_size,
                 iso_surface_threshold: args.surface_threshold,
                 domain_aabb,
-                enable_multi_threading: args.parallelize_over_particles,
+                enable_multi_threading: args.parallelize_over_particles.into_bool(),
                 spatial_decomposition,
             };
 
@@ -220,7 +238,7 @@ mod arguments {
 
             Ok(ReconstructionRunnerArgs {
                 params,
-                use_double_precision: args.use_double_precision,
+                use_double_precision: args.use_double_precision.into_bool(),
                 io_params: io::FormatParameters::default(),
             })
         }
@@ -405,6 +423,12 @@ mod arguments {
                         "{}.vtk",
                         input_stem.replace("{}", &format!("{}_{{}}", output_suffix))
                     );
+
+                    if args.parallelize_over_files.into_bool()
+                        && args.parallelize_over_particles.into_bool()
+                    {
+                        return Err(anyhow!("Multi-threading can only be enabled for EITHER files OR particles, not both at the same time."));
+                    }
 
                     Self::try_new(
                         true,
