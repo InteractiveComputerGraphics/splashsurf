@@ -3,11 +3,11 @@ use nalgebra::Vector3;
 use splashsurf_lib::AxisAlignedBoundingBox3d;
 use std::time::Duration;
 
-use super::io::xyz::particles_from_xyz;
+use super::io::vtk::particles_from_vtk;
 
 pub fn aabb_from_points(c: &mut Criterion) {
     let particle_positions: &Vec<Vector3<f32>> =
-        &particles_from_xyz("../data/canyon_13353401_particles.xyz").unwrap();
+        &particles_from_vtk("../data/hilbert_46843_particles.vtk").unwrap();
 
     let mut group = c.benchmark_group("aabb");
     group.sample_size(200);
@@ -23,7 +23,7 @@ pub fn aabb_from_points(c: &mut Criterion) {
 
 pub fn aabb_from_points_par(c: &mut Criterion) {
     let particle_positions: &Vec<Vector3<f32>> =
-        &particles_from_xyz("../data/canyon_13353401_particles.xyz").unwrap();
+        &particles_from_vtk("../data/hilbert_46843_particles.vtk").unwrap();
 
     let mut group = c.benchmark_group("aabb");
     group.sample_size(500);

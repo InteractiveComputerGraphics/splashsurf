@@ -12,6 +12,7 @@ use super::io::xyz::particles_from_xyz;
 #[allow(dead_code)]
 use super::io::vtk::write_vtk;
 
+/*
 pub fn surface_reconstruction_canyon(c: &mut Criterion) {
     let particle_positions: &Vec<Vector3<f32>> =
         &particles_from_xyz("../data/canyon_13353401_particles.xyz").unwrap();
@@ -83,6 +84,7 @@ pub fn surface_reconstruction_canyon(c: &mut Criterion) {
     )
     .unwrap();
 }
+*/
 
 pub fn surface_reconstruction_dam_break(c: &mut Criterion) {
     let particle_positions: &Vec<Vector3<f32>> =
@@ -338,5 +340,5 @@ criterion_group!(
     surface_reconstruction_double_dam_break,
     surface_reconstruction_double_dam_break_inplace,
     surface_reconstruction_dam_break,
-    surface_reconstruction_canyon
+    //surface_reconstruction_canyon
 );

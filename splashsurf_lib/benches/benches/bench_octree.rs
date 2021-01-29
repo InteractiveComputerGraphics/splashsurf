@@ -4,11 +4,11 @@ use splashsurf_lib::octree::Octree;
 use splashsurf_lib::{grid_for_reconstruction, SubdivisionCriterion, UniformGrid};
 use std::time::Duration;
 
-use super::io::xyz::particles_from_xyz;
+use super::io::vtk::particles_from_vtk;
 
 pub fn subdivide_recursively_benchmark(c: &mut Criterion) {
     let particle_positions: &Vec<Vector3<f32>> =
-        &particles_from_xyz("../data/canyon_13353401_particles.xyz").unwrap();
+        &particles_from_vtk("../data/hilbert_46843_particles.vtk").unwrap();
     let particles_per_cell = 20000;
 
     let particle_radius = 0.011;
