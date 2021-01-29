@@ -302,7 +302,8 @@ static MARCHING_CUBES_TABLE: [[i32; 16]; 256] = [
 
 /// Returns a reference into the marching cubes LUT to the case corresponding to the given vertex configuration
 pub fn get_marching_cubes_triangulation_raw(vertices_inside: &[bool; 8]) -> &'static [i32; 16] {
-    &MARCHING_CUBES_TABLE[flags_to_index(vertices_inside)]
+    let index = flags_to_index(vertices_inside);
+    &MARCHING_CUBES_TABLE[index]
 }
 
 /// Returns the marching cubes triangulation corresponding to the given vertex configuration
@@ -314,7 +315,7 @@ pub fn marching_cubes_triangulation_iter(
     vertices_inside: &[bool; 8],
 ) -> impl Iterator<Item = [i32; 3]> {
     let triangulation = get_marching_cubes_triangulation_raw(vertices_inside);
-    (0..4)
+    (0..5)
         .into_iter()
         .map(move |i| triangulation_to_triangle(triangulation, i))
         .flatten()
@@ -398,43 +399,32 @@ mod test_lut {
         }
     }
 
-    /*
     #[test]
-    fn test_marching_cubes_cases() {
+    fn test_get_marching_cubes_triangulation_iter() {
         assert_eq!(MARCHING_CUBES_TABLE.len(), 256);
 
         for i in 0..256 {
             let flags = index_to_flags(i);
-            let flags_inverse = inverse_flags(&flags);
-            let i_inverse = flags_to_index(&flags_inverse);
+            let raw = get_marching_cubes_triangulation_raw(&flags);
 
-            let case = MARCHING_CUBES_TABLE[i];
-            let case_inverse = MARCHING_CUBES_TABLE[i_inverse];
+            let mut tri_counter = 0;
+            for tri in marching_cubes_triangulation_iter(&flags) {
+                let mut vec_raw = raw[3 * tri_counter..3 * tri_counter + 3].to_vec();
+                let mut vec_tri = tri.to_vec();
 
-            let triangles: Vec<_> = (0..4)
-                .into_iter()
-                .map(|i| triangulation_to_triangle(&case, i))
-                .flatten()
-                .collect();
-
-            let triangles_inverse: Vec<_> = (0..4)
-                .into_iter()
-                .map(|i| triangulation_to_triangle(&case_inverse, i))
-                .flatten()
-                .collect();
+                vec_raw.sort();
+                vec_tri.sort();
+                assert_eq!(vec_raw, vec_tri);
+                tri_counter += 1;
+            }
 
             assert_eq!(
-                triangles.len(),
-                triangles_inverse.len(),
-                "Case {} and inverse case {} don't have the same number of triangles ({:?} vs {:?})",
-                i,
-                i_inverse,
-                triangles,
-                triangles_inverse
-            );
+                raw[3 * tri_counter],
+                -1,
+                "There are more triangles in the raw case then returned by the iterator!"
+            )
         }
     }
-    */
 
     #[test]
     fn test_marching_cubes_triangulation_iter() {
@@ -449,7 +439,6 @@ mod test_lut {
                 true, false, false, false, false, false, false, false
             ])
             .collect::<Vec<_>>(),
-            //vec![[0, 8, 3]]
             vec![[3, 8, 0]]
         );
 
