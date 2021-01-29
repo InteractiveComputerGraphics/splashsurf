@@ -48,7 +48,7 @@ pub struct ReconstructSubcommandArgs {
     surface_threshold: f64,
     /// Whether to enable the use of double precision for all computations
     #[structopt(short = "-d", long, default_value = "off", possible_values = &["on", "off"], case_insensitive = true)]
-    use_double_precision: Switch,
+    double_precision: Switch,
     /// Lower corner of the domain where surface reconstruction should be performed, format: domain-min=x_min;y_min;z_min (requires domain-max to be specified)
     #[structopt(
         long,
@@ -67,10 +67,10 @@ pub struct ReconstructSubcommandArgs {
     domain_max: Option<Vec<f64>>,
     /// Whether to enable spatial decomposition using an octree (faster) instead of a global approach
     #[structopt(long, default_value = "on", possible_values = &["on", "off"], case_insensitive = true)]
-    use_octree: Switch,
-    /// Whether to enable stitching of the disjoint subdomain meshes when spatial decomposition is enabled (slower but results in closed meshes)
-    #[structopt(long, default_value = "on", possible_values = &["on", "off"], case_insensitive = true)]
-    use_stitching: Switch,
+    octree_decomposition: Switch,
+    /// Whether to enable stitching of the disconnected local meshes when spatial decomposition is enabled (slower, but without stitching meshes will not be closed)
+    #[structopt(name="octree_stitch_subdomains", long, default_value = "on", possible_values = &["on", "off"], case_insensitive = true)]
+    stitch_subdomains: Switch,
     /// The maximum number of particles for leaf nodes of the octree, default is to compute it based on number of threads and particles
     #[structopt(long)]
     octree_max_particles: Option<usize>,
@@ -204,7 +204,7 @@ mod arguments {
                 .map(|r| args.particle_radius * r);
             let cube_size = args.particle_radius * args.cube_size;
 
-            let spatial_decomposition = if !args.use_octree.into_bool() {
+            let spatial_decomposition = if !args.octree_decomposition.into_bool() {
                 None
             } else {
                 let subdivision_criterion = if let Some(max_particles) = args.octree_max_particles {
@@ -213,7 +213,7 @@ mod arguments {
                     splashsurf_lib::SubdivisionCriterion::MaxParticleCountAuto
                 };
                 let ghost_particle_safety_factor = args.octree_ghost_margin_factor;
-                let enable_stitching = args.use_stitching.into_bool();
+                let enable_stitching = args.stitch_subdomains.into_bool();
 
                 Some(splashsurf_lib::SpatialDecompositionParameters {
                     subdivision_criterion,
@@ -242,7 +242,7 @@ mod arguments {
 
             Ok(ReconstructionRunnerArgs {
                 params,
-                use_double_precision: args.use_double_precision.into_bool(),
+                use_double_precision: args.double_precision.into_bool(),
                 check_mesh: args.check_mesh.into_bool(),
                 io_params: io::FormatParameters::default(),
             })
