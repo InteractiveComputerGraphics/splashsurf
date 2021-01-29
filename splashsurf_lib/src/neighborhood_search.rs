@@ -1,11 +1,17 @@
-use nalgebra::Vector3;
-use rayon::prelude::*;
+//! Simple neighborhood search based on spatial hashing
+//!
+//! This module provides basic sequential and parallel neighborhood search implementations using
+//! spatial hashing. The algorithms return per-particle neighborhood list with indices of all particles
+//! that are within the given radius of the particle.
 
 use crate::uniform_grid::UniformGrid;
 use crate::utils::SendSyncWrapper;
 use crate::{new_map, AxisAlignedBoundingBox3d, HashState, Index, MapType, ParallelMapType, Real};
+use nalgebra::Vector3;
+use rayon::prelude::*;
 
 // TODO: Replace some unwrap() calls with errors
+// TODO: Check if input parameters are valid (valid domain, valid search radius)
 
 /// Performs a neighborhood search, returning the indices of all neighboring particles in the given search radius per particle
 #[inline(never)]
@@ -15,11 +21,80 @@ pub fn search<I: Index, R: Real>(
     search_radius: R,
     enable_multi_threading: bool,
 ) -> Vec<Vec<usize>> {
+    let mut particle_neighbor_lists = Vec::new();
     if enable_multi_threading {
-        parallel_search::<I, R>(domain, particle_positions, search_radius)
+        parallel_search::<I, R>(
+            domain,
+            particle_positions,
+            search_radius,
+            &mut particle_neighbor_lists,
+        )
     } else {
-        sequential_search::<I, R>(domain, particle_positions, search_radius)
+        sequential_search::<I, R>(
+            domain,
+            particle_positions,
+            search_radius,
+            &mut particle_neighbor_lists,
+        )
     }
+    particle_neighbor_lists
+}
+
+/// Performs a neighborhood search inplace, stores the indices of all neighboring particles in the given search radius per particle in the given vector
+#[inline(never)]
+pub fn search_inplace<I: Index, R: Real>(
+    domain: &AxisAlignedBoundingBox3d<R>,
+    particle_positions: &[Vector3<R>],
+    search_radius: R,
+    enable_multi_threading: bool,
+    particle_neighbor_lists: &mut Vec<Vec<usize>>,
+) {
+    if enable_multi_threading {
+        parallel_search::<I, R>(
+            domain,
+            particle_positions,
+            search_radius,
+            particle_neighbor_lists,
+        )
+    } else {
+        sequential_search::<I, R>(
+            domain,
+            particle_positions,
+            search_radius,
+            particle_neighbor_lists,
+        )
+    }
+}
+
+/// Allocates enough storage for the given number of particles and clears all existing neighborhood lists
+fn init_neighborhood_list(neighborhood_list: &mut Vec<Vec<usize>>, new_len: usize) {
+    let old_len = neighborhood_list.len();
+    if old_len != new_len {
+        // Reset all neighbor lists that won't be truncated
+        for particle_list in neighborhood_list.iter_mut().take(old_len.min(new_len)) {
+            particle_list.clear();
+        }
+    }
+
+    // Ensure that length is correct
+    neighborhood_list.resize_with(new_len, || Vec::with_capacity(15));
+}
+
+/// Allocates enough storage for the given number of particles and clears all existing neighborhood lists in parallel
+fn par_init_neighborhood_list(neighborhood_list: &mut Vec<Vec<usize>>, new_len: usize) {
+    let old_len = neighborhood_list.len();
+    if old_len != new_len {
+        // Reset all neighbor lists that won't be truncated
+        neighborhood_list
+            .par_iter_mut()
+            .take(old_len.min(new_len))
+            .for_each(|particle_list| {
+                particle_list.clear();
+            });
+    }
+
+    // Ensure that length is correct
+    neighborhood_list.resize_with(new_len, || Vec::with_capacity(15));
 }
 
 /// Performs a neighborhood search, returning the indices of all neighboring particles in the given search radius per particle, sequential implementation
@@ -28,35 +103,52 @@ pub fn sequential_search<I: Index, R: Real>(
     domain: &AxisAlignedBoundingBox3d<R>,
     particle_positions: &[Vector3<R>],
     search_radius: R,
-) -> Vec<Vec<usize>> {
+    neighborhood_list: &mut Vec<Vec<usize>>,
+) {
     // TODO: Use ArrayStorage from femproto instead of Vec of Vecs?
     // FIXME: Replace unwraps?
     profile!("neighborhood_search");
 
+    assert!(
+        search_radius > R::zero(),
+        "Search radius for neighborhood search has to be positive!"
+    );
+    assert!(
+        domain.is_consistent(),
+        "Domain for neighborhood search has to be consistent!"
+    );
+    assert!(
+        !domain.is_degenerate(),
+        "Domain for neighborhood search cannot be degenerate!"
+    );
+
     let search_radius_squared = search_radius * search_radius;
 
     // Create a new grid for neighborhood search
-    let grid = UniformGrid::from_aabb(&domain, search_radius).unwrap();
+    let grid = UniformGrid::from_aabb(&domain, search_radius)
+        .expect("Failed to construct grid for neighborhood search!");
     // Map for spatially hashed storage of all particles (map from cell -> enclosed particles)
     let particles_per_cell =
         sequential_generate_cell_to_particle_map::<I, R>(&grid, particle_positions);
 
     // Build neighborhood lists cell by cell
-    let mut neighborhood_list = vec![Vec::new(); particle_positions.len()];
+    init_neighborhood_list(neighborhood_list, particle_positions.len());
     {
         profile!("calculate_particle_neighbors_seq");
+        let mut potential_neighbor_particle_vecs = Vec::new();
         for (&flat_cell_index, particles) in &particles_per_cell {
             let current_cell = grid.try_unflatten_cell_index(flat_cell_index).unwrap();
 
             // Collect references to the particle lists of all existing adjacent cells and the cell itself
-            let potential_neighbor_particle_vecs: Vec<&Vec<usize>> = grid
-                .cells_adjacent_to_cell(&current_cell)
-                .chain(std::iter::once(current_cell))
-                .filter_map(|c| {
-                    let flat_cell_index = grid.flatten_cell_index(&c);
-                    particles_per_cell.get(&flat_cell_index)
-                })
-                .collect();
+            potential_neighbor_particle_vecs.clear();
+            potential_neighbor_particle_vecs.extend(
+                grid.cells_adjacent_to_cell(&current_cell)
+                    .chain(std::iter::once(current_cell))
+                    .filter_map(|c| {
+                        let flat_cell_index = grid.flatten_cell_index(&c);
+                        particles_per_cell.get(&flat_cell_index)
+                    }),
+            );
 
             // Returns an iterator over all particles of all adjacent cells and the cell itself
             let potential_neighbor_particle_iter = || {
@@ -85,8 +177,6 @@ pub fn sequential_search<I: Index, R: Real>(
             }
         }
     }
-
-    neighborhood_list
 }
 
 /// Performs a neighborhood search, returning the indices of all neighboring particles in the given search radius per particle, multi-thread implementation
@@ -95,19 +185,30 @@ pub fn parallel_search<I: Index, R: Real>(
     domain: &AxisAlignedBoundingBox3d<R>,
     particle_positions: &[Vector3<R>],
     search_radius: R,
-) -> Vec<Vec<usize>> {
-    profile!("neighborhood_search");
+    neighborhood_list: &mut Vec<Vec<usize>>,
+) {
+    profile!("par_neighborhood_search");
+
+    assert!(
+        search_radius > R::zero(),
+        "Search radius for neighborhood search has to be positive!"
+    );
+    assert!(
+        domain.is_consistent(),
+        "Domain for neighborhood search has to be consistent!"
+    );
+    assert!(
+        !domain.is_degenerate(),
+        "Domain for neighborhood search cannot be degenerate!"
+    );
 
     let search_radius_squared = search_radius * search_radius;
 
     // Create a new grid for neighborhood search
-    let grid = UniformGrid::from_aabb(&domain, search_radius).unwrap();
+    let grid = UniformGrid::from_aabb(&domain, search_radius)
+        .expect("Failed to construct grid for neighborhood search!");
 
     // Map for spatially hashed storage of all particles (map from cell -> enclosed particles)
-    /*
-    let particles_per_cell_map =
-        sequential_generate_cell_to_particle_map::<I, R>(&grid, particle_positions);
-        */
     let particles_per_cell_map =
         parallel_generate_cell_to_particle_map::<I, R>(&grid, particle_positions).into_read_only();
     let particles_per_cell_vec: Vec<(I, Vec<usize>)> = particles_per_cell_map
@@ -137,7 +238,7 @@ pub fn parallel_search<I: Index, R: Real>(
     };
 
     // TODO: Compute the default capacity of neighborhood lists from rest volume of particles
-    let mut neighborhood_list = vec![Vec::with_capacity(15); particle_positions.len()];
+    par_init_neighborhood_list(neighborhood_list, particle_positions.len());
     // We are ok with making the ptr Send+Sync because we are only going to write into disjoint fields of the Vec
     let neighborhood_list_mut_ptr = unsafe { SendSyncWrapper::new(neighborhood_list.as_mut_ptr()) };
 
@@ -183,25 +284,26 @@ pub fn parallel_search<I: Index, R: Real>(
             },
         );
     }
-
-    neighborhood_list
 }
 
 /// Stats of a neighborhood list
+#[derive(Clone, Debug)]
 pub struct NeighborhoodStats {
     /// A histogram over the count of particle neighbors per particle (e.g. `histogram[0]` -> count of particles without neighbors, `histogram[1]` -> count of particles with one neighbor, etc.)
     pub histogram: Vec<usize>,
+    /// Number of particles that have neighbors
+    pub particles_with_neighbors: usize,
     /// The size of the largest neighborhood
     pub max_neighbors: usize,
     /// Average number of neighbors per particle (excluding particles without neighbors)
     pub avg_neighbors: f64,
 }
 
-/// Computes stats of the given neighborhood list
+/// Computes stats (avg. neighbors, histogram) of the given neighborhood list
 pub fn compute_neigborhood_stats(neighborhood_list: &Vec<Vec<usize>>) -> NeighborhoodStats {
     let mut max_neighbors = 0;
     let mut total_neighbors = 0;
-    let mut nonzero_neighborhoods = 0;
+    let mut particles_with_neighbors = 0;
     let mut neighbor_histogram: Vec<usize> = vec![0; 1];
 
     for neighborhood in neighborhood_list.iter() {
@@ -213,13 +315,13 @@ pub fn compute_neigborhood_stats(neighborhood_list: &Vec<Vec<usize>>) -> Neighbo
 
             max_neighbors = max_neighbors.max(neighborhood.len());
             total_neighbors += neighborhood.len();
-            nonzero_neighborhoods += 1;
+            particles_with_neighbors += 1;
         } else {
             neighbor_histogram[0] += 1;
         }
     }
 
-    let avg_neighbors = total_neighbors as f64 / nonzero_neighborhoods as f64;
+    let avg_neighbors = total_neighbors as f64 / particles_with_neighbors as f64;
 
     /*
     println!(
@@ -236,6 +338,7 @@ pub fn compute_neigborhood_stats(neighborhood_list: &Vec<Vec<usize>>) -> Neighbo
 
     NeighborhoodStats {
         histogram: neighbor_histogram,
+        particles_with_neighbors,
         max_neighbors,
         avg_neighbors,
     }
@@ -250,15 +353,20 @@ fn sequential_generate_cell_to_particle_map<I: Index, R: Real>(
     profile!("sequential_generate_cell_to_particle_map");
     let mut particles_per_cell = new_map();
 
+    // Compute average particle density for initial cell capacity
+    let cell_dims = grid.cells_per_dim();
+    let n_cells = cell_dims[0] * cell_dims[1] * cell_dims[2];
+    let avg_density = particle_positions.len() / n_cells.to_usize().unwrap_or(1);
+
     // Assign all particles to enclosing cells
     for (particle_i, particle) in particle_positions.iter().enumerate() {
         let cell_ijk = grid.enclosing_cell(particle);
-        let cell = grid.get_cell(&cell_ijk).unwrap();
+        let cell = grid.get_cell(cell_ijk).unwrap();
         let flat_cell_index = grid.flatten_cell_index(&cell);
 
         particles_per_cell
             .entry(flat_cell_index)
-            .or_insert_with(Vec::new)
+            .or_insert_with(|| Vec::with_capacity(avg_density))
             .push(particle_i);
     }
 
@@ -279,7 +387,7 @@ fn parallel_generate_cell_to_particle_map<I: Index, R: Real>(
         .enumerate()
         .for_each(|(particle_i, particle)| {
             let cell_ijk = grid.enclosing_cell(particle);
-            let cell = grid.get_cell(&cell_ijk).unwrap();
+            let cell = grid.get_cell(cell_ijk).unwrap();
             let flat_cell_index = grid.flatten_cell_index(&cell);
 
             particles_per_cell

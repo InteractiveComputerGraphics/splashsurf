@@ -1,38 +1,57 @@
-use log::info;
+//! Triangulation of [`DensityMap`](crate::density_map::DensityMap)s using marching cubes
 
-use crate::marching_cubes_lut::get_marching_cubes_triangulation;
+use crate::marching_cubes::narrow_band_extraction::{
+    construct_mc_input, construct_mc_input_with_stitching_data,
+};
+use crate::marching_cubes::triangulation::{
+    triangulate, triangulate_with_criterion, DefaultTriangleGenerator,
+    TriangulationSkipBoundaryCells,
+};
 use crate::mesh::TriMesh3d;
+use crate::uniform_grid::{DummySubdomain, OwningSubdomainGrid, Subdomain};
 use crate::{new_map, DensityMap, Index, MapType, Real, UniformGrid};
 
-/// Performs a marching cubes triangulation of a density map on the given background grid
-pub fn triangulate_density_map<I: Index, R: Real>(
-    grid: &UniformGrid<I, R>,
-    density_map: &DensityMap<I, R>,
-    iso_surface_threshold: R,
-    mesh: &mut TriMesh3d<R>,
-) {
-    profile!("triangulate_density_map");
-    let marching_cubes_data =
-        interpolate_points_to_cell_data::<I, R>(&grid, &density_map, iso_surface_threshold, mesh);
-    triangulate::<I, R>(marching_cubes_data, mesh)
+pub mod marching_cubes_lut;
+mod narrow_band_extraction;
+mod stitching;
+mod triangulation;
+
+pub(crate) use stitching::{stitch_surface_patches, SurfacePatch};
+
+/// Input data required by the marching cubes triangulation
+#[derive(Clone, Debug)]
+pub(crate) struct MarchingCubesInput<I: Index> {
+    /// Data for all cells that are supposed to be triangulated by marching cubes
+    pub(crate) cell_data: MapType<I, CellData>,
 }
 
-/// Flag indicating whether a vertex is above or below the iso-surface
-#[derive(Copy, Clone, Debug)]
-enum RelativeToThreshold {
+/// Flag indicating whether a vertex is above or below the iso-surface threshold
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub(crate) enum RelativeToThreshold {
     Below,
     Indeterminate,
     Above,
 }
 
 impl RelativeToThreshold {
-    /// Returns if the value is above the iso-surface, panics if the value is indeterminate
+    /// Returns if the value is above the iso-surface threshold, panics if the value is indeterminate
     fn is_above(&self) -> bool {
         match self {
             RelativeToThreshold::Below => false,
             RelativeToThreshold::Above => true,
             // TODO: Replace with error?
-            RelativeToThreshold::Indeterminate => panic!(),
+            RelativeToThreshold::Indeterminate => {
+                panic!("Trying to evaluate cell data with indeterminate data!")
+            }
+        }
+    }
+
+    /// Returns if the value is above the iso-surface threshold or `None` if the value is indeterminate
+    fn is_indeterminate(&self) -> bool {
+        if let RelativeToThreshold::Indeterminate = self {
+            true
+        } else {
+            false
         }
     }
 }
@@ -40,14 +59,14 @@ impl RelativeToThreshold {
 /// Data for a single cell required by marching cubes
 #[derive(Clone, Debug)]
 pub(crate) struct CellData {
-    /// The interpolated iso-surface vertex per edge if the edge crosses the iso-surface
-    iso_surface_vertices: [Option<usize>; 12],
-    /// Flags indicating whether a corner vertex is above or below the iso-surface threshold
-    corner_above_threshold: [RelativeToThreshold; 8],
+    /// The interpolated iso-surface vertex per local edge if the edge crosses the iso-surface
+    pub(crate) iso_surface_vertices: [Option<usize>; 12],
+    /// Flags indicating whether a corner vertex of the cell is above or below the iso-surface threshold
+    pub(crate) corner_above_threshold: [RelativeToThreshold; 8],
 }
 
 impl CellData {
-    /// Returns an boolean array indicating for each corner vertex of the cell whether it's above the iso-surface
+    /// Returns an boolean array indicating for each corner vertex of the cell whether it's above the iso-surface threshold
     fn are_vertices_above(&self) -> [bool; 8] {
         [
             self.corner_above_threshold[0].is_above(),
@@ -71,202 +90,94 @@ impl Default for CellData {
     }
 }
 
-/// Input for the marching cubes algorithm
-#[derive(Clone, Debug)]
-pub(crate) struct MarchingCubesInput<I: Index> {
-    /// Data for all cells that marching cubes has to visit
-    cell_data: MapType<I, CellData>,
+impl<I: Index> Default for MarchingCubesInput<I> {
+    fn default() -> Self {
+        Self {
+            cell_data: new_map(),
+        }
+    }
 }
 
-/// Generates input data for performing the actual marching cubes triangulation
-///
-/// The returned data is a list of interpolated iso-surfaces vertices and a map of all cells that
-/// have to be visited by marching cubes. For each cell, it is stored whether the corner vertices
-/// are above/below the iso-surface threshold and the indices of the interpolated vertices for each
-/// edge that crosses the iso-surface.
-#[inline(never)]
-pub(crate) fn interpolate_points_to_cell_data<I: Index, R: Real>(
+/// Performs a marching cubes triangulation of a density map on the given background grid
+pub fn triangulate_density_map<I: Index, R: Real>(
     grid: &UniformGrid<I, R>,
     density_map: &DensityMap<I, R>,
     iso_surface_threshold: R,
-    mesh: &mut TriMesh3d<R>,
-) -> MarchingCubesInput<I> {
-    profile!("interpolate_points_to_cell_data");
+) -> TriMesh3d<R> {
+    profile!("triangulate_density_map");
 
-    // Note: This functions assumes that the default value for missing point data is below the iso-surface threshold
-    info!("Starting interpolation of cell data for marching cubes...");
-
-    // Map from flat cell index to all data that is required per cell for the marching cubes triangulation
-    let mut cell_data: MapType<I, CellData> = new_map();
-    // Storage for vertices that are created on edges crossing the iso-surface
-    let vertices = &mut mesh.vertices;
-    vertices.clear();
-
-    // Generate iso-surface vertices and identify affected cells & edges
-    {
-        profile!("generate_iso_surface_vertices");
-        for (flat_point_index, point_value) in density_map.iter() {
-            // We want to find edges that cross the iso-surface,
-            // therefore we can choose to either skip all points above or below the threshold.
-            //
-            // In most scenes, the sparse density map should contain more entries above than
-            // below the threshold, as it contains the whole fluid interior, whereas areas completely
-            // devoid of fluid are not part of the density map.
-            //
-            // Therefore, we choose to skip points with densities above the threshold to improve efficiency
-            if point_value > iso_surface_threshold {
-                continue;
-            }
-
-            let point = grid.try_unflatten_point_index(flat_point_index).unwrap();
-            let neighborhood = grid.get_point_neighborhood(&point);
-
-            // Iterate over all neighbors of the point to find edges crossing the iso-surface
-            for neighbor_edge in neighborhood.neighbor_edge_iter() {
-                let neighbor = neighbor_edge.neighbor_index();
-
-                let flat_neighbor_index = grid.flatten_point_index(neighbor);
-                // Try to read out the function value at the neighboring point
-                let neighbor_value = if let Some(v) = density_map.get(flat_neighbor_index) {
-                    v
-                } else {
-                    // Neighbors that are not in the point-value map were outside of the kernel evaluation radius.
-                    // This should only happen for cells that are completely outside of the compact support of a particle.
-                    // The point-value map has to be consistent such that for each cell, where at least one point-value
-                    // is missing like this, the cell has to be completely below the iso-surface threshold.
-                    continue;
-                };
-
-                // Check if an edge crossing the iso-surface was found
-                if neighbor_value > iso_surface_threshold {
-                    // Interpolate iso-surface vertex on the edge
-                    let alpha =
-                        (iso_surface_threshold - point_value) / (neighbor_value - point_value);
-                    let point_coords = grid.point_coordinates(&point);
-                    let neighbor_coords = grid.point_coordinates(neighbor);
-                    let interpolated_coords =
-                        (point_coords) * (R::one() - alpha) + neighbor_coords * alpha;
-
-                    // Store interpolated vertex and remember its index
-                    let vertex_index = vertices.len();
-                    vertices.push(interpolated_coords);
-
-                    // Store the data required for the marching cubes triangulation for
-                    // each cell adjacent to the edge crossing the iso-surface.
-                    // This includes the above/below iso-surface flags and the interpolated vertex index.
-                    for cell in grid.cells_adjacent_to_edge(&neighbor_edge).iter().flatten() {
-                        let flat_cell_index = grid.flatten_cell_index(cell);
-
-                        let mut cell_data_entry = cell_data
-                            .entry(flat_cell_index)
-                            .or_insert_with(CellData::default);
-
-                        // Store the index of the interpolated vertex on the corresponding local edge of the cell
-                        let local_edge_index = cell.local_edge_index_of(&neighbor_edge).unwrap();
-                        cell_data_entry.iso_surface_vertices[local_edge_index] = Some(vertex_index);
-
-                        // Mark the neighbor as above the iso-surface threshold
-                        let local_vertex_index =
-                            cell.local_point_index_of(neighbor.index()).unwrap();
-                        cell_data_entry.corner_above_threshold[local_vertex_index] =
-                            RelativeToThreshold::Above;
-                    }
-                }
-            }
-        }
-    }
-
-    // Cell corner points above the iso-surface threshold which are only surrounded by neighbors that
-    // are also above the threshold were not marked as `corner_above_threshold = true` before, because they
-    // don't have any adjacent edge crossing the iso-surface (and thus were never touched by the point data loop).
-    // This can happen in a configuration where e.g. only one corner is below the threshold.
-    //
-    // Therefore, we have to loop over all corner points of all cells that were collected for marching cubes
-    // and check their density value again.
-    //
-    // Note, that we would also have this problem if we flipped the default value of corner_above_threshold
-    // to false. In this case we could also move this into the point data loop (which might increase performance).
-    // However, we would have to special case cells without point data, which are currently skipped.
-    // Similarly, they have to be treated in a second pass because we don't want to initialize cells only
-    // consisting of missing points and points below the surface.
-    {
-        profile!("relative_to_threshold_postprocessing");
-        for (&flat_cell_index, cell_data) in cell_data.iter_mut() {
-            let cell = grid.try_unflatten_cell_index(flat_cell_index).unwrap();
-            for (local_point_index, flag_above) in
-                cell_data.corner_above_threshold.iter_mut().enumerate()
-            {
-                // If the point is already marked as above we can ignore it
-                if let RelativeToThreshold::Above = flag_above {
-                    continue;
-                }
-
-                // Otherwise try to look up its value and potentially mark it as above the threshold
-                let point = cell.global_index_of(local_point_index).unwrap();
-                let flat_point_index = grid.flatten_point_index(&point);
-                if let Some(point_value) = density_map.get(flat_point_index) {
-                    if point_value > iso_surface_threshold {
-                        *flag_above = RelativeToThreshold::Above;
-                    } else {
-                        *flag_above = RelativeToThreshold::Below;
-                    }
-                } else {
-                    *flag_above = RelativeToThreshold::Below;
-                }
-            }
-        }
-    }
-
-    #[cfg(debug_assertions)]
-    assert_cell_data_point_data_consistency(density_map, &cell_data, grid, iso_surface_threshold);
-
-    info!(
-        "Generated cell data for marching cubes with {} cells and {} vertices.",
-        cell_data.len(),
-        vertices.len()
-    );
-    info!("Interpolation done.");
-
-    MarchingCubesInput { cell_data }
+    let mut mesh = TriMesh3d::default();
+    triangulate_density_map_append(grid, None, density_map, iso_surface_threshold, &mut mesh);
+    mesh
 }
 
-/// Converts the marching cubes input cell data into a triangle surface mesh
-#[inline(never)]
-pub(crate) fn triangulate<I: Index, R: Real>(
-    input: MarchingCubesInput<I>,
+/// Performs a marching cubes triangulation of a density map on the given background grid, appends triangles to the given mesh
+pub fn triangulate_density_map_append<I: Index, R: Real>(
+    grid: &UniformGrid<I, R>,
+    subdomain: Option<&OwningSubdomainGrid<I, R>>,
+    density_map: &DensityMap<I, R>,
+    iso_surface_threshold: R,
     mesh: &mut TriMesh3d<R>,
 ) {
-    profile!("triangulate");
+    profile!("triangulate_density_map_append");
 
-    let MarchingCubesInput { cell_data } = input;
+    let marching_cubes_data = if let Some(subdomain) = subdomain {
+        construct_mc_input(
+            subdomain,
+            &density_map,
+            iso_surface_threshold,
+            &mut mesh.vertices,
+        )
+    } else {
+        let subdomain = DummySubdomain::new(grid);
+        construct_mc_input(
+            &subdomain,
+            &density_map,
+            iso_surface_threshold,
+            &mut mesh.vertices,
+        )
+    };
 
-    info!(
-        "Starting marching cubes triangulation of {} cells...",
-        cell_data.len()
+    triangulate::<I, R>(marching_cubes_data, mesh);
+}
+
+/// Performs triangulation of the given density map to a surface patch
+pub(crate) fn triangulate_density_map_to_surface_patch<I: Index, R: Real>(
+    subdomain: &OwningSubdomainGrid<I, R>,
+    density_map: &DensityMap<I, R>,
+    iso_surface_threshold: R,
+) -> SurfacePatch<I, R> {
+    profile!("triangulate_density_map_append");
+
+    let mut mesh = TriMesh3d::default();
+    let subdomain = subdomain.clone();
+
+    assert!(
+        subdomain.subdomain_grid().cells_per_dim().iter().all(|&n_cells| n_cells > I::one() + I::one()),
+        "Interpolation procedure with stitching support only works on grids & subdomains with more than 2 cells in each dimension!"
     );
 
-    mesh.triangles.clear();
+    let (marching_cubes_data, boundary_data) = construct_mc_input_with_stitching_data(
+        &subdomain,
+        &density_map,
+        iso_surface_threshold,
+        &mut mesh.vertices,
+    );
 
-    // Triangulate affected cells
-    for (&_flat_cell_index, cell_data) in &cell_data {
-        let triangles = get_marching_cubes_triangulation(&cell_data.are_vertices_above());
+    triangulate_with_criterion(
+        &subdomain,
+        marching_cubes_data,
+        &mut mesh,
+        TriangulationSkipBoundaryCells,
+        DefaultTriangleGenerator,
+    );
 
-        for triangle in triangles.iter().flatten() {
-            let global_triangle = [
-                cell_data.iso_surface_vertices[triangle[0] as usize].unwrap(),
-                cell_data.iso_surface_vertices[triangle[1] as usize].unwrap(),
-                cell_data.iso_surface_vertices[triangle[2] as usize].unwrap(),
-            ];
-            mesh.triangles.push(global_triangle);
-        }
+    SurfacePatch {
+        mesh,
+        subdomain,
+        data: boundary_data,
+        stitching_level: 0,
     }
-
-    info!(
-        "Generated surface mesh with {} triangles and {} vertices.",
-        mesh.triangles.len(),
-        mesh.vertices.len()
-    );
-    info!("Triangulation done.");
 }
 
 #[allow(unused)]
@@ -285,7 +196,7 @@ fn assert_cell_data_point_data_consistency<I: Index, R: Real>(
 
         let cell = grid.try_unflatten_cell_index(flat_cell_index).unwrap();
         for i in 0..8 {
-            let point = cell.global_index_of(i).unwrap();
+            let point = cell.global_point_index_of(i).unwrap();
             let flat_point_index = grid.flatten_point_index(&point);
             if let Some(point_value) = density_map.get(flat_point_index) {
                 if point_value > iso_surface_threshold {
@@ -335,12 +246,15 @@ fn test_interpolate_cell_data() {
 
     let mut sparse_data = new_map();
 
-    let marching_cubes_data = interpolate_points_to_cell_data(
-        &grid,
-        &sparse_data.clone().into(),
-        iso_surface_threshold,
-        &mut trimesh,
-    );
+    let marching_cubes_data = {
+        let subdomain = DummySubdomain::new(&grid);
+        construct_mc_input(
+            &subdomain,
+            &sparse_data.clone().into(),
+            iso_surface_threshold,
+            &mut trimesh.vertices,
+        )
+    };
 
     assert_eq!(trimesh.vertices.len(), 0);
     assert_eq!(marching_cubes_data.cell_data.len(), 0);
@@ -360,12 +274,15 @@ fn test_interpolate_cell_data() {
         sparse_data.insert(grid.flatten_point_index_array(&ijk), val);
     }
 
-    let marching_cubes_data = interpolate_points_to_cell_data(
-        &grid,
-        &sparse_data.clone().into(),
-        iso_surface_threshold,
-        &mut trimesh,
-    );
+    let marching_cubes_data = {
+        let subdomain = DummySubdomain::new(&grid);
+        construct_mc_input(
+            &subdomain,
+            &sparse_data.clone().into(),
+            iso_surface_threshold,
+            &mut trimesh.vertices,
+        )
+    };
 
     assert_eq!(marching_cubes_data.cell_data.len(), 1);
     // Check that the correct number of vertices was created
@@ -382,7 +299,7 @@ fn test_interpolate_cell_data() {
         vec![false, true, true, true, false, false, true, false]
     );
 
-    // Check that vertices were instered at the correct edges
+    // Check that vertices were inserted at the correct edges
     assert!(cell.iso_surface_vertices[0].is_some());
     assert!(cell.iso_surface_vertices[3].is_some());
     assert!(cell.iso_surface_vertices[5].is_some());

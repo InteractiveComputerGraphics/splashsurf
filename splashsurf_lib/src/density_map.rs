@@ -1,40 +1,100 @@
-use std::cell::RefCell;
-
-use dashmap::ReadOnlyView as ReadDashMap;
-use log::{info, warn};
-use nalgebra::Vector3;
-use rayon::prelude::*;
-use thread_local::ThreadLocal;
+//! Computation of sparse density maps (evaluation of particle densities and mapping onto sparse grids)
+//!
+//! This module provides functions for the computation of per-particle densities and the discretization
+//! of the resulting fluid density field by mapping onto a discrete background grid.
+//!
+//! Currently, only sparse density maps are implemented.
+//!
+//! ## Sparse density maps
+//! The [`DensityMap`] stores fluid density values for each point of an implicit background grid
+//! where the density is not trivially zero. This is the case for all points that are inside or at
+//! least within some tolerance to the compact support radius of a particle.
+//! In case of a sparse density map, the values are stored in a hashmap. The keys are so called
+//! "flat point indices". These are computed from the background grid point coordinates `(i,j,k)`
+//! analogous to multidimensional array index flattening. That means for a grid with dimensions
+//! `[n_x, n_y, n_z]`, the flat point index is given by the expression `i*n_x + j*n_y + k*n_z`.
+//! For these point index operations, the [`UniformGrid`](crate::UniformGrid) is used.
+//!
+//! Note that all density mapping functions always use the global background grid for flat point
+//! indices, even if the density map is only generated for a smaller subdomain.
 
 use crate::kernel::DiscreteSquaredDistanceCubicKernel;
 use crate::mesh::{HexMesh3d, MeshWithPointData};
-use crate::uniform_grid::UniformGrid;
-use crate::{new_map, HashState, Index, MapType, ParallelMapType, Real};
+use crate::uniform_grid::{OwningSubdomainGrid, Subdomain, UniformGrid};
+use crate::utils::{ChunkSize, ParallelPolicy};
+use crate::{new_map, AxisAlignedBoundingBox3d, HashState, Index, MapType, ParallelMapType, Real};
+use dashmap::ReadOnlyView as ReadDashMap;
+use log::{info, trace, warn};
+use nalgebra::Vector3;
+use rayon::prelude::*;
+use std::cell::RefCell;
+use thread_local::ThreadLocal;
+
+// TODO: Document formulas for the computation of the values
+// TODO: Document that we actually evaluate the SPH interpolation of the constant function f(x) = 1
 
 /// Computes the individual densities of particles using a standard SPH sum
 #[inline(never)]
 pub fn compute_particle_densities<I: Index, R: Real>(
     particle_positions: &[Vector3<R>],
     particle_neighbor_lists: &[Vec<usize>],
-    kernel_radius: R,
+    compact_support_radius: R,
     particle_rest_mass: R,
     enable_multi_threading: bool,
 ) -> Vec<R> {
+    let mut densities = Vec::new();
     if enable_multi_threading {
         parallel_compute_particle_densities::<I, R>(
             particle_positions,
             particle_neighbor_lists,
-            kernel_radius,
+            compact_support_radius,
             particle_rest_mass,
+            &mut densities,
         )
     } else {
         sequential_compute_particle_densities::<I, R>(
             particle_positions,
             particle_neighbor_lists,
-            kernel_radius,
+            compact_support_radius,
             particle_rest_mass,
+            &mut densities,
         )
     }
+    densities
+}
+
+/// Computes the individual densities of particles inplace using a standard SPH sum
+#[inline(never)]
+pub fn compute_particle_densities_inplace<I: Index, R: Real>(
+    particle_positions: &[Vector3<R>],
+    particle_neighbor_lists: &[Vec<usize>],
+    compact_support_radius: R,
+    particle_rest_mass: R,
+    enable_multi_threading: bool,
+    densities: &mut Vec<R>,
+) {
+    if enable_multi_threading {
+        parallel_compute_particle_densities::<I, R>(
+            particle_positions,
+            particle_neighbor_lists,
+            compact_support_radius,
+            particle_rest_mass,
+            densities,
+        )
+    } else {
+        sequential_compute_particle_densities::<I, R>(
+            particle_positions,
+            particle_neighbor_lists,
+            compact_support_radius,
+            particle_rest_mass,
+            densities,
+        )
+    }
+}
+
+fn init_density_storage<R: Real>(densities: &mut Vec<R>, new_len: usize) {
+    // Ensure that length is correct
+    densities.resize(new_len, R::zero());
 }
 
 /// Computes the individual densities of particles using a standard SPH sum, sequential implementation
@@ -42,15 +102,16 @@ pub fn compute_particle_densities<I: Index, R: Real>(
 pub fn sequential_compute_particle_densities<I: Index, R: Real>(
     particle_positions: &[Vector3<R>],
     particle_neighbor_lists: &[Vec<usize>],
-    kernel_radius: R,
+    compact_support_radius: R,
     particle_rest_mass: R,
-) -> Vec<R> {
+    particle_densities: &mut Vec<R>,
+) {
     profile!("sequential_compute_particle_densities");
 
-    let mut particle_densities = vec![R::zero(); particle_positions.len()];
+    init_density_storage(particle_densities, particle_positions.len());
 
     // Pre-compute the kernel which can be queried using squared distances
-    let kernel = DiscreteSquaredDistanceCubicKernel::new(1000, kernel_radius);
+    let kernel = DiscreteSquaredDistanceCubicKernel::new(1000, compact_support_radius);
 
     for (i, (particle_i_position, particle_i_neighbors)) in particle_positions
         .iter()
@@ -65,8 +126,6 @@ pub fn sequential_compute_particle_densities<I: Index, R: Real>(
         particle_i_density *= particle_rest_mass;
         particle_densities[i] = particle_i_density;
     }
-
-    particle_densities
 }
 
 /// Computes the individual densities of particles using a standard SPH sum, multi-threaded implementation
@@ -74,30 +133,35 @@ pub fn sequential_compute_particle_densities<I: Index, R: Real>(
 pub fn parallel_compute_particle_densities<I: Index, R: Real>(
     particle_positions: &[Vector3<R>],
     particle_neighbor_lists: &[Vec<usize>],
-    kernel_radius: R,
+    compact_support_radius: R,
     particle_rest_mass: R,
-) -> Vec<R> {
+    particle_densities: &mut Vec<R>,
+) {
     profile!("parallel_compute_particle_densities");
 
+    init_density_storage(particle_densities, particle_positions.len());
+
     // Pre-compute the kernel which can be queried using squared distances
-    let kernel = DiscreteSquaredDistanceCubicKernel::new(1000, kernel_radius);
+    let kernel = DiscreteSquaredDistanceCubicKernel::new(1000, compact_support_radius);
 
-    let particle_densities = particle_positions
+    particle_positions
         .par_iter()
+        .with_min_len(8)
         .zip_eq(particle_neighbor_lists.par_iter())
-        .map(|(particle_i_position, particle_i_neighbors)| {
-            let mut particle_i_density = kernel.evaluate(R::zero());
-            for particle_j_position in particle_i_neighbors.iter().map(|&j| &particle_positions[j])
-            {
-                let r_squared = (particle_j_position - particle_i_position).norm_squared();
-                particle_i_density += kernel.evaluate(r_squared);
-            }
-            particle_i_density *= particle_rest_mass;
-            particle_i_density
-        })
-        .collect();
-
-    particle_densities
+        .zip_eq(particle_densities.par_iter_mut())
+        .for_each(
+            |((particle_i_position, particle_i_neighbors), particle_i_density)| {
+                let mut density = kernel.evaluate(R::zero());
+                for particle_j_position in
+                    particle_i_neighbors.iter().map(|&j| &particle_positions[j])
+                {
+                    let r_squared = (particle_j_position - particle_i_position).norm_squared();
+                    density += kernel.evaluate(r_squared);
+                }
+                density *= particle_rest_mass;
+                *particle_i_density = density;
+            },
+        );
 }
 
 /// A sparse density map
@@ -123,6 +187,7 @@ impl<I: Index, R: Real> From<ParallelMapType<I, R>> for DensityMap<I, R> {
 }
 
 impl<I: Index, R: Real> DensityMap<I, R> {
+    /// Converts the contained map into a vector of tuples of (flat_point_index, density)
     pub fn to_vec(&self) -> Vec<(I, R)> {
         match self {
             DensityMap::Standard(map) => map.iter().map(|(&i, &r)| (i, r)).collect(),
@@ -130,6 +195,7 @@ impl<I: Index, R: Real> DensityMap<I, R> {
         }
     }
 
+    /// Returns the number of density entries
     pub fn len(&self) -> usize {
         match self {
             DensityMap::Standard(map) => map.len(),
@@ -137,6 +203,7 @@ impl<I: Index, R: Real> DensityMap<I, R> {
         }
     }
 
+    /// Returns the density value at the specified flat point index
     pub fn get(&self, flat_point_index: I) -> Option<R> {
         match self {
             DensityMap::Standard(map) => map.get(&flat_point_index).copied(),
@@ -144,26 +211,24 @@ impl<I: Index, R: Real> DensityMap<I, R> {
         }
     }
 
-    pub fn iter<'a>(&'a self) -> impl Iterator<Item = (I, R)> + 'a {
-        let iter_standard = std::iter::once(if let DensityMap::Standard(map) = self {
-            Some(map)
-        } else {
-            None
-        })
-        .flatten()
-        .flat_map(|map| map.iter())
-        .map(|(&i, &r)| (i, r));
+    /// Returns a mutable reference to the contained standard map, replaces itself if not of standard type
+    fn standard_or_insert_mut(&mut self) -> &mut MapType<I, R> {
+        match self {
+            DensityMap::Standard(map) => return map,
+            _ => {}
+        }
 
-        let iter_dash = std::iter::once(if let DensityMap::DashMap(map) = self {
-            Some(map)
-        } else {
-            None
-        })
-        .flatten()
-        .flat_map(|map| map.iter())
-        .map(|(&i, &r)| (i, r));
+        *self = new_map().into();
+        self.standard_or_insert_mut()
+    }
 
-        iter_standard.chain(iter_dash)
+    /// Calls a closure for each `(flat_point_index, density_value)` tuple in the map
+    pub fn for_each<F: FnMut(I, R)>(&self, f: F) {
+        let mut f = f;
+        match self {
+            DensityMap::Standard(map) => map.iter().for_each(|(&i, &r)| f(i, r)),
+            DensityMap::DashMap(map) => map.iter().for_each(|(&i, &r)| f(i, r)),
+        }
     }
 }
 
@@ -171,36 +236,68 @@ impl<I: Index, R: Real> DensityMap<I, R> {
 #[inline(never)]
 pub fn generate_sparse_density_map<I: Index, R: Real>(
     grid: &UniformGrid<I, R>,
+    subdomain: Option<&OwningSubdomainGrid<I, R>>,
     particle_positions: &[Vector3<R>],
     particle_densities: &[R],
     active_particles: Option<&[usize]>,
     particle_rest_mass: R,
-    kernel_radius: R,
+    compact_support_radius: R,
     cube_size: R,
     allow_threading: bool,
-) -> DensityMap<I, R> {
-    // TODO: Reduce code duplication between these two functions
-    if allow_threading {
-        parallel_generate_sparse_density_map(
-            grid,
-            particle_positions,
-            particle_densities,
-            active_particles,
-            particle_rest_mass,
-            kernel_radius,
-            cube_size,
-        )
+    density_map: &mut DensityMap<I, R>,
+) {
+    trace!(
+        "Starting construction of sparse density map... (Input: {} particles)",
+        if let Some(active_particles) = active_particles {
+            active_particles.len()
+        } else {
+            particle_positions.len()
+        }
+    );
+
+    if let Some(subdomain) = subdomain {
+        if allow_threading {
+            panic!("Multi threading not implemented for density map with subdomain");
+        } else {
+            sequential_generate_sparse_density_map_subdomain(
+                subdomain,
+                particle_positions,
+                particle_densities,
+                active_particles,
+                particle_rest_mass,
+                compact_support_radius,
+                cube_size,
+                density_map,
+            );
+        }
     } else {
-        sequential_generate_sparse_density_map(
-            grid,
-            particle_positions,
-            particle_densities,
-            active_particles,
-            particle_rest_mass,
-            kernel_radius,
-            cube_size,
-        )
-    }
+        if allow_threading {
+            *density_map = parallel_generate_sparse_density_map(
+                grid,
+                particle_positions,
+                particle_densities,
+                active_particles,
+                particle_rest_mass,
+                compact_support_radius,
+                cube_size,
+            );
+        } else {
+            *density_map = sequential_generate_sparse_density_map(
+                grid,
+                particle_positions,
+                particle_densities,
+                active_particles,
+                particle_rest_mass,
+                compact_support_radius,
+                cube_size,
+            );
+        }
+    };
+
+    trace!(
+        "Sparse density map was constructed. (Output: density map with {} grid point data entries)",
+        density_map.len()
+    );
 }
 
 /// Computes a sparse density map for the fluid based on the specified background grid, sequential implementation
@@ -211,127 +308,24 @@ pub fn sequential_generate_sparse_density_map<I: Index, R: Real>(
     particle_densities: &[R],
     active_particles: Option<&[usize]>,
     particle_rest_mass: R,
-    kernel_radius: R,
+    compact_support_radius: R,
     cube_size: R,
 ) -> DensityMap<I, R> {
     profile!("sequential_generate_sparse_density_map");
 
-    info!(
-        "Starting construction of sparse density map for {} particles...",
-        if let Some(active_particles) = active_particles {
-            active_particles.len()
-        } else {
-            particle_positions.len()
-        }
-    );
-
     let mut sparse_densities = new_map();
 
-    // The number of cells in each direction from a particle that can be affected by a its compact support
-    let half_supported_cells_real = (kernel_radius / cube_size).ceil();
-    // Convert to index type for cell and point indexing
-    let half_supported_cells: I = half_supported_cells_real.to_index_unchecked();
-    // The total number of points per dimension that can be affected by a particle's compact support
-    //  + account for an additional layer of points that cover the positive outside of the supported cells
-    let supported_points = I::one() + half_supported_cells.times(2);
-
-    let kernel_evaluation_radius = cube_size.times_f64(1.0 + 1e-3) * half_supported_cells_real;
-    let kernel_evaluation_radius_sq = kernel_evaluation_radius * kernel_evaluation_radius;
-
-    // Pre-compute the kernel which can be queried using squared distances
-    let kernel = DiscreteSquaredDistanceCubicKernel::new(1000, kernel_radius);
-
-    // Shrink the allowed domain for particles by the kernel evaluation radius. This ensures that all cells/points
-    // that are affected by a particle are actually part of the domain/grid, so it does not have to be checked in the loops below.
-    // However, any particles inside of this margin, close to the border of the originally requested domain will be ignored.
-    let allowed_domain = {
-        let mut aabb = grid.aabb().clone();
-        aabb.grow_uniformly(kernel_evaluation_radius.neg().times(1));
-        aabb
-    };
-
-    if allowed_domain.is_degenerate() || !allowed_domain.is_consistent() {
-        warn!(
-            "After taking the kernel evaluation radius into account, the allowed domain of particles is inconsistent/degenerate: {:?}",
-            allowed_domain
-        );
-        warn!("No particles can be found in this domain. Increase the domain of surface reconstruction to avoid this.");
-    } else {
-        info!(
-            "To take into account the kernel evaluation radius, the allowed domain of particles was restricted to: {:?}",
-            allowed_domain
-        );
-
+    if let Some(processor) =
+        SparseDensityMapGenerator::new(grid, compact_support_radius, cube_size, particle_rest_mass)
+    {
         let process_particle = |particle_data: (&Vector3<R>, R)| {
             let (particle, particle_density) = particle_data;
-
-            // Skip particles outside of allowed domain
-            if !allowed_domain.contains_point(particle) {
-                return;
-            }
-
-            // Compute the volume of this particle
-            let particle_volume = particle_rest_mass / particle_density;
-
-            // Compute grid points affected by the particle
-            let min_supported_point_ijk = {
-                let cell_ijk = grid.enclosing_cell(particle);
-
-                [
-                    cell_ijk[0] - half_supported_cells,
-                    cell_ijk[1] - half_supported_cells,
-                    cell_ijk[2] - half_supported_cells,
-                ]
-            };
-
-            let max_supported_point_ijk = [
-                min_supported_point_ijk[0] + supported_points,
-                min_supported_point_ijk[1] + supported_points,
-                min_supported_point_ijk[2] + supported_points,
-            ];
-
-            let min_supported_point = grid.point_coordinates_array(&min_supported_point_ijk);
-
-            let mut dx = particle[0] - min_supported_point[0]
-                // Subtract cell size because it will be added in the beginning of each loop iteration
-                // this is done to avoid multiplications
-                + grid.cell_size();
-
-            // A range loop cannot be used here because the Step trait is unstable
-            // but it is required for the Iter impl on Range
-            // therefore a manual while loop has to be used
-            let mut i = min_supported_point_ijk[0];
-            while i != max_supported_point_ijk[0] {
-                dx -= grid.cell_size();
-                let dxdx = dx * dx;
-
-                let mut dy = particle[1] - min_supported_point[1] + grid.cell_size();
-                let mut j = min_supported_point_ijk[1];
-                while j != max_supported_point_ijk[1] {
-                    dy -= grid.cell_size();
-                    let dydy = dy * dy;
-
-                    let mut dz = particle[2] - min_supported_point[2] + grid.cell_size();
-                    let mut k = min_supported_point_ijk[2];
-                    while k != max_supported_point_ijk[2] {
-                        dz -= grid.cell_size();
-                        let dzdz = dz * dz;
-
-                        let r_squared = dxdx + dydy + dzdz;
-                        if r_squared < kernel_evaluation_radius_sq {
-                            let density_contribution = particle_volume * kernel.evaluate(r_squared);
-
-                            let flat_point_index = grid.flatten_point_indices(i, j, k);
-                            *sparse_densities
-                                .entry(flat_point_index)
-                                .or_insert(R::zero()) += density_contribution;
-                        }
-                        k = k + I::one();
-                    }
-                    j = j + I::one();
-                }
-                i = i + I::one();
-            }
+            processor.compute_particle_density_contribution(
+                grid,
+                &mut sparse_densities,
+                particle,
+                particle_density,
+            );
         };
 
         match active_particles {
@@ -347,13 +341,54 @@ pub fn sequential_generate_sparse_density_map<I: Index, R: Real>(
         }
     }
 
-    info!(
-        "Sparse density map with {} point data values was constructed.",
-        sparse_densities.len()
-    );
-    info!("Construction of sparse density map done.");
-
     sparse_densities.into()
+}
+
+/// Computes a sparse density map for the fluid restricted to the specified subdomain
+#[inline(never)]
+pub fn sequential_generate_sparse_density_map_subdomain<I: Index, R: Real>(
+    subdomain: &OwningSubdomainGrid<I, R>,
+    particle_positions: &[Vector3<R>],
+    particle_densities: &[R],
+    active_particles: Option<&[usize]>,
+    particle_rest_mass: R,
+    compact_support_radius: R,
+    cube_size: R,
+    density_map: &mut DensityMap<I, R>,
+) {
+    profile!("sequential_generate_sparse_density_map_subdomain");
+
+    let mut sparse_densities = density_map.standard_or_insert_mut();
+    sparse_densities.clear();
+
+    if let Some(processor) = SparseDensityMapGenerator::new(
+        &subdomain.global_grid(),
+        compact_support_radius,
+        cube_size,
+        particle_rest_mass,
+    ) {
+        let process_particle = |particle_data: (&Vector3<R>, R)| {
+            let (particle, particle_density) = particle_data;
+            processor.compute_particle_density_contribution_subdomain(
+                subdomain,
+                &mut sparse_densities,
+                particle,
+                particle_density,
+            );
+        };
+
+        match active_particles {
+            None => particle_positions
+                .iter()
+                .zip(particle_densities.iter().copied())
+                .for_each(process_particle),
+            Some(indices) => indices
+                .iter()
+                .map(|&i| &particle_positions[i])
+                .zip(indices.iter().map(|&i| particle_densities[i]))
+                .for_each(process_particle),
+        }
+    }
 }
 
 /// Computes a sparse density map for the fluid based on the specified background grid, multi-threaded implementation
@@ -364,152 +399,28 @@ pub fn parallel_generate_sparse_density_map<I: Index, R: Real>(
     particle_densities: &[R],
     active_particles: Option<&[usize]>,
     particle_rest_mass: R,
-    kernel_radius: R,
+    compact_support_radius: R,
     cube_size: R,
 ) -> DensityMap<I, R> {
     profile!("parallel_generate_sparse_density_map");
 
-    info!(
-        "Starting construction of sparse density map for {} particles...",
-        if let Some(active_particles) = active_particles {
-            active_particles.len()
-        } else {
-            particle_positions.len()
-        }
-    );
-
     // Each thread will write to its own local density map
     let sparse_densities: ThreadLocal<RefCell<MapType<I, R>>> = ThreadLocal::new();
 
-    // The number of cells in each direction from a particle that can be affected by a its compact support
-    let half_supported_cells_real = (kernel_radius / cube_size).ceil();
-    // Convert to index type for cell and point indexing
-    let half_supported_cells: I = half_supported_cells_real.to_index_unchecked();
-    // The total number of points per dimension that can be affected by a particle's compact support
-    //  + account for an additional layer of points that cover the positive outside of the supported cells
-    let supported_points = I::one() + half_supported_cells.times(2);
-
-    let kernel_evaluation_radius = cube_size.times_f64(1.0 + 1e-3) * half_supported_cells_real;
-    let kernel_evaluation_radius_sq = kernel_evaluation_radius * kernel_evaluation_radius;
-
-    // Pre-compute the kernel which can be queried using squared distances
-    let kernel = DiscreteSquaredDistanceCubicKernel::new(1000, kernel_radius);
-
-    // Shrink the allowed domain for particles by the kernel evaluation radius. This ensures that all cells/points
-    // that are affected by a particle are actually part of the domain/grid, so it does not have to be checked in the loops below.
-    // However, any particles inside of this margin, close to the border of the originally requested domain will be ignored.
-    let allowed_domain = {
-        let mut aabb = grid.aabb().clone();
-        aabb.grow_uniformly(kernel_evaluation_radius.neg().times(1));
-        aabb
-    };
-
-    if allowed_domain.is_degenerate() || !allowed_domain.is_consistent() {
-        warn!(
-            "After taking the kernel evaluation radius into account, the allowed domain of particles is inconsistent/degenerate: {:?}",
-            allowed_domain
-        );
-        warn!("No particles can be found in this domain. Increase the domain of surface reconstruction to avoid this.");
-    } else {
+    // Generate thread local density maps
+    if let Some(processor) =
+        SparseDensityMapGenerator::new(grid, compact_support_radius, cube_size, particle_rest_mass)
+    {
         profile!("generate thread local maps");
-
-        info!(
-            "To take into account the kernel evaluation radius, the allowed domain of particles was restricted to: {:?}",
-            allowed_domain
-        );
-
-        let process_particle = |sparse_densities: &mut MapType<I, R>,
-                                particle_data: (&Vector3<R>, R)| {
-            let (particle, particle_density) = particle_data;
-
-            // Skip particles outside of allowed domain
-            if !allowed_domain.contains_point(particle) {
-                return;
-            }
-
-            // Compute the volume of this particle
-            let particle_volume = particle_rest_mass / particle_density;
-
-            // Compute grid points affected by the particle
-            let min_supported_point_ijk = {
-                let cell_ijk = grid.enclosing_cell(particle);
-
-                [
-                    cell_ijk[0] - half_supported_cells,
-                    cell_ijk[1] - half_supported_cells,
-                    cell_ijk[2] - half_supported_cells,
-                ]
-            };
-
-            let max_supported_point_ijk = [
-                min_supported_point_ijk[0] + supported_points,
-                min_supported_point_ijk[1] + supported_points,
-                min_supported_point_ijk[2] + supported_points,
-            ];
-
-            let min_supported_point = grid.point_coordinates_array(&min_supported_point_ijk);
-
-            let mut dx = particle[0] - min_supported_point[0]
-                // Subtract cell size because it will be added in the beginning of each loop iteration
-                // this is done to avoid multiplications
-                + grid.cell_size();
-
-            // A range loop cannot be used here because the Step trait is unstable
-            // but it is required for the Iter impl on Range
-            // therefore a manual while loop has to be used
-            let mut i = min_supported_point_ijk[0];
-            while i != max_supported_point_ijk[0] {
-                dx -= grid.cell_size();
-                let dxdx = dx * dx;
-
-                let mut dy = particle[1] - min_supported_point[1] + grid.cell_size();
-                let mut j = min_supported_point_ijk[1];
-                while j != max_supported_point_ijk[1] {
-                    dy -= grid.cell_size();
-                    let dydy = dy * dy;
-
-                    let mut dz = particle[2] - min_supported_point[2] + grid.cell_size();
-                    let mut k = min_supported_point_ijk[2];
-                    while k != max_supported_point_ijk[2] {
-                        dz -= grid.cell_size();
-                        let dzdz = dz * dz;
-
-                        let r_squared = dxdx + dydy + dzdz;
-                        if r_squared < kernel_evaluation_radius_sq {
-                            let density_contribution = particle_volume * kernel.evaluate(r_squared);
-
-                            let flat_point_index = grid.flatten_point_indices(i, j, k);
-                            *sparse_densities
-                                .entry(flat_point_index)
-                                .or_insert(R::zero()) += density_contribution;
-                        }
-                        k = k + I::one();
-                    }
-                    j = j + I::one();
-                }
-                i = i + I::one();
-            }
-        };
-
-        let compute_chunk_size = |num_particles: usize| -> usize {
-            let min_chunk_size = 100.max(num_particles);
-            let chunks_per_cpu = 10;
-
-            let num_cpus = num_cpus::get();
-            let num_chunks = chunks_per_cpu * num_cpus;
-            let chunk_size = (num_particles / num_chunks).min(min_chunk_size);
-
-            info!(
-                "Splitting particles into {} chunks (with {} particles each) for density map generation",
-                num_chunks, chunk_size
-            );
-            chunk_size
-        };
 
         match active_particles {
             // Process particles, when no list of active particles was provided
             None => {
-                let chunk_size = compute_chunk_size(particle_positions.len());
+                let chunk_size =
+                    ChunkSize::new(&ParallelPolicy::default(), particle_positions.len())
+                        .with_log("particles", "density map generation")
+                        .chunk_size;
+
                 particle_positions
                     .par_chunks(chunk_size)
                     .zip(particle_densities.par_chunks(chunk_size))
@@ -520,7 +431,13 @@ pub fn parallel_generate_sparse_density_map<I: Index, R: Real>(
                         let mut mut_map = map.borrow_mut();
 
                         let process_particle_map = |particle_data: (&Vector3<R>, R)| {
-                            process_particle(&mut mut_map, particle_data);
+                            let (particle, particle_density) = particle_data;
+                            processor.compute_particle_density_contribution(
+                                grid,
+                                &mut mut_map,
+                                particle,
+                                particle_density,
+                            );
                         };
 
                         assert_eq!(position_chunk.len(), density_chunk.len());
@@ -532,7 +449,10 @@ pub fn parallel_generate_sparse_density_map<I: Index, R: Real>(
             }
             // Process particles, when only a subset is active
             Some(indices) => {
-                let chunk_size = compute_chunk_size(indices.len());
+                let chunk_size = ChunkSize::new(&ParallelPolicy::default(), indices.len())
+                    .with_log("active particles", "density map generation")
+                    .chunk_size;
+
                 indices.par_chunks(chunk_size).for_each(|index_chunk| {
                     // Obtain mutable reference to thread local density map
                     let map = sparse_densities
@@ -540,7 +460,13 @@ pub fn parallel_generate_sparse_density_map<I: Index, R: Real>(
                     let mut mut_map = map.borrow_mut();
 
                     let process_particle_map = |particle_data: (&Vector3<R>, R)| {
-                        process_particle(&mut mut_map, particle_data);
+                        let (particle, particle_density) = particle_data;
+                        processor.compute_particle_density_contribution(
+                            grid,
+                            &mut mut_map,
+                            particle,
+                            particle_density,
+                        );
                     };
 
                     index_chunk
@@ -552,6 +478,7 @@ pub fn parallel_generate_sparse_density_map<I: Index, R: Real>(
         }
     }
 
+    // Merge the thread local density maps
     {
         profile!("merge thread local maps to global map");
 
@@ -574,13 +501,276 @@ pub fn parallel_generate_sparse_density_map<I: Index, R: Real>(
             }
         });
 
-        info!(
-            "Global sparse density map with {} grid point data values was constructed.",
-            global_density_map.len()
-        );
-        info!("Construction of sparse density map done.");
-
         global_density_map.into()
+    }
+}
+
+struct SparseDensityMapGenerator<I: Index, R: Real> {
+    particle_rest_mass: R,
+    half_supported_cells: I,
+    supported_points: I,
+    kernel_evaluation_radius_sq: R,
+    kernel: DiscreteSquaredDistanceCubicKernel<R>,
+    allowed_domain: AxisAlignedBoundingBox3d<R>,
+}
+
+pub(crate) struct GridKernelExtents<I: Index, R: Real> {
+    // The number of cells in each direction from a particle that can be affected by its compact support
+    pub half_supported_cells: I,
+    // The total number of points per dimension that can be affected by a particle's compact support
+    pub supported_points: I,
+    // The resulting maximum kernel evaluation radius (more than the kernel compact support)
+    pub kernel_evaluation_radius: R,
+}
+
+pub(crate) fn compute_kernel_evaluation_radius<I: Index, R: Real>(
+    compact_support_radius: R,
+    cube_size: R,
+) -> GridKernelExtents<I, R> {
+    // The number of cells in each direction from a particle that can be affected by its compact support
+    let half_supported_cells_real = (compact_support_radius / cube_size).ceil();
+    // Convert to index type for cell and point indexing
+    let half_supported_cells: I = half_supported_cells_real.to_index_unchecked();
+    // The total number of points per dimension that can be affected by a particle's compact support
+    //  + account for an additional layer of points that cover the positive outside of the supported cells
+    let supported_points: I = I::one() + half_supported_cells.times(2);
+
+    let kernel_evaluation_radius = cube_size.times_f64(1.0 + 1e-3) * half_supported_cells_real;
+
+    GridKernelExtents {
+        half_supported_cells,
+        supported_points,
+        kernel_evaluation_radius,
+    }
+}
+
+// TODO: Maybe remove allowed domain check? And require this is done before, using the active_particles array?
+impl<I: Index, R: Real> SparseDensityMapGenerator<I, R> {
+    fn new(
+        grid: &UniformGrid<I, R>,
+        compact_support_radius: R,
+        cube_size: R,
+        particle_rest_mass: R,
+    ) -> Option<Self> {
+        let GridKernelExtents {
+            half_supported_cells,
+            supported_points,
+            kernel_evaluation_radius,
+        } = compute_kernel_evaluation_radius(compact_support_radius, cube_size);
+
+        // Pre-compute the kernel which can be queried using squared distances
+        let kernel_evaluation_radius_sq = kernel_evaluation_radius * kernel_evaluation_radius;
+        let kernel = DiscreteSquaredDistanceCubicKernel::new(1000, compact_support_radius);
+
+        // Shrink the allowed domain for particles by the kernel evaluation radius. This ensures that all cells/points
+        // that are affected by a particle are actually part of the domain/grid, so it does not have to be checked in the loops below.
+        // However, any particles inside of this margin, close to the border of the originally requested domain will be ignored.
+        //
+        // This also implies that this density map should always represent a closed surfaces.
+        // If particles were closer to the AABB boundary than this margin, there could be holes in the resulting level-set.
+        let allowed_domain = {
+            let mut aabb = grid.aabb().clone();
+            aabb.grow_uniformly(kernel_evaluation_radius.neg());
+            aabb
+        };
+
+        if allowed_domain.is_degenerate() || !allowed_domain.is_consistent() {
+            warn!(
+                "The allowed domain of particles for a subdomain is inconsistent/degenerate: {:?}",
+                allowed_domain
+            );
+            warn!("No particles can be found in this domain. Increase the domain of the surface reconstruction to avoid this.");
+            None
+        } else {
+            Some(Self {
+                half_supported_cells,
+                supported_points,
+                kernel_evaluation_radius_sq,
+                kernel,
+                allowed_domain,
+                particle_rest_mass,
+            })
+        }
+    }
+
+    /// Computes all density contributions of a particle to the background grid into the given map
+    fn compute_particle_density_contribution(
+        &self,
+        grid: &UniformGrid<I, R>,
+        sparse_densities: &mut MapType<I, R>,
+        particle: &Vector3<R>,
+        particle_density: R,
+    ) {
+        // Skip particles outside of allowed domain
+        if !self.allowed_domain.contains_point(particle) {
+            return;
+        }
+
+        // Compute grid points affected by the particle
+        let min_supported_point_ijk = {
+            let cell_ijk = grid.enclosing_cell(particle);
+            [
+                cell_ijk[0] - self.half_supported_cells,
+                cell_ijk[1] - self.half_supported_cells,
+                cell_ijk[2] - self.half_supported_cells,
+            ]
+        };
+
+        let max_supported_point_ijk = [
+            min_supported_point_ijk[0] + self.supported_points,
+            min_supported_point_ijk[1] + self.supported_points,
+            min_supported_point_ijk[2] + self.supported_points,
+        ];
+
+        self.particle_support_loop(
+            sparse_densities,
+            grid,
+            &min_supported_point_ijk,
+            &max_supported_point_ijk,
+            particle,
+            particle_density,
+        );
+    }
+
+    /// Computes all density contributions of a particle to a subdomain of the background grid into the given map
+    fn compute_particle_density_contribution_subdomain(
+        &self,
+        subdomain: &OwningSubdomainGrid<I, R>,
+        sparse_densities: &mut MapType<I, R>,
+        particle: &Vector3<R>,
+        particle_density: R,
+    ) {
+        let grid = subdomain.global_grid();
+        let subdomain_grid = subdomain.subdomain_grid();
+        let subdomain_offset = subdomain.subdomain_offset();
+
+        // Skip particles outside of allowed domain
+        if !self.allowed_domain.contains_point(particle) {
+            return;
+        }
+
+        let global_subdomain_min_point = subdomain_offset;
+        // Note: max supported point is one past the actual max point index
+        let global_subdomain_max_point = [
+            global_subdomain_min_point[0] + subdomain_grid.points_per_dim()[0],
+            global_subdomain_min_point[1] + subdomain_grid.points_per_dim()[1],
+            global_subdomain_min_point[2] + subdomain_grid.points_per_dim()[2],
+        ];
+
+        // Compute cuboid region of grid points that may be affected by the particle
+        // This excludes grid points outside of the current subdomain
+
+        let min_supported_point_ijk = {
+            let cell_ijk = grid.enclosing_cell(particle);
+            [
+                (cell_ijk[0] - self.half_supported_cells).max(global_subdomain_min_point[0]),
+                (cell_ijk[1] - self.half_supported_cells).max(global_subdomain_min_point[1]),
+                (cell_ijk[2] - self.half_supported_cells).max(global_subdomain_min_point[2]),
+            ]
+        };
+
+        let max_supported_point_ijk = {
+            [
+                (min_supported_point_ijk[0] + self.supported_points)
+                    .min(global_subdomain_max_point[0]),
+                (min_supported_point_ijk[1] + self.supported_points)
+                    .min(global_subdomain_max_point[1]),
+                (min_supported_point_ijk[2] + self.supported_points)
+                    .min(global_subdomain_max_point[2]),
+            ]
+        };
+
+        // Check if lower corner of the supported domain is above of subdomain
+        if min_supported_point_ijk
+            .iter()
+            .copied()
+            .zip(global_subdomain_max_point.iter().copied())
+            .any(|(min_support, subdomain_max)| min_support > subdomain_max)
+        {
+            return;
+        }
+
+        // Check if upper corner of the supported domain is below of subdomain
+        if max_supported_point_ijk
+            .iter()
+            .copied()
+            .zip(global_subdomain_min_point.iter().copied())
+            .any(|(max_support, subdomain_min)| max_support < subdomain_min)
+        {
+            return;
+        }
+
+        self.particle_support_loop(
+            sparse_densities,
+            grid,
+            &min_supported_point_ijk,
+            &max_supported_point_ijk,
+            particle,
+            particle_density,
+        );
+    }
+
+    /// Loops over a cube of background grid points that are potentially in the support radius of the particle and evaluates density contributions
+    #[inline(always)]
+    fn particle_support_loop(
+        &self,
+        sparse_densities: &mut MapType<I, R>,
+        grid: &UniformGrid<I, R>,
+        min_supported_point_ijk: &[I; 3],
+        max_supported_point_ijk: &[I; 3],
+        particle: &Vector3<R>,
+        particle_density: R,
+    ) {
+        // Compute the volume of this particle
+        let particle_volume = self.particle_rest_mass / particle_density;
+
+        // TODO: Check performance with just using multiplication
+        let min_supported_point = grid.point_coordinates_array(&min_supported_point_ijk);
+
+        // dx, dy, dz are the deltas of the supported points as seen from the current particle position
+        let mut dx = min_supported_point[0] - particle[0]
+            // Subtract cell size because it will be added in the beginning of each loop iteration
+            // this is done to avoid multiplications
+            - grid.cell_size();
+
+        // A range loop cannot be used here because the Step trait is unstable
+        // but it is required for the Iter impl on Range
+        // therefore a manual while loop has to be used
+
+        // Loop over all points that might receive a density contribution from this particle
+        let mut i = min_supported_point_ijk[0];
+        while i != max_supported_point_ijk[0] {
+            dx += grid.cell_size();
+            let dxdx = dx * dx;
+
+            let mut dy = min_supported_point[1] - particle[1] - grid.cell_size();
+            let mut j = min_supported_point_ijk[1];
+            while j != max_supported_point_ijk[1] {
+                dy += grid.cell_size();
+                let dydy = dy * dy;
+
+                let mut dz = min_supported_point[2] - particle[2] - grid.cell_size();
+                let mut k = min_supported_point_ijk[2];
+                while k != max_supported_point_ijk[2] {
+                    dz += grid.cell_size();
+                    let dzdz = dz * dz;
+
+                    let r_squared = dxdx + dydy + dzdz;
+                    if r_squared < self.kernel_evaluation_radius_sq {
+                        let density_contribution =
+                            particle_volume * self.kernel.evaluate(r_squared);
+
+                        let flat_point_index = grid.flatten_point_indices(i, j, k);
+                        *sparse_densities
+                            .entry(flat_point_index)
+                            .or_insert(R::zero()) += density_contribution;
+                    }
+                    k = k + I::one();
+                }
+                j = j + I::one();
+            }
+            i = i + I::one();
+        }
     }
 }
 
@@ -601,7 +791,7 @@ pub fn sparse_density_map_to_hex_mesh<I: Index, R: Real>(
     let mut cells = new_map();
 
     // Create vertices and cells for points with values
-    for (flat_point_index, point_value) in density_map.iter() {
+    density_map.for_each(|flat_point_index, point_value| {
         let point = grid.try_unflatten_point_index(flat_point_index).unwrap();
         let point_coords = grid.point_coordinates(&point);
 
@@ -617,12 +807,12 @@ pub fn sparse_density_map_to_hex_mesh<I: Index, R: Real>(
 
             let cell_connectivity_entry = cells
                 .entry(flat_cell_index)
-                .or_insert([None, None, None, None, None, None, None, None]);
+                .or_insert_with(|| [None, None, None, None, None, None, None, None]);
 
             let local_point_index = cell.local_point_index_of(point.index()).unwrap();
             cell_connectivity_entry[local_point_index] = Some(vertex_index);
         }
-    }
+    });
 
     // Add missing vertices of cells using default values
     let mut additional_vertices = new_map();
@@ -632,7 +822,7 @@ pub fn sparse_density_map_to_hex_mesh<I: Index, R: Real>(
         for (local_point_index, vertex) in cell_vertices.iter_mut().enumerate() {
             if vertex.is_none() {
                 // Map local point index to global index in grid
-                let point = cell.global_index_of(local_point_index).unwrap();
+                let point = cell.global_point_index_of(local_point_index).unwrap();
                 let flat_point_index = grid.flatten_point_index(&point);
 
                 // Try to lookup the vertex associated with the point or create a new one with default value

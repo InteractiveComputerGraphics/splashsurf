@@ -1,3 +1,6 @@
+use splashsurf_lib::vtkio::model::{
+    Attributes, CellType, Cells, UnstructuredGridPiece, VertexNumbers,
+};
 use std::fs::create_dir_all;
 use std::path::Path;
 
@@ -10,13 +13,27 @@ use splashsurf_lib::Real;
 use vtkio::model::{ByteOrder, DataSet, Version, Vtk};
 use vtkio::{export_be, import_be, IOBuffer};
 
+/// Tries to read a set of particles from the VTK file at the given path
 pub fn particles_from_vtk<R: Real, P: AsRef<Path>>(
     vtk_file: P,
 ) -> Result<Vec<Vector3<R>>, anyhow::Error> {
-    let sph_dataset = read_vtk(vtk_file)?;
-    particles_from_dataset(sph_dataset)
+    let particle_dataset = read_vtk(vtk_file)?;
+    particles_from_dataset(particle_dataset)
 }
 
+/// Tries to write a set of particles to the VTK file at the given path
+pub fn particles_to_vtk<R: Real, P: AsRef<Path>>(
+    particles: &[Vector3<R>],
+    vtk_file: P,
+) -> Result<(), anyhow::Error> {
+    write_vtk(
+        UnstructuredGridPiece::from(Particles(particles)),
+        vtk_file,
+        "particles",
+    )
+}
+
+/// Tries to write `data` that is convertible to a VTK `DataSet` into a big endian VTK file
 pub fn write_vtk<P: AsRef<Path>>(
     data: impl Into<DataSet>,
     filename: P,
@@ -36,11 +53,13 @@ pub fn write_vtk<P: AsRef<Path>>(
     export_be(vtk_file, filename).context("Error while writing VTK output to file")
 }
 
+/// Tries to read the given file into a VTK `DataSet`
 pub fn read_vtk<P: AsRef<Path>>(filename: P) -> Result<DataSet, vtkio::Error> {
     let filename = filename.as_ref();
     import_be(filename).map(|vtk| vtk.data)
 }
 
+/// Tries to convert a vector of consecutive coordinate triplets into a vector of `Vector3`, also converts between floating point types
 pub fn particles_from_coords<RealOut: Real, RealIn: Real>(
     coords: &Vec<RealIn>,
 ) -> Result<Vec<Vector3<RealOut>>, anyhow::Error> {
@@ -61,6 +80,7 @@ pub fn particles_from_coords<RealOut: Real, RealIn: Real>(
     Ok(positions)
 }
 
+/// Tries to convert a VTK `DataSet` into a vector of particle positions
 pub fn particles_from_dataset<R: Real>(dataset: DataSet) -> Result<Vec<Vector3<R>>, anyhow::Error> {
     if let DataSet::UnstructuredGrid { pieces, .. } = dataset {
         if let Some(piece) = pieces.into_iter().next() {
@@ -85,5 +105,48 @@ pub fn particles_from_dataset<R: Real>(dataset: DataSet) -> Result<Vec<Vector3<R
         Err(anyhow!(
             "Loaded dataset does not contain an unstructured grid"
         ))
+    }
+}
+
+/// Wrapper for a slice of particle positions for converting it into a VTK `UnstructuredGridPiece`
+struct Particles<'a, R: Real>(&'a [Vector3<R>]);
+
+impl<'a, R> From<Particles<'a, R>> for UnstructuredGridPiece
+where
+    R: Real,
+{
+    fn from(particles: Particles<'a, R>) -> Self {
+        let particles = particles.0;
+
+        let points = {
+            let mut points: Vec<R> = Vec::with_capacity(particles.len() * 3);
+            for p in particles.iter() {
+                points.extend(p.as_slice());
+            }
+            points
+        };
+
+        let vertices = {
+            let mut vertices = Vec::with_capacity(particles.len() * (1 + 1));
+            for i in 0..particles.len() {
+                vertices.push(1);
+                vertices.push(i as u32);
+            }
+            vertices
+        };
+
+        let cell_types = vec![CellType::Vertex; particles.len()];
+
+        UnstructuredGridPiece {
+            points: points.into(),
+            cells: Cells {
+                cell_verts: VertexNumbers::Legacy {
+                    num_cells: cell_types.len() as u32,
+                    vertices,
+                },
+                types: cell_types,
+            },
+            data: Attributes::new(),
+        }
     }
 }

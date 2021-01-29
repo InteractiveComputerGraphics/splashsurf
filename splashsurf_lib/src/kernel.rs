@@ -1,3 +1,5 @@
+//! SPH kernel function implementations
+
 use crate::Real;
 
 const ALPHA: f64 = 3.0 / (2.0 * std::f64::consts::PI);
@@ -88,7 +90,7 @@ fn test_cubic_kernel_r_integral() {
 /// in the value array, i.e. `k(sqrt(s)) ≈ K[s/dr]` (while taking care of rounding and clamping to the
 /// allowed index range).
 pub struct DiscreteSquaredDistanceCubicKernel<R: Real> {
-    /// Precomputed values of the kernel function
+    /// Precomputed values of the kernel functionclamp
     values: Vec<R>,
     /// The radial resolution of the discretization on a quadratic scale
     dr: R,
@@ -128,7 +130,7 @@ fn test_discrete_kernel() {
     let h = 0.025;
     let kernel = DiscreteSquaredDistanceCubicKernel::new(n, h);
 
-    // Test the pre-computated values using a linear stepping
+    // Test the pre-computed values using a linear stepping
     let dr = h / (n as f64);
     for i in 0..n {
         let r = (i as f64) * dr;

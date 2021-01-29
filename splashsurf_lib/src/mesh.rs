@@ -1,8 +1,8 @@
-use std::fmt::Debug;
+//! Basic mesh types used by the library and implementation of VTK export
 
+use crate::{new_map, Real};
 use nalgebra::{Unit, Vector3};
-
-use crate::Real;
+use std::fmt::Debug;
 
 /// A triangle (surface) mesh in 3D
 #[derive(Clone, Debug, Default)]
@@ -14,7 +14,38 @@ pub struct TriMesh3d<R: Real> {
 }
 
 impl<R: Real> TriMesh3d<R> {
-    /// Same as [Self::vertex_normal_directions_inplace] but assumes that the output is already zeroed
+    /// Clears the vertex and triangle storage, preserves allocated memory
+    pub fn clear(&mut self) {
+        self.vertices.clear();
+        self.triangles.clear();
+    }
+
+    /// Appends the other mesh to this mesh
+    ///
+    /// This operation appends the content of the other mesh's vertex and triangle storage tho this mesh.
+    /// The vertex indices of the appended triangles are adjusted accordingly.
+    /// The other mesh will be empty after this operation.
+    pub fn append(&mut self, other: &mut TriMesh3d<R>) {
+        let TriMesh3d {
+            vertices: ref mut new_verts,
+            triangles: ref mut new_tris,
+        } = other;
+
+        let vertex_offset = self.vertices.len();
+        let tri_offset = self.triangles.len();
+
+        self.vertices.append(new_verts);
+        self.triangles.append(new_tris);
+
+        // Update the vertex indices per triangle
+        for tri in self.triangles.iter_mut().skip(tri_offset) {
+            tri[0] += vertex_offset;
+            tri[1] += vertex_offset;
+            tri[2] += vertex_offset;
+        }
+    }
+
+    /// Same as [`Self::vertex_normal_directions_inplace`] but assumes that the output is already zeroed
     fn vertex_normal_directions_inplace_assume_zeroed(&self, normal_directions: &mut [Vector3<R>]) {
         assert_eq!(normal_directions.len(), self.vertices.len());
 
@@ -33,7 +64,7 @@ impl<R: Real> TriMesh3d<R> {
     /// Computes the mesh's vertex normal directions inplace using an area weighted average of the adjacent triangle faces
     ///
     /// Note that this function only computes the normal directions, these vectors are **not normalized**!
-    /// See [Self::vertex_normals_inplace] if actual normal vectors are needed.
+    /// See [`Self::vertex_normals_inplace`] if actual normal vectors are needed.
     ///
     /// The method will panic if the length of the output slice is different from the number of vertices of the mesh.
     ///
@@ -51,14 +82,14 @@ impl<R: Real> TriMesh3d<R> {
     /// Computes the mesh's vertex normal directions using an area weighted average of the adjacent triangle faces
     ///
     /// Note that this function only computes the normal directions, these vectors are **not normalized**!
-    /// See [Self::vertex_normals] if actual normal vectors are needed.
+    /// See [`Self::vertex_normals`] if actual normal vectors are needed.
     pub fn vertex_normal_directions(&self) -> Vec<Vector3<R>> {
         let mut normal_directions = vec![Vector3::zeros(); self.vertices.len()];
         self.vertex_normal_directions_inplace_assume_zeroed(normal_directions.as_mut_slice());
         normal_directions
     }
 
-    /// Same as [Self::vertex_normals_inplace] but assumes that the output is already zeroed
+    /// Same as [`Self::vertex_normals_inplace`] but assumes that the output is already zeroed
     fn vertex_normals_inplace_assume_zeroed<'a>(&self, normals: &'a mut [Unit<Vector3<R>>]) {
         assert_eq!(normals.len(), self.vertices.len());
 
@@ -101,6 +132,84 @@ impl<R: Real> TriMesh3d<R> {
         self.vertex_normals_inplace_assume_zeroed(normals.as_mut_slice());
         normals
     }
+
+    /// Returns all boundary edges of the mesh
+    ///
+    /// Returns edges which are only connected to exactly one triangle, along with the connected triangle
+    /// index and the local index of the edge within that triangle.
+    ///
+    /// Note that the output order is not necessarily deterministic due to the internal use of hashmaps.
+    pub fn find_boundary_edges(&self) -> Vec<([usize; 2], usize, usize)> {
+        let mut sorted_edges = Vec::new();
+        let mut edge_info = Vec::new();
+
+        // Local indices into the triangle connectivity to obtain all edges
+        let tri_edges: [(usize, usize); 3] = [(0, 1), (1, 2), (2, 0)];
+
+        // For each triangle collect
+        //  - each edge (with sorted vertices to use as unique key)
+        //  - each edge with the index of the triangle and local index in the triangle
+        for (tri_idx, tri_conn) in self.triangles.iter().enumerate() {
+            for (local_idx, (v0, v1)) in tri_edges
+                .iter()
+                .copied()
+                .map(|(i0, i1)| (tri_conn[i0], tri_conn[i1]))
+                .enumerate()
+            {
+                // Sort the edge
+                if v0 < v1 {
+                    sorted_edges.push([v0, v1])
+                } else {
+                    sorted_edges.push([v1, v0])
+                };
+
+                edge_info.push(([v0, v1], tri_idx, local_idx));
+            }
+        }
+
+        // Count the number of occurrences of "equivalent" edges (in the sense that they refer
+        // to the same vertex indices).
+        let mut edge_counts = new_map();
+        for (edge_idx, edge) in sorted_edges.iter().copied().enumerate() {
+            edge_counts
+                .entry(edge)
+                .and_modify(|(_, count)| *count += 1)
+                .or_insert((edge_idx, 1));
+        }
+
+        // Take only the faces which have a count of 1, which correspond to boundary faces
+        edge_counts
+            .into_iter()
+            .map(|(_edge, value)| value)
+            .filter(|&(_, count)| count == 1)
+            .map(move |(edge_idx, _)| edge_info[edge_idx].clone())
+            .collect()
+    }
+}
+
+#[test]
+fn test_find_boundary() {
+    // TODO: Needs a test with a real mesh
+    let mesh = TriMesh3d::<f64> {
+        vertices: vec![
+            Vector3::new_random(),
+            Vector3::new_random(),
+            Vector3::new_random(),
+        ],
+        triangles: vec![[0, 1, 2]],
+    };
+
+    let mut boundary = mesh.find_boundary_edges();
+    boundary.sort_unstable();
+
+    assert_eq!(
+        boundary,
+        vec![
+            ([0usize, 1usize], 0, 0),
+            ([1usize, 2usize], 0, 1),
+            ([2usize, 0usize], 0, 2),
+        ]
+    );
 }
 
 /// A hexahedral (volumetric) mesh in 3D
@@ -162,8 +271,7 @@ pub mod vtk_helper {
     {
         fn from(mesh: &TriMesh3d<R>) -> Self {
             let points = {
-                let mut points: Vec<R> = Vec::new();
-                points.reserve(mesh.vertices.len() * 3);
+                let mut points: Vec<R> = Vec::with_capacity(mesh.vertices.len() * 3);
                 for v in mesh.vertices.iter() {
                     points.extend(v.as_slice());
                 }
@@ -171,8 +279,7 @@ pub mod vtk_helper {
             };
 
             let vertices = {
-                let mut vertices = Vec::new();
-                vertices.reserve(mesh.triangles.len() * (3 + 1));
+                let mut vertices = Vec::with_capacity(mesh.triangles.len() * (3 + 1));
                 for triangle in mesh.triangles.iter() {
                     vertices.push(3);
                     vertices.extend(triangle.iter().copied().map(|i| i as u32));
@@ -192,8 +299,7 @@ pub mod vtk_helper {
     {
         fn from(mesh: &'a HexMesh3d<R>) -> Self {
             let points = {
-                let mut points: Vec<R> = Vec::new();
-                points.reserve(mesh.vertices.len() * 3);
+                let mut points: Vec<R> = Vec::with_capacity(mesh.vertices.len() * 3);
                 for v in mesh.vertices.iter() {
                     points.extend(v.as_slice());
                 }
@@ -201,8 +307,7 @@ pub mod vtk_helper {
             };
 
             let vertices = {
-                let mut vertices = Vec::new();
-                vertices.reserve(mesh.cells.len() * (8 + 1));
+                let mut vertices = Vec::with_capacity(mesh.cells.len() * (8 + 1));
                 for cell in mesh.cells.iter() {
                     vertices.push(8);
                     vertices.extend(cell.iter().copied().map(|i| i as u32));
@@ -222,8 +327,7 @@ pub mod vtk_helper {
     {
         fn from(mesh: &'a PointCloud3d<R>) -> Self {
             let points = {
-                let mut points: Vec<R> = Vec::new();
-                points.reserve(mesh.points.len() * 3);
+                let mut points: Vec<R> = Vec::with_capacity(mesh.points.len() * 3);
                 for v in mesh.points.iter() {
                     points.extend(v.as_slice());
                 }
@@ -231,8 +335,7 @@ pub mod vtk_helper {
             };
 
             let vertices = {
-                let mut vertices = Vec::new();
-                vertices.reserve(mesh.points.len() * (1 + 1));
+                let mut vertices = Vec::with_capacity(mesh.points.len() * (1 + 1));
                 for (i, _) in mesh.points.iter().enumerate() {
                     vertices.push(1 as u32);
                     vertices.push(i as u32);

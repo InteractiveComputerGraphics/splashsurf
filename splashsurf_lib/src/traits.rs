@@ -1,15 +1,16 @@
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
 
+use bitflags::_core::ops::{AddAssign, MulAssign, SubAssign};
 use nalgebra::allocator::Allocator;
 use nalgebra::{DefaultAllocator, DimName, RealField, VectorN};
 use num::{Bounded, CheckedAdd, CheckedMul, CheckedSub, FromPrimitive, Integer, ToPrimitive};
 
-/// Trait that has to be implemented by [Index] and [Real] types to use them in parallelized algorithms
-pub trait ThreadSafe: Sync + Send + 'static {}
-impl<T> ThreadSafe for T where T: Sync + Send + 'static {}
+/// Convenience trait that combines `Send` and `Sync`
+pub trait ThreadSafe: Sync + Send {}
+impl<T> ThreadSafe for T where T: Sync + Send {}
 
-/// Trait that has to be implemented for types to be used as grid cell indices in the context of the library
+/// Trait that has to be implemented for types to be used as background grid cell indices in the context of the library
 pub trait Index:
     Copy
     + Hash
@@ -18,12 +19,16 @@ pub trait Index:
     + CheckedAdd
     + CheckedSub
     + CheckedMul
+    + AddAssign
+    + SubAssign
+    + MulAssign
     + FromPrimitive
     + ToPrimitive
     + Default
     + Debug
     + Display
     + ThreadSafe
+    + 'static
 {
     /// Converts the value to the specified [Real] type. If the value cannot be represented by the target type, `None` is returned.
     fn to_real<R: Real>(self) -> Option<R> {
@@ -90,13 +95,20 @@ impl<T> Index for T where
         + CheckedAdd
         + CheckedSub
         + CheckedMul
+        + AddAssign
+        + SubAssign
+        + MulAssign
         + FromPrimitive
         + ToPrimitive
         + Debug
         + Default
         + Display
         + ThreadSafe
+        + 'static
 {
 }
 
-impl<T: RealField + FromPrimitive + ToPrimitive + Debug + Default + ThreadSafe> Real for T {}
+impl<T: RealField + FromPrimitive + ToPrimitive + Debug + Default + ThreadSafe + 'static> Real
+    for T
+{
+}

@@ -1,36 +1,43 @@
-// Classic marching cubes cases.
-// There are 256 possible combinations of the above/below iso-surface states for the 8 vertices
-// of a cube. The following lookup table maps each combination to the corresponding triangulation.
-//
-// The index for a case is obtained with a bitfield of size 8, where a bit value of 1
-// indicates that the corresponding vertex of the cube is above the iso-surface threshold.
-// Reversing the order of the bit pattern and interpreting it as an integer yields the case index.
-//
-// For each case, the triangulation is represented by a 16 element array containing successive
-// index triplets for each required triangle. The indices refer to the corresponding edges that
-// are intersected by the triangle. Each case has at most three triangles and unused entries of the
-// 16 element arrays are filled with -1 entries for padding.
-//
-// Example:
-//   - Vertex 0 and 2 are above the iso-surface threshold.
-//   - The corresponding bit pattern is `10100000`, the corresponding index is 5
-//   - The case with index 5 reads `[ 0,  8,  3,  1,  2, 10, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1]`
-//   - The triangulation is given by the two triangles `[0, 8, 3]` and `[1, 2, 10]`, with vertices
-//     on the edges identified by the given indices
-//
-// Cube description:
-//
-//         7 ________ 6           _____6__
-//         /|       /|         7/|       /|
-//       /  |     /  |        /  |     /5 |
-//   4 /_______ /    |      /__4____ /    10
-//    |     |  |5    |     |    11  |     |
-//    |    3|__|_____|2    |     |__|__2__|
-//    |    /   |    /      8   3/   9    /
-//    |  /     |  /        |  /     |  /1
-//    |/_______|/          |/___0___|/
-//   0          1
-//          Vertices              Edges
+//! Classic marching cubes cases.
+//! There are 256 possible combinations of the above/below iso-surface states for the 8 vertices
+//! of a cube. The following lookup table maps each combination to the corresponding triangulation.
+//!
+//! The index for a case is obtained with a bitfield of size 8, where a bit value of 1
+//! indicates that the corresponding vertex of the cube is above the iso-surface threshold.
+//! Reversing the order of the bit pattern and interpreting it as an integer yields the case index.
+//!
+//! For each case, the triangulation is represented by a 16 element array containing successive
+//! index triplets for each required triangle. The indices refer to the corresponding edges that
+//! are intersected by the triangle. Each case has at most three triangles and unused entries of the
+//! 16 element arrays are filled with -1 entries for padding.
+//!
+//! Example:
+//!   - Vertex 0 and 2 are above the iso-surface threshold.
+//!   - The corresponding bit pattern is `10100000`, the corresponding index is 5
+//!   - The case with index 5 reads `[ 0,  8,  3,  1,  2, 10, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1]`
+//!   - The triangulation is given by the two triangles `[0, 8, 3]` and `[1, 2, 10]`, with vertices
+//!     on the edges identified by the given indices
+//!
+//! Note that the raw table apparently uses a left-handed coordinate system and accordingly a
+//! clockwise winding order of the triangles. To avoid producing meshes with normals pointing into
+//! the reconstructed surface, the resulting triangles have to be flipped. This is already taken
+//! into account by the [`marching_cubes_triangulation_iter`] function.
+//!
+//! Cube description:
+//!
+//! ```text
+//!         7 ________ 6           _____6__
+//!         /|       /|         7/|       /|
+//!       /  |     /  |        /  |     /5 |
+//!   4 /_______ /    |      /__4____ /    10
+//!    |     |  |5    |     |    11  |     |
+//!    |    3|__|_____|2    |     |__|__2__|
+//!    |    /   |    /      8   3/   9    /
+//!    |  /     |  /        |  /     |  /1
+//!    |/_______|/          |/___0___|/
+//!   0          1
+//!          Vertices              Edges
+//! ```
 
 /// The classic marching cubes table
 #[rustfmt::skip]
@@ -293,57 +300,165 @@ static MARCHING_CUBES_TABLE: [[i32; 16]; 256] = [
 /* 255: 0, 1, 2, 3, 4, 5, 6, 7,  */  [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
 ];
 
-/// Returns a reference into the marching cubes LUT to the case corresponding to a vertex configuration
+/// Returns a reference into the marching cubes LUT to the case corresponding to the given vertex configuration
 pub fn get_marching_cubes_triangulation_raw(vertices_inside: &[bool; 8]) -> &'static [i32; 16] {
-    let mut index = 0;
-    for bit in vertices_inside.iter().rev().copied() {
-        index = (index << 1) | bit as usize
-    }
-
-    &MARCHING_CUBES_TABLE[index]
+    &MARCHING_CUBES_TABLE[flags_to_index(vertices_inside)]
 }
 
 /// Returns the marching cubes triangulation corresponding to the given vertex configuration
 ///
 /// In the vertex configuration, a `true` value indicates that the given vertex is inside the
-/// iso-surface, i.e. above the iso-surface threshold value. The returned triangulation contains
-/// at most 5 triangles identified with the indices of the edges of their corner vertices.
-pub fn get_marching_cubes_triangulation(vertices_inside: &[bool; 8]) -> [Option<[i32; 3]>; 5] {
+/// iso-surface, i.e. above the iso-surface threshold value. The returned iterator yields
+/// at most 5 triangles defined by the indices of the edges of their corner vertices.
+pub fn marching_cubes_triangulation_iter(
+    vertices_inside: &[bool; 8],
+) -> impl Iterator<Item = [i32; 3]> {
     let triangulation = get_marching_cubes_triangulation_raw(vertices_inside);
-
-    let get_triangle = |i: usize| -> Option<[i32; 3]> {
-        if triangulation[3 * i] == -1 {
-            None
-        } else {
-            Some([
-                triangulation[3 * i + 0],
-                triangulation[3 * i + 1],
-                triangulation[3 * i + 2],
-            ])
-        }
-    };
-
-    [
-        get_triangle(0),
-        get_triangle(1),
-        get_triangle(2),
-        get_triangle(3),
-        get_triangle(4),
-    ]
+    (0..4)
+        .into_iter()
+        .map(move |i| triangulation_to_triangle(triangulation, i))
+        .flatten()
 }
 
-#[test]
-fn test_marching_cubes_triangulation() {
-    assert_eq!(
-        get_marching_cubes_triangulation(&[false, false, false, false, false, false, false, false]),
-        [None, None, None, None, None]
-    );
-    assert_eq!(
-        get_marching_cubes_triangulation(&[true, false, false, false, false, false, false, false]),
-        [Some([0, 8, 3]), None, None, None, None]
-    );
-    assert_eq!(
-        get_marching_cubes_triangulation(&[false, false, true, false, true, false, false, false]),
-        [Some([1, 2, 10]), Some([8, 4, 7]), None, None, None]
-    );
+/// Converts an array of bool representing bits to the corresponding usize, the order of the bits is least to most significant
+fn flags_to_index(flags: &[bool; 8]) -> usize {
+    let mut index = 0;
+    for bit in flags.iter().rev().copied() {
+        index = (index << 1) | bit as usize
+    }
+
+    index
+}
+
+/// Extracts the triangle with the given index from the triangulation
+fn triangulation_to_triangle(triangulation: &[i32; 16], triangle_index: usize) -> Option<[i32; 3]> {
+    let i = triangle_index;
+    if triangulation[3 * i] == -1 {
+        None
+    } else {
+        // Reverse the vertex index order to fix winding order (so that normals point outwards)
+        Some([
+            triangulation[3 * i + 2],
+            triangulation[3 * i + 1],
+            triangulation[3 * i + 0],
+        ])
+    }
+}
+
+#[cfg(test)]
+#[allow(unused)]
+mod test_lut {
+    use super::*;
+
+    /// A dumb integer -> bit flags conversion using format!
+    fn index_to_flags(index: usize) -> [bool; 8] {
+        assert!(index <= 256);
+
+        let b: Vec<char> = format!("{:08b}", index).chars().collect();
+        [
+            b[7] == '1',
+            b[6] == '1',
+            b[5] == '1',
+            b[4] == '1',
+            b[3] == '1',
+            b[2] == '1',
+            b[1] == '1',
+            b[0] == '1',
+        ]
+    }
+
+    /// Inverts all bools in a flag array
+    fn inverse_flags(flags: &[bool; 8]) -> [bool; 8] {
+        [
+            !flags[0], !flags[1], !flags[2], !flags[3], !flags[4], !flags[5], !flags[6], !flags[7],
+        ]
+    }
+
+    #[test]
+    fn test_flag_conversion_roundtrip() {
+        assert_eq!(MARCHING_CUBES_TABLE.len(), 256);
+
+        for i in 0..256 {
+            let flags = index_to_flags(i);
+            let index = flags_to_index(&flags);
+
+            assert_eq!(i, index);
+        }
+    }
+
+    #[test]
+    fn test_get_marching_cubes_triangulation_raw() {
+        assert_eq!(MARCHING_CUBES_TABLE.len(), 256);
+
+        for i in 0..256 {
+            assert_eq!(
+                MARCHING_CUBES_TABLE[i],
+                *get_marching_cubes_triangulation_raw(&index_to_flags(i))
+            )
+        }
+    }
+
+    /*
+    #[test]
+    fn test_marching_cubes_cases() {
+        assert_eq!(MARCHING_CUBES_TABLE.len(), 256);
+
+        for i in 0..256 {
+            let flags = index_to_flags(i);
+            let flags_inverse = inverse_flags(&flags);
+            let i_inverse = flags_to_index(&flags_inverse);
+
+            let case = MARCHING_CUBES_TABLE[i];
+            let case_inverse = MARCHING_CUBES_TABLE[i_inverse];
+
+            let triangles: Vec<_> = (0..4)
+                .into_iter()
+                .map(|i| triangulation_to_triangle(&case, i))
+                .flatten()
+                .collect();
+
+            let triangles_inverse: Vec<_> = (0..4)
+                .into_iter()
+                .map(|i| triangulation_to_triangle(&case_inverse, i))
+                .flatten()
+                .collect();
+
+            assert_eq!(
+                triangles.len(),
+                triangles_inverse.len(),
+                "Case {} and inverse case {} don't have the same number of triangles ({:?} vs {:?})",
+                i,
+                i_inverse,
+                triangles,
+                triangles_inverse
+            );
+        }
+    }
+    */
+
+    #[test]
+    fn test_marching_cubes_triangulation_iter() {
+        assert!(marching_cubes_triangulation_iter(&[
+            false, false, false, false, false, false, false, false
+        ])
+        .next()
+        .is_none(),);
+
+        assert_eq!(
+            marching_cubes_triangulation_iter(&[
+                true, false, false, false, false, false, false, false
+            ])
+            .collect::<Vec<_>>(),
+            //vec![[0, 8, 3]]
+            vec![[3, 8, 0]]
+        );
+
+        assert_eq!(
+            marching_cubes_triangulation_iter(&[
+                false, false, true, false, true, false, false, false
+            ])
+            .collect::<Vec<_>>(),
+            vec![[10, 2, 1], [7, 4, 8]]
+        );
+    }
 }

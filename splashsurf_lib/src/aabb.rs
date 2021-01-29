@@ -1,13 +1,16 @@
+//! Axis-aligned bounding boxes
+
 use std::fmt;
 use std::fmt::Debug;
 
 use nalgebra::allocator::Allocator;
 use nalgebra::{DefaultAllocator, DimName, VectorN, U2, U3};
+use rayon::prelude::*;
 
-use crate::Real;
+use crate::{Real, ThreadSafe};
 
 /// Type representing an axis aligned bounding box in arbitrary dimensions
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct AxisAlignedBoundingBox<R: Real, D: DimName>
 where
     DefaultAllocator: Allocator<R, D>,
@@ -26,14 +29,46 @@ where
     R: Real,
     D: DimName,
     DefaultAllocator: Allocator<R, D>,
+    VectorN<R, D>: ThreadSafe,
 {
-    /// Constructs an AABB with min and max set to zero
+    /// Constructs the smallest AABB fitting around all the given points, parallel version
+    pub fn from_points_par(points: &[VectorN<R, D>]) -> Self {
+        if points.is_empty() {
+            Self::zeros()
+        } else if points.len() == 1 {
+            Self::from_point(points[0].clone())
+        } else {
+            let initial_aabb = Self::from_point(points[0].clone());
+            points[1..]
+                .par_iter()
+                .fold(
+                    || initial_aabb.clone(),
+                    |mut aabb, next_point| {
+                        aabb.join_with_point(next_point);
+                        aabb
+                    },
+                )
+                .reduce(
+                    || initial_aabb.clone(),
+                    |mut final_aabb, aabb| {
+                        final_aabb.join(&aabb);
+                        final_aabb
+                    },
+                )
+        }
+    }
+}
+
+impl<R, D> AxisAlignedBoundingBox<R, D>
+where
+    R: Real,
+    D: DimName,
+    DefaultAllocator: Allocator<R, D>,
+{
+    /// Constructs a degenerate AABB with min and max set to zero
     #[inline(always)]
     pub fn zeros() -> Self {
-        Self {
-            min: VectorN::zeros(),
-            max: VectorN::zeros(),
-        }
+        Self::from_point(VectorN::zeros())
     }
 
     /// Constructs an AABB with the given min and max bounding points
@@ -42,21 +77,21 @@ where
         Self { min, max }
     }
 
-    /// Constructs an AABB with zero extents centered at the given point
+    /// Constructs a degenerate AABB with zero extents centered at the given point
     #[inline(always)]
-    pub fn from_point(point: &VectorN<R, D>) -> Self {
+    pub fn from_point(point: VectorN<R, D>) -> Self {
         Self {
             min: point.clone(),
-            max: point.clone(),
+            max: point,
         }
     }
 
     /// Constructs the smallest AABB fitting around all the given points
     pub fn from_points(points: &[VectorN<R, D>]) -> Self {
         let mut point_iter = points.iter();
-        if let Some(first_point) = point_iter.next() {
+        if let Some(first_point) = point_iter.next().cloned() {
             let mut aabb = Self::from_point(first_point);
-            while let Some(next_point) = point_iter.next() {
+            for next_point in point_iter {
                 aabb.join_with_point(next_point)
             }
             aabb

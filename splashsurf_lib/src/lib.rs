@@ -1,15 +1,33 @@
 //!
-//! Library for surface reconstruction using marching cubes for SPH particle data. Entry point is the [reconstruct_surface] function.
+//! Library for surface reconstruction of SPH particle data using marching cubes.
+//!
+//! Entry points are the [`reconstruct_surface`] or [`reconstruct_surface_inplace`] functions.
 //!
 
-/// Re-export the version of coarse_prof used by this crate, if profiling is enabled
+/// Re-export the version of `coarse_prof` used by this crate, if profiling is enabled
 #[cfg(feature = "profiling")]
 pub use coarse_prof;
-/// Re-export the version of nalgebra used by this crate
+use log::info;
+/// Re-export the version of `nalgebra` used by this crate
 pub use nalgebra;
-/// Re-export the version of vtkio used by this crate, if vtk support is enabled
+use nalgebra::Vector3;
+use thiserror::Error as ThisError;
+/// Re-export the version of `vtkio` used by this crate, if vtk support is enabled
 #[cfg(feature = "vtk_extras")]
 pub use vtkio;
+
+pub use aabb::{AxisAlignedBoundingBox, AxisAlignedBoundingBox2d, AxisAlignedBoundingBox3d};
+pub use density_map::DensityMap;
+pub use octree::SubdivisionCriterion;
+pub use traits::{Index, Real, ThreadSafe};
+pub use uniform_grid::{GridConstructionError, UniformGrid};
+
+use crate::mesh::TriMesh3d;
+use crate::octree::Octree;
+use crate::reconstruction::{
+    reconstruct_single_surface_append, SurfaceReconstructionOctreeVisitor,
+};
+use crate::workspace::ReconstructionWorkspace;
 
 #[cfg(feature = "profiling")]
 /// Invokes coarse_prof::profile! with the given expression
@@ -28,48 +46,31 @@ macro_rules! profile {
 }
 
 mod aabb;
-/// Computation of sparse density maps (evaluation of particle densities and mapping onto sparse grids)
 pub mod density_map;
-/// SPH kernel function implementations
+pub mod generic_tree;
 pub mod kernel;
-/// Triangulation of density maps using marching cubes
 pub mod marching_cubes;
-mod marching_cubes_lut;
-/// Basic mesh types used by the library and implementation of VTK export
 pub mod mesh;
-/// Simple neighborhood search based on spatial hashing
 pub mod neighborhood_search;
-mod numeric_types;
-/// Types related to the virtual background grid used for marching cubes
-mod uniform_grid;
+pub mod octree;
+mod reconstruction;
+pub mod topology;
+mod traits;
+pub mod uniform_grid;
 mod utils;
-
-pub use aabb::{AxisAlignedBoundingBox, AxisAlignedBoundingBox2d, AxisAlignedBoundingBox3d};
-pub use density_map::DensityMap;
-pub use numeric_types::{Index, Real, ThreadSafe};
-pub use uniform_grid::{GridConstructionError, UniformGrid};
-
-use log::info;
-use mesh::TriMesh3d;
-use nalgebra::Vector3;
-use thiserror::Error as ThisError;
+pub(crate) mod workspace;
 
 // TODO: Add documentation of feature flags
-// TODO: Add documentation of the parameter struct
+// TODO: Feature flag for multi threading
+// TODO: Feature flag to disable (debug level) logging?
 
 // TODO: Remove anyhow/thiserror from lib?
 // TODO: Write more unit tests (e.g. AABB, UniformGrid, neighborhood search)
-// TODO: Write some integration tests
 // TODO: Test kernels with property based testing?
-// TODO: Investigate why reconstruction crashes with an AABB that is too small
 // TODO: Add free particles back again after triangulation as sphere meshes if they were removed
-// TODO: Check why, when particle density is erroneously initialized with zero, the cell interpolation crashes
 // TODO: Detect free particles by just comparing with the SPH density of a free particle? (no need for extra neighborhood search?)
-// TODO: Ensure that if an AABB is adapted for an operation (e.g. a margin is added), that it shrinks towards the original center of the AABB
 // TODO: More and better error messages with distinct types
 // TODO: Make flat indices strongly typed
-// TODO: Windowed approach that supports multi threading and dense operations without hashmap
-// TODO: Make deterministic ordering a feature flag / runtime option
 // TODO: Function that detects smallest usable index type
 
 pub(crate) type HashState = fxhash::FxBuildHasher;
@@ -98,19 +99,6 @@ pub(crate) fn new_map<K, V>() -> MapType<K, V> {
 
 pub(crate) type ParallelMapType<K, V> = dashmap::DashMap<K, V, HashState>;
 
-/// Parameters for the surface reconstruction
-#[derive(Clone, Debug)]
-pub struct Parameters<R: Real> {
-    pub particle_radius: R,
-    pub rest_density: R,
-    pub kernel_radius: R,
-    pub splash_detection_radius: Option<R>,
-    pub cube_size: R,
-    pub iso_surface_threshold: R,
-    pub domain_aabb: Option<AxisAlignedBoundingBox3d<R>>,
-    pub enable_multi_threading: bool,
-}
-
 /// Macro version of Option::map that allows using e.g. using the ?-operator in the map expression
 macro_rules! map_option {
     ($some_optional:expr, $value_identifier:ident => $value_transformation:expr) => {
@@ -121,13 +109,64 @@ macro_rules! map_option {
     };
 }
 
+/// Parameters for the spatial decomposition
+#[derive(Clone, Debug)]
+pub struct SpatialDecompositionParameters<R: Real> {
+    /// Criterion used for subdivision of the octree cells
+    pub subdivision_criterion: SubdivisionCriterion,
+    /// Safety factor applied to the kernel radius when it's used as a margin to collect ghost particles in the leaf nodes
+    pub ghost_particle_safety_factor: Option<R>,
+    /// Whether to enable stitching of all disjoint subdomain meshes to a global manifold mesh
+    pub enable_stitching: bool,
+}
+
+impl<R: Real> SpatialDecompositionParameters<R> {
+    /// Tries to convert the parameters from one [Real] type to another [Real] type, returns None if conversion fails
+    pub fn try_convert<T: Real>(&self) -> Option<SpatialDecompositionParameters<T>> {
+        Some(SpatialDecompositionParameters {
+            subdivision_criterion: self.subdivision_criterion.clone(),
+            ghost_particle_safety_factor: map_option!(
+                &self.ghost_particle_safety_factor,
+                r => r.try_convert()?
+            ),
+            enable_stitching: self.enable_stitching,
+        })
+    }
+}
+
+/// Parameters for the surface reconstruction
+#[derive(Clone, Debug)]
+pub struct Parameters<R: Real> {
+    /// Radius per particle (used to calculate the particle volume)
+    pub particle_radius: R,
+    /// Rest density of the fluid
+    pub rest_density: R,
+    /// Compact support radius of the kernel, i.e. distance from the particle where kernel reaches zero (in distance units, not relative to particle radius)
+    pub compact_support_radius: R,
+    /// Particles without neighbors within the splash detection radius are considered "splash" or "free particles".
+    /// They are filtered out and processed separately. Currently they are only skipped during the surface reconstruction.
+    pub splash_detection_radius: Option<R>,
+    /// Edge length of the marching cubes implicit background grid (in distance units, not relative to particle radius)
+    pub cube_size: R,
+    /// Density threshold value to distinguish between the inside (above threshold) and outside (below threshold) of the fluid
+    pub iso_surface_threshold: R,
+    /// Manually restrict the domain to the surface reconstruction.
+    /// If not provided, the smallest AABB enclosing all particles is computed instead.
+    pub domain_aabb: Option<AxisAlignedBoundingBox3d<R>>,
+    /// Whether to allow multi threading within the surface reconstruction procedure
+    pub enable_multi_threading: bool,
+    /// Parameters for the spatial decomposition (octree subdivision) of the particles.
+    /// If not provided, no octree is generated and a global approach is used instead.
+    pub spatial_decomposition: Option<SpatialDecompositionParameters<R>>,
+}
+
 impl<R: Real> Parameters<R> {
     /// Tries to convert the parameters from one [Real] type to another [Real] type, returns None if conversion fails
     pub fn try_convert<T: Real>(&self) -> Option<Parameters<T>> {
         Some(Parameters {
             particle_radius: self.particle_radius.try_convert()?,
             rest_density: self.rest_density.try_convert()?,
-            kernel_radius: self.kernel_radius.try_convert()?,
+            compact_support_radius: self.compact_support_radius.try_convert()?,
             splash_detection_radius: map_option!(
                 &self.splash_detection_radius,
                 r => r.try_convert()?
@@ -136,6 +175,7 @@ impl<R: Real> Parameters<R> {
             iso_surface_threshold: self.iso_surface_threshold.try_convert()?,
             domain_aabb: map_option!(&self.domain_aabb, aabb => aabb.try_convert()?),
             enable_multi_threading: self.enable_multi_threading,
+            spatial_decomposition: map_option!(&self.spatial_decomposition, sd => sd.try_convert()?),
         })
     }
 }
@@ -143,12 +183,16 @@ impl<R: Real> Parameters<R> {
 /// Result data returned when the surface reconstruction was successful
 #[derive(Clone, Debug)]
 pub struct SurfaceReconstruction<I: Index, R: Real> {
-    /// The background grid that was used as a basis for generating the density map for marching cubes
+    /// Background grid that was used as a basis for generating the density map for marching cubes
     grid: UniformGrid<I, R>,
-    /// The point-based density map generated from the particles that was used as input to marching cubes
+    /// Octree built for domain decomposition
+    octree: Option<Octree<I, R>>,
+    /// Point-based density map generated from the particles that was used as input to marching cubes
     density_map: Option<DensityMap<I, R>>,
-    /// The actual mesh that is the result of the surface reconstruction
+    /// Surface mesh that is the result of the surface reconstruction
     mesh: TriMesh3d<R>,
+    /// Workspace with allocated memory for subsequent surface reconstructions
+    workspace: ReconstructionWorkspace<I, R>,
 }
 
 impl<I: Index, R: Real> Default for SurfaceReconstruction<I, R> {
@@ -156,8 +200,10 @@ impl<I: Index, R: Real> Default for SurfaceReconstruction<I, R> {
     fn default() -> Self {
         Self {
             grid: UniformGrid::new_zero(),
+            octree: None,
             density_map: None,
             mesh: TriMesh3d::default(),
+            workspace: ReconstructionWorkspace::default(),
         }
     }
 }
@@ -166,6 +212,11 @@ impl<I: Index, R: Real> SurfaceReconstruction<I, R> {
     /// Returns a reference to the actual triangulated surface mesh that is the result of the reconstruction
     pub fn mesh(&self) -> &TriMesh3d<R> {
         &self.mesh
+    }
+
+    /// Returns a reference to the octree generated for spatial decomposition of the input particles
+    pub fn octree(&self) -> Option<&Octree<I, R>> {
+        self.octree.as_ref()
     }
 
     /// Returns a reference to the sparse density map (discretized on the vertices of the background grid) that is used as input for marching cubes
@@ -180,6 +231,7 @@ impl<I: Index, R: Real> SurfaceReconstruction<I, R> {
 }
 
 impl<I: Index, R: Real> From<SurfaceReconstruction<I, R>> for TriMesh3d<R> {
+    /// Extracts the reconstructed mesh
     fn from(result: SurfaceReconstruction<I, R>) -> Self {
         result.mesh
     }
@@ -198,15 +250,29 @@ pub enum ReconstructionError<I: Index, R: Real> {
 }
 
 impl<I: Index, R: Real> From<GridConstructionError<I, R>> for ReconstructionError<I, R> {
+    /// Allows automatic conversion of a [`GridConstructionError`] to a [`ReconstructionError`]
     fn from(error: GridConstructionError<I, R>) -> Self {
         ReconstructionError::GridConstructionError(error)
     }
 }
 
 impl<I: Index, R: Real> From<anyhow::Error> for ReconstructionError<I, R> {
+    /// Allows automatic conversion of an `anyhow::Error` to a [`ReconstructionError`]
     fn from(error: anyhow::Error) -> Self {
         ReconstructionError::Unknown(error)
     }
+}
+
+/// Initializes the global thread pool used by this library with the given parameters.
+///
+/// Initialization of the global thread pool happens exactly once.
+/// Therefore, if you call `initialize_thread_pool` a second time, it will return an error.
+/// An `Ok` result indicates that this is the first initialization of the thread pool.
+pub fn initialize_thread_pool(num_threads: usize) -> Result<(), anyhow::Error> {
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(num_threads)
+        .build_global()?;
+    Ok(())
 }
 
 /// Performs a marching cubes surface construction of the fluid represented by the given particle positions
@@ -221,107 +287,74 @@ pub fn reconstruct_surface<I: Index, R: Real>(
     Ok(surface)
 }
 
+/// Performs a marching cubes surface construction of the fluid represented by the given particle positions, inplace
 pub fn reconstruct_surface_inplace<'a, I: Index, R: Real>(
     particle_positions: &[Vector3<R>],
     parameters: &Parameters<R>,
-    surface: &'a mut SurfaceReconstruction<I, R>,
+    output_surface: &'a mut SurfaceReconstruction<I, R>,
 ) -> Result<(), ReconstructionError<I, R>> {
-    profile!("reconstruct_surface_inplace");
+    // Clear the existing mesh
+    output_surface.mesh.clear();
 
-    let Parameters {
-        particle_radius,
-        rest_density,
-        kernel_radius,
-        splash_detection_radius,
-        cube_size,
-        iso_surface_threshold,
-        domain_aabb,
-        enable_multi_threading,
-    } = parameters.clone();
-
-    surface.grid = grid_for_reconstruction(
+    // Initialize grid for the reconstruction
+    output_surface.grid = grid_for_reconstruction(
         particle_positions,
-        particle_radius,
-        cube_size,
-        domain_aabb.as_ref(),
+        parameters.particle_radius,
+        parameters.compact_support_radius,
+        parameters.cube_size,
+        parameters.domain_aabb.as_ref(),
+        parameters.enable_multi_threading,
     )?;
-    let grid = &surface.grid;
+    let grid = &output_surface.grid;
+    grid.log_grid_info();
 
-    info!(
-        "Using a grid with {:?}x{:?}x{:?} points and {:?}x{:?}x{:?} cells of edge length {}.",
-        grid.points_per_dim()[0],
-        grid.points_per_dim()[1],
-        grid.points_per_dim()[2],
-        grid.cells_per_dim()[0],
-        grid.cells_per_dim()[1],
-        grid.cells_per_dim()[2],
-        grid.cell_size()
-    );
-    info!("The resulting domain size is: {:?}", grid.aabb());
+    if parameters.spatial_decomposition.is_some() {
+        SurfaceReconstructionOctreeVisitor::new(particle_positions, parameters, output_surface)
+            .unwrap()
+            .run(particle_positions, output_surface);
+    } else {
+        profile!("reconstruct_surface_inplace");
 
-    let particle_rest_density = rest_density;
-    let particle_rest_volume =
-        R::from_f64((4.0 / 3.0) * std::f64::consts::PI).unwrap() * particle_radius.powi(3);
-    let particle_rest_mass = particle_rest_volume * particle_rest_density;
+        let mut workspace = output_surface
+            .workspace
+            .get_local_with_capacity(particle_positions.len())
+            .borrow_mut();
 
-    let particle_densities = {
-        info!("Starting neighborhood search...");
-
-        let particle_neighbor_lists = neighborhood_search::search::<I, R>(
-            &grid.aabb(),
+        // Clear the current mesh, as reconstruction will be appended to output
+        output_surface.mesh.clear();
+        // Perform global reconstruction without octree
+        reconstruct_single_surface_append(
+            &mut *workspace,
+            grid,
+            None,
             particle_positions,
-            kernel_radius,
-            enable_multi_threading,
+            parameters,
+            &mut output_surface.mesh,
         );
 
-        info!("Computing particle densities...");
+        /*
+        let particle_indices = splash_detection_radius.map(|splash_detection_radius| {
+            let neighborhood_list = neighborhood_search::search::<I, R>(
+                &grid.aabb(),
+                particle_positions,
+                splash_detection_radius,
+                enable_multi_threading,
+            );
 
-        density_map::compute_particle_densities::<I, R>(
-            particle_positions,
-            particle_neighbor_lists.as_slice(),
-            kernel_radius,
-            particle_rest_mass,
-            enable_multi_threading,
-        )
-    };
-
-    let particle_indices = splash_detection_radius.map(|splash_detection_radius| {
-        let neighborhood_list = neighborhood_search::search::<I, R>(
-            &grid.aabb(),
-            particle_positions,
-            splash_detection_radius,
-            enable_multi_threading,
-        );
-
-        let mut active_particles = Vec::new();
-        for (particle_i, neighbors) in neighborhood_list.iter().enumerate() {
-            if !neighbors.is_empty() {
-                active_particles.push(particle_i);
+            let mut active_particles = Vec::new();
+            for (particle_i, neighbors) in neighborhood_list.iter().enumerate() {
+                if !neighbors.is_empty() {
+                    active_particles.push(particle_i);
+                }
             }
-        }
 
-        active_particles
-    });
+            active_particles
+        });
+        */
 
-    let density_map = density_map::generate_sparse_density_map::<I, R>(
-        &grid,
-        particle_positions,
-        particle_densities.as_slice(),
-        particle_indices.as_ref().map(|is| is.as_slice()),
-        particle_rest_mass,
-        kernel_radius,
-        cube_size,
-        enable_multi_threading,
-    );
-
-    marching_cubes::triangulate_density_map::<I, R>(
-        &grid,
-        &density_map,
-        iso_surface_threshold,
-        &mut surface.mesh,
-    );
-
-    surface.density_map = Some(density_map);
+        // TODO: Set this correctly
+        output_surface.density_map = None;
+    }
 
     Ok(())
 }
@@ -330,8 +363,10 @@ pub fn reconstruct_surface_inplace<'a, I: Index, R: Real>(
 pub fn grid_for_reconstruction<I: Index, R: Real>(
     particle_positions: &[Vector3<R>],
     particle_radius: R,
+    compact_support_radius: R,
     cube_size: R,
     domain_aabb: Option<&AxisAlignedBoundingBox3d<R>>,
+    enable_multi_threading: bool,
 ) -> Result<UniformGrid<I, R>, ReconstructionError<I, R>> {
     let domain_aabb = if let Some(domain_aabb) = domain_aabb {
         domain_aabb.clone()
@@ -339,7 +374,11 @@ pub fn grid_for_reconstruction<I: Index, R: Real>(
         profile!("compute minimum enclosing aabb");
 
         let mut domain_aabb = {
-            let mut aabb = AxisAlignedBoundingBox3d::from_points(particle_positions);
+            let mut aabb = if enable_multi_threading {
+                AxisAlignedBoundingBox3d::from_points_par(particle_positions)
+            } else {
+                AxisAlignedBoundingBox3d::from_points(particle_positions)
+            };
             aabb.grow_uniformly(particle_radius);
             aabb
         };
@@ -349,7 +388,14 @@ pub fn grid_for_reconstruction<I: Index, R: Real>(
             domain_aabb
         );
 
-        domain_aabb.scale_uniformly(R::one().times(2));
+        // Ensure that we have enough margin around the particles such that the every particle's kernel support is completely in the domain
+        let kernel_margin = density_map::compute_kernel_evaluation_radius::<I, R>(
+            compact_support_radius,
+            cube_size,
+        )
+        .kernel_evaluation_radius;
+        domain_aabb.grow_uniformly(kernel_margin);
+
         domain_aabb
     };
 
