@@ -1,6 +1,10 @@
 ## Master
 
+ - Lib: Implemented an own `profile!` macro that also works in multi-threaded code, i.e. with together with `rayon`
+ - CLI: The CLI now also prints detailed profiling/timing output when running in parallel with domain decomposition thanks to the new `profile` macro
+
 ### Short-term goals
+ - Investigate and fix artifacts with domain decomposition in large, flat surfaces
  - Implement export of surface normals via the CLI
 
 ## Version 0.5.1
