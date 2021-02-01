@@ -7,7 +7,6 @@ use splashsurf_lib::{
 use std::time::Duration;
 
 use super::io::vtk::particles_from_vtk;
-use super::io::xyz::particles_from_xyz;
 
 #[allow(dead_code)]
 use super::io::vtk::write_vtk;

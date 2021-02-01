@@ -41,6 +41,7 @@ pub fn subdivide_recursively_benchmark(c: &mut Criterion) {
                     particle_positions.as_slice(),
                     SubdivisionCriterion::MaxParticleCount(particles_per_cell),
                     compact_support_radius,
+                    false,
                 )
             },
             BatchSize::LargeInput,
