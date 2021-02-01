@@ -82,6 +82,7 @@ struct Scope {
     name: &'static str,
     num_calls: usize,
     duration_sum: Duration,
+    first_call: Instant,
 }
 
 impl Scope {
@@ -90,6 +91,7 @@ impl Scope {
             name,
             num_calls: 0,
             duration_sum: Default::default(),
+            first_call: Instant::now(),
         }
     }
 
@@ -97,6 +99,9 @@ impl Scope {
         if other.name == self.name {
             self.num_calls += other.num_calls;
             self.duration_sum += other.duration_sum;
+            if other.first_call < self.first_call {
+                self.first_call = other.first_call;
+            }
         }
     }
 }
@@ -180,39 +185,40 @@ impl Profiler {
 
 fn write_recursively<W: io::Write>(
     out: &mut W,
-    scopes: &HashMap<ScopeId, Scope>,
-    id: &ScopeId,
+    sorted_scopes: &[(ScopeId, Scope)],
+    current: &(ScopeId, Scope),
     total_duration: Option<Duration>,
     depth: usize,
 ) -> io::Result<()> {
-    if let Some(scope) = scopes.get(id) {
-        let current_hash = ScopeId::get_hash(Some(id));
+    let (id, scope) = current;
 
-        for _ in 0..depth {
-            write!(out, "  ")?;
-        }
+    for _ in 0..depth {
+        write!(out, "  ")?;
+    }
 
-        let duration_sum_secs = scope.duration_sum.as_secs_f64();
-        let total_duration_secs = total_duration.map_or(duration_sum_secs, |t| t.as_secs_f64());
-        let percent = duration_sum_secs / total_duration_secs * 100.0;
+    let duration_sum_secs = scope.duration_sum.as_secs_f64();
+    let total_duration_secs = total_duration.map_or(duration_sum_secs, |t| t.as_secs_f64());
+    let percent = duration_sum_secs / total_duration_secs * 100.0;
 
-        writeln!(
-            out,
-            "{}: {:3.2}%, {:>4.2}ms avg @ {:.2}Hz ({} {})",
-            scope.name,
-            percent,
-            duration_sum_secs * 1000.0 / (scope.num_calls as f64),
-            scope.num_calls as f64 / total_duration_secs,
-            scope.num_calls,
-            if scope.num_calls > 1 { "calls" } else { "call" }
-        )?;
+    writeln!(
+        out,
+        "{}: {:3.2}%, {:>4.2}ms avg @ {:.2}Hz ({} {})",
+        scope.name,
+        percent,
+        duration_sum_secs * 1000.0 / (scope.num_calls as f64),
+        scope.num_calls as f64 / total_duration_secs,
+        scope.num_calls,
+        if scope.num_calls > 1 { "calls" } else { "call" }
+    )?;
 
-        // TODO: Prevent infinite recursion for recursive functions, maybe remove current scope from map?
-        //  Maybe we don't have this problem, instead it will be a huge chain which is as long as the recursion depth...
-        for child_id in scopes.keys() {
-            if child_id.parent_hash == current_hash {
-                write_recursively(out, scopes, child_id, Some(scope.duration_sum), depth + 1)?;
-            }
+    // Process children in sorted order
+    let current_hash = ScopeId::get_hash(Some(id));
+    for s in sorted_scopes {
+        let (child_id, _) = s;
+        if child_id.parent_hash == current_hash {
+            // TODO: Prevent infinite recursion for recursive functions, maybe remove current scope from map?
+            //  Maybe we don't have this problem, instead it will be a huge chain which is as long as the recursion depth...
+            write_recursively(out, sorted_scopes, s, Some(scope.duration_sum), depth + 1)?;
         }
     }
 
@@ -238,15 +244,31 @@ pub fn write<W: io::Write>(out: &mut W) -> io::Result<()> {
         }
     }
 
-    // Remove roots that are not actual roots (happens if their parent was set manually)
-    {
+    // Sort and filter root scopes
+    let sorted_roots = {
         let root_hash = ScopeId::get_hash(None);
-        roots.retain(|id| id.parent_hash == root_hash);
-    }
+        let mut roots = roots
+            .into_iter()
+            // Remove roots that are not actual roots (happens if their parent was set manually)
+            .filter(|id| id.parent_hash == root_hash)
+            // Get (id, scope) tuple
+            .flat_map(|id| merged_scopes.get(&id).cloned().map(|s| (id, s)))
+            .collect::<Vec<_>>();
+
+        roots.sort_unstable_by_key(|(_, s)| s.first_call);
+        roots
+    };
+
+    // Sort all scopes by first call time
+    let sorted_scopes = {
+        let mut scopes = merged_scopes.into_iter().collect::<Vec<_>>();
+        scopes.sort_unstable_by_key(|(_, s)| s.first_call);
+        scopes
+    };
 
     // Print the stats
-    for root_id in &roots {
-        write_recursively(out, &merged_scopes, root_id, None, 0)?;
+    for root in &sorted_roots {
+        write_recursively(out, sorted_scopes.as_slice(), root, None, 0)?;
     }
 
     Ok(())
