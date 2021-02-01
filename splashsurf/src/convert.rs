@@ -1,8 +1,8 @@
 use crate::io;
 use anyhow::anyhow;
 use anyhow::Context;
-use splashsurf_lib::coarse_prof::profile;
 use splashsurf_lib::nalgebra::Vector3;
+use splashsurf_lib::profile;
 use std::path::PathBuf;
 use structopt::StructOpt;
 

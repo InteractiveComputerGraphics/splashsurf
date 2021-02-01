@@ -2,7 +2,7 @@ use crate::marching_cubes::stitching::{collect_boundary_cell_data, BoundaryData}
 use crate::marching_cubes::{CellData, MarchingCubesInput, RelativeToThreshold};
 use crate::topology::{Axis, DirectedAxisArray};
 use crate::uniform_grid::{CellIndex, GridBoundaryFaceFlags, PointIndex, Subdomain};
-use crate::{DensityMap, Index, MapType, Real};
+use crate::{profile, DensityMap, Index, MapType, Real};
 use log::trace;
 use nalgebra::Vector3;
 

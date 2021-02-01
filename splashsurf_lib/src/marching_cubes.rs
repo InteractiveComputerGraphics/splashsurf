@@ -9,7 +9,7 @@ use crate::marching_cubes::triangulation::{
 };
 use crate::mesh::TriMesh3d;
 use crate::uniform_grid::{DummySubdomain, OwningSubdomainGrid, Subdomain};
-use crate::{new_map, DensityMap, Index, MapType, Real, UniformGrid};
+use crate::{new_map, profile, DensityMap, Index, MapType, Real, UniformGrid};
 use nalgebra::Vector3;
 
 pub mod marching_cubes_lut;

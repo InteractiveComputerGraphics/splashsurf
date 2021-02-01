@@ -6,7 +6,9 @@
 
 use crate::uniform_grid::UniformGrid;
 use crate::utils::SendSyncWrapper;
-use crate::{new_map, AxisAlignedBoundingBox3d, HashState, Index, MapType, ParallelMapType, Real};
+use crate::{
+    new_map, profile, AxisAlignedBoundingBox3d, HashState, Index, MapType, ParallelMapType, Real,
+};
 use nalgebra::Vector3;
 use rayon::prelude::*;
 

@@ -4,8 +4,8 @@ use std::path::Path;
 
 use anyhow::{anyhow, Context};
 use log::info;
-use splashsurf_lib::coarse_prof::profile;
 use splashsurf_lib::nalgebra::Vector3;
+use splashsurf_lib::profile;
 use splashsurf_lib::Real;
 
 pub mod bgeo_format;

@@ -91,9 +91,9 @@ dependencies = [
 
 [[package]]
 name = "bumpalo"
-version = "3.5.0"
+version = "3.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f07aa6688c702439a1be0307b6a94dffe1168569e45b9500c1372bc580740d59"
+checksum = "099e596ef14349721d9016f6b80dd3419ea1bf289ab9b44df8e4dfd3a005d5d9"
 
 [[package]]
 name = "bytecount"
@@ -172,16 +172,6 @@ dependencies = [
  "textwrap",
  "unicode-width",
  "vec_map",
-]
-
-[[package]]
-name = "coarse-prof"
-version = "0.2.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "97aadcb74f45a014516348b86413b1a7784dd600c5084af1b94c15bb1379f7ff"
-dependencies = [
- "floating-duration",
- "log",
 ]
 
 [[package]]
@@ -348,12 +338,6 @@ dependencies = [
  "libc",
  "miniz_oxide",
 ]
-
-[[package]]
-name = "floating-duration"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b2c60b71d9dbcd810a3be879dc9aafac6cec5c50dc2346e245f61f54a61fdf22"
 
 [[package]]
 name = "funty"
@@ -1157,11 +1141,11 @@ dependencies = [
  "anyhow",
  "arrayvec",
  "bitflags",
- "coarse-prof",
  "criterion",
  "dashmap",
  "fxhash",
  "itertools 0.10.0",
+ "lazy_static",
  "log",
  "nalgebra",
  "num",

@@ -2,8 +2,8 @@ use crate::marching_cubes::marching_cubes_lut::marching_cubes_triangulation_iter
 use crate::marching_cubes::{CellData, MarchingCubesInput};
 use crate::mesh::TriMesh3d;
 use crate::topology::Axis;
-use crate::uniform_grid::{DummySubdomain, GridBoundaryFaceFlags, Subdomain};
-use crate::{Index, Real, UniformGrid};
+use crate::uniform_grid::{DummySubdomain, GridBoundaryFaceFlags, Subdomain, UniformGrid};
+use crate::{profile, Index, Real};
 use anyhow::Context;
 use log::trace;
 use nalgebra::Vector3;

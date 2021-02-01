@@ -18,11 +18,12 @@
 //! Note that all density mapping functions always use the global background grid for flat point
 //! indices, even if the density map is only generated for a smaller subdomain.
 
+use crate::aabb::AxisAlignedBoundingBox3d;
 use crate::kernel::DiscreteSquaredDistanceCubicKernel;
 use crate::mesh::{HexMesh3d, MeshWithPointData};
 use crate::uniform_grid::{OwningSubdomainGrid, Subdomain, UniformGrid};
 use crate::utils::{ChunkSize, ParallelPolicy};
-use crate::{new_map, AxisAlignedBoundingBox3d, HashState, Index, MapType, ParallelMapType, Real};
+use crate::{new_map, profile, HashState, Index, MapType, ParallelMapType, Real};
 use dashmap::ReadOnlyView as ReadDashMap;
 use log::{info, trace, warn};
 use nalgebra::Vector3;

@@ -5,8 +5,8 @@ use arguments::{
 };
 use log::info;
 use rayon::prelude::*;
-use splashsurf_lib::coarse_prof::profile;
 use splashsurf_lib::mesh::PointCloud3d;
+use splashsurf_lib::profile;
 use splashsurf_lib::vtkio::model::UnstructuredGridPiece;
 use splashsurf_lib::{density_map, Index, Real};
 use std::convert::TryFrom;

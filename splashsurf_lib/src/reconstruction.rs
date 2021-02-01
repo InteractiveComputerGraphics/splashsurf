@@ -7,8 +7,8 @@ use crate::octree::{NodeData, Octree, OctreeNode};
 use crate::uniform_grid::{OwningSubdomainGrid, Subdomain, UniformGrid};
 use crate::workspace::LocalReconstructionWorkspace;
 use crate::{
-    density_map, marching_cubes, neighborhood_search, new_map, utils, Index, Parameters, Real,
-    SpatialDecompositionParameters, SurfaceReconstruction,
+    density_map, marching_cubes, neighborhood_search, new_map, profile, utils, Index, Parameters,
+    Real, SpatialDecompositionParameters, SurfaceReconstruction,
 };
 use log::{debug, info, trace};
 use nalgebra::Vector3;
@@ -185,12 +185,17 @@ impl<I: Index, R: Real> SurfaceReconstructionOctreeVisitor<I, R> {
         {
             let tl_workspaces = &output_surface.workspace;
 
-            profile!("parallel domain decomposed surface reconstruction with stitching");
+            profile!(
+                parent_scope,
+                "parallel domain decomposed surf. rec. with stitching"
+            );
             info!("Starting triangulation of surface patches.");
 
             octree
                 .root_mut()
                 .par_visit_mut_dfs_post(|octree_node: &mut OctreeNode<I, R>| {
+                    profile!("visit octree node (reconstruct or stitch)", parent = parent_scope);
+
                     let particles = if let Some(particle_set) = octree_node.data().particle_set() {
                         &particle_set.particles
                     } else {
@@ -209,7 +214,8 @@ impl<I: Index, R: Real> SurfaceReconstructionOctreeVisitor<I, R> {
                             "Reconstructing surface of local patch with {} particles. (offset: {:?}, cells_per_dim: {:?})",
                             particles.len(),
                             subdomain_grid.subdomain_offset(),
-                            subdomain_grid.subdomain_grid().cells_per_dim());
+                            subdomain_grid.subdomain_grid().cells_per_dim()
+                        );
 
                         let mut tl_workspace = tl_workspaces
                             .get_local_with_capacity(particles.len())
@@ -355,6 +361,8 @@ pub(crate) fn reconstruct_surface_patch<I: Index, R: Real>(
     particle_positions: &[Vector3<R>],
     parameters: &Parameters<R>,
 ) -> SurfacePatch<I, R> {
+    profile!("reconstruct_surface_patch");
+
     let particle_rest_density = parameters.rest_density;
     let particle_rest_volume = R::from_f64((4.0 / 3.0) * std::f64::consts::PI).unwrap()
         * parameters.particle_radius.powi(3);

@@ -5,7 +5,7 @@ use crate::mesh::{HexMesh3d, TriMesh3d};
 use crate::uniform_grid::{PointIndex, UniformGrid};
 use crate::utils::{ChunkSize, ParallelPolicy};
 use crate::{
-    marching_cubes, new_map, AxisAlignedBoundingBox, AxisAlignedBoundingBox3d,
+    marching_cubes, new_map, profile, AxisAlignedBoundingBox, AxisAlignedBoundingBox3d,
     GridConstructionError, Index, MapType, Real,
 };
 use arrayvec::ArrayVec;
@@ -622,6 +622,8 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
         stitching_axis: Axis,
         iso_surface_threshold: R,
     ) {
+        profile!("stitch_children_orthogonal_to");
+
         for mut octant in OctantAxisDirections::all().iter().copied() {
             // Iterate over every octant pair only once
             if octant.direction(stitching_axis).is_positive() {
@@ -653,6 +655,8 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
 
     /// Stitches together the [`SurfacePatch`]es stored in the children of this node if this is the direct parent of only leaf nodes
     pub(crate) fn stitch_surface_patches(&mut self, iso_surface_threshold: R) {
+        profile!("stitch_surface_patches");
+
         // If this node has no children there is nothing to stitch
         if self.children.is_empty() {
             panic!("A node can only be stitched if it has children!");

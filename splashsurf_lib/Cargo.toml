@@ -22,7 +22,7 @@ exclude = [
 [features]
 default = []
 vtk_extras = ["vtkio"]
-profiling = ["coarse-prof"]
+profiling = ["lazy_static"]
 
 [dependencies]
 log = "0.4"
@@ -30,16 +30,20 @@ nalgebra = "0.24"
 num = "0.3"
 anyhow = "1.0"
 thiserror = "1.0"
-coarse-prof = { version = "0.2", optional = true }
 itertools = "0.10"
 rayon = "1.5"
 dashmap = "4.0"
 fxhash = "0.2"
-vtkio = { version = "0.5", optional = true }
 thread_local = "1.1"
-smallvec = { version = "1.6", features = ["union"] }
 bitflags = "1.2"
+smallvec = { version = "1.6", features = ["union"] }
 arrayvec = "0.5"
+
+# VTK extras
+vtkio = { version = "0.5", optional = true }
+
+# Needed for profiling feature
+lazy_static = { version = "1.4", optional = true }
 
 [dev-dependencies]
 criterion = "0.3"

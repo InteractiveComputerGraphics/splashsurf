@@ -2,11 +2,7 @@
 //! Library for surface reconstruction of SPH particle data using marching cubes.
 //!
 //! Entry points are the [`reconstruct_surface`] or [`reconstruct_surface_inplace`] functions.
-//!
 
-/// Re-export the version of `coarse_prof` used by this crate, if profiling is enabled
-#[cfg(feature = "profiling")]
-pub use coarse_prof;
 use log::info;
 /// Re-export the version of `nalgebra` used by this crate
 pub use nalgebra;
@@ -30,20 +26,9 @@ use crate::reconstruction::{
 use crate::workspace::ReconstructionWorkspace;
 
 #[cfg(feature = "profiling")]
-/// Invokes coarse_prof::profile! with the given expression
-macro_rules! profile {
-    ($body:expr) => {
-        coarse_prof::profile!($body);
-    };
-}
-
-#[cfg(not(feature = "profiling"))]
-/// No-op macro if profiling is disabled
-macro_rules! profile {
-    ($body:expr) => {
-        $body
-    };
-}
+pub mod profiling;
+#[doc(hidden)]
+pub mod profiling_macro;
 
 mod aabb;
 pub mod density_map;

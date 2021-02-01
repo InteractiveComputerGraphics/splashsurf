@@ -80,7 +80,8 @@ fn run_splashsurf() -> Result<(), anyhow::Error> {
 
     // Write coarse_prof stats using log::info
     info!("Timings:");
-    coarse_prof_write_string()?
+    splashsurf_lib::profiling::write_to_string()
+        .unwrap()
         .split("\n")
         .filter(|l| l.len() > 0)
         .for_each(|l| info!("{}", l));
@@ -180,13 +181,6 @@ fn log_program_info() {
         cmd_line
     };
     info!("Called with command line: {}", cmd_line);
-}
-
-/// Returns the coarse_prof::write output as a string
-fn coarse_prof_write_string() -> Result<String, anyhow::Error> {
-    let mut buffer = Vec::new();
-    splashsurf_lib::coarse_prof::write(&mut buffer)?;
-    Ok(String::from_utf8_lossy(buffer.as_slice()).into_owned())
 }
 
 #[derive(Copy, Clone, Debug)]
