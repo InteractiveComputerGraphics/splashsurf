@@ -1,0 +1,2 @@
+[build]
+rustflags = ["--emit=asm", "-C", "target-cpu=native"]
