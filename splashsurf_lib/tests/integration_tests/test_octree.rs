@@ -85,6 +85,7 @@ fn build_octree() {
         particles.as_slice(),
         SubdivisionCriterion::MaxParticleCount(30),
         0.0,
+        false,
     );
 
     /*
@@ -126,6 +127,7 @@ fn build_octree_from_vtk() {
         particles.as_slice(),
         SubdivisionCriterion::MaxParticleCount(60),
         0.0,
+        false,
     );
 
     // Sum the number of particles per leaf
@@ -172,6 +174,7 @@ fn build_octree_par_consistency() {
         particles.as_slice(),
         SubdivisionCriterion::MaxParticleCount(20),
         0.0,
+        false,
     );
 
     let mut octree_par = Octree::new(&grid, particles.as_slice().len());
@@ -180,6 +183,7 @@ fn build_octree_par_consistency() {
         particles.as_slice(),
         SubdivisionCriterion::MaxParticleCount(20),
         0.0,
+        false,
     );
 
     let mut particle_count = 0;
