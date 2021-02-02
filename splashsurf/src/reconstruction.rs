@@ -77,8 +77,8 @@ pub struct ReconstructSubcommandArgs {
     #[structopt(long, default_value = "on", possible_values = &["on", "off"], case_insensitive = true)]
     octree_decomposition: Switch,
     /// Whether to enable stitching of the disconnected local meshes when spatial decomposition is enabled (slower, but without stitching meshes will not be closed)
-    #[structopt(name="octree_stitch_subdomains", long, default_value = "on", possible_values = &["on", "off"], case_insensitive = true)]
-    stitch_subdomains: Switch,
+    #[structopt(long, default_value = "on", possible_values = &["on", "off"], case_insensitive = true)]
+    octree_stitch_subdomains: Switch,
     /// The maximum number of particles for leaf nodes of the octree, default is to compute it based on number of threads and particles
     #[structopt(long)]
     octree_max_particles: Option<usize>,
@@ -221,7 +221,7 @@ mod arguments {
                     splashsurf_lib::SubdivisionCriterion::MaxParticleCountAuto
                 };
                 let ghost_particle_safety_factor = args.octree_ghost_margin_factor;
-                let enable_stitching = args.stitch_subdomains.into_bool();
+                let enable_stitching = args.octree_stitch_subdomains.into_bool();
 
                 Some(splashsurf_lib::SpatialDecompositionParameters {
                     subdivision_criterion,
