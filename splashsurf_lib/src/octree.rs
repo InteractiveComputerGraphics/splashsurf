@@ -11,7 +11,7 @@ use crate::{
 use arrayvec::ArrayVec;
 use log::info;
 use nalgebra::Vector3;
-use octant_helper::{Octant, OctantAxisDirections, HalfspaceFlags};
+use octant_helper::{HalfspaceFlags, Octant, OctantAxisDirections};
 use rayon::prelude::*;
 use smallvec::SmallVec;
 use std::cell::RefCell;
@@ -532,10 +532,8 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
 
                             // Classify into all octants with margin
                             {
-                                *particle_octant_flags = HalfspaceFlags::classify_with_margin(
-                                    &relative_pos,
-                                    margin,
-                                );
+                                *particle_octant_flags =
+                                    HalfspaceFlags::classify_with_margin(&relative_pos, margin);
 
                                 // Increase the counter of each octant that contains the current particle
                                 HalfspaceFlags::all_unique_octants()
