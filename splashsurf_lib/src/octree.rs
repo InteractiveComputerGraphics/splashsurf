@@ -11,7 +11,7 @@ use crate::{
 use arrayvec::ArrayVec;
 use log::info;
 use nalgebra::Vector3;
-use octant_helper::{Octant, OctantAxisDirections, OctantDirectionFlags};
+use octant_helper::{Octant, OctantAxisDirections, HalfspaceFlags};
 use rayon::prelude::*;
 use smallvec::SmallVec;
 use std::cell::RefCell;
@@ -395,33 +395,33 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
                 .expect("Failed to get split point of octree node");
             let split_coordinates = grid.point_coordinates(&split_point);
 
-            let mut octant_flags = vec![OctantDirectionFlags::empty(); particles.len()];
+            let mut halfspace_flags = vec![HalfspaceFlags::empty(); particles.len()];
             let mut counters: [usize; 8] = [0, 0, 0, 0, 0, 0, 0, 0];
             let mut non_ghost_counters: [usize; 8] = [0, 0, 0, 0, 0, 0, 0, 0];
 
-            // Classify all particles of this leaf into its octants
-            assert_eq!(particles.len(), octant_flags.len());
-            for (particle_idx, particle_octant_flags) in
-                particles.iter().copied().zip(octant_flags.iter_mut())
+            // Classify all particles of this leaf into the halfspaces relative to the split point
+            assert_eq!(particles.len(), halfspace_flags.len());
+            for (particle_idx, particle_halfspace_flags) in
+                particles.iter().copied().zip(halfspace_flags.iter_mut())
             {
                 let relative_pos = particle_positions[particle_idx] - split_coordinates;
 
-                // Check what the main octant of the particle is (to count ghost particles)
+                // Check what the main octant (without margin) of the particle is to count ghost particles later
                 {
                     let main_octant: Octant = OctantAxisDirections::classify(&relative_pos).into();
                     non_ghost_counters[main_octant as usize] += 1;
                 }
 
-                // Classify into all octants with margin
+                // Classify into all halfspaces with margin
                 {
-                    *particle_octant_flags =
-                        OctantDirectionFlags::classify_with_margin(&relative_pos, margin);
+                    *particle_halfspace_flags =
+                        HalfspaceFlags::classify_with_margin(&relative_pos, margin);
 
                     // Increase the counter of each octant that contains the current particle
-                    OctantDirectionFlags::all_unique_octants()
+                    HalfspaceFlags::all_unique_octants()
                         .iter()
                         .zip(counters.iter_mut())
-                        .filter(|(octant, _)| particle_octant_flags.contains(**octant))
+                        .filter(|(octant, _)| particle_halfspace_flags.contains(**octant))
                         .for_each(|(_, counter)| {
                             *counter += 1;
                         });
@@ -436,7 +436,7 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
                     .zip(counters.iter().zip(non_ghost_counters.iter()))
             {
                 let current_octant_dir = OctantAxisDirections::from(current_octant);
-                let current_octant_flags = OctantDirectionFlags::from(current_octant);
+                let current_octant_flags = HalfspaceFlags::from(current_octant);
 
                 let min_corner = current_octant_dir
                     .combine_point_index(grid, &self.min_corner, &split_point)
@@ -450,10 +450,10 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
                     particles
                         .iter()
                         .copied()
-                        .zip(octant_flags.iter())
+                        .zip(halfspace_flags.iter())
                         // Skip particles from other octants
-                        .filter(|(_, &particle_i_octant)| {
-                            particle_i_octant.contains(current_octant_flags)
+                        .filter(|(_, &particle_i_halfspaces)| {
+                            particle_i_halfspaces.contains(current_octant_flags)
                         })
                         .map(|(particle_i, _)| particle_i),
                 );
@@ -495,7 +495,7 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
                 .expect("Failed to get split point of octree node");
             let split_coordinates = grid.point_coordinates(&split_point);
 
-            let mut octant_flags = vec![OctantDirectionFlags::empty(); particles.len()];
+            let mut octant_flags = vec![HalfspaceFlags::empty(); particles.len()];
 
             // Initial values for the thread local counters
             let zeros = || ([0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0]);
@@ -532,13 +532,13 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
 
                             // Classify into all octants with margin
                             {
-                                *particle_octant_flags = OctantDirectionFlags::classify_with_margin(
+                                *particle_octant_flags = HalfspaceFlags::classify_with_margin(
                                     &relative_pos,
                                     margin,
                                 );
 
                                 // Increase the counter of each octant that contains the current particle
-                                OctantDirectionFlags::all_unique_octants()
+                                HalfspaceFlags::all_unique_octants()
                                     .iter()
                                     .zip(counters.iter_mut())
                                     .filter(|(octant, _)| particle_octant_flags.contains(**octant))
@@ -572,7 +572,7 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
                 .map(
                     |(&current_octant, (&octant_particle_count, &octant_non_ghost_count))| {
                         let current_octant_dir = OctantAxisDirections::from(current_octant);
-                        let current_octant_flags = OctantDirectionFlags::from(current_octant);
+                        let current_octant_flags = HalfspaceFlags::from(current_octant);
 
                         let min_corner = current_octant_dir
                             .combine_point_index(grid, &self.min_corner, &split_point)
@@ -922,7 +922,7 @@ mod octant_helper {
     }
 
     bitflags! {
-        pub struct OctantDirectionFlags: u8 {
+        pub struct HalfspaceFlags: u8 {
             const X_NEG = 0b00000001;
             const X_POS = 0b00000010;
             const Y_NEG = 0b00000100;
@@ -941,22 +941,22 @@ mod octant_helper {
         }
     }
 
-    impl OctantDirectionFlags {
+    impl HalfspaceFlags {
         #[inline(always)]
-        pub const fn all_unique_octants() -> &'static [OctantDirectionFlags] {
+        pub const fn all_unique_octants() -> &'static [HalfspaceFlags] {
             &ALL_UNIQUE_OCTANT_DIRECTION_FLAGS
         }
 
-        /// Classifies a point relative to zero into all octants it belongs including a margin around the octants
+        /// Classifies a point relative to zero into all halfspaces it belongs including a margin around the halfspace boundary
         #[inline(always)]
         pub fn classify_with_margin<R: Real>(point: &Vector3<R>, margin: R) -> Self {
-            let mut flags = OctantDirectionFlags::empty();
-            flags.set(OctantDirectionFlags::X_NEG, point.x < margin);
-            flags.set(OctantDirectionFlags::X_POS, point.x > -margin);
-            flags.set(OctantDirectionFlags::Y_NEG, point.y < margin);
-            flags.set(OctantDirectionFlags::Y_POS, point.y > -margin);
-            flags.set(OctantDirectionFlags::Z_NEG, point.z < margin);
-            flags.set(OctantDirectionFlags::Z_POS, point.z > -margin);
+            let mut flags = HalfspaceFlags::empty();
+            flags.set(HalfspaceFlags::X_NEG, point.x < margin);
+            flags.set(HalfspaceFlags::X_POS, point.x > -margin);
+            flags.set(HalfspaceFlags::Y_NEG, point.y < margin);
+            flags.set(HalfspaceFlags::Y_POS, point.y > -margin);
+            flags.set(HalfspaceFlags::Z_NEG, point.z < margin);
+            flags.set(HalfspaceFlags::Z_POS, point.z > -margin);
             flags
         }
 
@@ -976,38 +976,38 @@ mod octant_helper {
 
         #[inline(always)]
         pub fn from_directions(directions: OctantAxisDirections) -> Self {
-            let mut flags = OctantDirectionFlags::empty();
-            flags.set(OctantDirectionFlags::X_NEG, directions.x_axis.is_negative());
-            flags.set(OctantDirectionFlags::X_POS, directions.x_axis.is_positive());
-            flags.set(OctantDirectionFlags::Y_NEG, directions.y_axis.is_negative());
-            flags.set(OctantDirectionFlags::Y_POS, directions.y_axis.is_positive());
-            flags.set(OctantDirectionFlags::Z_NEG, directions.z_axis.is_negative());
-            flags.set(OctantDirectionFlags::Z_POS, directions.z_axis.is_positive());
+            let mut flags = HalfspaceFlags::empty();
+            flags.set(HalfspaceFlags::X_NEG, directions.x_axis.is_negative());
+            flags.set(HalfspaceFlags::X_POS, directions.x_axis.is_positive());
+            flags.set(HalfspaceFlags::Y_NEG, directions.y_axis.is_negative());
+            flags.set(HalfspaceFlags::Y_POS, directions.y_axis.is_positive());
+            flags.set(HalfspaceFlags::Z_NEG, directions.z_axis.is_negative());
+            flags.set(HalfspaceFlags::Z_POS, directions.z_axis.is_positive());
             flags
         }
     }
 
-    impl From<Octant> for OctantDirectionFlags {
+    impl From<Octant> for HalfspaceFlags {
         fn from(octant: Octant) -> Self {
             Self::from_octant(octant)
         }
     }
 
-    impl From<OctantAxisDirections> for OctantDirectionFlags {
+    impl From<OctantAxisDirections> for HalfspaceFlags {
         fn from(directions: OctantAxisDirections) -> Self {
             Self::from_directions(directions)
         }
     }
 
-    const ALL_UNIQUE_OCTANT_DIRECTION_FLAGS: [OctantDirectionFlags; 8] = [
-        OctantDirectionFlags::NEG_NEG_NEG,
-        OctantDirectionFlags::POS_NEG_NEG,
-        OctantDirectionFlags::NEG_POS_NEG,
-        OctantDirectionFlags::POS_POS_NEG,
-        OctantDirectionFlags::NEG_NEG_POS,
-        OctantDirectionFlags::POS_NEG_POS,
-        OctantDirectionFlags::NEG_POS_POS,
-        OctantDirectionFlags::POS_POS_POS,
+    const ALL_UNIQUE_OCTANT_DIRECTION_FLAGS: [HalfspaceFlags; 8] = [
+        HalfspaceFlags::NEG_NEG_NEG,
+        HalfspaceFlags::POS_NEG_NEG,
+        HalfspaceFlags::NEG_POS_NEG,
+        HalfspaceFlags::POS_POS_NEG,
+        HalfspaceFlags::NEG_NEG_POS,
+        HalfspaceFlags::POS_NEG_POS,
+        HalfspaceFlags::NEG_POS_POS,
+        HalfspaceFlags::POS_POS_POS,
     ];
 
     impl OctantAxisDirections {
