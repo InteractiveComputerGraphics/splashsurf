@@ -1,7 +1,9 @@
 //! Octree for spatially partitioning particle sets
 
 use crate::generic_tree::*;
-use crate::mesh::{HexMesh3d, TriMesh3d};
+use crate::marching_cubes::SurfacePatch;
+use crate::mesh::{HexMesh3d, MeshWithData, TriMesh3d};
+use crate::topology::{Axis, Direction};
 use crate::uniform_grid::{PointIndex, UniformGrid};
 use crate::utils::{ChunkSize, ParallelPolicy};
 use crate::{
@@ -14,7 +16,9 @@ use nalgebra::Vector3;
 use octant_helper::{HalfspaceFlags, Octant, OctantAxisDirections};
 use rayon::prelude::*;
 use smallvec::SmallVec;
+use split_criterion::{default_split_criterion, LeafSplitCriterion};
 use std::cell::RefCell;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use thread_local::ThreadLocal;
 
 // TODO: Make margin an Option
@@ -31,12 +35,17 @@ pub enum SubdivisionCriterion {
 /// Data structure for octree based spatial subdivision of particles sets, for tree iteration/visitation use the [`root`](Self::root) [`OctreeNode`]
 #[derive(Clone, Debug)]
 pub struct Octree<I: Index, R: Real> {
+    /// Root node of the tree
     root: OctreeNode<I, R>,
+    /// Counter for assigning ids to subdivided nodes
+    next_id: usize,
 }
 
 /// Represents a node in the octree hierarchy and stores child nodes, implements tree iteration/visitation from the [`generic_tree`](crate::generic_tree) module
 #[derive(Clone, Debug)]
 pub struct OctreeNode<I: Index, R: Real> {
+    /// Id of the node used to identify it for debugging
+    id: usize,
     /// All child nodes of this octree node
     children: ArrayVec<[Box<Self>; 8]>,
     /// Lower corner point of the octree node on the background grid
@@ -108,15 +117,12 @@ impl<I: Index, R: Real> SurfacePatchWrapper<I, R> {
 
 type OctreeNodeParticleStorage = SmallVec<[usize; 6]>;
 
-use crate::marching_cubes::SurfacePatch;
-use crate::topology::{Axis, Direction};
-use split_criterion::{default_split_criterion, LeafSplitCriterion};
-
 impl<I: Index, R: Real> Octree<I, R> {
     /// Creates a new octree with a single leaf node containing all vertices
     pub fn new(grid: &UniformGrid<I, R>, n_particles: usize) -> Self {
         Self {
             root: OctreeNode::new_root(grid, n_particles),
+            next_id: 0,
         }
     }
 
@@ -134,6 +140,8 @@ impl<I: Index, R: Real> Octree<I, R> {
         enable_stitching: bool,
     ) -> Self {
         let mut tree = Octree::new(&grid, particle_positions.len());
+
+        println!("Margin: {}", margin);
 
         if enable_multi_threading {
             tree.subdivide_recursively_margin_par(
@@ -154,11 +162,6 @@ impl<I: Index, R: Real> Octree<I, R> {
         }
 
         tree
-    }
-
-    /// Creates a new octree with the given node as root
-    pub fn with_root(root: OctreeNode<I, R>) -> Self {
-        Self { root }
     }
 
     /// Returns a reference to the root node of the octree
@@ -188,6 +191,7 @@ impl<I: Index, R: Real> Octree<I, R> {
             enable_stitching,
         );
 
+        let next_id = AtomicUsize::new(0);
         self.root.visit_mut_bfs(|node| {
             // Stop recursion if split criterion is not fulfilled
             if !split_criterion.split_leaf(node) {
@@ -195,8 +199,9 @@ impl<I: Index, R: Real> Octree<I, R> {
             }
 
             // Perform one octree split on the node
-            node.subdivide_with_margin(grid, particle_positions, margin);
+            node.subdivide_with_margin(grid, particle_positions, margin, &next_id);
         });
+        self.next_id = next_id.into_inner();
     }
 
     /// Subdivide the octree recursively and in parallel using the given splitting criterion and a margin to add ghost particles
@@ -217,32 +222,47 @@ impl<I: Index, R: Real> Octree<I, R> {
         );
         let parallel_policy = ParallelPolicy::default();
 
-        let visitor = move |node: &mut OctreeNode<I, R>| {
-            // Stop recursion if split criterion is not fulfilled
-            if !split_criterion.split_leaf(node) {
-                return;
-            }
+        let next_id = AtomicUsize::new(0);
+        let visitor = {
+            let next_id = &next_id;
+            move |node: &mut OctreeNode<I, R>| {
+                // Stop recursion if split criterion is not fulfilled
+                if !split_criterion.split_leaf(node) {
+                    return;
+                }
 
-            // Perform one octree split on the leaf
-            if node
-                .data
-                .particle_set()
-                .expect("Node is not a leaf")
-                .particles
-                .len()
-                < parallel_policy.min_task_size
-            {
-                node.subdivide_with_margin(grid, particle_positions, margin);
-            } else {
-                node.subdivide_with_margin_par(grid, particle_positions, margin, &parallel_policy);
+                // Perform one octree split on the leaf
+                if node
+                    .data
+                    .particle_set()
+                    .expect("Node is not a leaf")
+                    .particles
+                    .len()
+                    < parallel_policy.min_task_size
+                {
+                    node.subdivide_with_margin(grid, particle_positions, margin, &next_id);
+                } else {
+                    node.subdivide_with_margin_par(
+                        grid,
+                        particle_positions,
+                        margin,
+                        &parallel_policy,
+                        &next_id,
+                    );
+                }
             }
         };
 
         self.root.par_visit_mut_bfs(visitor);
+        self.next_id = next_id.into_inner();
     }
 
     /// Constructs a hex mesh visualizing the cells of the octree, may contain hanging and duplicate vertices as cells are not connected
-    pub fn hexmesh(&self, grid: &UniformGrid<I, R>, only_non_empty: bool) -> HexMesh3d<R> {
+    pub fn hexmesh(
+        &self,
+        grid: &UniformGrid<I, R>,
+        only_non_empty: bool,
+    ) -> MeshWithData<HexMesh3d<R>, (), u64> {
         profile!("convert octree into hexmesh");
 
         let mut mesh = HexMesh3d {
@@ -250,6 +270,7 @@ impl<I: Index, R: Real> Octree<I, R> {
             cells: Vec::new(),
         };
 
+        let mut ids = Vec::new();
         self.root.dfs_iter().for_each(|node| {
             if node.children().is_empty() {
                 if only_non_empty
@@ -290,16 +311,18 @@ impl<I: Index, R: Real> Octree<I, R> {
 
                 mesh.vertices.extend(vertices);
                 mesh.cells.push(cell);
+                ids.push(node.id as u64);
             }
         });
 
-        mesh
+        assert_eq!(mesh.cells.len(), ids.len());
+        MeshWithData::with_cell_data(mesh, ids)
     }
 }
 
 impl<I: Index, R: Real> OctreeNode<I, R> {
-    pub fn new(min_corner: PointIndex<I>, max_corner: PointIndex<I>) -> Self {
-        Self::with_data(min_corner, max_corner, NodeData::None)
+    pub fn new(id: usize, min_corner: PointIndex<I>, max_corner: PointIndex<I>) -> Self {
+        Self::with_data(id, min_corner, max_corner, NodeData::None)
     }
 
     fn new_root(grid: &UniformGrid<I, R>, n_particles: usize) -> Self {
@@ -312,6 +335,7 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
         ];
 
         Self::with_data(
+            0,
             grid.get_point(min_point)
                 .expect("Cannot get lower corner of grid"),
             grid.get_point(max_point)
@@ -321,16 +345,23 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
     }
 
     fn with_data(
+        id: usize,
         min_corner: PointIndex<I>,
         max_corner: PointIndex<I>,
         data: NodeData<I, R>,
     ) -> Self {
         Self {
+            id,
             children: Default::default(),
             min_corner,
             max_corner,
             data,
         }
+    }
+
+    /// Returns the id of the node
+    pub fn id(&self) -> usize {
+        self.id
     }
 
     /// Returns a reference to the data stored in the node
@@ -385,6 +416,7 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
         grid: &UniformGrid<I, R>,
         particle_positions: &[Vector3<R>],
         margin: R,
+        next_id: &AtomicUsize,
     ) {
         // Convert node body from Leaf to Children
         if let NodeData::ParticleSet(particle_set) = self.data.take() {
@@ -460,6 +492,7 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
                 assert_eq!(octant_particles.len(), octant_particle_count);
 
                 let child = Box::new(OctreeNode::with_data(
+                    next_id.fetch_add(1, Ordering::SeqCst),
                     min_corner,
                     max_corner,
                     NodeData::new_particle_set(
@@ -485,6 +518,7 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
         particle_positions: &[Vector3<R>],
         margin: R,
         parallel_policy: &ParallelPolicy,
+        next_id: &AtomicUsize,
     ) {
         // Convert node body from Leaf to Children
         if let NodeData::ParticleSet(particle_set) = self.data.take() {
@@ -594,6 +628,7 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
                         assert_eq!(octant_particles.len(), octant_particle_count);
 
                         let child = Box::new(OctreeNode::with_data(
+                            next_id.fetch_add(1, Ordering::SeqCst),
                             min_corner,
                             max_corner,
                             NodeData::new_particle_set(

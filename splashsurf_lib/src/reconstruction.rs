@@ -107,7 +107,9 @@ impl<I: Index, R: Real> SurfaceReconstructionOctreeVisitor<I, R> {
         {
             let tl_workspaces = &output_surface.workspace;
 
-            profile!("parallel domain decomposed surface reconstruction");
+            profile!(parent_scope, "parallel domain decomposed surf. rec.");
+            info!("Starting triangulation of surface patches.");
+
             self.octree
                 .root()
                 .par_visit_bfs(|octree_node: &OctreeNode<I, R>| {
@@ -118,6 +120,7 @@ impl<I: Index, R: Real> SurfaceReconstructionOctreeVisitor<I, R> {
                         return;
                     };
 
+                    profile!("visit octree node for reconstruction", parent = parent_scope);
                     trace!("Processing octree leaf with {} particles", particles.len());
 
                     if particles.is_empty() {
@@ -310,7 +313,7 @@ pub(crate) fn reconstruct_single_surface_append<'a, I: Index, R: Real>(
         * parameters.particle_radius.powi(3);
     let particle_rest_mass = particle_rest_volume * particle_rest_density;
 
-    info!("Starting neighborhood search...");
+    trace!("Starting neighborhood search...");
     neighborhood_search::search_inplace::<I, R>(
         &grid.aabb(),
         particle_positions,
@@ -319,7 +322,7 @@ pub(crate) fn reconstruct_single_surface_append<'a, I: Index, R: Real>(
         &mut workspace.particle_neighbor_lists,
     );
 
-    info!("Computing particle densities...");
+    trace!("Computing particle densities...");
     density_map::compute_particle_densities_inplace::<I, R>(
         particle_positions,
         workspace.particle_neighbor_lists.as_slice(),

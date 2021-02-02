@@ -7,7 +7,6 @@ use log::info;
 use rayon::prelude::*;
 use splashsurf_lib::mesh::PointCloud3d;
 use splashsurf_lib::profile;
-use splashsurf_lib::vtkio::model::UnstructuredGridPiece;
 use splashsurf_lib::{density_map, Index, Real};
 use std::convert::TryFrom;
 use std::path::PathBuf;
@@ -564,7 +563,11 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
     if let Some(output_octree_file) = &paths.output_octree_file {
         info!("Writing octree to \"{}\"...", output_octree_file.display());
         io::vtk_format::write_vtk(
-            UnstructuredGridPiece::from(&reconstruction.octree().unwrap().hexmesh(grid, false)),
+            reconstruction
+                .octree()
+                .unwrap()
+                .hexmesh(grid, true)
+                .to_dataset(),
             output_octree_file,
             "mesh",
         )

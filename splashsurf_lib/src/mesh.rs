@@ -230,28 +230,71 @@ pub struct PointCloud3d<R: Real> {
 
 /// A mesh with attached vertex or point data
 #[derive(Clone, Debug, Default)]
-pub struct MeshWithPointData<MeshT, DataT> {
+pub struct MeshWithData<MeshT, PointDataT, CellDataT = ()> {
     /// The mesh geometry itself
     pub mesh: MeshT,
     /// Data attached to each vertex or point of the mesh
-    pub data: Vec<DataT>,
+    pub point_data: Vec<PointDataT>,
+    /// Data attached to each cell of the mesh
+    pub cell_data: Vec<CellDataT>,
+}
+
+impl<MeshT, PointDataT, CellDataT> MeshWithData<MeshT, PointDataT, CellDataT> {
+    /// Creates a new mesh the given point data
+    pub fn with_point_data<PointData: Into<Vec<PointDataT>>>(
+        mesh: MeshT,
+        point_data: PointData,
+    ) -> Self {
+        Self {
+            mesh,
+            point_data: point_data.into(),
+            cell_data: vec![],
+        }
+    }
+
+    /// Creates a new mesh the given cell data
+    pub fn with_cell_data<CellData: Into<Vec<CellDataT>>>(
+        mesh: MeshT,
+        cell_data: CellData,
+    ) -> Self {
+        Self {
+            mesh,
+            point_data: vec![],
+            cell_data: cell_data.into(),
+        }
+    }
 }
 
 #[cfg(feature = "vtk_extras")]
 use vtkio::model::{Attribute, UnstructuredGridPiece};
 
 #[cfg(feature = "vtk_extras")]
-impl<'a, MeshT: 'a, DataT> MeshWithPointData<MeshT, DataT>
+impl<'a, MeshT: 'a, PointDataT> MeshWithData<MeshT, PointDataT, ()>
 where
     &'a MeshT: Into<UnstructuredGridPiece>,
-    DataT: Real,
+    PointDataT: Real,
 {
     pub fn to_dataset(&'a self) -> UnstructuredGridPiece {
         let mut grid_piece: UnstructuredGridPiece = (&self.mesh).into();
         grid_piece
             .data
             .point
-            .push(Attribute::scalars("density", 1).with_data(self.data.clone()));
+            .push(Attribute::scalars("density", 1).with_data(self.point_data.clone()));
+        grid_piece
+    }
+}
+
+#[cfg(feature = "vtk_extras")]
+impl<'a, MeshT: 'a> MeshWithData<MeshT, (), u64>
+where
+    &'a MeshT: Into<UnstructuredGridPiece>,
+{
+    pub fn to_dataset(&'a self) -> UnstructuredGridPiece {
+        let mut grid_piece: UnstructuredGridPiece = (&self.mesh).into();
+        grid_piece
+            .data
+            .cell
+            .push(Attribute::scalars("node_id", 1).with_data(self.cell_data.clone()));
         grid_piece
     }
 }

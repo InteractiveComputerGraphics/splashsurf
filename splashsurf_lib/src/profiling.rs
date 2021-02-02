@@ -143,6 +143,7 @@ impl Profiler {
 
     /// Enter a scope with the given name and push it onto the stack of scopes. It will be a child scope of the current top of the stack.
     pub fn enter(&mut self, name: &'static str) -> (Guard, ScopeId) {
+        // TODO: If the scope on top of the stack has the same name, use the next one as parent, to avoid huge chains for recursive functions
         let id = self.new_id(name, self.scope_stack.last());
         self.enter_with_id(name, id)
     }
