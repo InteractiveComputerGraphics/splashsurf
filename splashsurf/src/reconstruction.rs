@@ -192,14 +192,24 @@ mod arguments {
                     assert_eq!(domain_min.len(), 3);
                     assert_eq!(domain_max.len(), 3);
 
-                    // TODO: Check that domain_min < domain_max
-                    let to_na_vec =
-                        |v: &Vec<f64>| -> Vector3<f64> { Vector3::new(v[0], v[1], v[2]) };
+                    let aabb = AxisAlignedBoundingBox3d::new(
+                        Vector3::from_iterator(domain_min.clone()),
+                        Vector3::from_iterator(domain_max.clone()),
+                    );
 
-                    Some(AxisAlignedBoundingBox3d::new(
-                        to_na_vec(domain_min),
-                        to_na_vec(domain_max),
-                    ))
+                    if !aabb.is_consistent() {
+                        return Err(anyhow!("The user specified domain min/max values are inconsistent! min: {:?} max: {:?}", aabb.min().as_slice(), aabb.max().as_slice()));
+                    }
+
+                    if aabb.is_degenerate() {
+                        return Err(anyhow!(
+                            "The user specified domain is degenerate! min: {:?} max: {:?}",
+                            aabb.min().as_slice(),
+                            aabb.max().as_slice()
+                        ));
+                    }
+
+                    Some(aabb)
                 }
                 _ => None,
             };
