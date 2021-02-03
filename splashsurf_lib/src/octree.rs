@@ -431,15 +431,23 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
             let mut counters: [usize; 8] = [0, 0, 0, 0, 0, 0, 0, 0];
             let mut non_ghost_counters: [usize; 8] = [0, 0, 0, 0, 0, 0, 0, 0];
 
+            let node_aabb = AxisAlignedBoundingBox3d::new(
+                grid.point_coordinates(&self.min_corner),
+                grid.point_coordinates(&self.max_corner),
+            );
+
             // Classify all particles of this leaf into the halfspaces relative to the split point
             assert_eq!(particles.len(), halfspace_flags.len());
             for (particle_idx, particle_halfspace_flags) in
                 particles.iter().copied().zip(halfspace_flags.iter_mut())
             {
-                let relative_pos = particle_positions[particle_idx] - split_coordinates;
+                let pos = particle_positions[particle_idx];
+                let relative_pos = pos - split_coordinates;
+
+                let is_ghost_particle = !node_aabb.contains_point(&pos);
 
                 // Check what the main octant (without margin) of the particle is to count ghost particles later
-                {
+                if !is_ghost_particle {
                     let main_octant: Octant = OctantAxisDirections::classify(&relative_pos).into();
                     non_ghost_counters[main_octant as usize] += 1;
                 }
@@ -538,6 +546,11 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
             let tl_counters = ThreadLocal::new();
             let chunk_size = ChunkSize::new(parallel_policy, particles.len()).chunk_size;
 
+            let node_aabb = AxisAlignedBoundingBox3d::new(
+                grid.point_coordinates(&self.min_corner),
+                grid.point_coordinates(&self.max_corner),
+            );
+
             // Classify all particles of this leaf into its octants
             assert_eq!(particles.len(), octant_flags.len());
             particles
@@ -555,10 +568,13 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
                         .copied()
                         .zip(flags_chunk.iter_mut())
                         .for_each(|(particle_idx, particle_octant_flags)| {
+                            let pos = particle_positions[particle_idx];
                             let relative_pos = particle_positions[particle_idx] - split_coordinates;
 
+                            let is_ghost_particle = !node_aabb.contains_point(&pos);
+
                             // Check what the main octant of the particle is (to count ghost particles)
-                            {
+                            if !is_ghost_particle {
                                 let main_octant: Octant =
                                     OctantAxisDirections::classify(&relative_pos).into();
                                 non_ghost_counters[main_octant as usize] += 1;
