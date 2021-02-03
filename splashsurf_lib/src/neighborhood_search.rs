@@ -71,11 +71,9 @@ pub fn search_inplace<I: Index, R: Real>(
 /// Allocates enough storage for the given number of particles and clears all existing neighborhood lists
 fn init_neighborhood_list(neighborhood_list: &mut Vec<Vec<usize>>, new_len: usize) {
     let old_len = neighborhood_list.len();
-    if old_len != new_len {
-        // Reset all neighbor lists that won't be truncated
-        for particle_list in neighborhood_list.iter_mut().take(old_len.min(new_len)) {
-            particle_list.clear();
-        }
+    // Reset all neighbor lists that won't be truncated
+    for particle_list in neighborhood_list.iter_mut().take(old_len.min(new_len)) {
+        particle_list.clear();
     }
 
     // Ensure that length is correct
@@ -85,15 +83,14 @@ fn init_neighborhood_list(neighborhood_list: &mut Vec<Vec<usize>>, new_len: usiz
 /// Allocates enough storage for the given number of particles and clears all existing neighborhood lists in parallel
 fn par_init_neighborhood_list(neighborhood_list: &mut Vec<Vec<usize>>, new_len: usize) {
     let old_len = neighborhood_list.len();
-    if old_len != new_len {
-        // Reset all neighbor lists that won't be truncated
-        neighborhood_list
-            .par_iter_mut()
-            .take(old_len.min(new_len))
-            .for_each(|particle_list| {
-                particle_list.clear();
-            });
-    }
+    // Reset all neighbor lists that won't be truncated
+    neighborhood_list
+        .par_iter_mut()
+        .with_min_len(8)
+        .take(old_len.min(new_len))
+        .for_each(|particle_list| {
+            particle_list.clear();
+        });
 
     // Ensure that length is correct
     neighborhood_list.resize_with(new_len, || Vec::with_capacity(15));
