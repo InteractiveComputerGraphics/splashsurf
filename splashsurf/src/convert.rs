@@ -1,8 +1,9 @@
 use crate::io;
 use anyhow::anyhow;
 use anyhow::Context;
+use log::info;
 use splashsurf_lib::nalgebra::Vector3;
-use splashsurf_lib::profile;
+use splashsurf_lib::{nalgebra, profile, AxisAlignedBoundingBox3d};
 use std::path::PathBuf;
 use structopt::StructOpt;
 
@@ -20,6 +21,22 @@ pub struct ConvertSubcommandArgs {
     /// Whether to overwrite existing files without asking
     #[structopt(long)]
     overwrite: bool,
+    /// Lower corner of the domain of particles to keep, format: domain-min=x_min;y_min;z_min (requires domain-max to be specified)
+    #[structopt(
+        long,
+        number_of_values = 3,
+        value_delimiter = ";",
+        requires = "domain-max"
+    )]
+    domain_min: Option<Vec<f64>>,
+    /// Lower corner of the domain of particles to keep, format:domain-max=x_max;y_max;z_max (requires domain-min to be specified)
+    #[structopt(
+        long,
+        number_of_values = 3,
+        value_delimiter = ";",
+        requires = "domain-min"
+    )]
+    domain_max: Option<Vec<f64>>,
 }
 
 /// Executes the `convert` subcommand
@@ -48,6 +65,23 @@ pub fn convert_subcommand(cmd_args: &ConvertSubcommandArgs) -> Result<(), anyhow
                 input_file.as_path().display()
             )
         })?;
+
+    // Filter particles by user specified domain
+    let particle_positions = if let (Some(min), Some(max)) =
+        (cmd_args.domain_min.clone(), cmd_args.domain_max.clone())
+    {
+        let min = nalgebra::convert(Vector3::from_iterator(min));
+        let max = nalgebra::convert(Vector3::from_iterator(max));
+        let aabb = AxisAlignedBoundingBox3d::new(min, max);
+        info!("Filtering out particles outside of {:?}", aabb);
+
+        particle_positions
+            .into_iter()
+            .filter(|p| aabb.contains_point(p))
+            .collect()
+    } else {
+        particle_positions
+    };
 
     // Write particles
     io::write_particle_positions(
