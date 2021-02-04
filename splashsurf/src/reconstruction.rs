@@ -84,6 +84,14 @@ pub struct ReconstructSubcommandArgs {
     /// Safety factor applied to the kernel compact support radius when it's used as a margin to collect ghost particles in the leaf nodes
     #[structopt(long)]
     octree_ghost_margin_factor: Option<f64>,
+    /// Whether to compute particle densities in a global step before domain decomposition (slower)
+    #[structopt(long, default_value = "off", possible_values = &["on", "off"], case_insensitive = true)]
+    octree_global_density: Switch,
+    /// Whether to compute particle densities per subdomain but synchronize densities for ghost-particles (faster, recommended).
+    /// Note: if both this and global particle density computation is disabled the ghost particle margin has to be increased to at least 2.0
+    /// to compute correct density values for ghost particles.
+    #[structopt(long, default_value = "on", possible_values = &["on", "off"], case_insensitive = true)]
+    octree_sync_local_density: Switch,
     /// Optional filename for writing the point cloud representation of the intermediate density map to disk
     #[structopt(long, parse(from_os_str))]
     output_dm_points: Option<PathBuf>,
@@ -167,7 +175,7 @@ mod arguments {
     use anyhow::{anyhow, Context};
     use log::info;
     use splashsurf_lib::nalgebra::Vector3;
-    use splashsurf_lib::AxisAlignedBoundingBox3d;
+    use splashsurf_lib::{AxisAlignedBoundingBox3d, ParticleDensityComputationStrategy};
     use std::convert::TryFrom;
     use std::fs;
     use std::path::{Path, PathBuf};
@@ -232,10 +240,25 @@ mod arguments {
                 let ghost_particle_safety_factor = args.octree_ghost_margin_factor;
                 let enable_stitching = args.octree_stitch_subdomains.into_bool();
 
+                let particle_density_computation = if args.octree_global_density.into_bool()
+                    && args.octree_sync_local_density.into_bool()
+                {
+                    return Err(anyhow!("Cannot enable both global and merged local particle density computation at the same time. Switch off at least one."));
+                } else {
+                    if args.octree_global_density.into_bool() {
+                        ParticleDensityComputationStrategy::Global
+                    } else if args.octree_sync_local_density.into_bool() {
+                        ParticleDensityComputationStrategy::SynchronizeSubdomains
+                    } else {
+                        ParticleDensityComputationStrategy::IndependentSubdomains
+                    }
+                };
+
                 Some(splashsurf_lib::SpatialDecompositionParameters {
                     subdivision_criterion,
                     ghost_particle_safety_factor,
                     enable_stitching,
+                    particle_density_computation,
                 })
             };
 

@@ -20,9 +20,6 @@ pub use uniform_grid::{GridConstructionError, UniformGrid};
 
 use crate::mesh::TriMesh3d;
 use crate::octree::Octree;
-use crate::reconstruction::{
-    reconstruct_single_surface_append, SurfaceReconstructionOctreeVisitor,
-};
 use crate::workspace::ReconstructionWorkspace;
 
 #[cfg(feature = "profiling")]
@@ -103,6 +100,50 @@ pub struct SpatialDecompositionParameters<R: Real> {
     pub ghost_particle_safety_factor: Option<R>,
     /// Whether to enable stitching of all disjoint subdomain meshes to a global manifold mesh
     pub enable_stitching: bool,
+    /// Which method to use for computing the densities of the particles
+    pub particle_density_computation: ParticleDensityComputationStrategy,
+}
+
+/// Available strategies for the computation of the particle densities
+#[derive(Copy, Clone, Debug)]
+pub enum ParticleDensityComputationStrategy {
+    /// Compute the particle densities globally before performing domain decomposition.
+    ///
+    /// With this approach the particle densities are computed globally on all particles before any
+    /// domain decomposition is performed.
+    ///
+    /// This approach is guaranteed to lead to consistent results and does not depend on the following
+    /// decomposition. However, it is also by far the *slowest method* as global operations (especially
+    /// the global neighborhood search) are much slower.
+    Global,
+    /// Compute particle densities for all particles locally followed by a synchronization step.
+    ///
+    /// **This is the recommended approach.**
+    /// The particle densities will be evaluated for all particles per subdomain, possibly in parallel.
+    /// Afterwards, the values for all non-ghost particles are written to a global array.
+    /// This happens in a separate step before performing any reconstructions
+    /// For the following reconstruction procedure, each subdomain will update the densities of its ghost particles
+    /// from this global array. This ensures that all ghost-particles receive correct density values
+    /// without requiring to double the width of the ghost-particle margin just to ensure correct values
+    /// for the actual inner ghost-particles (i.e. in contrast to the completely local approach).
+    ///
+    /// The actual synchronization overhead is relatively low and this approach is often the fastest method.
+    ///
+    /// This approach should always lead consistent results. Only in very rare cases when a particle is not
+    /// uniquely assigned during domain decomposition this might lead to problems. If you encounter such
+    /// problems with this approach please report it as a bug.
+    SynchronizeSubdomains,
+    /// Compute densities locally per subdomain without global synchronization.
+    ///
+    /// The particle densities will be evaluated per subdomain on-the-fly just before the reconstruction
+    /// of the subdomain happens. In order to compute correct densities for the ghost particles of each
+    /// subdomain it is required that the ghost-particle margin is at least two times the kernel compact
+    /// support radius. This may add a lot of additional ghost-particles to each subdomain.
+    ///
+    /// If the ghost-particle margin is not set wide enough, this may lead to density differences on subdomain
+    /// boundaries. Otherwise this approach robust with respect to the classification of particles into the
+    /// subdomains.
+    IndependentSubdomains,
 }
 
 impl<R: Real> SpatialDecompositionParameters<R> {
@@ -115,6 +156,7 @@ impl<R: Real> SpatialDecompositionParameters<R> {
                 r => r.try_convert()?
             ),
             enable_stitching: self.enable_stitching,
+            particle_density_computation: self.particle_density_computation,
         })
     }
 }
@@ -266,7 +308,6 @@ pub fn reconstruct_surface<I: Index, R: Real>(
     particle_positions: &[Vector3<R>],
     parameters: &Parameters<R>,
 ) -> Result<SurfaceReconstruction<I, R>, ReconstructionError<I, R>> {
-    profile!("reconstruct_surface");
     let mut surface = SurfaceReconstruction::default();
     reconstruct_surface_inplace(particle_positions, parameters, &mut surface)?;
     Ok(surface)
@@ -290,55 +331,17 @@ pub fn reconstruct_surface_inplace<'a, I: Index, R: Real>(
         parameters.domain_aabb.as_ref(),
         parameters.enable_multi_threading,
     )?;
-    let grid = &output_surface.grid;
-    grid.log_grid_info();
+
+    output_surface.grid.log_grid_info();
 
     if parameters.spatial_decomposition.is_some() {
-        SurfaceReconstructionOctreeVisitor::new(particle_positions, parameters, output_surface)
-            .unwrap()
-            .run(particle_positions, output_surface);
-    } else {
-        profile!("reconstruct_surface_inplace");
-
-        let mut workspace = output_surface
-            .workspace
-            .get_local_with_capacity(particle_positions.len())
-            .borrow_mut();
-
-        // Clear the current mesh, as reconstruction will be appended to output
-        output_surface.mesh.clear();
-        // Perform global reconstruction without octree
-        reconstruct_single_surface_append(
-            &mut *workspace,
-            grid,
-            None,
+        reconstruction::reconstruct_surface_domain_decomposition(
             particle_positions,
             parameters,
-            &mut output_surface.mesh,
+            output_surface,
         );
-
-        /*
-        let particle_indices = splash_detection_radius.map(|splash_detection_radius| {
-            let neighborhood_list = neighborhood_search::search::<I, R>(
-                &grid.aabb(),
-                particle_positions,
-                splash_detection_radius,
-                enable_multi_threading,
-            );
-
-            let mut active_particles = Vec::new();
-            for (particle_i, neighbors) in neighborhood_list.iter().enumerate() {
-                if !neighbors.is_empty() {
-                    active_particles.push(particle_i);
-                }
-            }
-
-            active_particles
-        });
-        */
-
-        // TODO: Set this correctly
-        output_surface.density_map = None;
+    } else {
+        reconstruction::reconstruct_surface_global(particle_positions, parameters, output_surface);
     }
 
     Ok(())

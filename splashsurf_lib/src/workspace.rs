@@ -11,12 +11,23 @@ use thread_local::ThreadLocal;
 /// Collection of all thread local workspaces used to reduce allocations on subsequent surface reconstructions
 #[derive(Default)]
 pub struct ReconstructionWorkspace<I: Index, R: Real> {
+    global_densities: Vec<R>,
     local_workspaces: ThreadLocal<RefCell<LocalReconstructionWorkspace<I, R>>>,
 }
 
 impl<I: Index, R: Real> ReconstructionWorkspace<I, R> {
+    /// Returns a mutable reference to the global particle density vector
+    pub(crate) fn densities_mut(&mut self) -> &mut Vec<R> {
+        &mut self.global_densities
+    }
+
+    /// Returns a reference to a thread local workspace
+    pub(crate) fn get_local(&self) -> &RefCell<LocalReconstructionWorkspace<I, R>> {
+        self.local_workspaces.get_or_default()
+    }
+
     /// Returns a reference to a thread local workspace, initializes it with the given capacity if not already initialized
-    pub fn get_local_with_capacity(
+    pub(crate) fn get_local_with_capacity(
         &self,
         capacity: usize,
     ) -> &RefCell<LocalReconstructionWorkspace<I, R>> {
@@ -25,7 +36,7 @@ impl<I: Index, R: Real> ReconstructionWorkspace<I, R> {
     }
 
     /// Returns a mutable reference to the thread local workspaces
-    pub fn local_workspaces_mut(
+    pub(crate) fn local_workspaces_mut(
         &mut self,
     ) -> &mut ThreadLocal<RefCell<LocalReconstructionWorkspace<I, R>>> {
         &mut self.local_workspaces
@@ -47,7 +58,7 @@ impl<I: Index, R: Real> Debug for ReconstructionWorkspace<I, R> {
 }
 
 /// Workspace used by [crate::reconstruct_surface_inplace] internally to re-use allocated memory
-pub struct LocalReconstructionWorkspace<I: Index, R: Real> {
+pub(crate) struct LocalReconstructionWorkspace<I: Index, R: Real> {
     /// Storage for the particle positions (only used in octree based approach)
     pub particle_positions: Vec<Vector3<R>>,
     /// Storage for per particle neighbor lists
@@ -69,7 +80,7 @@ impl<I: Index, R: Real> Default for LocalReconstructionWorkspace<I, R> {
 
 impl<I: Index, R: Real> LocalReconstructionWorkspace<I, R> {
     /// Constructs a workspace without allocating additional memory
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             particle_positions: Default::default(),
             particle_neighbor_lists: Default::default(),
@@ -80,7 +91,7 @@ impl<I: Index, R: Real> LocalReconstructionWorkspace<I, R> {
     }
 
     /// Constructs a workspace with capacity for the given number of particles
-    pub fn with_capacity(capacity: usize) -> Self {
+    pub(crate) fn with_capacity(capacity: usize) -> Self {
         Self {
             particle_positions: Vec::with_capacity(capacity),
             particle_neighbor_lists: Vec::with_capacity(capacity),

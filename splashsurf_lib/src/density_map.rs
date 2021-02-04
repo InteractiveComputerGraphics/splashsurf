@@ -96,6 +96,7 @@ pub fn compute_particle_densities_inplace<I: Index, R: Real>(
 fn init_density_storage<R: Real>(densities: &mut Vec<R>, new_len: usize) {
     // Ensure that length is correct
     densities.resize(new_len, R::zero());
+    // Existing values don't have to be set to zero, as they are overwritten later anyway
 }
 
 /// Computes the individual densities of particles using a standard SPH sum, sequential implementation

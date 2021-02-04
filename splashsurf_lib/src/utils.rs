@@ -1,6 +1,7 @@
 //! Internal helper functions and types
 
 use log::info;
+use rayon::prelude::*;
 
 /// Wrapper type to make any type Send + Sync
 pub(crate) struct SendSyncWrapper<T>(T);
@@ -20,10 +21,45 @@ impl<T> SendSyncWrapper<T> {
 unsafe impl<T> Sync for SendSyncWrapper<T> {}
 unsafe impl<T> Send for SendSyncWrapper<T> {}
 
+/// Ensure that at least the specified total capacity is reserved for the given vector
 pub(crate) fn reserve_total<T>(vec: &mut Vec<T>, total_capacity: usize) {
     if total_capacity > vec.capacity() {
         vec.reserve(total_capacity - vec.capacity());
     }
+}
+
+pub(crate) fn resize_and_fill<T: Clone + Send + Sync>(
+    vec: &mut Vec<T>,
+    new_len: usize,
+    value: T,
+    par: bool,
+) {
+    if par {
+        par_resize_and_fill(vec, new_len, value);
+    } else {
+        seq_resize_and_fill(vec, new_len, value);
+    }
+}
+
+pub(crate) fn seq_resize_and_fill<T: Clone>(vec: &mut Vec<T>, new_len: usize, value: T) {
+    let old_len = vec.len();
+    vec.iter_mut()
+        .take(old_len.min(new_len))
+        .for_each(|v| *v = value.clone());
+    vec.resize(new_len, value);
+}
+
+pub(crate) fn par_resize_and_fill<T: Clone + Send + Sync>(
+    vec: &mut Vec<T>,
+    new_len: usize,
+    value: T,
+) {
+    let old_len = vec.len();
+    vec.par_iter_mut()
+        .with_min_len(8)
+        .take(old_len.min(new_len))
+        .for_each(|v| *v = value.clone());
+    vec.resize(new_len, value);
 }
 
 pub struct ParallelPolicy {
