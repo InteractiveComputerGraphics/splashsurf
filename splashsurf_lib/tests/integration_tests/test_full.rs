@@ -1,7 +1,8 @@
 use nalgebra::Vector3;
 use splashsurf_lib::marching_cubes::check_mesh_consistency;
 use splashsurf_lib::{
-    reconstruct_surface, Parameters, Real, SpatialDecompositionParameters, SubdivisionCriterion,
+    reconstruct_surface, Parameters, ParticleDensityComputationStrategy, Real,
+    SpatialDecompositionParameters, SubdivisionCriterion,
 };
 use std::path::Path;
 
@@ -44,6 +45,8 @@ fn params<R: Real>(
                 subdivision_criterion: SubdivisionCriterion::MaxParticleCountAuto,
                 ghost_particle_safety_factor: Some(R::one()),
                 enable_stitching: false,
+                particle_density_computation:
+                    ParticleDensityComputationStrategy::SynchronizeSubdomains,
             });
         }
         Strategy::OctreeStitching => {
@@ -51,6 +54,8 @@ fn params<R: Real>(
                 subdivision_criterion: SubdivisionCriterion::MaxParticleCountAuto,
                 ghost_particle_safety_factor: Some(R::one() + R::one()),
                 enable_stitching: true,
+                particle_density_computation:
+                    ParticleDensityComputationStrategy::SynchronizeSubdomains,
             });
         }
     }
