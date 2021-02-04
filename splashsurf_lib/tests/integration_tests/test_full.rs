@@ -49,7 +49,7 @@ fn params<R: Real>(
         Strategy::OctreeStitching => {
             parameters.spatial_decomposition = Some(SpatialDecompositionParameters {
                 subdivision_criterion: SubdivisionCriterion::MaxParticleCountAuto,
-                ghost_particle_safety_factor: Some(R::one()),
+                ghost_particle_safety_factor: Some(R::one() + R::one()),
                 enable_stitching: true,
             });
         }

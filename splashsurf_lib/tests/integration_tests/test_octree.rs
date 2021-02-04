@@ -1,15 +1,12 @@
-use std::path::Path;
-
-use splashsurf_lib::mesh::PointCloud3d;
+use splashsurf_lib::generic_tree::VisitableTree;
 use splashsurf_lib::nalgebra::Vector3;
 use splashsurf_lib::octree::Octree;
 use splashsurf_lib::{grid_for_reconstruction, Index, Real, SubdivisionCriterion, UniformGrid};
-
-use vtkio::model::UnstructuredGridPiece;
+use std::path::Path;
 
 use super::io;
-use splashsurf_lib::generic_tree::VisitableTree;
 
+/*
 #[allow(dead_code)]
 fn particles_to_file<P: AsRef<Path>, R: Real>(particles: Vec<Vector3<R>>, path: P) {
     let points = PointCloud3d { points: particles };
@@ -20,6 +17,7 @@ fn particles_to_file<P: AsRef<Path>, R: Real>(particles: Vec<Vector3<R>>, path: 
     )
     .unwrap();
 }
+ */
 
 #[allow(dead_code)]
 fn octree_to_file<P: AsRef<Path>, I: Index, R: Real>(
@@ -28,7 +26,7 @@ fn octree_to_file<P: AsRef<Path>, I: Index, R: Real>(
     path: P,
 ) {
     let mesh = octree.hexmesh(&grid, false);
-    io::vtk::write_vtk(UnstructuredGridPiece::from(&mesh), path.as_ref(), "octree").unwrap();
+    io::vtk::write_vtk(mesh.to_dataset(), path.as_ref(), "octree").unwrap();
 }
 
 #[test]
@@ -139,7 +137,7 @@ fn build_octree_from_vtk() {
             particle_count += node_particles.len();
 
             // Ensure that all particles are within extents of octree cell
-            let aabb = node.aabb(&grid);
+            let aabb = node.aabb();
             for idx in node_particles.iter().copied() {
                 let particle = particles[idx];
                 assert!(aabb.contains_point(&particle));
@@ -152,45 +150,121 @@ fn build_octree_from_vtk() {
     //octree_to_file(&octree, &grid, "U:\\double_dam_break_frame_26_4732_particles_octree.vtk");
 }
 
-#[test]
-fn build_octree_par_consistency() {
-    let file = "../data/double_dam_break_frame_26_4732_particles.vtk";
-    let particles = io::vtk::particles_from_vtk::<f64, _>(file).unwrap();
-    //println!("Loaded {} particles from {}", particles.len(), file);
+struct TestParameters<R: Real> {
+    particle_radius: R,
+    compact_support_radius: R,
+    cube_size: R,
+    margin: Option<R>,
+    max_particles_per_cell: Option<usize>,
+    compare_seq_par: bool,
+}
 
-    let grid = grid_for_reconstruction::<i64, _>(
-        particles.as_slice(),
-        0.025,
-        4.0 * 0.025,
-        0.2,
-        None,
-        true,
-    )
-    .unwrap();
+impl<R: Real> Default for TestParameters<R> {
+    fn default() -> Self {
+        let particle_radius = R::from_f64(0.025).unwrap();
+        let compact_support_radius = particle_radius.times_f64(4.0);
+        let cube_size = particle_radius.times_f64(0.5);
 
-    let mut octree_seq = Octree::new(&grid, particles.as_slice().len());
-    octree_seq.subdivide_recursively_margin(
-        &grid,
-        particles.as_slice(),
-        SubdivisionCriterion::MaxParticleCount(20),
-        0.0,
-        false,
+        Self {
+            particle_radius,
+            compact_support_radius,
+            cube_size,
+            margin: None,
+            max_particles_per_cell: None,
+            compare_seq_par: true,
+        }
+    }
+}
+
+impl<R: Real> TestParameters<R> {
+    fn new(particle_radius: f64, compact_support_factor: f64, cube_size_factor: f64) -> Self {
+        let params = Self::default();
+        params.with_parameters(particle_radius, compact_support_factor, cube_size_factor)
+    }
+
+    fn with_margin(mut self, margin: Option<f64>) -> Self {
+        self.margin = margin.map(|m| self.particle_radius.times_f64(m));
+        self
+    }
+    fn with_max_particles_per_cell(mut self, max_particles_per_cell: Option<usize>) -> Self {
+        self.max_particles_per_cell = max_particles_per_cell;
+        self
+    }
+
+    fn with_compare_seq_par(mut self, compare_seq_par: bool) -> Self {
+        self.compare_seq_par = compare_seq_par;
+        self
+    }
+
+    fn with_parameters(
+        mut self,
+        particle_radius: f64,
+        compact_support_factor: f64,
+        cube_size_factor: f64,
+    ) -> Self {
+        self.particle_radius = R::from_f64(particle_radius).unwrap();
+        self.compact_support_radius = self.particle_radius.times_f64(compact_support_factor);
+        self.cube_size = self.particle_radius.times_f64(cube_size_factor);
+        self
+    }
+
+    fn build_grid<I: Index>(&self, particle_positions: &[Vector3<R>]) -> UniformGrid<I, R> {
+        grid_for_reconstruction(
+            particle_positions,
+            self.particle_radius,
+            self.compact_support_radius,
+            self.cube_size,
+            None,
+            true,
+        )
+        .unwrap()
+    }
+}
+
+/// Returns a vector containing per particle how often it is a non-ghost particle in the octree
+fn count_non_ghost_particles<I: Index, R: Real>(
+    particle_positions: &[Vector3<R>],
+    octree: &Octree<I, R>,
+) -> Vec<usize> {
+    let mut non_ghost_particles = vec![0; particle_positions.len()];
+    for node in octree.root().dfs_iter() {
+        if let Some(particle_set) = node.data().particle_set() {
+            for idx in particle_set.particles.iter().copied() {
+                if node.aabb().contains_point(&particle_positions[idx]) {
+                    non_ghost_particles[idx] += 1;
+                }
+            }
+        }
+    }
+
+    non_ghost_particles
+}
+
+/// Asserts whether each particle has a unique octree node where it is not a ghost particle
+fn assert_unique_node_per_particle<I: Index, R: Real>(
+    particle_positions: &[Vector3<R>],
+    octree: &Octree<I, R>,
+) {
+    let non_ghost_particles_counts = count_non_ghost_particles(particle_positions, octree);
+    let no_unique_node_particles: Vec<_> = non_ghost_particles_counts
+        .into_iter()
+        .enumerate()
+        .filter(|&(_, count)| count != 1)
+        .collect();
+
+    assert_eq!(
+        no_unique_node_particles,
+        vec![],
+        "There are nodes that don't have a unique octree node where they are not ghost particles!"
     );
+}
 
-    let mut octree_par = Octree::new(&grid, particles.as_slice().len());
-    octree_par.subdivide_recursively_margin_par(
-        &grid,
-        particles.as_slice(),
-        SubdivisionCriterion::MaxParticleCount(20),
-        0.0,
-        false,
-    );
-
-    let mut particle_count = 0;
-    for (node_seq, node_par) in octree_seq
+/// Asserts whether both trees have equivalent particle sets in the same octree nodes
+fn assert_tree_equivalence<I: Index, R: Real>(left_tree: &Octree<I, R>, right_tree: &Octree<I, R>) {
+    for (node_seq, node_par) in left_tree
         .root()
         .dfs_iter()
-        .zip(octree_par.root().dfs_iter())
+        .zip(right_tree.root().dfs_iter())
     {
         match (
             node_seq.data().particle_set(),
@@ -201,8 +275,7 @@ fn build_octree_par_consistency() {
                 let particles_par = &particles_par.particles;
 
                 // Ensure that we have the same number of particles for sequential and parallel result
-                assert_eq!(particles_seq.len(), particles_par.len());
-                particle_count += particles_seq.len();
+                assert_eq!(particles_seq.len(), particles_par.len(), "Found corresponding leaves in the trees that don't have the same number of particles!");
 
                 // Sort the particle lists
                 let mut particles_seq = particles_seq.to_vec();
@@ -211,19 +284,126 @@ fn build_octree_par_consistency() {
                 particles_par.sort_unstable();
 
                 // Ensure that the particle lists are identical
-                assert_eq!(particles_seq, particles_par);
+                assert_eq!(particles_seq, particles_par, "Found corresponding leaves in the trees that don't have the same sorted particle lists!");
             }
             (None, None) => {
                 // Both nodes are leaves
                 continue;
             }
             _ => {
-                // Parallel and sequential node do not match (one is leaf, one has children)
-                assert!(false);
+                // Parallel and sequential nodes do not match (one is leaf, one has children)
+                panic!("Encountered a node where one octree has a particle set but the other does not!");
             }
         }
     }
-
-    // Check if all particles were visited once
-    assert_eq!(particle_count, particles.len());
 }
+
+fn build_octree_par_consistency<I: Index, R: Real, P: AsRef<Path>>(
+    file: P,
+    parameters: TestParameters<R>,
+) {
+    let particles = io::vtk::particles_from_vtk::<R, _>(file).unwrap();
+
+    let grid = parameters.build_grid::<I>(particles.as_slice());
+
+    let octree_seq = if parameters.compare_seq_par {
+        let mut octree_seq = Octree::new(&grid, particles.as_slice().len());
+        octree_seq.subdivide_recursively_margin(
+            &grid,
+            particles.as_slice(),
+            parameters
+                .max_particles_per_cell
+                .map(|n| SubdivisionCriterion::MaxParticleCount(n))
+                .unwrap_or(SubdivisionCriterion::MaxParticleCountAuto),
+            parameters.margin.unwrap_or(R::zero()),
+            false,
+        );
+
+        assert_unique_node_per_particle(particles.as_slice(), &octree_seq);
+
+        Some(octree_seq)
+    } else {
+        None
+    };
+
+    let mut octree_par = Octree::new(&grid, particles.as_slice().len());
+    octree_par.subdivide_recursively_margin_par(
+        &grid,
+        particles.as_slice(),
+        parameters
+            .max_particles_per_cell
+            .map(|n| SubdivisionCriterion::MaxParticleCount(n))
+            .unwrap_or(SubdivisionCriterion::MaxParticleCountAuto),
+        parameters.margin.unwrap_or(R::zero()),
+        false,
+    );
+
+    assert_unique_node_per_particle(particles.as_slice(), &octree_par);
+
+    if let Some(octree_seq) = octree_seq {
+        assert_tree_equivalence(&octree_seq, &octree_par)
+    }
+}
+
+#[test]
+fn build_octree_cube() {
+    build_octree_par_consistency::<i64, f64, _>(
+        "../data/cube_2366_particles.vtk",
+        TestParameters::default()
+            .with_margin(Some(1.0))
+            .with_max_particles_per_cell(Some(70)),
+    );
+}
+
+#[test]
+fn build_octree_double_dam_break() {
+    build_octree_par_consistency::<i64, f64, _>(
+        "../data/double_dam_break_frame_26_4732_particles.vtk",
+        TestParameters::default()
+            .with_margin(Some(1.0))
+            .with_max_particles_per_cell(Some(200)),
+    );
+}
+
+#[test]
+fn build_octree_dam_break() {
+    build_octree_par_consistency::<i64, f64, _>(
+        "../data/dam_break_frame_23_24389_particles.vtk",
+        TestParameters::default()
+            .with_margin(Some(1.0))
+            .with_max_particles_per_cell(Some(1000)),
+    );
+}
+
+#[test]
+fn build_octree_bunny() {
+    build_octree_par_consistency::<i64, f64, _>(
+        "../data/bunny_frame_14_7705_particles.vtk",
+        TestParameters::default()
+            .with_margin(Some(1.0))
+            .with_max_particles_per_cell(Some(200)),
+    );
+}
+
+#[test]
+fn build_octree_hilbert() {
+    build_octree_par_consistency::<i64, f64, _>(
+        "../data/hilbert_46843_particles.vtk",
+        TestParameters::default()
+            .with_margin(Some(1.0))
+            .with_max_particles_per_cell(Some(1000)),
+    );
+}
+
+/*
+#[test]
+fn build_octree_canyon() {
+    build_octree_par_consistency::<i64, f64, _>(
+        "../../canyon_13353401_particles.vtk",
+        TestParameters::new(0.011, 4.0, 1.5)
+            .with_margin(Some(1.0))
+            .with_max_particles_per_cell(Some(52161))
+            .with_compare_seq_par(false),
+    );
+}
+*/
