@@ -171,10 +171,10 @@ where
         &self.min + (self.extents() / (R::one() + R::one()))
     }
 
-    /// Checks if the given point is inside or on the boundary of the AABB
+    /// Checks if the given point is inside of the AABB, the AABB is considered to be half-open to its max coordinate
     pub fn contains_point(&self, point: &VectorN<R, D>) -> bool {
         for i in 0..D::dim() {
-            if point[i] <= self.min[i] || point[i] >= self.max[i] {
+            if point[i] < self.min[i] || point[i] >= self.max[i] {
                 return false;
             }
         }
