@@ -269,9 +269,8 @@ impl<I: Index, R: Real> SurfaceReconstructionOctreeVisitor<I, R> {
     fn extract_node_subdomain(&self, octree_node: &OctreeNode<I, R>) -> OwningSubdomainGrid<I, R> {
         let grid = &self.grid;
 
-        let leaf_aabb = octree_node.aabb(grid);
         let subdomain_grid = octree_node
-            .grid(leaf_aabb.min(), grid.cell_size())
+            .grid(octree_node.aabb().min(), grid.cell_size())
             .expect("Unable to construct Octree node grid");
         let subdomain_offset = octree_node.min_corner();
         subdomain_grid.log_grid_info();

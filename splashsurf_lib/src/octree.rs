@@ -7,8 +7,8 @@ use crate::topology::{Axis, Direction};
 use crate::uniform_grid::{PointIndex, UniformGrid};
 use crate::utils::{ChunkSize, ParallelPolicy};
 use crate::{
-    marching_cubes, new_map, profile, AxisAlignedBoundingBox, AxisAlignedBoundingBox3d,
-    GridConstructionError, Index, MapType, Real,
+    marching_cubes, new_map, profile, AxisAlignedBoundingBox3d, GridConstructionError, Index,
+    MapType, Real,
 };
 use arrayvec::ArrayVec;
 use log::info;
@@ -52,6 +52,8 @@ pub struct OctreeNode<I: Index, R: Real> {
     min_corner: PointIndex<I>,
     /// Upper corner point of the octree node on the background grid
     max_corner: PointIndex<I>,
+    /// AABB of the octree node
+    aabb: AxisAlignedBoundingBox3d<R>,
     /// Additional data associated to this octree node
     data: NodeData<I, R>,
 }
@@ -140,8 +142,6 @@ impl<I: Index, R: Real> Octree<I, R> {
         enable_stitching: bool,
     ) -> Self {
         let mut tree = Octree::new(&grid, particle_positions.len());
-
-        println!("Margin: {}", margin);
 
         if enable_multi_threading {
             tree.subdivide_recursively_margin_par(
@@ -321,8 +321,13 @@ impl<I: Index, R: Real> Octree<I, R> {
 }
 
 impl<I: Index, R: Real> OctreeNode<I, R> {
-    pub fn new(id: usize, min_corner: PointIndex<I>, max_corner: PointIndex<I>) -> Self {
-        Self::with_data(id, min_corner, max_corner, NodeData::None)
+    pub fn new(
+        id: usize,
+        min_corner: PointIndex<I>,
+        max_corner: PointIndex<I>,
+        aabb: AxisAlignedBoundingBox3d<R>,
+    ) -> Self {
+        Self::with_data(id, min_corner, max_corner, aabb, NodeData::None)
     }
 
     fn new_root(grid: &UniformGrid<I, R>, n_particles: usize) -> Self {
@@ -340,6 +345,7 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
                 .expect("Cannot get lower corner of grid"),
             grid.get_point(max_point)
                 .expect("Cannot get upper corner of grid"),
+            grid.aabb().clone(),
             NodeData::new_particle_set((0..n_particles).collect::<SmallVec<_>>(), 0),
         )
     }
@@ -348,6 +354,7 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
         id: usize,
         min_corner: PointIndex<I>,
         max_corner: PointIndex<I>,
+        aabb: AxisAlignedBoundingBox3d<R>,
         data: NodeData<I, R>,
     ) -> Self {
         Self {
@@ -355,6 +362,7 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
             children: Default::default(),
             min_corner,
             max_corner,
+            aabb,
             data,
         }
     }
@@ -385,11 +393,8 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
     }
 
     /// Returns the AABB represented by this octree node
-    pub fn aabb(&self, grid: &UniformGrid<I, R>) -> AxisAlignedBoundingBox3d<R> {
-        AxisAlignedBoundingBox::new(
-            grid.point_coordinates(&self.min_corner),
-            grid.point_coordinates(&self.max_corner),
-        )
+    pub fn aabb(&self) -> &AxisAlignedBoundingBox3d<R> {
+        &self.aabb
     }
 
     /// Constructs a [`UniformGrid`](crate::UniformGrid) that represents the domain of this octree node
@@ -431,11 +436,6 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
             let mut counters: [usize; 8] = [0, 0, 0, 0, 0, 0, 0, 0];
             let mut non_ghost_counters: [usize; 8] = [0, 0, 0, 0, 0, 0, 0, 0];
 
-            let node_aabb = AxisAlignedBoundingBox3d::new(
-                grid.point_coordinates(&self.min_corner),
-                grid.point_coordinates(&self.max_corner),
-            );
-
             // Classify all particles of this leaf into the halfspaces relative to the split point
             assert_eq!(particles.len(), halfspace_flags.len());
             for (particle_idx, particle_halfspace_flags) in
@@ -444,7 +444,7 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
                 let pos = particle_positions[particle_idx];
                 let relative_pos = pos - split_coordinates;
 
-                let is_ghost_particle = !node_aabb.contains_point(&pos);
+                let is_ghost_particle = !self.aabb.contains_point(&pos);
 
                 // Check what the main octant (without margin) of the particle is to count ghost particles later
                 if !is_ghost_particle {
@@ -485,6 +485,11 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
                     .combine_point_index(grid, &split_point, &self.max_corner)
                     .expect("Failed to get corner point of octree subcell");
 
+                let child_aabb = AxisAlignedBoundingBox3d::new(
+                    grid.point_coordinates(&min_corner),
+                    grid.point_coordinates(&max_corner),
+                );
+
                 let mut octant_particles = SmallVec::with_capacity(octant_particle_count);
                 octant_particles.extend(
                     particles
@@ -503,6 +508,7 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
                     next_id.fetch_add(1, Ordering::SeqCst),
                     min_corner,
                     max_corner,
+                    child_aabb,
                     NodeData::new_particle_set(
                         octant_particles,
                         octant_particle_count - octant_non_ghost_count,
@@ -546,11 +552,6 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
             let tl_counters = ThreadLocal::new();
             let chunk_size = ChunkSize::new(parallel_policy, particles.len()).chunk_size;
 
-            let node_aabb = AxisAlignedBoundingBox3d::new(
-                grid.point_coordinates(&self.min_corner),
-                grid.point_coordinates(&self.max_corner),
-            );
-
             // Classify all particles of this leaf into its octants
             assert_eq!(particles.len(), octant_flags.len());
             particles
@@ -571,7 +572,7 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
                             let pos = particle_positions[particle_idx];
                             let relative_pos = particle_positions[particle_idx] - split_coordinates;
 
-                            let is_ghost_particle = !node_aabb.contains_point(&pos);
+                            let is_ghost_particle = !self.aabb.contains_point(&pos);
 
                             // Check what the main octant of the particle is (to count ghost particles)
                             if !is_ghost_particle {
@@ -629,6 +630,11 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
                             .combine_point_index(grid, &split_point, &self.max_corner)
                             .expect("Failed to get corner point of octree subcell");
 
+                        let child_aabb = AxisAlignedBoundingBox3d::new(
+                            grid.point_coordinates(&min_corner),
+                            grid.point_coordinates(&max_corner),
+                        );
+
                         let mut octant_particles = SmallVec::with_capacity(octant_particle_count);
                         octant_particles.extend(
                             particles
@@ -647,6 +653,7 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
                             next_id.fetch_add(1, Ordering::SeqCst),
                             min_corner,
                             max_corner,
+                            child_aabb,
                             NodeData::new_particle_set(
                                 octant_particles,
                                 octant_particle_count - octant_non_ghost_count,
