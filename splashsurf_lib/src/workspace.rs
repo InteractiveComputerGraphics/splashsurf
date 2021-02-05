@@ -65,9 +65,9 @@ pub(crate) struct LocalReconstructionWorkspace<I: Index, R: Real> {
     pub particle_neighbor_lists: Vec<Vec<usize>>,
     /// Storage for per particle densities
     pub particle_densities: Vec<R>,
-    /// Storage for the mesh
+    /// Storage for the final surface mesh
     pub mesh: TriMesh3d<R>,
-    /// Storage for the density map
+    /// Storage for the density level-set
     pub density_map: DensityMap<I, R>,
 }
 

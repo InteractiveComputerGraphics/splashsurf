@@ -250,60 +250,51 @@ impl<I: Index, R: Real> SurfaceReconstructionOctreeVisitor<I, R> {
                     parent = parent_scope
                 );
 
-                let particles = if let Some(particle_set) = octree_node.data().particle_set() {
+                let node_particles = if let Some(particle_set) = octree_node.data().particle_set() {
                     &particle_set.particles
                 } else {
                     // Skip non-leaf nodes
                     return;
                 };
 
-                let mut tl_workspace = tl_workspaces
-                    .get_local_with_capacity(particles.len())
+                let mut tl_workspace_ref_mut = tl_workspaces
+                    .get_local_with_capacity(node_particles.len())
                     .borrow_mut();
+                let tl_workspace = &mut *tl_workspace_ref_mut;
 
-                // Take particle position storage from workspace and fill it with positions of the leaf
-                let mut node_particle_positions =
-                    std::mem::take(&mut tl_workspace.particle_positions);
                 Self::collect_node_particle_positions(
-                    particles,
+                    node_particles,
                     global_particle_positions,
-                    &mut node_particle_positions,
+                    &mut tl_workspace.particle_positions,
                 );
 
-                {
-                    let mut particle_neighbor_lists =
-                        std::mem::take(&mut tl_workspace.particle_neighbor_lists);
-                    let mut particle_densities =
-                        std::mem::take(&mut tl_workspace.particle_densities);
-                    compute_particle_densities_and_neighbors(
-                        grid,
-                        node_particle_positions.as_slice(),
-                        parameters,
-                        &mut particle_neighbor_lists,
-                        &mut particle_densities,
-                    );
-
-                    tl_workspace.particle_neighbor_lists = particle_neighbor_lists;
-                    tl_workspace.particle_densities = particle_densities;
-                }
+                compute_particle_densities_and_neighbors(
+                    grid,
+                    tl_workspace.particle_positions.as_slice(),
+                    parameters,
+                    &mut tl_workspace.particle_neighbor_lists,
+                    &mut tl_workspace.particle_densities,
+                );
 
                 {
                     profile!("update global density values");
 
                     let mut global_densities = global_densities.lock().unwrap();
-                    for (&i, &density) in
-                        particles.iter().zip(tl_workspace.particle_densities.iter())
-                    {
-                        let position = &global_particle_positions[i];
+                    for (&global_idx, (&density, position)) in node_particles.iter().zip(
+                        tl_workspace
+                            .particle_densities
+                            .iter()
+                            .zip(tl_workspace.particle_positions.iter()),
+                    ) {
                         // Check if the particle is actually inside of the cell and not a ghost particle
                         if octree_node.aabb().contains_point(position) {
-                            global_densities[i] = density;
+                            global_densities[global_idx] = density;
                         }
                     }
                 }
             });
 
-        // Unpack densities from mutex and move into workspace
+        // Unpack densities from mutex and move back into workspace
         *output_surface.workspace.densities_mut() = global_densities.into_inner().unwrap();
     }
 
@@ -388,9 +379,12 @@ impl<I: Index, R: Real> SurfaceReconstructionOctreeVisitor<I, R> {
 
                         trace!("Surface patch successfully processed.");
 
-                        // Put back the particle position and mesh storage
+                        // Put back everything taken from the workspace
                         tl_workspace.particle_positions = node_particle_positions;
                         tl_workspace.mesh = node_mesh;
+                        if let Some(node_particle_densities) = node_particle_densities {
+                            tl_workspace.particle_densities = node_particle_densities;
+                        }
                     }
                 });
         };
@@ -477,8 +471,11 @@ impl<I: Index, R: Real> SurfaceReconstructionOctreeVisitor<I, R> {
                             &self.parameters,
                         );
 
-                        // Put back the particle position storage
+                        // Put back everything taken from the workspace
                         tl_workspace.particle_positions = node_particle_positions;
+                        if let Some(node_particle_densities) = node_particle_densities {
+                            tl_workspace.particle_densities = node_particle_densities;
+                        }
 
                         surface_patch
                     };
