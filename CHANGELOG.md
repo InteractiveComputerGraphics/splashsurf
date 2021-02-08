@@ -1,11 +1,24 @@
 ## Master
 
+### Short-term goals
+ - Implement export of surface normals via the CLI
+
+## Version 0.6.0
+
+This release fixes a couple of bugs that may lead to inconsistent surface reconstructions when using domain decomposition (i.e. reconstructions with artificial bumps exactly at the subdomain boundaries, especially on flat surfaces). Currently there are no other known bugs and the domain decomposed approach appears to be really fast and robust.
+
+In addition the CLI now reports more detailed timing statistics for multi-threaded reconstructions.
+
+Otherwise this release contains just some small changes to command line parameters.
+
+ - Lib: Add a `ParticleDensityComputationStrategy` enum to the `SpatialDecompositionParameters` struct. In order for domain decomposition to work consistently, the per particle densities have to be evaluated to a consistent value between domains. This is especially important for the ghost particles. Previously, this resulted inconsistent density values on boundaries if the ghost particle margin was not at least 2x the compact support radius (as this ensures that the inner ghost particles actually have the correct density). This option is now still available as the `IndependentSubdomains` strategy. The preferred way, that avoids the 2x ghost particle margin is the `SynchronizeSubdomains` where the density values of the particles in the subdomains are first collected into a global storage. This can be faster as the previous method as this avoids having to collect a double-width ghost particle layer. In addition there is the "playing it safe" option, the `Global` strategy, where the particle densities are computed in a completely global step before any domain decomposition. This approach however is *really* slow for large quantities of particles. For more information, read the documentation on the `ParticleDensityComputationStrategy` enum.
+ - Lib: Fix bug where the workspace storage was not cleared correctly leading to inconsistent results depending on the sequence of processed subdomains
+ - Lib: Fix bug in the octree splitting where ghost particles of a parent node were actually classified as non-ghost particles in the child node, leading to many subsequent splits
+ - Lib: Change AABB's `contains_point` method such that it now considers the AABB as "open" to its max value, i.e. it checks if the point is in the half-open set `[min, max[`
  - Lib: Implemented an own `profile!` macro that also works in multi-threaded code, i.e. with together with `rayon`
  - CLI: The CLI now also prints detailed profiling/timing output when running in parallel with domain decomposition thanks to the new `profile` macro
-
-### Short-term goals
- - Investigate and fix artifacts with domain decomposition in large, flat surfaces
- - Implement export of surface normals via the CLI
+ - CLI: Add `--domain-min` and `--domain-max` flags to the `convert` subcommand that allows to filter out particles
+ - CLI: Remove the `--splash-detection-radius` flag as it did not work for a couple of releases
 
 ## Version 0.5.1
 

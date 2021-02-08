@@ -21,7 +21,7 @@ pub struct ReconstructSubcommandArgs {
     /// Path to the input file where the particle positions are stored (supported formats: VTK, binary f32 XYZ, PLY, BGEO)
     #[structopt(short = "-i", long, parse(from_os_str))]
     input_file: Option<PathBuf>,
-    /// Path to a sequence of particle files that should be processed, use `{}` in the filename to indicated a placeholder
+    /// Path to a sequence of particle files that should be processed, use `{}` in the filename to indicate a placeholder
     #[structopt(
         name = "input_sequence_pattern",
         short = "-s",
@@ -47,7 +47,7 @@ pub struct ReconstructSubcommandArgs {
     /// The cube edge length used for marching cubes in multiplies of the particle radius, corresponds to the cell size of the implicit background grid
     #[structopt(long)]
     cube_size: f64,
-    /// The iso-surface threshold for the density, i.e. value of the reconstructed density that indicates the fluid surface (in multiplies of the rest density)
+    /// The iso-surface threshold for the density, i.e. the normalized value of the reconstructed density level that indicates the fluid surface (in multiplies of the rest density)
     #[structopt(long, default_value = "0.6")]
     surface_threshold: f64,
     /// Whether to enable the use of double precision for all computations
@@ -72,13 +72,13 @@ pub struct ReconstructSubcommandArgs {
     /// Whether to enable spatial decomposition using an octree (faster) instead of a global approach
     #[structopt(long, default_value = "on", possible_values = &["on", "off"], case_insensitive = true)]
     octree_decomposition: Switch,
-    /// Whether to enable stitching of the disconnected local meshes when spatial decomposition is enabled (slower, but without stitching meshes will not be closed)
+    /// Whether to enable stitching of the disconnected local meshes resulting from the reconstruction when spatial decomposition is enabled (slower, but without stitching meshes will not be closed)
     #[structopt(long, default_value = "on", possible_values = &["on", "off"], case_insensitive = true)]
     octree_stitch_subdomains: Switch,
-    /// The maximum number of particles for leaf nodes of the octree, default is to compute it based on number of threads and particles
+    /// The maximum number of particles for leaf nodes of the octree, default is to compute it based on the number of threads and particles
     #[structopt(long)]
     octree_max_particles: Option<usize>,
-    /// Safety factor applied to the kernel compact support radius when it's used as a margin to collect ghost particles in the leaf nodes
+    /// Safety factor applied to the kernel compact support radius when it's used as a margin to collect ghost particles in the leaf nodes when performing the spatial decomposition
     #[structopt(long)]
     octree_ghost_margin_factor: Option<f64>,
     /// Whether to compute particle densities in a global step before domain decomposition (slower)
