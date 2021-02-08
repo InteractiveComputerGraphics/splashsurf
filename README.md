@@ -20,6 +20,9 @@ Surface reconstruction library and CLI for particle data from SPH simulations, w
     - [PLY](#ply)
     - [XYZ](#xyz)
   - [Output file formats](#output-file-formats)
+  - [All command line options](#all-command-line-options)
+    - [The `reconstruct` command](#the-reconstruct-command)
+    - [The `convert` subcommand](#the-convert-subcommand)
 - [License](#license)
 
 # The `splashsurf` CLI
@@ -64,111 +67,58 @@ cargo install splashsurf
 ## Usage
 
 ### Basic usage
-
-```
-splashsurf-reconstruct 0.5.0
-Reconstruct a surface from particle data
-
-USAGE:
-    splashsurf reconstruct [OPTIONS] --cube-size <cube-size> -i <input-file> --particle-radius <particle-radius> --smoothing-length <smoothing-length>
-
-FLAGS:
-    -h, --help       Prints help information
-    -V, --version    Prints version information
-
-OPTIONS:
-        --cube-size <cube-size>
-            The marching cubes grid size in multiplies of the particle radius
-
-        --domain-max <domain-max> <domain-max> <domain-max>
-            Upper corner of the domain where surface reconstruction should be performed, format:domain-
-            max=x_max;y_max;z_max (requires domain-min to be specified)
-        --domain-min <domain-min> <domain-min> <domain-min>
-            Lower corner of the domain where surface reconstruction should be performed, format: domain-
-            min=x_min;y_min;z_min (requires domain-max to be specified)
-    -i <input-file>
-            Path to the input file where the particle positions are stored (supported formats: VTK, binary f32 XYZ, PLY,
-            BGEO)
-    -n, --num-threads <num-threads>
-            Set the number of threads for the worker thread pool
-
-        --octree-ghost-margin-factor <octree-ghost-margin-factor>
-            Safety factor applied to the kernel compact support radius when it's used as a margin to collect ghost
-            particles in the leaf nodes
-        --octree-max-particles <octree-max-particles>
-            The maximum number of particles for leaf nodes of the octree, default is to compute it based on number of
-            threads and particles
-        --output-dir <output-dir>
-            Optional base directory for all output files (default: current working directory)
-
-        --output-dm-grid <output-dm-grid>
-            Optional filename for writing the grid representation of the intermediate density map to disk
-
-        --output-dm-points <output-dm-points>
-            Optional filename for writing the point cloud representation of the intermediate density map to disk
-
-    -o <output-file>
-            Filename for writing the reconstructed surface to disk (default: "{original_filename}_surface.vtk")
-
-        --output-octree <output-octree>
-            Optional filename for writing the octree used to partition the particles to disk
-
-        --mt-files <parallelize-over-files>
-            Flag to enable multi-threading to process multiple input files in parallel [default: off]  [possible values:
-            on, off]
-        --mt-particles <parallelize-over-particles>
-            Flag to enable multi-threading for a single input file by processing chunks of particles in parallel
-            [default: on]  [possible values: on, off]
-        --particle-radius <particle-radius>                          The particle radius of the input data
-        --rest-density <rest-density>                                The rest density of the fluid [default: 1000.0]
-        --smoothing-length <smoothing-length>
-            The smoothing length radius used for the SPH kernel, the kernel compact support radius will be twice the
-            smoothing length (in multiplies of the particle radius)
-        --splash-detection-radius <splash-detection-radius>
-            If a particle has no neighbors in this radius (in multiplies of the particle radius) it is considered as a
-            free particle
-        --surface-threshold <surface-threshold>
-            The iso-surface threshold for the density, i.e. value of the reconstructed density that indicates the fluid
-            surface (in multiplies of the rest density) [default: 0.6]
-    -d, --use-double-precision <use-double-precision>
-            Whether to enable the use of double precision for all computations [default: off]  [possible values: on,
-            off]
-        --use-octree <use-octree>
-            Whether to enable spatial decomposition using an octree (faster) instead of a global approach [default: on]
-            [possible values: on, off]
-        --use-stitching <use-stitching>
-            Whether to enable stitching of the disjoint subdomain meshes when spatial decomposition is enabled (slower
-            but results in closed meshes) [default: on]  [possible values: on, off]
-```
 For example:
 ```
-splashsurf "/home/user/canyon.xyz" --output-dir="/home/user/temp" --particle-radius=0.011 --kernel-radius=4.0 --cube-size=1.5 --surface-threshold=0.6 --mt-particles
 splashsurf reconstruct -i data/canyon_13353401_particles.xyz --output-dir=out --particle-radius=0.011 --smoothing-length=2.0 --cube-size=1.5 --surface-threshold=0.6
 ```
-With these parameters, a scene with 13353401 particles is reconstructed in less than 3.5 seconds on a Ryzen 9 5950X. The output is a mesh with 6022105 triangles.
+With these parameters, a scene with 13353401 particles is reconstructed in less than 3 seconds on a Ryzen 9 5950X. The output is a mesh with 6023244 triangles.
 ```
-[2021-01-29T15:14:18.738806+01:00][splashsurf][INFO] splashsurf v0.5.0 (splashsurf)
-[2021-01-29T15:14:18.738828+01:00][splashsurf][INFO] Called with command line: target/release/splashsurf reconstruct -i data/canyon_13353401_particles.xyz --output-dir=out --particle-radius=0.011 --smoothing-length=2.0 --cube-size=1.5 --surface-threshold=0.6
-[2021-01-29T15:14:18.738839+01:00][splashsurf::reconstruction][INFO] Using single precision (f32) for surface reconstruction.
-[2021-01-29T15:14:18.738841+01:00][splashsurf::io][INFO] Reading particle dataset from "data/canyon_13353401_particles.xyz"...
-[2021-01-29T15:14:18.921825+01:00][splashsurf::io][INFO] Successfully read dataset with 13353401 particle positions.
-[2021-01-29T15:14:18.929109+01:00][splashsurf_lib][INFO] Minimal enclosing bounding box of particles was computed as: AxisAlignedBoundingBox { min: [-25.0060978, -5.0146289, -40.0634613], max: [24.4994926, 18.3062096, 39.7757950] }
-[2021-01-29T15:14:18.946873+01:00][splashsurf_lib::utils][INFO] Splitting 13353401 particles into 257 chunks (with 52161 particles each) for octree generation
-[2021-01-29T15:14:18.946879+01:00][splashsurf_lib::octree::split_criterion][INFO] Building octree with at most 52161 particles per leaf
-[2021-01-29T15:14:19.165740+01:00][splashsurf_lib::reconstruction][INFO] Starting triangulation of surface patches.
-[2021-01-29T15:14:21.591042+01:00][splashsurf_lib::reconstruction][INFO] Generation of surface patches is done.
-[2021-01-29T15:14:21.591056+01:00][splashsurf_lib::reconstruction][INFO] Global mesh has 6022105 triangles and 3015090 vertices.
-[2021-01-29T15:14:21.591062+01:00][splashsurf::reconstruction][INFO] Writing surface mesh to "out/canyon_13353401_particles_surface.vtk"...
-[2021-01-29T15:14:21.997339+01:00][splashsurf::reconstruction][INFO] Done.
-[2021-01-29T15:14:22.007195+01:00][splashsurf::reconstruction][INFO] Successfully finished processing all inputs.
-[2021-01-29T15:14:22.007203+01:00][splashsurf][INFO] Timings:
-[2021-01-29T15:14:22.007217+01:00][splashsurf][INFO] surface reconstruction cli: 100.00%, 3268.35ms/call @ 0.31Hz
-[2021-01-29T15:14:22.007220+01:00][splashsurf][INFO]   loading particle positions: 5.60%, 182.98ms/call @ 0.31Hz
-[2021-01-29T15:14:22.007222+01:00][splashsurf][INFO]   reconstruct_surface: 81.67%, 2669.22ms/call @ 0.31Hz
-[2021-01-29T15:14:22.007224+01:00][splashsurf][INFO]     compute minimum enclosing aabb: 0.27%, 7.28ms/call @ 0.31Hz
-[2021-01-29T15:14:22.007225+01:00][splashsurf][INFO]     octree subdivide_recursively_margin_par: 6.96%, 185.75ms/call @ 0.31Hz
-[2021-01-29T15:14:22.007227+01:00][splashsurf][INFO]     parallel domain decomposed surface reconstruction with stitching: 90.86%, 2425.32ms/call @ 0.31Hz
-[2021-01-29T15:14:22.007229+01:00][splashsurf][INFO]   write surface mesh to file: 12.43%, 406.29ms/call @ 0.31Hz
+[2021-02-09T00:16:11.677571+01:00][splashsurf][INFO] splashsurf v0.6.0 (splashsurf)
+[2021-02-09T00:16:11.677595+01:00][splashsurf][INFO] Called with command line: target/release/splashsurf reconstruct -i /home/fabian/programming/canyon_13353401_particles.xyz --output-dir=out --particle-radius=0.011 --smoothing-length=2.0 --cube-size=1.5 --surface-threshold=0.6
+[2021-02-09T00:16:11.677609+01:00][splashsurf::reconstruction][INFO] Using single precision (f32) for surface reconstruction.
+[2021-02-09T00:16:11.677618+01:00][splashsurf::io][INFO] Reading particle dataset from "/home/fabian/programming/canyon_13353401_particles.xyz"...
+[2021-02-09T00:16:11.796790+01:00][splashsurf::io][INFO] Successfully read dataset with 13353401 particle positions.
+[2021-02-09T00:16:11.804396+01:00][splashsurf_lib][INFO] Minimal enclosing bounding box of particles was computed as: AxisAlignedBoundingBox { min: [-25.0060978, -5.0146289, -40.0634613], max: [24.4994926, 18.3062096, 39.7757950] }
+[2021-02-09T00:16:11.826742+01:00][splashsurf_lib::utils][INFO] Splitting 13353401 particles into 257 chunks (with 52161 particles each) for octree generation
+[2021-02-09T00:16:11.826749+01:00][splashsurf_lib::octree::split_criterion][INFO] Building octree with at most 52161 particles per leaf
+[2021-02-09T00:16:12.011061+01:00][splashsurf_lib::reconstruction][INFO] Starting computation of particle densities.
+[2021-02-09T00:16:12.891286+01:00][splashsurf_lib::reconstruction][INFO] Starting triangulation of surface patches.
+[2021-02-09T00:16:14.337897+01:00][splashsurf_lib::reconstruction][INFO] Generation of surface patches is done.
+[2021-02-09T00:16:14.337922+01:00][splashsurf_lib::reconstruction][INFO] Global mesh has 6023244 triangles and 3015096 vertices.
+[2021-02-09T00:16:14.337929+01:00][splashsurf::reconstruction][INFO] Writing surface mesh to "out/canyon_13353401_particles_surface.vtk"...
+[2021-02-09T00:16:14.604527+01:00][splashsurf::reconstruction][INFO] Done.
+[2021-02-09T00:16:14.613392+01:00][splashsurf::reconstruction][INFO] Successfully finished processing all inputs.
+[2021-02-09T00:16:14.613399+01:00][splashsurf][INFO] Timings:
+[2021-02-09T00:16:14.613479+01:00][splashsurf][INFO] surface reconstruction cli: 100.00%, 2935.77ms avg @ 0.34Hz (1 call)
+[2021-02-09T00:16:14.613481+01:00][splashsurf][INFO]   loading particle positions: 4.06%, 119.17ms avg @ 0.34Hz (1 call)
+[2021-02-09T00:16:14.613483+01:00][splashsurf][INFO]   compute minimum enclosing aabb: 0.26%, 7.61ms avg @ 0.34Hz (1 call)
+[2021-02-09T00:16:14.613484+01:00][splashsurf][INFO]   reconstruct_surface_domain_decomposition: 86.30%, 2533.51ms avg @ 0.34Hz (1 call)
+[2021-02-09T00:16:14.613485+01:00][splashsurf][INFO]     octree subdivide_recursively_margin_par: 7.28%, 184.32ms avg @ 0.39Hz (1 call)
+[2021-02-09T00:16:14.613486+01:00][splashsurf][INFO]     parallel subdomain particle density computation: 33.43%, 847.00ms avg @ 0.39Hz (1 call)
+[2021-02-09T00:16:14.613487+01:00][splashsurf][INFO]       visit octree node for density computation: 3116.00%, 23.88ms avg @ 1304.61Hz (1105 calls)
+[2021-02-09T00:16:14.613488+01:00][splashsurf][INFO]         compute_particle_densities_and_neighbors: 96.55%, 26.35ms avg @ 36.64Hz (967 calls)
+[2021-02-09T00:16:14.613489+01:00][splashsurf][INFO]           neighborhood_search: 88.00%, 23.19ms avg @ 37.95Hz (967 calls)
+[2021-02-09T00:16:14.613490+01:00][splashsurf][INFO]             sequential_generate_cell_to_particle_map: 5.92%, 1.37ms avg @ 43.12Hz (967 calls)
+[2021-02-09T00:16:14.613491+01:00][splashsurf][INFO]             calculate_particle_neighbors_seq: 78.63%, 18.23ms avg @ 43.12Hz (967 calls)
+[2021-02-09T00:16:14.613492+01:00][splashsurf][INFO]           sequential_compute_particle_densities: 11.99%, 3.16ms avg @ 37.95Hz (967 calls)
+[2021-02-09T00:16:14.613493+01:00][splashsurf][INFO]         update global density values: 1.38%, 0.38ms avg @ 36.64Hz (967 calls)
+[2021-02-09T00:16:14.613494+01:00][splashsurf][INFO]     parallel domain decomposed surf. rec. with stitching: 57.10%, 1446.64ms avg @ 0.39Hz (1 call)
+[2021-02-09T00:16:14.613495+01:00][splashsurf][INFO]       visit octree node (reconstruct or stitch): 2812.08%, 36.81ms avg @ 763.84Hz (1105 calls)
+[2021-02-09T00:16:14.613496+01:00][splashsurf][INFO]         reconstruct_surface_patch: 96.80%, 50.36ms avg @ 19.22Hz (782 calls)
+[2021-02-09T00:16:14.613497+01:00][splashsurf][INFO]           sequential_generate_sparse_density_map_subdomain: 89.21%, 44.92ms avg @ 19.86Hz (782 calls)
+[2021-02-09T00:16:14.613498+01:00][splashsurf][INFO]           triangulate_density_map_append: 10.78%, 5.43ms avg @ 19.86Hz (782 calls)
+[2021-02-09T00:16:14.613499+01:00][splashsurf][INFO]             interpolate_points_to_cell_data_skip_boundary: 83.44%, 4.53ms avg @ 184.17Hz (782 calls)
+[2021-02-09T00:16:14.613500+01:00][splashsurf][INFO]               generate_iso_surface_vertices: 99.97%, 4.53ms avg @ 220.72Hz (782 calls)
+[2021-02-09T00:16:14.613501+01:00][splashsurf][INFO]             relative_to_threshold_postprocessing: 7.18%, 0.39ms avg @ 184.17Hz (782 calls)
+[2021-02-09T00:16:14.613502+01:00][splashsurf][INFO]             triangulate_with_criterion: 6.73%, 0.37ms avg @ 184.17Hz (782 calls)
+[2021-02-09T00:16:14.613503+01:00][splashsurf][INFO]         stitch_surface_patches: 2.85%, 8.39ms avg @ 3.39Hz (138 calls)
+[2021-02-09T00:16:14.613504+01:00][splashsurf][INFO]           stitch_children_orthogonal_to: 99.87%, 2.79ms avg @ 357.60Hz (414 calls)
+[2021-02-09T00:16:14.613505+01:00][splashsurf][INFO]             stitch_surface_patches: 99.92%, 1.20ms avg @ 835.51Hz (966 calls)
+[2021-02-09T00:16:14.613506+01:00][splashsurf][INFO]               interpolate_points_to_cell_data_skip_boundary: 17.32%, 0.21ms avg @ 836.16Hz (966 calls)
+[2021-02-09T00:16:14.613507+01:00][splashsurf][INFO]                 generate_iso_surface_vertices: 99.82%, 0.21ms avg @ 4827.46Hz (966 calls)
+[2021-02-09T00:16:14.613508+01:00][splashsurf][INFO]               relative_to_threshold_postprocessing: 2.45%, 0.03ms avg @ 836.16Hz (966 calls)
+[2021-02-09T00:16:14.613509+01:00][splashsurf][INFO]               triangulate_with_criterion: 2.44%, 0.03ms avg @ 836.16Hz (966 calls)
+[2021-02-09T00:16:14.613511+01:00][splashsurf][INFO]   write surface mesh to file: 9.08%, 266.61ms avg @ 0.34Hz (1 call)
 ```
 
 ### Sequences of files
@@ -202,6 +152,121 @@ Files with the "`.xyz`" extension are interpreted as raw bytes of `f32` values i
 ## Output file formats
 
 Currently, only VTK files are supported for output.
+
+## All command line options
+
+### The `reconstruct` command
+```
+splashsurf-reconstruct 0.6.0
+Reconstruct a surface from particle data
+
+USAGE:
+    splashsurf reconstruct [OPTIONS] --cube-size <cube-size> --particle-radius <particle-radius> --smoothing-length <smoothing-length>
+
+FLAGS:
+    -h, --help       Prints help information
+    -V, --version    Prints version information
+
+OPTIONS:
+        --check-mesh <check-mesh>
+            Whether to check the final mesh for problems such as holes (note that when stitching is disabled this will
+            lead to a lot of reported problems) [default: off]  [possible values: on, off]
+        --cube-size <cube-size>
+            The cube edge length used for marching cubes in multiplies of the particle radius, corresponds to the cell
+            size of the implicit background grid
+        --domain-max <domain-max> <domain-max> <domain-max>
+            Upper corner of the domain where surface reconstruction should be performed, format:domain-
+            max=x_max;y_max;z_max (requires domain-min to be specified)
+        --domain-min <domain-min> <domain-min> <domain-min>
+            Lower corner of the domain where surface reconstruction should be performed, format: domain-
+            min=x_min;y_min;z_min (requires domain-max to be specified)
+    -d, --double-precision <double-precision>
+            Whether to enable the use of double precision for all computations [default: off]  [possible values: on,
+            off]
+    -i, --input-file <input-file>
+            Path to the input file where the particle positions are stored (supported formats: VTK, binary f32 XYZ, PLY,
+            BGEO)
+    -s, --input_sequence_pattern <input_sequence_pattern>
+            Path to a sequence of particle files that should be processed, use `{}` in the filename to indicate a
+            placeholder
+    -n, --num-threads <num-threads>
+            Set the number of threads for the worker thread pool
+
+        --octree-decomposition <octree-decomposition>
+            Whether to enable spatial decomposition using an octree (faster) instead of a global approach [default: on]
+            [possible values: on, off]
+        --octree-ghost-margin-factor <octree-ghost-margin-factor>
+            Safety factor applied to the kernel compact support radius when it's used as a margin to collect ghost
+            particles in the leaf nodes when performing the spatial decomposition
+        --octree-global-density <octree-global-density>
+            Whether to compute particle densities in a global step before domain decomposition (slower) [default: off]
+            [possible values: on, off]
+        --octree-max-particles <octree-max-particles>
+            The maximum number of particles for leaf nodes of the octree, default is to compute it based on the number
+            of threads and particles
+        --octree-stitch-subdomains <octree-stitch-subdomains>
+            Whether to enable stitching of the disconnected local meshes resulting from the reconstruction when spatial
+            decomposition is enabled (slower, but without stitching meshes will not be closed) [default: on]  [possible
+            values: on, off]
+        --octree-sync-local-density <octree-sync-local-density>
+            Whether to compute particle densities per subdomain but synchronize densities for ghost-particles (faster,
+            recommended). Note: if both this and global particle density computation is disabled the ghost particle
+            margin has to be increased to at least 2.0 to compute correct density values for ghost particles [default:
+            on]  [possible values: on, off]
+        --output-dir <output-dir>
+            Optional base directory for all output files (default: current working directory)
+
+        --output-dm-grid <output-dm-grid>
+            Optional filename for writing the grid representation of the intermediate density map to disk
+
+        --output-dm-points <output-dm-points>
+            Optional filename for writing the point cloud representation of the intermediate density map to disk
+
+    -o <output-file>
+            Filename for writing the reconstructed surface to disk (default: "{original_filename}_surface.vtk")
+
+        --output-octree <output-octree>
+            Optional filename for writing the octree used to partition the particles to disk
+
+        --mt-files <parallelize-over-files>
+            Flag to enable multi-threading to process multiple input files in parallel [default: off]  [possible values:
+            on, off]
+        --mt-particles <parallelize-over-particles>
+            Flag to enable multi-threading for a single input file by processing chunks of particles in parallel
+            [default: on]  [possible values: on, off]
+        --particle-radius <particle-radius>                          The particle radius of the input data
+        --rest-density <rest-density>                                The rest density of the fluid [default: 1000.0]
+        --smoothing-length <smoothing-length>
+            The smoothing length radius used for the SPH kernel, the kernel compact support radius will be twice the
+            smoothing length (in multiplies of the particle radius)
+        --surface-threshold <surface-threshold>
+            The iso-surface threshold for the density, i.e. the normalized value of the reconstructed density level that
+            indicates the fluid surface (in multiplies of the rest density) [default: 0.6]
+```
+
+### The `convert` subcommand
+```
+splashsurf-convert 0.6.0
+Convert between particle formats (supports the same input and output formats as the reconstruction)
+
+USAGE:
+    splashsurf convert [FLAGS] [OPTIONS] -i <input-file> -o <output-file>
+
+FLAGS:
+    -h, --help         Prints help information
+        --overwrite    Whether to overwrite existing files without asking
+    -V, --version      Prints version information
+
+OPTIONS:
+        --domain-max <domain-max> <domain-max> <domain-max>
+            Lower corner of the domain of particles to keep, format:domain-max=x_max;y_max;z_max (requires domain-min to
+            be specified)
+        --domain-min <domain-min> <domain-min> <domain-min>
+            Lower corner of the domain of particles to keep, format: domain-min=x_min;y_min;z_min (requires domain-max
+            to be specified)
+    -i <input-file>                                            Path to the input file with particles to read
+    -o <output-file>                                           Path to the output file
+```
 
 # License
 
