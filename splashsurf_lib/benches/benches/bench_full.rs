@@ -1,9 +1,6 @@
 use criterion::{criterion_group, Criterion};
 use nalgebra::Vector3;
-use splashsurf_lib::{
-    reconstruct_surface, reconstruct_surface_inplace, Parameters, SpatialDecompositionParameters,
-    SubdivisionCriterion, SurfaceReconstruction,
-};
+use splashsurf_lib::{reconstruct_surface, reconstruct_surface_inplace, Parameters, SpatialDecompositionParameters, SubdivisionCriterion, SurfaceReconstruction, ParticleDensityComputationStrategy};
 use std::time::Duration;
 
 use super::io::vtk::particles_from_vtk;
@@ -14,7 +11,7 @@ use super::io::vtk::write_vtk;
 /*
 pub fn surface_reconstruction_canyon(c: &mut Criterion) {
     let particle_positions: &Vec<Vector3<f32>> =
-        &particles_from_xyz("../data/canyon_13353401_particles.xyz").unwrap();
+        &super::io::xyz::particles_from_xyz("../../canyon_13353401_particles.xyz").unwrap();
 
     let particle_radius = 0.011;
     let compact_support_radius = 4.0 * particle_radius;

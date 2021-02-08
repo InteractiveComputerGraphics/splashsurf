@@ -9,7 +9,7 @@ pub mod vtk {
     use anyhow::{anyhow, Context};
 
     use vtkio::model::{ByteOrder, DataSet, Version, Vtk};
-    use vtkio::{export_ascii, import_be, IOBuffer};
+    use vtkio::IOBuffer;
 
     pub fn particles_from_vtk<R: Real, P: AsRef<Path>>(
         vtk_file: P,
@@ -26,6 +26,7 @@ pub mod vtk {
         let vtk_file = Vtk {
             version: Version::new((4, 1)),
             title: title.to_string(),
+            file_path: None,
             byte_order: ByteOrder::BigEndian,
             data: data.into(),
         };
@@ -34,12 +35,12 @@ pub mod vtk {
         if let Some(dir) = filename.parent() {
             create_dir_all(dir).context("Failed to create parent directory of output file")?;
         }
-        export_ascii(vtk_file, filename).context("Error while writing VTK output to file")
+        vtk_file.export_ascii(filename).context("Error while writing VTK output to file")
     }
 
     pub fn read_vtk<P: AsRef<Path>>(filename: P) -> Result<DataSet, vtkio::Error> {
         let filename = filename.as_ref();
-        import_be(filename).map(|vtk| vtk.data)
+        Vtk::import_legacy_be(filename).map(|vtk| vtk.data)
     }
 
     pub fn particles_from_coords<RealOut: Real, RealIn: Real>(
@@ -68,7 +69,7 @@ pub mod vtk {
         if let DataSet::UnstructuredGrid { pieces, .. } = dataset {
             if let Some(piece) = pieces.into_iter().next() {
                 let points = piece
-                    .load_piece_data()
+                    .into_loaded_piece_data(None)
                     .context("Failed to load unstructured grid piece")?
                     .points;
 

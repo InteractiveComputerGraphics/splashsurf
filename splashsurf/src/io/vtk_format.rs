@@ -11,7 +11,7 @@ use splashsurf_lib::vtkio;
 use splashsurf_lib::Real;
 
 use vtkio::model::{ByteOrder, DataSet, Version, Vtk};
-use vtkio::{export_be, import_be, IOBuffer};
+use vtkio::IOBuffer;
 
 /// Tries to read a set of particles from the VTK file at the given path
 pub fn particles_from_vtk<R: Real, P: AsRef<Path>>(
@@ -42,6 +42,7 @@ pub fn write_vtk<P: AsRef<Path>>(
     let vtk_file = Vtk {
         version: Version::new((4, 1)),
         title: title.to_string(),
+        file_path: None,
         byte_order: ByteOrder::BigEndian,
         data: data.into(),
     };
@@ -50,13 +51,15 @@ pub fn write_vtk<P: AsRef<Path>>(
     if let Some(dir) = filename.parent() {
         create_dir_all(dir).context("Failed to create parent directory of output file")?;
     }
-    export_be(vtk_file, filename).context("Error while writing VTK output to file")
+    vtk_file
+        .export_be(filename)
+        .context("Error while writing VTK output to file")
 }
 
 /// Tries to read the given file into a VTK `DataSet`
 pub fn read_vtk<P: AsRef<Path>>(filename: P) -> Result<DataSet, vtkio::Error> {
     let filename = filename.as_ref();
-    import_be(filename).map(|vtk| vtk.data)
+    Vtk::import_legacy_be(filename).map(|vtk| vtk.data)
 }
 
 /// Tries to convert a vector of consecutive coordinate triplets into a vector of `Vector3`, also converts between floating point types
@@ -85,7 +88,7 @@ pub fn particles_from_dataset<R: Real>(dataset: DataSet) -> Result<Vec<Vector3<R
     if let DataSet::UnstructuredGrid { pieces, .. } = dataset {
         if let Some(piece) = pieces.into_iter().next() {
             let points = piece
-                .load_piece_data()
+                .into_loaded_piece_data(None)
                 .context("Failed to load unstructured grid piece")?
                 .points;
 

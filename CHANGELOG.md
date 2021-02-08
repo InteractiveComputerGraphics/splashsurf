@@ -19,6 +19,7 @@ Otherwise this release contains just some small changes to command line paramete
  - CLI: The CLI now also prints detailed profiling/timing output when running in parallel with domain decomposition thanks to the new `profile` macro
  - CLI: Add `--domain-min` and `--domain-max` flags to the `convert` subcommand that allows to filter out particles
  - CLI: Remove the `--splash-detection-radius` flag as it did not work for a couple of releases
+ - Lib: Update to [`vtkio`](https://github.com/elrnv/vtkio) 0.6.0
 
 ## Version 0.5.1
 
