@@ -1,6 +1,10 @@
 use criterion::{criterion_group, Criterion};
 use nalgebra::Vector3;
-use splashsurf_lib::{reconstruct_surface, reconstruct_surface_inplace, Parameters, SpatialDecompositionParameters, SubdivisionCriterion, SurfaceReconstruction, ParticleDensityComputationStrategy};
+use splashsurf_lib::{
+    reconstruct_surface, reconstruct_surface_inplace, Parameters,
+    ParticleDensityComputationStrategy, SpatialDecompositionParameters, SubdivisionCriterion,
+    SurfaceReconstruction,
+};
 use std::time::Duration;
 
 use super::io::vtk::particles_from_vtk;

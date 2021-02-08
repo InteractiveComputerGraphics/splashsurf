@@ -78,7 +78,9 @@ pub mod vtk {
         if let Some(dir) = filename.parent() {
             create_dir_all(dir).context("Failed to create parent directory of output file")?;
         }
-        vtk_file.export_ascii(filename).context("Error while writing VTK output to file")
+        vtk_file
+            .export_ascii(filename)
+            .context("Error while writing VTK output to file")
     }
 
     pub fn read_vtk<P: AsRef<Path>>(filename: P) -> Result<DataSet, vtkio::Error> {
