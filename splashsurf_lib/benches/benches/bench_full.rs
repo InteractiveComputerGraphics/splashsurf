@@ -52,6 +52,8 @@ pub fn surface_reconstruction_canyon(c: &mut Criterion) {
                 subdivision_criterion: SubdivisionCriterion::MaxParticleCountAuto,
                 ghost_particle_safety_factor: Some(1.0),
                 enable_stitching: false,
+                particle_density_computation:
+                    ParticleDensityComputationStrategy::SynchronizeSubdomains,
             });
 
             reconstruction =
@@ -66,6 +68,8 @@ pub fn surface_reconstruction_canyon(c: &mut Criterion) {
                 subdivision_criterion: SubdivisionCriterion::MaxParticleCountAuto,
                 ghost_particle_safety_factor: Some(1.0),
                 enable_stitching: true,
+                particle_density_computation:
+                    ParticleDensityComputationStrategy::SynchronizeSubdomains,
             });
 
             reconstruction =
@@ -124,6 +128,8 @@ pub fn surface_reconstruction_dam_break(c: &mut Criterion) {
                 subdivision_criterion: SubdivisionCriterion::MaxParticleCountAuto,
                 ghost_particle_safety_factor: Some(1.0),
                 enable_stitching: false,
+                particle_density_computation:
+                    ParticleDensityComputationStrategy::SynchronizeSubdomains,
             });
 
             reconstruction =
@@ -140,6 +146,8 @@ pub fn surface_reconstruction_dam_break(c: &mut Criterion) {
                     subdivision_criterion: SubdivisionCriterion::MaxParticleCountAuto,
                     ghost_particle_safety_factor: Some(1.0),
                     enable_stitching: true,
+                    particle_density_computation:
+                        ParticleDensityComputationStrategy::SynchronizeSubdomains,
                 });
 
                 reconstruction =
@@ -201,6 +209,8 @@ pub fn surface_reconstruction_double_dam_break(c: &mut Criterion) {
                 subdivision_criterion: SubdivisionCriterion::MaxParticleCountAuto,
                 ghost_particle_safety_factor: Some(1.0),
                 enable_stitching: false,
+                particle_density_computation:
+                    ParticleDensityComputationStrategy::SynchronizeSubdomains,
             });
 
             reconstruction =
@@ -217,6 +227,8 @@ pub fn surface_reconstruction_double_dam_break(c: &mut Criterion) {
                     subdivision_criterion: SubdivisionCriterion::MaxParticleCountAuto,
                     ghost_particle_safety_factor: Some(1.0),
                     enable_stitching: true,
+                    particle_density_computation:
+                        ParticleDensityComputationStrategy::SynchronizeSubdomains,
                 });
 
                 reconstruction =
@@ -287,6 +299,8 @@ pub fn surface_reconstruction_double_dam_break_inplace(c: &mut Criterion) {
                     subdivision_criterion: SubdivisionCriterion::MaxParticleCountAuto,
                     ghost_particle_safety_factor: Some(1.0),
                     enable_stitching: false,
+                    particle_density_computation:
+                        ParticleDensityComputationStrategy::SynchronizeSubdomains,
                 });
 
                 reconstruct_surface_inplace::<i64, _>(
@@ -308,6 +322,8 @@ pub fn surface_reconstruction_double_dam_break_inplace(c: &mut Criterion) {
                     subdivision_criterion: SubdivisionCriterion::MaxParticleCountAuto,
                     ghost_particle_safety_factor: Some(1.0),
                     enable_stitching: true,
+                    particle_density_computation:
+                        ParticleDensityComputationStrategy::SynchronizeSubdomains,
                 });
 
                 reconstruct_surface_inplace::<i64, _>(
