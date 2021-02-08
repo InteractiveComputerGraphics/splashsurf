@@ -41,26 +41,6 @@ pub(crate) fn reconstruct_surface_global<'a, I: Index, R: Real>(
         &mut output_surface.mesh,
     );
 
-    /*
-    let particle_indices = splash_detection_radius.map(|splash_detection_radius| {
-        let neighborhood_list = neighborhood_search::search::<I, R>(
-            &grid.aabb(),
-            particle_positions,
-            splash_detection_radius,
-            enable_multi_threading,
-        );
-
-        let mut active_particles = Vec::new();
-        for (particle_i, neighbors) in neighborhood_list.iter().enumerate() {
-            if !neighbors.is_empty() {
-                active_particles.push(particle_i);
-            }
-        }
-
-        active_particles
-    });
-    */
-
     // TODO: Set this correctly
     output_surface.density_map = None;
 }

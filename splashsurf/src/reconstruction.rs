@@ -44,10 +44,7 @@ pub struct ReconstructSubcommandArgs {
     /// The smoothing length radius used for the SPH kernel, the kernel compact support radius will be twice the smoothing length (in multiplies of the particle radius)
     #[structopt(long)]
     smoothing_length: f64,
-    /// If a particle has no neighbors in this radius (in multiplies of the particle radius) it is considered as a free particle
-    #[structopt(long)]
-    splash_detection_radius: Option<f64>,
-    /// The marching cubes grid size in multiplies of the particle radius
+    /// The cube edge length used for marching cubes in multiplies of the particle radius, corresponds to the cell size of the implicit background grid
     #[structopt(long)]
     cube_size: f64,
     /// The iso-surface threshold for the density, i.e. value of the reconstructed density that indicates the fluid surface (in multiplies of the rest density)
@@ -224,9 +221,6 @@ mod arguments {
 
             // Scale kernel radius and cube size by particle radius
             let compact_support_radius = args.particle_radius * 2.0 * args.smoothing_length;
-            let splash_detection_radius = args
-                .splash_detection_radius
-                .map(|r| args.particle_radius * r);
             let cube_size = args.particle_radius * args.cube_size;
 
             let spatial_decomposition = if !args.octree_decomposition.into_bool() {
@@ -267,7 +261,6 @@ mod arguments {
                 particle_radius: args.particle_radius,
                 rest_density: args.rest_density,
                 compact_support_radius,
-                splash_detection_radius,
                 cube_size,
                 iso_surface_threshold: args.surface_threshold,
                 domain_aabb,

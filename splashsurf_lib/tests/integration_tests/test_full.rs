@@ -30,7 +30,6 @@ fn params<R: Real>(
         particle_radius,
         rest_density: R::from_f64(1000.0).unwrap(),
         compact_support_radius,
-        splash_detection_radius: None,
         cube_size,
         iso_surface_threshold: R::from_f64(0.6).unwrap(),
         domain_aabb: None,

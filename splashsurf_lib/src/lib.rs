@@ -170,9 +170,6 @@ pub struct Parameters<R: Real> {
     pub rest_density: R,
     /// Compact support radius of the kernel, i.e. distance from the particle where kernel reaches zero (in distance units, not relative to particle radius)
     pub compact_support_radius: R,
-    /// Particles without neighbors within the splash detection radius are considered "splash" or "free particles".
-    /// They are filtered out and processed separately. Currently they are only skipped during the surface reconstruction.
-    pub splash_detection_radius: Option<R>,
     /// Edge length of the marching cubes implicit background grid (in distance units, not relative to particle radius)
     pub cube_size: R,
     /// Density threshold value to distinguish between the inside (above threshold) and outside (below threshold) of the fluid
@@ -194,10 +191,6 @@ impl<R: Real> Parameters<R> {
             particle_radius: self.particle_radius.try_convert()?,
             rest_density: self.rest_density.try_convert()?,
             compact_support_radius: self.compact_support_radius.try_convert()?,
-            splash_detection_radius: map_option!(
-                &self.splash_detection_radius,
-                r => r.try_convert()?
-            ),
             cube_size: self.cube_size.try_convert()?,
             iso_surface_threshold: self.iso_surface_threshold.try_convert()?,
             domain_aabb: map_option!(&self.domain_aabb, aabb => aabb.try_convert()?),
