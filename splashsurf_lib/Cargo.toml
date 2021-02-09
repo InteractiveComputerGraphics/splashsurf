@@ -14,8 +14,11 @@ repository = "https://github.com/w1th0utnam3/splashsurf"
 documentation = "https://docs.rs/splashsurf_lib"
 
 [package.metadata.docs.rs]
+# RUSTDOCFLAGS="--cfg doc_cfg" cargo +nightly doc --all-features --no-deps --open
 # Build with all features to properly document everything
 all-features = true
+# Run with specific configuration for special doc attributes
+rustdoc-args = ["--cfg", "doc_cfg"]
 # Build only for a single target as this crate does not have any platform specific behavior
 default-target = "x86_64-unknown-linux-gnu"
 targets = []

@@ -70,6 +70,7 @@
 ///     profile!(inner_id, "inner scope", parent = outer_id);
 ///     ```
 #[macro_export]
+#[cfg_attr(doc_cfg, doc(cfg(feature = "profiling")))]
 macro_rules! profile {
     ($name:expr) => {
         use $crate::profile_impl;

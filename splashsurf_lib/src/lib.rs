@@ -1,23 +1,22 @@
+#![cfg_attr(doc_cfg, feature(doc_cfg))]
+
 //!
 //! Library for surface reconstruction of SPH particle data using marching cubes.
 //!
 //! Entry points are the [`reconstruct_surface`] or [`reconstruct_surface_inplace`] functions.
 //!
 //! ## Feature flags
-//! The following features are all non-default features to reduces the amount of additional dependencies.
+//! The following features are all non-default features to reduce the amount of additional dependencies.
 //!
-//! #### vtk_extras
-//! Enables helper functions and trait implementations to export meshes using [`vtkio`](https://github.com/elrnv/vtkio).
-//! In particular it adds `From` impls for the [mesh](crate::mesh) types used by this crate to convert them to
-//! [`vtkio::model::UnstructuredGridPiece`](https://docs.rs/vtkio/0.6.*/vtkio/model/struct.UnstructuredGridPiece.html) and [`vtkio::model::DataSet`](https://docs.rs/vtkio/0.6.*/vtkio/model/enum.DataSet.html)
-//! types. The crate exposes its `vtkio` dependency as `splashsurflib::vtkio` if the feature is enabled.
-//!
-//! #### profiling
-//! Enables profiling of internal functions. The resulting data can be displayed using the functions
-//! from the [`profiling`] module. Furthermore, it exposes the [`profile`] macro that can be used e.g.
-//! by binary crates calling into this library to add their own profiling scopes to the measurements.
-//! If this features is not enabled, the macro will just expend to a no-op and remove the (small)
-//! performance overhead of the profiling.
+//! - **`vtk_extras`**: Enables helper functions and trait implementations to export meshes using [`vtkio`](https://github.com/elrnv/vtkio).
+//!  In particular it adds `From` impls for the [mesh](crate::mesh) types used by this crate to convert them to
+//!  [`vtkio::model::UnstructuredGridPiece`](https://docs.rs/vtkio/0.6.*/vtkio/model/struct.UnstructuredGridPiece.html) and [`vtkio::model::DataSet`](https://docs.rs/vtkio/0.6.*/vtkio/model/enum.DataSet.html)
+//!  types. If the feature is enabled, The crate exposes its `vtkio` dependency as `splashsurflib::vtkio`.
+//! - **`profiling`**: Enables profiling of internal functions. The resulting data can be displayed using the functions
+//!  from the [`profiling`] module. Furthermore, it exposes the [`profile`] macro that can be used e.g.
+//!  by binary crates calling into this library to add their own profiling scopes to the measurements.
+//!  If this features is not enabled, the macro will just expend to a no-op and remove the (small)
+//!  performance overhead of the profiling.
 //!
 
 use log::info;
@@ -40,6 +39,7 @@ use crate::octree::Octree;
 use crate::workspace::ReconstructionWorkspace;
 
 #[cfg(feature = "profiling")]
+#[cfg_attr(doc_cfg, doc(cfg(feature = "profiling")))]
 pub mod profiling;
 #[doc(hidden)]
 pub mod profiling_macro;

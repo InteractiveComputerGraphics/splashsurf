@@ -277,6 +277,7 @@ where
     PointDataT: Real,
 {
     /// Creates a [`vtkio::model::UnstructuredGridPiece`](https://docs.rs/vtkio/0.6.*/vtkio/model/struct.UnstructuredGridPiece.html) representing this mesh
+    #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
     pub fn to_dataset(&'a self) -> UnstructuredGridPiece {
         let mut grid_piece: UnstructuredGridPiece = (&self.mesh).into();
         grid_piece
@@ -293,6 +294,7 @@ where
     &'a MeshT: Into<UnstructuredGridPiece>,
 {
     /// Creates a [`vtkio::model::UnstructuredGridPiece`](https://docs.rs/vtkio/0.6.*/vtkio/model/struct.UnstructuredGridPiece.html) representing this mesh
+    #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
     pub fn to_dataset(&'a self) -> UnstructuredGridPiece {
         let mut grid_piece: UnstructuredGridPiece = (&self.mesh).into();
         grid_piece
@@ -304,6 +306,7 @@ where
 }
 
 #[cfg(feature = "vtk_extras")]
+#[doc(hidden)]
 /// Trait implementations to convert meshes into types supported by [`vtkio`](https://github.com/elrnv/vtkio)
 pub mod vtk_helper {
     use vtkio::model::{
@@ -314,6 +317,7 @@ pub mod vtk_helper {
     use super::{HexMesh3d, PointCloud3d, Real, TriMesh3d};
 
     /// Creates a [`vtkio::model::UnstructuredGridPiece`](https://docs.rs/vtkio/0.6.*/vtkio/model/struct.UnstructuredGridPiece.html) representing this mesh
+    #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
     impl<R> From<&TriMesh3d<R>> for UnstructuredGridPiece
     where
         R: Real,
@@ -343,6 +347,7 @@ pub mod vtk_helper {
     }
 
     /// Creates a [`vtkio::model::UnstructuredGridPiece`](https://docs.rs/vtkio/0.6.*/vtkio/model/struct.UnstructuredGridPiece.html) representing this mesh
+    #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
     impl<'a, R> From<&'a HexMesh3d<R>> for UnstructuredGridPiece
     where
         R: Real,
@@ -372,6 +377,7 @@ pub mod vtk_helper {
     }
 
     /// Creates a [`vtkio::model::UnstructuredGridPiece`](https://docs.rs/vtkio/0.6.*/vtkio/model/struct.UnstructuredGridPiece.html) representing this point cloud
+    #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
     impl<'a, R> From<&'a PointCloud3d<R>> for UnstructuredGridPiece
     where
         R: Real,
@@ -401,6 +407,7 @@ pub mod vtk_helper {
     }
 
     /// Creates a [`vtkio::model::UnstructuredGridPiece`](https://docs.rs/vtkio/0.6.*/vtkio/model/struct.UnstructuredGridPiece.html) representing this mesh and wraps it into a [`vtkio::model::DataSet`](https://docs.rs/vtkio/0.6.*/vtkio/model/enum.DataSet.html)
+    #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
     impl<R: Real> Into<DataSet> for &TriMesh3d<R> {
         fn into(self) -> DataSet {
             DataSet::inline(UnstructuredGridPiece::from(self))
@@ -408,6 +415,7 @@ pub mod vtk_helper {
     }
 
     /// Creates a [`vtkio::model::UnstructuredGridPiece`](https://docs.rs/vtkio/0.6.*/vtkio/model/struct.UnstructuredGridPiece.html) representing this mesh and wraps it into a [`vtkio::model::DataSet`](https://docs.rs/vtkio/0.6.*/vtkio/model/enum.DataSet.html)
+    #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
     impl<R: Real> Into<DataSet> for &HexMesh3d<R> {
         fn into(self) -> DataSet {
             DataSet::inline(UnstructuredGridPiece::from(self))
@@ -415,6 +423,7 @@ pub mod vtk_helper {
     }
 
     /// Creates a [`vtkio::model::UnstructuredGridPiece`](https://docs.rs/vtkio/0.6.*/vtkio/model/struct.UnstructuredGridPiece.html) representing this point cloud and wraps it into a [`vtkio::model::DataSet`](https://docs.rs/vtkio/0.6.*/vtkio/model/enum.DataSet.html)
+    #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
     impl<R: Real> Into<DataSet> for &PointCloud3d<R> {
         fn into(self) -> DataSet {
             DataSet::inline(UnstructuredGridPiece::from(self))
