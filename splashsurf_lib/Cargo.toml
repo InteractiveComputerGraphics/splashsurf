@@ -13,6 +13,13 @@ homepage = "https://github.com/w1th0utnam3/splashsurf"
 repository = "https://github.com/w1th0utnam3/splashsurf"
 documentation = "https://docs.rs/splashsurf_lib"
 
+[package.metadata.docs.rs]
+# Build with all features to properly document everything
+all-features = true
+# Build only for a single target as this crate does not have any platform specific behavior
+default-target = "x86_64-unknown-linux-gnu"
+targets = []
+
 # Ignore the tests (especially the test mesh files) for publishing
 exclude = [
     "tests/*",
