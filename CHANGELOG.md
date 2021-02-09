@@ -3,6 +3,10 @@
 ### Short-term goals
  - Implement export of surface normals via the CLI
 
+## Version 0.6.1
+
+ - Lib: Add docs.rs metadata to manifest to document all features and to build only for a single target
+
 ## Version 0.6.0
 
 This release fixes a couple of bugs that may lead to inconsistent surface reconstructions when using domain decomposition (i.e. reconstructions with artificial bumps exactly at the subdomain boundaries, especially on flat surfaces). Currently there are no other known bugs and the domain decomposed approach appears to be really fast and robust.
