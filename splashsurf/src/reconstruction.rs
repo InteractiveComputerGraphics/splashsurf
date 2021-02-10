@@ -22,12 +22,7 @@ pub struct ReconstructSubcommandArgs {
     #[structopt(short = "-i", long, parse(from_os_str))]
     input_file: Option<PathBuf>,
     /// Path to a sequence of particle files that should be processed, use `{}` in the filename to indicate a placeholder
-    #[structopt(
-        name = "input_sequence_pattern",
-        short = "-s",
-        long,
-        parse(from_os_str)
-    )]
+    #[structopt(short = "-s", long, parse(from_os_str))]
     input_sequence: Option<PathBuf>,
     /// Filename for writing the reconstructed surface to disk (default: "{original_filename}_surface.vtk")
     #[structopt(short = "-o", parse(from_os_str))]
