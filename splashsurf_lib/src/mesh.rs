@@ -335,7 +335,7 @@ pub mod vtk_helper {
                 let mut vertices = Vec::with_capacity(mesh.triangles.len() * (3 + 1));
                 for triangle in mesh.triangles.iter() {
                     vertices.push(3);
-                    vertices.extend(triangle.iter().copied().map(|i| i as u32));
+                    vertices.extend(triangle.iter().map(|&i| i as u32));
                 }
                 vertices
             };
@@ -365,7 +365,7 @@ pub mod vtk_helper {
                 let mut vertices = Vec::with_capacity(mesh.cells.len() * (8 + 1));
                 for cell in mesh.cells.iter() {
                     vertices.push(8);
-                    vertices.extend(cell.iter().copied().map(|i| i as u32));
+                    vertices.extend(cell.iter().map(|&i| i as u32));
                 }
                 vertices
             };

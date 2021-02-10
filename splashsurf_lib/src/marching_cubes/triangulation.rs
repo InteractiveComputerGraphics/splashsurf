@@ -167,15 +167,10 @@ impl<I: Index, R: Real, S: Subdomain<I, R>> TriangulationCriterion<I, R, S>
         let index = local_cell.index();
 
         // Skip only boundary cells in directions orthogonal to the stitching axis
-        !self
-            .stitching_axis
-            .orthogonal_axes()
-            .iter()
-            .copied()
-            .any(|axis| {
-                index[axis.dim()] == I::zero()
-                    || index[axis.dim()] == subdomain_grid.cells_per_dim()[axis.dim()] - I::one()
-            })
+        !self.stitching_axis.orthogonal_axes().iter().any(|&axis| {
+            index[axis.dim()] == I::zero()
+                || index[axis.dim()] == subdomain_grid.cells_per_dim()[axis.dim()] - I::one()
+        })
     }
 }
 

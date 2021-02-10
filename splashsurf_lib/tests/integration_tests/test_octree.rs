@@ -138,7 +138,7 @@ fn build_octree_from_vtk() {
 
             // Ensure that all particles are within extents of octree cell
             let aabb = node.aabb();
-            for idx in node_particles.iter().copied() {
+            for &idx in node_particles.iter() {
                 let particle = particles[idx];
                 assert!(aabb.contains_point(&particle));
             }
@@ -229,7 +229,7 @@ fn count_non_ghost_particles<I: Index, R: Real>(
     let mut non_ghost_particles = vec![0; particle_positions.len()];
     for node in octree.root().dfs_iter() {
         if let Some(particle_set) = node.data().particle_set() {
-            for idx in particle_set.particles.iter().copied() {
+            for &idx in particle_set.particles.iter() {
                 if node.aabb().contains_point(&particle_positions[idx]) {
                     non_ghost_particles[idx] += 1;
                 }

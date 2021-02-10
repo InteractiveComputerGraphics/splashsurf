@@ -324,7 +324,7 @@ pub fn marching_cubes_triangulation_iter(
 /// Converts an array of bool representing bits to the corresponding usize, the order of the bits is least to most significant
 fn flags_to_index(flags: &[bool; 8]) -> usize {
     let mut index = 0;
-    for bit in flags.iter().rev().copied() {
+    for &bit in flags.iter().rev() {
         index = (index << 1) | bit as usize
     }
 

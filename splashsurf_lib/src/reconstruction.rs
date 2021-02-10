@@ -510,8 +510,7 @@ impl<I: Index, R: Real> SurfaceReconstructionOctreeVisitor<I, R> {
         node_particle_positions.extend(
             node_particles
                 .iter()
-                .copied()
-                .map(|idx| global_particle_positions[idx]),
+                .map(|&idx| global_particle_positions[idx]),
         );
     }
 
@@ -527,8 +526,7 @@ impl<I: Index, R: Real> SurfaceReconstructionOctreeVisitor<I, R> {
         node_particle_densities.extend(
             node_particles
                 .iter()
-                .copied()
-                .map(|idx| global_particle_densities[idx]),
+                .map(|&idx| global_particle_densities[idx]),
         );
     }
 }

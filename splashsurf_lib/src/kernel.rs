@@ -40,7 +40,7 @@ pub fn cubic_kernel_r<R: Real>(r: R, h: R) -> R {
 #[test]
 fn test_cubic_kernel_r_compact_support() {
     let hs = [0.025, 0.1, 2.0];
-    for h in hs.iter().copied() {
+    for &h in hs.iter() {
         assert_eq!(cubic_kernel_r(h, h), 0.0);
         assert_eq!(cubic_kernel_r(2.0 * h, h), 0.0);
         assert_eq!(cubic_kernel_r(10.0 * h, h), 0.0);
@@ -54,7 +54,7 @@ fn test_cubic_kernel_r_integral() {
     let hs = [0.025, 0.1, 2.0];
     let n = 10;
 
-    for h in hs.iter().copied() {
+    for &h in hs.iter() {
         let dr = h / (n as f64);
         let dvol = dr * dr * dr;
 
