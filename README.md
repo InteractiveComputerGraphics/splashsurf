@@ -6,6 +6,23 @@
 
 Surface reconstruction library and CLI for particle data from SPH simulations, written in Rust.
 
+<p align="center">
+<img src="example_particles.png" alt="Image of the original particle data" width="32%"> <img src="example_coarse.png" alt="Image of a coarse reconstructed surface mesh" width="32%"> <img src="example_fine.png" alt="Image of a fine reconstructed surface mesh" width="32%">
+</p>
+
+`splashsurf` is a tool to reconstruct surfaces meshes from SPH particle data.
+The first image shows the visualization of a set of particles from an SPH fluid simulation from [SPlisHSPlasH](https://github.com/InteractiveComputerGraphics/SPlisHSPlasH).
+The particle radius is `0.025`. As the rendering of a fluid should not look like a ball pit, a surface mesh has to be
+reconstructed from this particle data. The next image shows a reconstructed surface mesh of the fluid produced by `splashsurf`
+with a "smoothing length" of `2.2` times the particles radius and a cell size of `1.1` times the particle radius. The
+third image shows a finer reconstruction with a cell size of `0.45` times the particle radius. These surface meshes can
+then be fed into 3D rendering software such as [Blender](https://www.blender.org/) to generate beautiful water animations.
+The result might look something like this (please excuse the lack of 3D rendering skills):
+
+<p align="center">
+<img src="https://raw.githubusercontent.com/w1th0utnam3/w1th0utnam3.github.io/master/splashsurf.gif" alt="Rendered water animation" width="96%">
+</p>
+
 **Contents**
 - [The `splashsurf` CLI](#the-splashsurf-cli)
   - [Introduction](#introduction)
