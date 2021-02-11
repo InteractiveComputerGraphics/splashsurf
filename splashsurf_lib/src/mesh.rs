@@ -2,7 +2,12 @@
 
 use crate::{new_map, Real};
 use nalgebra::{Unit, Vector3};
+use rayon::prelude::*;
+use std::cell::RefCell;
 use std::fmt::Debug;
+use thread_local::ThreadLocal;
+#[cfg(feature = "vtk_extras")]
+use vtkio::model::{Attribute, UnstructuredGridPiece};
 
 // TODO: Rename/restructure VTK helper implementations
 
@@ -63,6 +68,48 @@ impl<R: Real> TriMesh3d<R> {
         }
     }
 
+    /// Same as [`Self::vertex_normal_directions_inplace`] but assumes that the output is already zeroed
+    fn par_vertex_normal_directions_inplace_assume_zeroed(
+        &self,
+        normal_directions: &mut [Vector3<R>],
+    ) {
+        assert_eq!(normal_directions.len(), self.vertices.len());
+
+        let tl_normals = ThreadLocal::new();
+        let init_tl_normals = || RefCell::new(vec![Vector3::zeros(); normal_directions.len()]);
+
+        self.triangles.par_chunks(256).for_each(|tri_chunk| {
+            let mut tl_normals_ref = tl_normals.get_or(init_tl_normals).borrow_mut();
+            let tl_normals = &mut *tl_normals_ref;
+
+            for tri_verts in tri_chunk.iter() {
+                let v0 = &self.vertices[tri_verts[0]];
+                let v1 = &self.vertices[tri_verts[1]];
+                let v2 = &self.vertices[tri_verts[2]];
+                let normal = (v0 - v1).cross(&(v2 - v1));
+
+                tl_normals[tri_verts[0]] += normal;
+                tl_normals[tri_verts[1]] += normal;
+                tl_normals[tri_verts[2]] += normal;
+            }
+        });
+
+        let tl_normals = tl_normals
+            .into_iter()
+            .map(|cell| cell.into_inner())
+            .collect::<Vec<_>>();
+
+        normal_directions
+            .par_iter_mut()
+            .with_min_len(256)
+            .enumerate()
+            .for_each(|(i, out_normal)| {
+                for tl_normals in tl_normals.iter() {
+                    *out_normal += tl_normals[i];
+                }
+            });
+    }
+
     /// Computes the mesh's vertex normal directions inplace using an area weighted average of the adjacent triangle faces
     ///
     /// Note that this function only computes the normal directions, these vectors are **not normalized**!
@@ -109,8 +156,36 @@ impl<R: Real> TriMesh3d<R> {
 
         // ...then actually normalize them.
         for normal in normals.iter_mut() {
-            normal.renormalize();
+            let norm = (normal.x * normal.x + normal.y * normal.y + normal.z * normal.z).sqrt();
+            *normal.as_mut_unchecked() /= norm;
+            //normal.renormalize();
         }
+    }
+
+    /// Same as [`Self::par_vertex_normals_inplace`] but assumes that the output is already zeroed
+    fn par_vertex_normals_inplace_assume_zeroed<'a>(&self, normals: &'a mut [Unit<Vector3<R>>]) {
+        assert_eq!(normals.len(), self.vertices.len());
+
+        // First, compute the directions of the normals...
+        {
+            let normal_directions = unsafe {
+                // This is sound, as Unit<T> has repr(transparent)
+                let vector3_ptr = normals.as_mut_ptr() as *mut Vector3<R>;
+                let normal_directions: &'a mut _ =
+                    std::slice::from_raw_parts_mut(vector3_ptr, normals.len());
+                normal_directions
+            };
+            self.par_vertex_normal_directions_inplace_assume_zeroed(normal_directions);
+        }
+
+        // ...then actually normalize them.
+        normals.par_chunks_mut(256).for_each(|normal_chunk| {
+            for normal in normal_chunk.iter_mut() {
+                let norm = (normal.x * normal.x + normal.y * normal.y + normal.z * normal.z).sqrt();
+                *normal.as_mut_unchecked() /= norm;
+                //normal.renormalize();
+            }
+        });
     }
 
     /// Computes the mesh's vertex normals inplace using an area weighted average of the adjacent triangle faces
@@ -132,6 +207,30 @@ impl<R: Real> TriMesh3d<R> {
     pub fn vertex_normals(&self) -> Vec<Unit<Vector3<R>>> {
         let mut normals = vec![Unit::new_unchecked(Vector3::zeros()); self.vertices.len()];
         self.vertex_normals_inplace_assume_zeroed(normals.as_mut_slice());
+        normals
+    }
+
+    /// Computes the mesh's vertex normals inplace using an area weighted average of the adjacent triangle faces (parallelized version)
+    ///
+    /// The method will panic if the length of the output slice is different from the number of vertices of the mesh.
+    ///
+    /// The method does not make any assumptions about the values in the output slice.
+    pub fn par_vertex_normals_inplace(&self, normals: &mut [Unit<Vector3<R>>]) {
+        assert_eq!(normals.len(), self.vertices.len());
+
+        normals.par_chunks_mut(256).for_each(|normal_chunk| {
+            for normal in normal_chunk {
+                normal.as_mut_unchecked().fill(R::zero())
+            }
+        });
+
+        self.par_vertex_normals_inplace_assume_zeroed(normals);
+    }
+
+    /// Computes the mesh's vertex normals using an area weighted average of the adjacent triangle faces (parallelized version)
+    pub fn par_vertex_normals(&self) -> Vec<Unit<Vector3<R>>> {
+        let mut normals = vec![Unit::new_unchecked(Vector3::zeros()); self.vertices.len()];
+        self.par_vertex_normals_inplace_assume_zeroed(normals.as_mut_slice());
         normals
     }
 
@@ -266,9 +365,6 @@ impl<MeshT, PointDataT, CellDataT> MeshWithData<MeshT, PointDataT, CellDataT> {
         }
     }
 }
-
-#[cfg(feature = "vtk_extras")]
-use vtkio::model::{Attribute, UnstructuredGridPiece};
 
 #[cfg(feature = "vtk_extras")]
 impl<'a, MeshT: 'a, PointDataT> MeshWithData<MeshT, PointDataT, ()>
