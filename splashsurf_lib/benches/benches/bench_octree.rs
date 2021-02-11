@@ -36,7 +36,7 @@ pub fn subdivide_recursively_benchmark(c: &mut Criterion) {
         b.iter_batched(
             get_tree,
             |mut tree| {
-                tree.subdivide_recursively_margin_par(
+                tree.par_subdivide_recursively_margin(
                     grid,
                     particle_positions.as_slice(),
                     SubdivisionCriterion::MaxParticleCount(particles_per_cell),

@@ -327,7 +327,7 @@ fn build_octree_par_consistency<I: Index, R: Real, P: AsRef<Path>>(
     };
 
     let mut octree_par = Octree::new(&grid, particles.as_slice().len());
-    octree_par.subdivide_recursively_margin_par(
+    octree_par.par_subdivide_recursively_margin(
         &grid,
         particles.as_slice(),
         parameters

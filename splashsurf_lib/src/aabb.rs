@@ -32,7 +32,7 @@ where
     VectorN<R, D>: ThreadSafe,
 {
     /// Constructs the smallest AABB fitting around all the given points, parallel version
-    pub fn from_points_par(points: &[VectorN<R, D>]) -> Self {
+    pub fn par_from_points(points: &[VectorN<R, D>]) -> Self {
         if points.is_empty() {
             Self::zeros()
         } else if points.len() == 1 {

@@ -31,7 +31,7 @@ pub fn aabb_from_points_par(c: &mut Criterion) {
     group.measurement_time(Duration::from_secs(5));
 
     group.bench_function("aabb_from_points_par", move |b| {
-        b.iter(|| AxisAlignedBoundingBox3d::from_points_par(particle_positions))
+        b.iter(|| AxisAlignedBoundingBox3d::par_from_points(particle_positions))
     });
 
     group.finish();

@@ -373,7 +373,7 @@ pub fn grid_for_reconstruction<I: Index, R: Real>(
 
         let mut domain_aabb = {
             let mut aabb = if enable_multi_threading {
-                AxisAlignedBoundingBox3d::from_points_par(particle_positions)
+                AxisAlignedBoundingBox3d::par_from_points(particle_positions)
             } else {
                 AxisAlignedBoundingBox3d::from_points(particle_positions)
             };
