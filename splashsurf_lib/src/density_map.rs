@@ -517,7 +517,7 @@ struct SparseDensityMapGenerator<I: Index, R: Real> {
 }
 
 pub(crate) struct GridKernelExtents<I: Index, R: Real> {
-    // The number of cells in each direction from a particle that can be affected by its compact support
+    // The number of cells in each direction from a particle's cell that can be affected by its compact support
     pub half_supported_cells: I,
     // The total number of points per dimension that can be affected by a particle's compact support
     pub supported_points: I,
@@ -533,11 +533,15 @@ pub(crate) fn compute_kernel_evaluation_radius<I: Index, R: Real>(
     let half_supported_cells_real = (compact_support_radius / cube_size).ceil();
     // Convert to index type for cell and point indexing
     let half_supported_cells: I = half_supported_cells_real.to_index_unchecked();
-    // The total number of points per dimension that can be affected by a particle's compact support
-    //  + account for an additional layer of points that cover the positive outside of the supported cells
-    let supported_points: I = I::one() + half_supported_cells.times(2);
 
-    let kernel_evaluation_radius = cube_size.times_f64(1.0 + 1e-3) * half_supported_cells_real;
+    // The total number of cells per dimension that can be affected by a particle's compact support
+    let supported_cells: I = half_supported_cells.times(2) + I::one();
+    // The number of points corresponding to the number of supported cells
+    let supported_points: I = I::one() + supported_cells;
+
+    // Evaluate kernel in a smaller domain, points outside of this radius have to be assumed to be outside of the iso-surface
+    let kernel_evaluation_radius =
+        cube_size * half_supported_cells_real * (R::one() + R::default_epsilon().sqrt());
 
     GridKernelExtents {
         half_supported_cells,

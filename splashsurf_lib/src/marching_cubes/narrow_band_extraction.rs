@@ -335,7 +335,10 @@ fn update_cell_data_threshold_flags<I: Index, R: Real, S: Subdomain<I, R>>(
                         RelativeToThreshold::Below
                     }
                 } else {
-                    RelativeToThreshold::Indeterminate
+                    // Points that are not in the density map are assumed to be below the iso-surface threshold.
+                    // This is done to avoid unnecessarily large domains where the density map has to provide values
+                    // that are trivially below the iso-surface threshold.
+                    RelativeToThreshold::Below
                 }
             }
         };
