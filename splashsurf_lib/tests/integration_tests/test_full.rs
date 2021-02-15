@@ -1,8 +1,8 @@
 use nalgebra::Vector3;
 use splashsurf_lib::marching_cubes::check_mesh_consistency;
 use splashsurf_lib::{
-    reconstruct_surface, Parameters, ParticleDensityComputationStrategy, Real,
-    SpatialDecompositionParameters, SubdivisionCriterion,
+    reconstruct_surface, AxisAlignedBoundingBox3d, Parameters, ParticleDensityComputationStrategy,
+    Real, SpatialDecompositionParameters, SubdivisionCriterion,
 };
 use std::path::Path;
 
@@ -17,10 +17,12 @@ enum Strategy {
     OctreeStitching,
 }
 
-fn params<R: Real>(
+fn params_with_aabb<R: Real>(
     particle_radius: R,
     compact_support_radius: R,
     cube_size: R,
+    iso_surface_threshold: R,
+    domain_aabb: Option<AxisAlignedBoundingBox3d<R>>,
     strategy: Strategy,
 ) -> Parameters<R> {
     let compact_support_radius = particle_radius * compact_support_radius;
@@ -31,9 +33,9 @@ fn params<R: Real>(
         rest_density: R::from_f64(1000.0).unwrap(),
         compact_support_radius,
         cube_size,
-        iso_surface_threshold: R::from_f64(0.6).unwrap(),
-        domain_aabb: None,
-        enable_multi_threading: true,
+        iso_surface_threshold,
+        domain_aabb,
+        enable_multi_threading: false,
         spatial_decomposition: None,
     };
 
@@ -62,11 +64,29 @@ fn params<R: Real>(
     parameters
 }
 
+fn params<R: Real>(
+    particle_radius: R,
+    compact_support_radius: R,
+    cube_size: R,
+    iso_surface_threshold: R,
+    strategy: Strategy,
+) -> Parameters<R> {
+    params_with_aabb(
+        particle_radius,
+        compact_support_radius,
+        cube_size,
+        iso_surface_threshold,
+        None,
+        strategy,
+    )
+}
+
 fn default_params_with<R: Real>(strategy: Strategy) -> Parameters<R> {
     params(
         R::from_f64(0.025).unwrap(),
         R::from_f64(4.0).unwrap(),
         R::from_f64(0.75).unwrap(),
+        R::from_f64(0.6).unwrap(),
         strategy,
     )
 }
@@ -128,8 +148,11 @@ generate_test!(f32, surface_reconstruction_bunny_stitching, "bunny_frame_14_7705
 
 generate_test!(f32, surface_reconstruction_hexecontahedron_stitching, "pentagonal_hexecontahedron_32286_particles.vtk" => "reconstruct_surface_pentagonal_hexecontahedron_par_stitching.vtk", default_params_with(Strategy::OctreeStitching), 600000, 700000);
 generate_test!(f32, surface_reconstruction_hilbert_stitching, "hilbert_46843_particles.vtk" => "reconstruct_surface_hilbert_par_stitching.vtk", default_params_with(Strategy::OctreeStitching), 380000, 430000);
-generate_test!(f32, surface_reconstruction_hilbert2_stitching, "hilbert2_7954_particles.vtk" => "reconstruct_surface_hilbert2_par_stitching.vtk", params(0.025, 4.0, 1.1, Strategy::OctreeStitching), 80000, 130000);
-generate_test!(f32, surface_reconstruction_octocat_stitching, "octocat_32614_particles.vtk" => "reconstruct_surface_octocat_par_stitching.vtk", params(0.025, 4.0, 0.75, Strategy::OctreeStitching), 150000, 210000);
+generate_test!(f32, surface_reconstruction_hilbert2_stitching, "hilbert2_7954_particles.vtk" => "reconstruct_surface_hilbert2_par_stitching.vtk", params(0.025, 4.0, 1.1, 0.6, Strategy::OctreeStitching), 80000, 130000);
+generate_test!(f32, surface_reconstruction_octocat_stitching, "octocat_32614_particles.vtk" => "reconstruct_surface_octocat_par_stitching.vtk", params(0.025, 4.0, 0.75, 0.6, Strategy::OctreeStitching), 150000, 210000);
 
-generate_test!(f32, surface_reconstruction_knot_global, "sailors_knot_19539_particles.vtk" => "reconstruct_surface_knot_par_global.vtk", params(0.025, 4.0, 1.1, Strategy::Global), 50000, 100000);
-generate_test!(f32, surface_reconstruction_knot_stitching, "sailors_knot_19539_particles.vtk" => "reconstruct_surface_knot_par_stitching.vtk", params(0.025, 4.0, 1.1, Strategy::OctreeStitching), 50000, 100000);
+generate_test!(f32, surface_reconstruction_knot_global, "sailors_knot_19539_particles.vtk" => "reconstruct_surface_knot_par_global.vtk", params(0.025, 4.0, 1.1, 0.6, Strategy::Global), 50000, 100000);
+generate_test!(f32, surface_reconstruction_knot_stitching, "sailors_knot_19539_particles.vtk" => "reconstruct_surface_knot_par_stitching.vtk", params(0.025, 4.0, 1.1, 0.6, Strategy::OctreeStitching), 50000, 100000);
+
+//generate_test!(f32, surface_reconstruction_free_particles_01, "free_particles_1000_particles.vtk" => "reconstruct_surface_free_particles_01_global.vtk", params(0.5, 4.0, 1.5, 0.45, Strategy::Global), 21000, 25000);
+//generate_test!(f32, surface_reconstruction_free_particles_02, "free_particles_125_particles.vtk" => "reconstruct_surface_free_particles_02_global.vtk", params_with_aabb(0.5, 4.0, 2.0, 0.45, Some(AxisAlignedBoundingBox3d::new(Vector3::new(-10.0, -10.0, -10.0), Vector3::new(210.0, 210.0, 210.0))), Strategy::Global), 800, 900);
