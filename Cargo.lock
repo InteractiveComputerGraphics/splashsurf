@@ -1159,6 +1159,7 @@ dependencies = [
  "num",
  "ply-rs",
  "rayon",
+ "serde_json",
  "splashsurf_lib",
  "structopt",
 ]

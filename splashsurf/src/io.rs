@@ -9,6 +9,7 @@ use splashsurf_lib::profile;
 use splashsurf_lib::Real;
 
 pub mod bgeo_format;
+pub mod json_format;
 pub mod ply_format;
 pub mod vtk_format;
 pub mod xyz_format;
@@ -63,6 +64,7 @@ pub fn read_particle_positions<R: Real, P: AsRef<Path>>(
             "xyz" => xyz_format::particles_from_xyz(&input_file)?,
             "ply" => ply_format::particles_from_ply(&input_file)?,
             "bgeo" => bgeo_format::particles_from_bgeo(&input_file)?,
+            "json" => json_format::particles_from_json(&input_file)?,
             _ => {
                 return Err(anyhow!(
                     "Unsupported file format extension \"{}\" for reading particles",
