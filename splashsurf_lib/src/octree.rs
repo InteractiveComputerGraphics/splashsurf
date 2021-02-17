@@ -2,7 +2,7 @@
 
 use crate::generic_tree::*;
 use crate::marching_cubes::SurfacePatch;
-use crate::mesh::{HexMesh3d, MeshWithData, TriMesh3d};
+use crate::mesh::{HexMesh3d, MeshAttribute, MeshWithData, TriMesh3d};
 use crate::topology::{Axis, Direction};
 use crate::uniform_grid::{PointIndex, UniformGrid};
 use crate::utils::{ChunkSize, ParallelPolicy};
@@ -262,7 +262,7 @@ impl<I: Index, R: Real> Octree<I, R> {
         &self,
         grid: &UniformGrid<I, R>,
         only_non_empty: bool,
-    ) -> MeshWithData<HexMesh3d<R>, (), u64> {
+    ) -> MeshWithData<R, HexMesh3d<R>> {
         profile!("convert octree into hexmesh");
 
         let mut mesh = HexMesh3d {
@@ -316,7 +316,7 @@ impl<I: Index, R: Real> Octree<I, R> {
         });
 
         assert_eq!(mesh.cells.len(), ids.len());
-        MeshWithData::with_cell_data(mesh, ids)
+        MeshWithData::new(mesh).with_cell_data(MeshAttribute::new("node_id", ids))
     }
 }
 

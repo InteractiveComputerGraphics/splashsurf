@@ -20,7 +20,7 @@
 
 use crate::aabb::AxisAlignedBoundingBox3d;
 use crate::kernel::DiscreteSquaredDistanceCubicKernel;
-use crate::mesh::{HexMesh3d, MeshWithData};
+use crate::mesh::{HexMesh3d, MeshAttribute, MeshWithData};
 use crate::uniform_grid::{OwningSubdomainGrid, Subdomain, UniformGrid};
 use crate::utils::{ChunkSize, ParallelPolicy};
 use crate::{new_map, profile, HashState, Index, MapType, ParallelMapType, Real};
@@ -786,7 +786,7 @@ pub fn sparse_density_map_to_hex_mesh<I: Index, R: Real>(
     density_map: &DensityMap<I, R>,
     grid: &UniformGrid<I, R>,
     default_value: R,
-) -> MeshWithData<HexMesh3d<R>, R> {
+) -> MeshWithData<R, HexMesh3d<R>> {
     profile!("sparse_density_map_to_hex_mesh");
 
     let mut mesh = HexMesh3d {
@@ -864,5 +864,5 @@ pub fn sparse_density_map_to_hex_mesh<I: Index, R: Real>(
         ]);
     }
 
-    MeshWithData::with_point_data(mesh, values)
+    MeshWithData::new(mesh).with_point_data(MeshAttribute::new_real_scalar("density", values))
 }

@@ -1,4 +1,20 @@
 //! Basic mesh types used by the library and implementation of VTK export
+//!
+//! This modules provides three basic types of meshes embedded in three dimensional spaces used
+//! by the library:
+//!  - [`TriMesh3d`]
+//!  - [`HexMesh3d`]
+//!  - [`PointCloud3d`]
+//!
+//! Furthermore, it provides the [`MeshWithData`] type that is used when additional attributes are
+//! attached to the vertices (e.g. normals) or cells (e.g. some identifiers) of the mesh.
+//!
+//! If the `vtk_extras` feature is enabled, this module also provides features for conversion of these
+//! meshes to [`vtkio`](https://docs.rs/vtkio/0.6.*/vtkio/index.html) data structures. For example:
+//!  - [`MeshWithData::to_unstructured_grid`] to convert a mesh together with all attached attributes
+//!  - [`vtk_helper::mesh_to_unstructured_grid`] to convert a basic mesh without additional data
+//!  - `From<T> for UnstructuredGridPiece` implementations for the basic mesh types
+//!  - `Into<DataSet>` implementations for the basic mesh types
 
 use crate::{new_map, Real};
 use nalgebra::{Unit, Vector3};
@@ -11,6 +27,25 @@ use vtkio::model::{Attribute, UnstructuredGridPiece};
 
 // TODO: Rename/restructure VTK helper implementations
 
+/// A named attribute with data that can be attached to the vertices or cells of a mesh
+#[derive(Clone, Debug)]
+pub struct MeshAttribute<R: Real> {
+    /// Name of the attribute
+    pub name: &'static str,
+    /// Data of the attribute
+    pub data: AttributeData<R>,
+}
+
+/// Data of an [`MeshAttribute`] that can be attached to the vertices or cells of a mesh
+///
+/// One value in the data-set corresponds is associated to a point or cell of the mesh.
+#[derive(Clone, Debug)]
+pub enum AttributeData<R: Real> {
+    ScalarU64(Vec<u64>),
+    ScalarReal(Vec<R>),
+    //Vector3Real(Vec<Vector3<R>>)
+}
+
 /// A triangle (surface) mesh in 3D
 #[derive(Clone, Debug, Default)]
 pub struct TriMesh3d<R: Real> {
@@ -18,6 +53,130 @@ pub struct TriMesh3d<R: Real> {
     pub vertices: Vec<Vector3<R>>,
     /// The triangles of the mesh identified by their vertex indices
     pub triangles: Vec<[usize; 3]>,
+}
+
+/// A hexahedral (volumetric) mesh in 3D
+#[derive(Clone, Debug, Default)]
+pub struct HexMesh3d<R: Real> {
+    /// Coordinates of all vertices of the mesh
+    pub vertices: Vec<Vector3<R>>,
+    /// The hexahedral cells of the mesh identified by their vertex indices
+    pub cells: Vec<[usize; 8]>,
+}
+
+/// A point cloud in 3D
+#[derive(Clone, Debug, Default)]
+pub struct PointCloud3d<R: Real> {
+    /// Coordinates of all points in the point cloud
+    points: Vec<Vector3<R>>,
+    /// Indices of the points (for `CellConnectivity`)
+    indices: Vec<usize>,
+}
+
+impl<R: Real> PointCloud3d<R> {
+    pub fn new(points: impl Into<Vec<Vector3<R>>>) -> Self {
+        let points = points.into();
+        let indices = (0..points.len()).collect();
+        Self { points, indices }
+    }
+}
+
+/// Basic functionality that is provided by all meshes of the library
+///
+/// Meshes consist of vertices and cells. Cells identify their associated vertices using indices
+/// into the mesh's slice of vertices.
+pub trait Mesh3d<R: Real> {
+    /// The cell connectivity type of the mesh
+    type Cell: CellConnectivity;
+
+    /// Returns a slice of all vertices of the mesh
+    fn vertices(&self) -> &[Vector3<R>];
+    /// Returns a slice of all cells of the mesh
+    fn cells(&self) -> &[Self::Cell];
+}
+
+/// Basic interface for mesh cells consisting of a collection of vertex indices
+pub trait CellConnectivity {
+    /// Returns the number of vertices per cell
+    fn num_vertices() -> usize;
+    /// Calls the given closure with each vertex index that is part of this cell
+    fn for_each_vertex<F: FnMut(usize)>(&self, f: F);
+}
+
+/// Cell type for the [`TriMesh3d`]
+#[repr(transparent)]
+pub struct TriangleCell(pub [usize; 3]);
+/// Cell type for the [`HexMesh3d`]
+#[repr(transparent)]
+pub struct HexCell(pub [usize; 8]);
+/// Cell type for the [`PointCloud3d`]
+#[repr(transparent)]
+pub struct PointCell(pub usize);
+
+impl CellConnectivity for TriangleCell {
+    fn num_vertices() -> usize {
+        3
+    }
+
+    fn for_each_vertex<F: FnMut(usize)>(&self, f: F) {
+        self.0.iter().copied().for_each(f);
+    }
+}
+
+impl CellConnectivity for HexCell {
+    fn num_vertices() -> usize {
+        8
+    }
+
+    fn for_each_vertex<F: FnMut(usize)>(&self, f: F) {
+        self.0.iter().copied().for_each(f);
+    }
+}
+
+impl CellConnectivity for PointCell {
+    fn num_vertices() -> usize {
+        1
+    }
+
+    fn for_each_vertex<F: FnMut(usize)>(&self, mut f: F) {
+        f(self.0);
+    }
+}
+
+impl<R: Real> Mesh3d<R> for TriMesh3d<R> {
+    type Cell = TriangleCell;
+
+    fn vertices(&self) -> &[Vector3<R>] {
+        self.vertices.as_slice()
+    }
+
+    fn cells(&self) -> &[TriangleCell] {
+        unsafe { std::mem::transmute::<&[[usize; 3]], &[TriangleCell]>(self.triangles.as_slice()) }
+    }
+}
+
+impl<R: Real> Mesh3d<R> for HexMesh3d<R> {
+    type Cell = HexCell;
+
+    fn vertices(&self) -> &[Vector3<R>] {
+        self.vertices.as_slice()
+    }
+
+    fn cells(&self) -> &[HexCell] {
+        unsafe { std::mem::transmute::<&[[usize; 8]], &[HexCell]>(self.cells.as_slice()) }
+    }
+}
+
+impl<R: Real> Mesh3d<R> for PointCloud3d<R> {
+    type Cell = PointCell;
+
+    fn vertices(&self) -> &[Vector3<R>] {
+        self.points.as_slice()
+    }
+
+    fn cells(&self) -> &[PointCell] {
+        unsafe { std::mem::transmute::<&[usize], &[PointCell]>(self.indices.as_slice()) }
+    }
 }
 
 impl<R: Real> TriMesh3d<R> {
@@ -313,96 +472,128 @@ fn test_find_boundary() {
     );
 }
 
-/// A hexahedral (volumetric) mesh in 3D
-#[derive(Clone, Debug, Default)]
-pub struct HexMesh3d<R: Real> {
-    /// Coordinates of all vertices of the mesh
-    pub vertices: Vec<Vector3<R>>,
-    /// The hexahedral cells of the mesh identified by their vertex indices
-    pub cells: Vec<[usize; 8]>,
-}
-
-/// A point cloud in 3D
-#[derive(Clone, Debug, Default)]
-pub struct PointCloud3d<R: Real> {
-    /// Coordinates of all points in the point cloud
-    pub points: Vec<Vector3<R>>,
-}
-
-/// A mesh with attached vertex or point data
-#[derive(Clone, Debug, Default)]
-pub struct MeshWithData<MeshT, PointDataT, CellDataT = ()> {
+/// Wrapper type for meshes with attached point or cell data
+#[derive(Clone, Debug)]
+pub struct MeshWithData<R: Real, MeshT: Mesh3d<R>> {
     /// The mesh geometry itself
     pub mesh: MeshT,
     /// Data attached to each vertex or point of the mesh
-    pub point_data: Vec<PointDataT>,
+    pub point_attributes: Vec<MeshAttribute<R>>,
     /// Data attached to each cell of the mesh
-    pub cell_data: Vec<CellDataT>,
+    pub cell_attributes: Vec<MeshAttribute<R>>,
 }
 
-impl<MeshT, PointDataT, CellDataT> MeshWithData<MeshT, PointDataT, CellDataT> {
-    /// Creates a new mesh the given point data
-    pub fn with_point_data<PointData: Into<Vec<PointDataT>>>(
-        mesh: MeshT,
-        point_data: PointData,
-    ) -> Self {
+/// Returns an mesh data wrapper with a default mesh and without attached attributes
+impl<R: Real, MeshT: Mesh3d<R> + Default> Default for MeshWithData<R, MeshT> {
+    fn default() -> Self {
+        Self::new(MeshT::default())
+    }
+}
+
+impl<R: Real, MeshT: Mesh3d<R>> MeshWithData<R, MeshT> {
+    /// Wraps the given mesh such that point and cell data can be attached
+    pub fn new(mesh: MeshT) -> Self {
         Self {
             mesh,
-            point_data: point_data.into(),
-            cell_data: vec![],
+            point_attributes: Vec::new(),
+            cell_attributes: Vec::new(),
         }
     }
 
-    /// Creates a new mesh the given cell data
-    pub fn with_cell_data<CellData: Into<Vec<CellDataT>>>(
-        mesh: MeshT,
-        cell_data: CellData,
-    ) -> Self {
+    /// Attaches an attribute to the points of the mesh, panics if the length of the data does not match the mesh's number of points
+    pub fn with_point_data(mut self, point_attribute: impl Into<MeshAttribute<R>>) -> Self {
+        let point_attribute = point_attribute.into();
+        assert_eq!(point_attribute.data.len(), self.mesh.vertices().len());
+        self.point_attributes.push(point_attribute);
+        self
+    }
+
+    /// Attaches an attribute to the cells of the mesh, panics if the length of the data does not match the mesh's number of cells
+    pub fn with_cell_data(mut self, cell_attribute: impl Into<MeshAttribute<R>>) -> Self {
+        let cell_attribute = cell_attribute.into();
+        assert_eq!(cell_attribute.data.len(), self.mesh.cells().len());
+        self.cell_attributes.push(cell_attribute);
+        self
+    }
+}
+
+impl<R: Real> MeshAttribute<R> {
+    /// Creates a new named mesh attribute with the given data
+    pub fn new(name: &'static str, data: impl Into<AttributeData<R>>) -> Self {
         Self {
-            mesh,
-            point_data: vec![],
-            cell_data: cell_data.into(),
+            name,
+            data: data.into(),
+        }
+    }
+
+    /// Creates a new named mesh attribute with scalar values implementing the [`Real`](crate::Real) trait
+    pub fn new_real_scalar(name: &'static str, data: impl Into<Vec<R>>) -> Self {
+        Self {
+            name,
+            data: AttributeData::ScalarReal(data.into()),
+        }
+    }
+
+    #[cfg(feature = "vtk_extras")]
+    /// Converts the mesh attribute to a [`vtkio::model::Attribute`](https://docs.rs/vtkio/0.6.*/vtkio/model/enum.Attribute.html)
+    fn to_vtk_attribute(&self) -> Attribute {
+        match &self.data {
+            AttributeData::ScalarU64(u64_vec) => {
+                Attribute::scalars(self.name, 1).with_data(u64_vec.clone())
+            }
+            AttributeData::ScalarReal(real_vec) => {
+                Attribute::scalars(self.name, 1).with_data(real_vec.clone())
+            } /*
+              EntityData::Vector3Real(vec3r_vec) => {
+                  Attribute::scalars(self.name, 3).with_data(vec3r_vec.clone())
+              },
+               */
         }
     }
 }
 
+impl<R: Real> AttributeData<R> {
+    /// Returns the number of entries in the data set
+    fn len(&self) -> usize {
+        match self {
+            AttributeData::ScalarU64(v) => v.len(),
+            AttributeData::ScalarReal(v) => v.len(),
+        }
+    }
+}
+
+impl<R: Real, V: Into<Vec<u64>>> From<V> for AttributeData<R> {
+    fn from(data: V) -> Self {
+        Self::ScalarU64(data.into())
+    }
+}
+
 #[cfg(feature = "vtk_extras")]
-impl<'a, MeshT: 'a, PointDataT> MeshWithData<MeshT, PointDataT, ()>
+impl<'a, R, MeshT> MeshWithData<R, MeshT>
 where
+    R: Real,
+    MeshT: Mesh3d<R> + 'a,
     &'a MeshT: Into<UnstructuredGridPiece>,
-    PointDataT: Real,
 {
-    /// Creates a [`vtkio::model::UnstructuredGridPiece`](https://docs.rs/vtkio/0.6.*/vtkio/model/struct.UnstructuredGridPiece.html) representing this mesh
+    /// Creates a [`vtkio::model::UnstructuredGridPiece`](https://docs.rs/vtkio/0.6.*/vtkio/model/struct.UnstructuredGridPiece.html) representing this mesh including its attached [`MeshAttribute`]s
     #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
-    pub fn to_dataset(&'a self) -> UnstructuredGridPiece {
+    pub fn to_unstructured_grid(&'a self) -> UnstructuredGridPiece {
         let mut grid_piece: UnstructuredGridPiece = (&self.mesh).into();
-        grid_piece
-            .data
-            .point
-            .push(Attribute::scalars("density", 1).with_data(self.point_data.clone()));
+        for point_attribute in &self.point_attributes {
+            grid_piece
+                .data
+                .point
+                .push(point_attribute.to_vtk_attribute())
+        }
+        for cell_attribute in &self.cell_attributes {
+            grid_piece.data.cell.push(cell_attribute.to_vtk_attribute())
+        }
         grid_piece
     }
 }
 
 #[cfg(feature = "vtk_extras")]
-impl<'a, MeshT: 'a> MeshWithData<MeshT, (), u64>
-where
-    &'a MeshT: Into<UnstructuredGridPiece>,
-{
-    /// Creates a [`vtkio::model::UnstructuredGridPiece`](https://docs.rs/vtkio/0.6.*/vtkio/model/struct.UnstructuredGridPiece.html) representing this mesh
-    #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
-    pub fn to_dataset(&'a self) -> UnstructuredGridPiece {
-        let mut grid_piece: UnstructuredGridPiece = (&self.mesh).into();
-        grid_piece
-            .data
-            .cell
-            .push(Attribute::scalars("node_id", 1).with_data(self.cell_data.clone()));
-        grid_piece
-    }
-}
-
-#[cfg(feature = "vtk_extras")]
-#[doc(hidden)]
+#[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
 /// Trait implementations to convert meshes into types supported by [`vtkio`](https://github.com/elrnv/vtkio)
 pub mod vtk_helper {
     use vtkio::model::{
@@ -410,7 +601,69 @@ pub mod vtk_helper {
     };
     use vtkio::IOBuffer;
 
-    use super::{HexMesh3d, PointCloud3d, Real, TriMesh3d};
+    use super::{
+        CellConnectivity, HexCell, HexMesh3d, Mesh3d, PointCell, PointCloud3d, Real, TriMesh3d,
+        TriangleCell,
+    };
+
+    /// Trait that can be implemented by mesh cells to return the corresponding [`vtkio::model::CellType`](https://docs.rs/vtkio/0.6.*/vtkio/model/enum.CellType.html)
+    #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
+    pub trait HasVtkCellType {
+        /// Returns the corresponding [`vtkio::model::CellType`](https://docs.rs/vtkio/0.6.*/vtkio/model/enum.CellType.html) of the cell
+        fn vtk_cell_type() -> CellType;
+    }
+
+    #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
+    impl HasVtkCellType for TriangleCell {
+        fn vtk_cell_type() -> CellType {
+            CellType::Triangle
+        }
+    }
+
+    #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
+    impl HasVtkCellType for HexCell {
+        fn vtk_cell_type() -> CellType {
+            CellType::Hexahedron
+        }
+    }
+
+    #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
+    impl HasVtkCellType for PointCell {
+        fn vtk_cell_type() -> CellType {
+            CellType::Vertex
+        }
+    }
+
+    /// Converts any supported mesh to a [`vtkio::model::UnstructuredGridPiece`](https://docs.rs/vtkio/0.6.*/vtkio/model/struct.UnstructuredGridPiece.html)
+    #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
+    pub fn mesh_to_unstructured_grid<'a, R, MeshT>(mesh: &'a MeshT) -> UnstructuredGridPiece
+    where
+        R: Real,
+        MeshT: Mesh3d<R> + 'a,
+        <MeshT as Mesh3d<R>>::Cell: HasVtkCellType,
+    {
+        let points = {
+            let mut points: Vec<R> = Vec::with_capacity(mesh.vertices().len() * 3);
+            for v in mesh.vertices().iter() {
+                points.extend(v.as_slice());
+            }
+            points
+        };
+
+        let vertices_per_cell = MeshT::Cell::num_vertices();
+        let vertices = {
+            let mut vertices = Vec::with_capacity(mesh.cells().len() * (vertices_per_cell + 1));
+            for cell in mesh.cells().iter() {
+                vertices.push(3);
+                cell.for_each_vertex(|v| vertices.push(v as u32));
+            }
+            vertices
+        };
+
+        let cell_types = vec![<MeshT::Cell as HasVtkCellType>::vtk_cell_type(); mesh.cells().len()];
+
+        new_unstructured_grid_piece(points, vertices, cell_types)
+    }
 
     /// Creates a [`vtkio::model::UnstructuredGridPiece`](https://docs.rs/vtkio/0.6.*/vtkio/model/struct.UnstructuredGridPiece.html) representing this mesh
     #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
@@ -419,26 +672,7 @@ pub mod vtk_helper {
         R: Real,
     {
         fn from(mesh: &TriMesh3d<R>) -> Self {
-            let points = {
-                let mut points: Vec<R> = Vec::with_capacity(mesh.vertices.len() * 3);
-                for v in mesh.vertices.iter() {
-                    points.extend(v.as_slice());
-                }
-                points
-            };
-
-            let vertices = {
-                let mut vertices = Vec::with_capacity(mesh.triangles.len() * (3 + 1));
-                for triangle in mesh.triangles.iter() {
-                    vertices.push(3);
-                    vertices.extend(triangle.iter().map(|&i| i as u32));
-                }
-                vertices
-            };
-
-            let cell_types = vec![CellType::Triangle; mesh.triangles.len()];
-
-            new_unstructured_grid_piece(points, vertices, cell_types)
+            mesh_to_unstructured_grid(mesh)
         }
     }
 
@@ -449,26 +683,7 @@ pub mod vtk_helper {
         R: Real,
     {
         fn from(mesh: &'a HexMesh3d<R>) -> Self {
-            let points = {
-                let mut points: Vec<R> = Vec::with_capacity(mesh.vertices.len() * 3);
-                for v in mesh.vertices.iter() {
-                    points.extend(v.as_slice());
-                }
-                points
-            };
-
-            let vertices = {
-                let mut vertices = Vec::with_capacity(mesh.cells.len() * (8 + 1));
-                for cell in mesh.cells.iter() {
-                    vertices.push(8);
-                    vertices.extend(cell.iter().map(|&i| i as u32));
-                }
-                vertices
-            };
-
-            let cell_types = vec![CellType::Hexahedron; mesh.cells.len()];
-
-            new_unstructured_grid_piece(points, vertices, cell_types)
+            mesh_to_unstructured_grid(mesh)
         }
     }
 
@@ -479,26 +694,7 @@ pub mod vtk_helper {
         R: Real,
     {
         fn from(mesh: &'a PointCloud3d<R>) -> Self {
-            let points = {
-                let mut points: Vec<R> = Vec::with_capacity(mesh.points.len() * 3);
-                for v in mesh.points.iter() {
-                    points.extend(v.as_slice());
-                }
-                points
-            };
-
-            let vertices = {
-                let mut vertices = Vec::with_capacity(mesh.points.len() * (1 + 1));
-                for (i, _) in mesh.points.iter().enumerate() {
-                    vertices.push(1 as u32);
-                    vertices.push(i as u32);
-                }
-                vertices
-            };
-
-            let cell_types = vec![CellType::Vertex; mesh.points.len()];
-
-            new_unstructured_grid_piece(points, vertices, cell_types)
+            mesh_to_unstructured_grid(mesh)
         }
     }
 

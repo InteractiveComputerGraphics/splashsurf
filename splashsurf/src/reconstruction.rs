@@ -588,7 +588,7 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
                 .octree()
                 .unwrap()
                 .hexmesh(grid, true)
-                .to_dataset(),
+                .to_unstructured_grid(),
             output_octree_file,
             "mesh",
         )
@@ -615,7 +615,7 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
                 points.push(grid.point_coordinates(&point));
             });
 
-            PointCloud3d { points }
+            PointCloud3d::new(points)
         };
 
         info!(
@@ -648,7 +648,7 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
         );
 
         io::vtk_format::write_vtk(
-            density_mesh.to_dataset(),
+            density_mesh.to_unstructured_grid(),
             output_density_map_grid_file,
             "density_map",
         )?;
