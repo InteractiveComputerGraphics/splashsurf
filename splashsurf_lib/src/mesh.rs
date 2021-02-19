@@ -542,9 +542,9 @@ impl<R: Real> MeshAttribute<R> {
         }
     }
 
+    /// Converts the mesh attribute to a [`vtkio::model::Attribute`](https://docs.rs/vtkio/0.6.*/vtkio/model/enum.Attribute.html)
     #[cfg(feature = "vtk_extras")]
     #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
-    /// Converts the mesh attribute to a [`vtkio::model::Attribute`](https://docs.rs/vtkio/0.6.*/vtkio/model/enum.Attribute.html)
     fn to_vtk_attribute(&self) -> Attribute {
         match &self.data {
             AttributeData::ScalarU64(u64_vec) => {
@@ -576,6 +576,7 @@ impl<R: Real, V: Into<Vec<u64>>> From<V> for AttributeData<R> {
     }
 }
 
+#[cfg(feature = "vtk_extras")]
 impl<R, MeshT> MeshWithData<R, MeshT>
 where
     R: Real,
@@ -583,7 +584,6 @@ where
     for<'a> &'a MeshT: Into<UnstructuredGridPiece>,
 {
     /// Creates a [`vtkio::model::UnstructuredGridPiece`](https://docs.rs/vtkio/0.6.*/vtkio/model/struct.UnstructuredGridPiece.html) representing this mesh including its attached [`MeshAttribute`]s
-    #[cfg(feature = "vtk_extras")]
     #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
     pub fn to_unstructured_grid(&self) -> UnstructuredGridPiece {
         let mut grid_piece: UnstructuredGridPiece = (&self.mesh).into();
@@ -601,6 +601,7 @@ where
 }
 
 /// Creates a [`vtkio::model::UnstructuredGridPiece`](https://docs.rs/vtkio/0.6.*/vtkio/model/struct.UnstructuredGridPiece.html) representing this mesh with all its attributes and wraps it into a [`vtkio::model::DataSet`](https://docs.rs/vtkio/0.6.*/vtkio/model/enum.DataSet.html)
+#[cfg(feature = "vtk_extras")]
 #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
 impl<R, MeshT> Into<DataSet> for &MeshWithData<R, MeshT>
 where
@@ -613,9 +614,9 @@ where
     }
 }
 
+/// Trait implementations to convert meshes into types supported by [`vtkio`](https://github.com/elrnv/vtkio)
 #[cfg(feature = "vtk_extras")]
 #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
-/// Trait implementations to convert meshes into types supported by [`vtkio`](https://github.com/elrnv/vtkio)
 pub mod vtk_helper {
     use vtkio::model::{
         Attributes, CellType, Cells, DataSet, UnstructuredGridPiece, VertexNumbers,
