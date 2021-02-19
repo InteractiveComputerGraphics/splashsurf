@@ -5,7 +5,8 @@ use arguments::{
 };
 use log::info;
 use rayon::prelude::*;
-use splashsurf_lib::mesh::PointCloud3d;
+use splashsurf_lib::mesh::{MeshAttribute, MeshWithData, PointCloud3d};
+use splashsurf_lib::nalgebra::Vector3;
 use splashsurf_lib::profile;
 use splashsurf_lib::{density_map, Index, Real};
 use std::convert::TryFrom;
@@ -105,6 +106,9 @@ pub struct ReconstructSubcommandArgs {
     /// Whether to check the final mesh for problems such as holes (note that when stitching is disabled this will lead to a lot of reported problems)
     #[structopt(long, default_value = "off", possible_values = &["on", "off"], case_insensitive = true)]
     check_mesh: Switch,
+    /// Whether to write vertex normals to the output file. Note that currently the normals are only computed using an area weighted average of triangle normals.
+    #[structopt(long, default_value = "off", possible_values = &["on", "off"], case_insensitive = true)]
+    output_normals: Switch,
 }
 
 arg_enum! {
@@ -285,6 +289,7 @@ mod arguments {
         output_density_map_points_file: Option<PathBuf>,
         output_density_map_grid_file: Option<PathBuf>,
         output_octree_file: Option<PathBuf>,
+        output_normals: bool,
     }
 
     impl ReconstructionRunnerPathCollection {
@@ -296,6 +301,7 @@ mod arguments {
             output_density_map_points_file: Option<P>,
             output_density_map_grid_file: Option<P>,
             output_octree_file: Option<P>,
+            output_normals: bool,
         ) -> Result<Self, anyhow::Error> {
             let input_file = input_file.into();
             let output_base_path = output_base_path.map(|p| p.into());
@@ -329,6 +335,7 @@ mod arguments {
                     output_density_map_grid_file: output_density_map_grid_file
                         .map(|f| output_base_path.join(f)),
                     output_octree_file: output_octree_file.map(|f| output_base_path.join(f)),
+                    output_normals,
                 })
             } else {
                 Ok(Self {
@@ -338,6 +345,7 @@ mod arguments {
                     output_density_map_points_file,
                     output_density_map_grid_file,
                     output_octree_file,
+                    output_normals,
                 })
             }
         }
@@ -371,6 +379,7 @@ mod arguments {
                             None,
                             None,
                             None,
+                            self.output_normals,
                         ));
                     } else {
                         break;
@@ -388,6 +397,7 @@ mod arguments {
                         self.output_density_map_points_file.clone(),
                         self.output_density_map_grid_file.clone(),
                         self.output_octree_file.clone(),
+                        self.output_normals,
                     );
                     1
                 ]
@@ -421,6 +431,7 @@ mod arguments {
                         args.output_dm_points.clone(),
                         args.output_dm_grid.clone(),
                         args.output_octree.clone(),
+                        args.output_normals.into_bool(),
                     )
                 } else {
                     return Err(anyhow!(
@@ -468,6 +479,7 @@ mod arguments {
                         args.output_dm_points.clone(),
                         args.output_dm_grid.clone(),
                         args.output_octree.clone(),
+                        args.output_normals.into_bool(),
                     )
                 } else {
                     return Err(anyhow!(
@@ -490,6 +502,7 @@ mod arguments {
         pub output_density_map_points_file: Option<PathBuf>,
         pub output_density_map_grid_file: Option<PathBuf>,
         pub output_octree_file: Option<PathBuf>,
+        pub output_normals: bool,
     }
 
     impl ReconstructionRunnerPaths {
@@ -499,6 +512,7 @@ mod arguments {
             output_density_map_points_file: Option<PathBuf>,
             output_density_map_grid_file: Option<PathBuf>,
             output_octree_file: Option<PathBuf>,
+            output_normals: bool,
         ) -> Self {
             ReconstructionRunnerPaths {
                 input_file,
@@ -506,6 +520,7 @@ mod arguments {
                 output_density_map_points_file,
                 output_density_map_grid_file,
                 output_octree_file,
+                output_normals,
             }
         }
     }
@@ -564,6 +579,25 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
     let grid = reconstruction.grid();
     let mesh = reconstruction.mesh();
 
+    // Add normals to mesh if requested
+    let mesh = if paths.output_normals {
+        profile!("compute normals");
+        let normals = mesh.par_vertex_normals();
+        // Transmute Unit<Vector3<R>> to Vector3<R>
+        let normals = unsafe {
+            let mut normals = std::mem::ManuallyDrop::new(normals);
+            Vec::from_raw_parts(
+                normals.as_mut_ptr() as *mut Vector3<R>,
+                normals.len(),
+                normals.capacity(),
+            )
+        };
+        MeshWithData::new(mesh.clone())
+            .with_point_data(MeshAttribute::new_real_vector3("normals", normals))
+    } else {
+        MeshWithData::new(mesh.clone())
+    };
+
     // Store the surface mesh
     {
         profile!("write surface mesh to file");
@@ -571,7 +605,7 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
             "Writing surface mesh to \"{}\"...",
             paths.output_file.to_string_lossy()
         );
-        io::vtk_format::write_vtk(mesh, &paths.output_file, "mesh").with_context(|| {
+        io::vtk_format::write_vtk(&mesh, &paths.output_file, "mesh").with_context(|| {
             format!(
                 "Failed to write reconstructed surface to output file '{}'",
                 paths.output_file.to_string_lossy()
@@ -657,7 +691,7 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
     }
 
     if check_mesh {
-        if let Err(err) = splashsurf_lib::marching_cubes::check_mesh_consistency(grid, mesh) {
+        if let Err(err) = splashsurf_lib::marching_cubes::check_mesh_consistency(grid, &mesh.mesh) {
             return Err(anyhow!("{}", err));
         } else {
             info!("Checked mesh for problems (holes, etc.), no problems were found.");

@@ -23,7 +23,7 @@ use std::cell::RefCell;
 use std::fmt::Debug;
 use thread_local::ThreadLocal;
 #[cfg(feature = "vtk_extras")]
-use vtkio::model::{Attribute, UnstructuredGridPiece};
+use vtkio::model::{Attribute, DataSet, UnstructuredGridPiece};
 
 // TODO: Rename/restructure VTK helper implementations
 
@@ -43,7 +43,7 @@ pub struct MeshAttribute<R: Real> {
 pub enum AttributeData<R: Real> {
     ScalarU64(Vec<u64>),
     ScalarReal(Vec<R>),
-    //Vector3Real(Vec<Vector3<R>>)
+    Vector3Real(Vec<Vector3<R>>),
 }
 
 /// A triangle (surface) mesh in 3D
@@ -534,7 +534,16 @@ impl<R: Real> MeshAttribute<R> {
         }
     }
 
+    /// Creates a new named mesh attribute with scalar values implementing the [`Real`](crate::Real) trait
+    pub fn new_real_vector3(name: &'static str, data: impl Into<Vec<Vector3<R>>>) -> Self {
+        Self {
+            name,
+            data: AttributeData::Vector3Real(data.into()),
+        }
+    }
+
     #[cfg(feature = "vtk_extras")]
+    #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
     /// Converts the mesh attribute to a [`vtkio::model::Attribute`](https://docs.rs/vtkio/0.6.*/vtkio/model/enum.Attribute.html)
     fn to_vtk_attribute(&self) -> Attribute {
         match &self.data {
@@ -543,11 +552,9 @@ impl<R: Real> MeshAttribute<R> {
             }
             AttributeData::ScalarReal(real_vec) => {
                 Attribute::scalars(self.name, 1).with_data(real_vec.clone())
-            } /*
-              EntityData::Vector3Real(vec3r_vec) => {
-                  Attribute::scalars(self.name, 3).with_data(vec3r_vec.clone())
-              },
-               */
+            }
+            AttributeData::Vector3Real(vec3r_vec) => Attribute::scalars(self.name, 3)
+                .with_data(vec3r_vec.iter().flatten().copied().collect::<Vec<R>>()),
         }
     }
 }
@@ -558,6 +565,7 @@ impl<R: Real> AttributeData<R> {
         match self {
             AttributeData::ScalarU64(v) => v.len(),
             AttributeData::ScalarReal(v) => v.len(),
+            AttributeData::Vector3Real(v) => v.len(),
         }
     }
 }
@@ -568,16 +576,16 @@ impl<R: Real, V: Into<Vec<u64>>> From<V> for AttributeData<R> {
     }
 }
 
-#[cfg(feature = "vtk_extras")]
-impl<'a, R, MeshT> MeshWithData<R, MeshT>
+impl<R, MeshT> MeshWithData<R, MeshT>
 where
     R: Real,
-    MeshT: Mesh3d<R> + 'a,
-    &'a MeshT: Into<UnstructuredGridPiece>,
+    MeshT: Mesh3d<R>,
+    for<'a> &'a MeshT: Into<UnstructuredGridPiece>,
 {
     /// Creates a [`vtkio::model::UnstructuredGridPiece`](https://docs.rs/vtkio/0.6.*/vtkio/model/struct.UnstructuredGridPiece.html) representing this mesh including its attached [`MeshAttribute`]s
+    #[cfg(feature = "vtk_extras")]
     #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
-    pub fn to_unstructured_grid(&'a self) -> UnstructuredGridPiece {
+    pub fn to_unstructured_grid(&self) -> UnstructuredGridPiece {
         let mut grid_piece: UnstructuredGridPiece = (&self.mesh).into();
         for point_attribute in &self.point_attributes {
             grid_piece
@@ -589,6 +597,19 @@ where
             grid_piece.data.cell.push(cell_attribute.to_vtk_attribute())
         }
         grid_piece
+    }
+}
+
+/// Creates a [`vtkio::model::UnstructuredGridPiece`](https://docs.rs/vtkio/0.6.*/vtkio/model/struct.UnstructuredGridPiece.html) representing this mesh with all its attributes and wraps it into a [`vtkio::model::DataSet`](https://docs.rs/vtkio/0.6.*/vtkio/model/enum.DataSet.html)
+#[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
+impl<R, MeshT> Into<DataSet> for &MeshWithData<R, MeshT>
+where
+    R: Real,
+    MeshT: Mesh3d<R>,
+    for<'a> &'a MeshT: Into<UnstructuredGridPiece>,
+{
+    fn into(self) -> DataSet {
+        DataSet::inline(self.to_unstructured_grid())
     }
 }
 
