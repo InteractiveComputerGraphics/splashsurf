@@ -219,7 +219,7 @@ impl<R: Real> TriMesh3d<R> {
             let v0 = &self.vertices[tri_verts[0]];
             let v1 = &self.vertices[tri_verts[1]];
             let v2 = &self.vertices[tri_verts[2]];
-            let normal = (v0 - v1).cross(&(v2 - v1));
+            let normal = (v1 - v0).cross(&(v2 - v1));
 
             normal_directions[tri_verts[0]] += normal;
             normal_directions[tri_verts[1]] += normal;
@@ -245,7 +245,7 @@ impl<R: Real> TriMesh3d<R> {
                 let v0 = &self.vertices[tri_verts[0]];
                 let v1 = &self.vertices[tri_verts[1]];
                 let v2 = &self.vertices[tri_verts[2]];
-                let normal = (v0 - v1).cross(&(v2 - v1));
+                let normal = (v1 - v0).cross(&(v2 - v1));
 
                 tl_normals[tri_verts[0]] += normal;
                 tl_normals[tri_verts[1]] += normal;
