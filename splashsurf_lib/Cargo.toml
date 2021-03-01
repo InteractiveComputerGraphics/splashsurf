@@ -46,7 +46,7 @@ dashmap = "4.0"
 fxhash = "0.2"
 thread_local = "1.1"
 bitflags = "1.2"
-smallvec = { version = "1.6", features = ["union"] }
+smallvec = { version = "^1.6.1", features = ["union"] }
 arrayvec = "0.5"
 
 # VTK extras
