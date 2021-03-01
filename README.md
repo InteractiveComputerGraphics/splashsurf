@@ -2,6 +2,7 @@
 [![On crates.io](https://img.shields.io/crates/v/splashsurf)](https://crates.io/crates/splashsurf)
 [![On docs.rs](https://docs.rs/splashsurf_lib/badge.svg)](https://docs.rs/splashsurf_lib)
 [![License: MIT](https://img.shields.io/crates/l/splashsurf)](https://github.com/w1th0utnam3/splashsurf/blob/master/LICENSE)
+[![Dependency status](https://deps.rs/repo/github/w1th0utnam3/splashsurf/status.svg)](https://deps.rs/repo/github/w1th0utnam3/splashsurf)
 ![Build and test GitHub Actions workflow](https://github.com/w1th0utnam3/splashsurf/workflows/Build%20and%20test/badge.svg)
 
 Surface reconstruction library and CLI for particle data from SPH simulations, written in Rust.
