@@ -229,9 +229,13 @@ pub trait ParVisitableTree: TreeNode {
         }
 
         // Return any potential error collected during visitation
-        match Arc::try_unwrap(error) {
-            Ok(e) => e.into_inner().unwrap(),
-            Err(_) => panic!("Unable to unwrap Arc that stores error of tree visitation"),
+        if !error.read().unwrap().is_ok() {
+            match Arc::try_unwrap(error) {
+                Ok(e) => e.into_inner().unwrap(),
+                Err(_) => panic!("Unable to unwrap Arc that stores error of tree visitation"),
+            }
+        } else {
+            Ok(())
         }
     }
 }
@@ -348,9 +352,13 @@ pub trait ParMutVisitableTree: TreeNodeMut {
         }
 
         // Return any potential error collected during visitation
-        match Arc::try_unwrap(error) {
-            Ok(e) => e.into_inner().unwrap(),
-            Err(_) => panic!("Unable to unwrap Arc that stores error of tree visitation"),
+        if !error.read().unwrap().is_ok() {
+            match Arc::try_unwrap(error) {
+                Ok(e) => e.into_inner().unwrap(),
+                Err(_) => panic!("Unable to unwrap Arc that stores error of tree visitation"),
+            }
+        } else {
+            Ok(())
         }
     }
 }
