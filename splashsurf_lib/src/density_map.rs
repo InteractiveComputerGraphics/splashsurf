@@ -29,10 +29,28 @@ use log::{info, trace, warn};
 use nalgebra::Vector3;
 use rayon::prelude::*;
 use std::cell::RefCell;
+use thiserror::Error as ThisError;
 use thread_local::ThreadLocal;
 
 // TODO: Document formulas for the computation of the values
 // TODO: Document that we actually evaluate the SPH interpolation of the constant function f(x) = 1
+
+/// Errors that can occur during generation of the density map
+#[derive(Debug, ThisError)]
+pub enum DensityMapError<R: Real> {
+    /// Indicates that domain for the density map is inconsistent or degenerate
+    ///
+    /// For the density map computation the user specified domain is shrunk ensuring that all
+    /// remaining particles only influence grid points on the interior of this domain. If the initial
+    /// user specified domain is too small, this can result in an inconsistent or degenerate domain.
+    #[error("the adapted subdomain for the density map is inconsistent/degenerate")]
+    InvalidDomain {
+        /// The margin by which the user specified domain is shrunk
+        margin: R,
+        /// The final (invalid) domain after the margin is applied to the user specified domain
+        domain: AxisAlignedBoundingBox3d<R>,
+    },
+}
 
 /// Computes the individual densities of particles using a standard SPH sum
 #[inline(never)]
@@ -247,7 +265,7 @@ pub fn generate_sparse_density_map<I: Index, R: Real>(
     cube_size: R,
     allow_threading: bool,
     density_map: &mut DensityMap<I, R>,
-) {
+) -> Result<(), DensityMapError<R>> {
     trace!(
         "Starting construction of sparse density map... (Input: {} particles)",
         if let Some(active_particles) = active_particles {
@@ -270,7 +288,7 @@ pub fn generate_sparse_density_map<I: Index, R: Real>(
                 compact_support_radius,
                 cube_size,
                 density_map,
-            );
+            )?;
         }
     } else {
         if allow_threading {
@@ -282,7 +300,7 @@ pub fn generate_sparse_density_map<I: Index, R: Real>(
                 particle_rest_mass,
                 compact_support_radius,
                 cube_size,
-            );
+            )?
         } else {
             *density_map = sequential_generate_sparse_density_map(
                 grid,
@@ -292,7 +310,7 @@ pub fn generate_sparse_density_map<I: Index, R: Real>(
                 particle_rest_mass,
                 compact_support_radius,
                 cube_size,
-            );
+            )?
         }
     };
 
@@ -300,6 +318,8 @@ pub fn generate_sparse_density_map<I: Index, R: Real>(
         "Sparse density map was constructed. (Output: density map with {} grid point data entries)",
         density_map.len()
     );
+
+    Ok(())
 }
 
 /// Computes a sparse density map for the fluid based on the specified background grid, sequential implementation
@@ -312,38 +332,41 @@ pub fn sequential_generate_sparse_density_map<I: Index, R: Real>(
     particle_rest_mass: R,
     compact_support_radius: R,
     cube_size: R,
-) -> DensityMap<I, R> {
+) -> Result<DensityMap<I, R>, DensityMapError<R>> {
     profile!("sequential_generate_sparse_density_map");
 
     let mut sparse_densities = new_map();
 
-    if let Some(processor) =
-        SparseDensityMapGenerator::new(grid, compact_support_radius, cube_size, particle_rest_mass)
-    {
-        let process_particle = |particle_data: (&Vector3<R>, R)| {
-            let (particle, particle_density) = particle_data;
-            processor.compute_particle_density_contribution(
-                grid,
-                &mut sparse_densities,
-                particle,
-                particle_density,
-            );
-        };
+    let density_map_generator = SparseDensityMapGenerator::try_new(
+        grid,
+        compact_support_radius,
+        cube_size,
+        particle_rest_mass,
+    )?;
 
-        match active_particles {
-            None => particle_positions
-                .iter()
-                .zip(particle_densities.iter().copied())
-                .for_each(process_particle),
-            Some(indices) => indices
-                .iter()
-                .map(|&i| &particle_positions[i])
-                .zip(indices.iter().map(|&i| particle_densities[i]))
-                .for_each(process_particle),
-        }
+    let process_particle = |particle_data: (&Vector3<R>, R)| {
+        let (particle, particle_density) = particle_data;
+        density_map_generator.compute_particle_density_contribution(
+            grid,
+            &mut sparse_densities,
+            particle,
+            particle_density,
+        );
+    };
+
+    match active_particles {
+        None => particle_positions
+            .iter()
+            .zip(particle_densities.iter().copied())
+            .for_each(process_particle),
+        Some(indices) => indices
+            .iter()
+            .map(|&i| &particle_positions[i])
+            .zip(indices.iter().map(|&i| particle_densities[i]))
+            .for_each(process_particle),
     }
 
-    sparse_densities.into()
+    Ok(sparse_densities.into())
 }
 
 /// Computes a sparse density map for the fluid restricted to the specified subdomain
@@ -357,40 +380,42 @@ pub fn sequential_generate_sparse_density_map_subdomain<I: Index, R: Real>(
     compact_support_radius: R,
     cube_size: R,
     density_map: &mut DensityMap<I, R>,
-) {
+) -> Result<(), DensityMapError<R>> {
     profile!("sequential_generate_sparse_density_map_subdomain");
 
     let mut sparse_densities = density_map.standard_or_insert_mut();
     sparse_densities.clear();
 
-    if let Some(processor) = SparseDensityMapGenerator::new(
+    let density_map_generator = SparseDensityMapGenerator::try_new(
         &subdomain.global_grid(),
         compact_support_radius,
         cube_size,
         particle_rest_mass,
-    ) {
-        let process_particle = |particle_data: (&Vector3<R>, R)| {
-            let (particle, particle_density) = particle_data;
-            processor.compute_particle_density_contribution_subdomain(
-                subdomain,
-                &mut sparse_densities,
-                particle,
-                particle_density,
-            );
-        };
+    )?;
 
-        match active_particles {
-            None => particle_positions
-                .iter()
-                .zip(particle_densities.iter().copied())
-                .for_each(process_particle),
-            Some(indices) => indices
-                .iter()
-                .map(|&i| &particle_positions[i])
-                .zip(indices.iter().map(|&i| particle_densities[i]))
-                .for_each(process_particle),
-        }
+    let process_particle = |particle_data: (&Vector3<R>, R)| {
+        let (particle, particle_density) = particle_data;
+        density_map_generator.compute_particle_density_contribution_subdomain(
+            subdomain,
+            &mut sparse_densities,
+            particle,
+            particle_density,
+        );
+    };
+
+    match active_particles {
+        None => particle_positions
+            .iter()
+            .zip(particle_densities.iter().copied())
+            .for_each(process_particle),
+        Some(indices) => indices
+            .iter()
+            .map(|&i| &particle_positions[i])
+            .zip(indices.iter().map(|&i| particle_densities[i]))
+            .for_each(process_particle),
     }
+
+    Ok(())
 }
 
 /// Computes a sparse density map for the fluid based on the specified background grid, multi-threaded implementation
@@ -403,16 +428,21 @@ pub fn parallel_generate_sparse_density_map<I: Index, R: Real>(
     particle_rest_mass: R,
     compact_support_radius: R,
     cube_size: R,
-) -> DensityMap<I, R> {
+) -> Result<DensityMap<I, R>, DensityMapError<R>> {
     profile!("parallel_generate_sparse_density_map");
 
     // Each thread will write to its own local density map
     let sparse_densities: ThreadLocal<RefCell<MapType<I, R>>> = ThreadLocal::new();
 
     // Generate thread local density maps
-    if let Some(processor) =
-        SparseDensityMapGenerator::new(grid, compact_support_radius, cube_size, particle_rest_mass)
     {
+        let density_map_generator = SparseDensityMapGenerator::try_new(
+            grid,
+            compact_support_radius,
+            cube_size,
+            particle_rest_mass,
+        )?;
+
         profile!("generate thread local maps");
 
         match active_particles {
@@ -434,7 +464,7 @@ pub fn parallel_generate_sparse_density_map<I: Index, R: Real>(
 
                         let process_particle_map = |particle_data: (&Vector3<R>, R)| {
                             let (particle, particle_density) = particle_data;
-                            processor.compute_particle_density_contribution(
+                            density_map_generator.compute_particle_density_contribution(
                                 grid,
                                 &mut mut_map,
                                 particle,
@@ -463,7 +493,7 @@ pub fn parallel_generate_sparse_density_map<I: Index, R: Real>(
 
                     let process_particle_map = |particle_data: (&Vector3<R>, R)| {
                         let (particle, particle_density) = particle_data;
-                        processor.compute_particle_density_contribution(
+                        density_map_generator.compute_particle_density_contribution(
                             grid,
                             &mut mut_map,
                             particle,
@@ -503,10 +533,11 @@ pub fn parallel_generate_sparse_density_map<I: Index, R: Real>(
             }
         });
 
-        global_density_map.into()
+        Ok(global_density_map.into())
     }
 }
 
+/// Internal helper type used to evaluate the density contribution for a particle
 struct SparseDensityMapGenerator<I: Index, R: Real> {
     particle_rest_mass: R,
     half_supported_cells: I,
@@ -552,12 +583,12 @@ pub(crate) fn compute_kernel_evaluation_radius<I: Index, R: Real>(
 
 // TODO: Maybe remove allowed domain check? And require this is done before, using the active_particles array?
 impl<I: Index, R: Real> SparseDensityMapGenerator<I, R> {
-    fn new(
+    fn try_new(
         grid: &UniformGrid<I, R>,
         compact_support_radius: R,
         cube_size: R,
         particle_rest_mass: R,
-    ) -> Option<Self> {
+    ) -> Result<Self, DensityMapError<R>> {
         let GridKernelExtents {
             half_supported_cells,
             supported_points,
@@ -586,9 +617,12 @@ impl<I: Index, R: Real> SparseDensityMapGenerator<I, R> {
                 allowed_domain
             );
             warn!("No particles can be found in this domain. Increase the domain of the surface reconstruction to avoid this.");
-            None
+            Err(DensityMapError::InvalidDomain {
+                margin: kernel_evaluation_radius,
+                domain: allowed_domain,
+            })
         } else {
-            Some(Self {
+            Ok(Self {
                 half_supported_cells,
                 supported_points,
                 kernel_evaluation_radius_sq,

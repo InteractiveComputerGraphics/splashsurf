@@ -19,6 +19,7 @@ use rayon::{Scope, ScopeFifo};
 use std::collections::VecDeque;
 use std::iter::FusedIterator;
 use std::ops::{Deref, DerefMut};
+use std::sync::{Arc, RwLock};
 
 // TODO: Tests for the algorithms
 
@@ -168,6 +169,71 @@ pub trait ParVisitableTree: TreeNode {
         let v = &visitor;
         rayon::scope_fifo(move |s| par_visit_bfs_impl(self, s, v));
     }
+
+    /// Visits a node and its children in breadth-first order, stops visitation on first error and returns it. The visitor is applied in parallel to processing the children.
+    fn try_par_visit_bfs<E, F>(&self, visitor: F) -> Result<(), E>
+    where
+        Self: Sync,
+        E: Send + Sync,
+        F: Fn(&Self) -> Result<(), E> + Sync,
+    {
+        let error = Arc::new(RwLock::new(Ok(())));
+
+        // Parallel implementation of recursive breadth-first visitation
+        fn try_par_visit_bfs_impl<'scope, T, E, F>(
+            node: &'scope T,
+            s: &ScopeFifo<'scope>,
+            error: Arc<RwLock<Result<(), E>>>,
+            visitor: &'scope F,
+        ) where
+            T: TreeNode + Sync + ?Sized,
+            E: Send + Sync + 'scope,
+            F: Fn(&T) -> Result<(), E> + Sync,
+        {
+            // Stop recursion if there is already an error
+            if error.read().unwrap().is_err() {
+                return;
+            }
+
+            // Spawn task for visitor
+            {
+                let error = error.clone();
+                s.spawn_fifo(move |_| {
+                    // Only run visitor if there was no error in the meantime
+                    if error.read().unwrap().is_ok() {
+                        // Run visitor and check returned result
+                        let res = visitor(node);
+                        if res.is_err() {
+                            let mut error_guard = error.write().unwrap();
+                            // Don't overwrite error if there is already one
+                            if !error_guard.is_err() {
+                                *error_guard = res;
+                            }
+                        }
+                    }
+                });
+            }
+
+            // Spawn tasks for all children
+            for child in node.children().iter().map(Deref::deref) {
+                let error = error.clone();
+                s.spawn_fifo(move |s| try_par_visit_bfs_impl(child, s, error, visitor));
+            }
+        }
+
+        // Start the visitation
+        {
+            let v = &visitor;
+            let e = error.clone();
+            rayon::scope_fifo(move |s| try_par_visit_bfs_impl(self, s, e, v));
+        }
+
+        // Return any potential error collected during visitation
+        match Arc::try_unwrap(error) {
+            Ok(e) => e.into_inner().unwrap(),
+            Err(_) => panic!("Unable to unwrap Arc that stores error of tree visitation"),
+        }
+    }
 }
 
 /// Trait for mutable parallel tree visitation algorithms. Automatically implemented for types that implement [`TreeNodeMut`] and [`ThreadSafe`](crate::ThreadSafe).
@@ -226,6 +292,66 @@ pub trait ParMutVisitableTree: TreeNodeMut {
 
         let v = &visitor;
         rayon::scope(move |s| par_visit_mut_dfs_post_impl(self, s, v));
+    }
+
+    /// Visits a node and its children in depth-first post-order, stops visitation on first error and returns it. The visitor is applied after processing each node's children. Parallel version.
+    fn try_par_visit_mut_dfs_post<E, F>(&mut self, visitor: F) -> Result<(), E>
+    where
+        Self: Send + Sync,
+        E: Send + Sync,
+        F: Fn(&mut Self) -> Result<(), E> + Sync,
+    {
+        let error = Arc::new(RwLock::new(Ok(())));
+
+        fn try_par_visit_mut_dfs_post_impl<'scope, T, E, F>(
+            node: &'scope mut T,
+            _s: &Scope<'scope>,
+            error: Arc<RwLock<Result<(), E>>>,
+            visitor: &'scope F,
+        ) where
+            T: TreeNodeMut + Send + Sync + ?Sized,
+            E: Send + Sync,
+            F: Fn(&mut T) -> Result<(), E> + Sync,
+        {
+            // Stop recursion if there is already an error
+            if error.read().unwrap().is_err() {
+                return;
+            }
+
+            // Create a new scope to ensure that tasks are completed before the visitor runs
+            rayon::scope(|s| {
+                for child in node.children_mut().iter_mut().map(DerefMut::deref_mut) {
+                    let error = error.clone();
+                    s.spawn(move |s| try_par_visit_mut_dfs_post_impl(child, s, error, visitor));
+                }
+            });
+
+            // Only run visitor if none of the child nodes returned an error
+            if error.read().unwrap().is_ok() {
+                // Run visitor and check returned result
+                let res = visitor(node);
+                if res.is_err() {
+                    let mut error_guard = error.write().unwrap();
+                    // Don't overwrite error if there is already one
+                    if !error_guard.is_err() {
+                        *error_guard = res;
+                    }
+                }
+            }
+        }
+
+        // Start the visitation
+        {
+            let v = &visitor;
+            let e = error.clone();
+            rayon::scope(move |s| try_par_visit_mut_dfs_post_impl(self, s, e, v));
+        }
+
+        // Return any potential error collected during visitation
+        match Arc::try_unwrap(error) {
+            Ok(e) => e.into_inner().unwrap(),
+            Err(_) => panic!("Unable to unwrap Arc that stores error of tree visitation"),
+        }
     }
 }
 

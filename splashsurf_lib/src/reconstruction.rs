@@ -8,7 +8,7 @@ use crate::uniform_grid::{OwningSubdomainGrid, Subdomain, UniformGrid};
 use crate::workspace::LocalReconstructionWorkspace;
 use crate::{
     density_map, marching_cubes, neighborhood_search, new_map, profile, utils, Index, Parameters,
-    ParticleDensityComputationStrategy, Real, SpatialDecompositionParameters,
+    ParticleDensityComputationStrategy, Real, ReconstructionError, SpatialDecompositionParameters,
     SurfaceReconstruction,
 };
 use log::{debug, info, trace};
@@ -20,7 +20,7 @@ pub(crate) fn reconstruct_surface_global<'a, I: Index, R: Real>(
     particle_positions: &[Vector3<R>],
     parameters: &Parameters<R>,
     output_surface: &'a mut SurfaceReconstruction<I, R>,
-) {
+) -> Result<(), ReconstructionError<I, R>> {
     profile!("reconstruct_surface_global");
 
     let mut workspace = output_surface
@@ -39,10 +39,12 @@ pub(crate) fn reconstruct_surface_global<'a, I: Index, R: Real>(
         None,
         parameters,
         &mut output_surface.mesh,
-    );
+    )?;
 
     // TODO: Set this correctly
     output_surface.density_map = None;
+
+    Ok(())
 }
 
 /// Perform a surface reconstruction with an octree for domain decomposition
@@ -50,12 +52,14 @@ pub(crate) fn reconstruct_surface_domain_decomposition<'a, I: Index, R: Real>(
     particle_positions: &[Vector3<R>],
     parameters: &Parameters<R>,
     output_surface: &'a mut SurfaceReconstruction<I, R>,
-) {
+) -> Result<(), ReconstructionError<I, R>> {
     profile!("reconstruct_surface_domain_decomposition");
 
     SurfaceReconstructionOctreeVisitor::new(particle_positions, parameters, output_surface)
-        .expect("Unable to construct octree")
-        .run(particle_positions, output_surface);
+        .expect("Unable to construct octree. Missing/invalid decomposition parameters?")
+        .run(particle_positions, output_surface)?;
+
+    Ok(())
 }
 
 struct SurfaceReconstructionOctreeVisitor<I: Index, R: Real> {
@@ -114,7 +118,7 @@ impl<I: Index, R: Real> SurfaceReconstructionOctreeVisitor<I, R> {
         self,
         global_particle_positions: &[Vector3<R>],
         output_surface: &mut SurfaceReconstruction<I, R>,
-    ) {
+    ) -> Result<(), ReconstructionError<I, R>> {
         let global_particle_densities_vec =
             match self.spatial_decomposition.particle_density_computation {
                 // Compute particle densities globally
@@ -151,13 +155,13 @@ impl<I: Index, R: Real> SurfaceReconstructionOctreeVisitor<I, R> {
                 global_particle_positions,
                 global_particle_densities,
                 output_surface,
-            );
+            )?;
         } else {
             self.run_inplace(
                 global_particle_positions,
                 global_particle_densities,
                 output_surface,
-            );
+            )?;
         }
 
         info!(
@@ -173,6 +177,8 @@ impl<I: Index, R: Real> SurfaceReconstructionOctreeVisitor<I, R> {
         if let Some(global_particle_densities_vec) = global_particle_densities_vec {
             *output_surface.workspace.densities_mut() = global_particle_densities_vec;
         }
+
+        Ok(())
     }
 
     fn compute_particle_densities_global(
@@ -283,7 +289,7 @@ impl<I: Index, R: Real> SurfaceReconstructionOctreeVisitor<I, R> {
         global_particle_positions: &[Vector3<R>],
         global_particle_densities: Option<&[R]>,
         output_surface: &mut SurfaceReconstruction<I, R>,
-    ) {
+    ) -> Result<(), ReconstructionError<I, R>> {
         // Clear all local meshes
         {
             let tl_workspaces = &mut output_surface.workspace;
@@ -305,19 +311,19 @@ impl<I: Index, R: Real> SurfaceReconstructionOctreeVisitor<I, R> {
 
             self.octree
                 .root()
-                .par_visit_bfs(|octree_node: &OctreeNode<I, R>| {
+                .try_par_visit_bfs(|octree_node: &OctreeNode<I, R>| -> Result<(), ReconstructionError<I, R>> {
                     let particles = if let Some(particle_set) = octree_node.data().particle_set() {
                         &particle_set.particles
                     } else {
                         // Skip non-leaf nodes
-                        return;
+                        return Ok(());
                     };
 
                     profile!("visit octree node for reconstruction", parent = parent_scope);
                     trace!("Processing octree leaf with {} particles", particles.len());
 
                     if particles.is_empty() {
-                        return;
+                        return Ok(());
                     } else {
                         let subdomain_grid = self.extract_node_subdomain(octree_node);
 
@@ -355,7 +361,7 @@ impl<I: Index, R: Real> SurfaceReconstructionOctreeVisitor<I, R> {
                             node_particle_densities.as_ref().map(|v| v.as_slice()),
                             &self.parameters,
                             &mut node_mesh,
-                        );
+                        )?;
 
                         trace!("Surface patch successfully processed.");
 
@@ -365,8 +371,10 @@ impl<I: Index, R: Real> SurfaceReconstructionOctreeVisitor<I, R> {
                         if let Some(node_particle_densities) = node_particle_densities {
                             tl_workspace.particle_densities = node_particle_densities;
                         }
+
+                        Ok(())
                     }
-                });
+                })?;
         };
 
         // Append all thread local meshes to global mesh
@@ -380,6 +388,8 @@ impl<I: Index, R: Real> SurfaceReconstructionOctreeVisitor<I, R> {
                 },
             );
         }
+
+        Ok(())
     }
 
     fn run_with_stitching(
@@ -387,7 +397,7 @@ impl<I: Index, R: Real> SurfaceReconstructionOctreeVisitor<I, R> {
         global_particle_positions: &[Vector3<R>],
         global_particle_densities: Option<&[R]>,
         output_surface: &mut SurfaceReconstruction<I, R>,
-    ) {
+    ) -> Result<(), ReconstructionError<I, R>> {
         let mut octree = self.octree.clone();
 
         // Perform individual surface reconstructions on all non-empty leaves of the octree
@@ -402,7 +412,7 @@ impl<I: Index, R: Real> SurfaceReconstructionOctreeVisitor<I, R> {
 
             octree
                 .root_mut()
-                .par_visit_mut_dfs_post(|octree_node: &mut OctreeNode<I, R>| {
+                .try_par_visit_mut_dfs_post(|octree_node: &mut OctreeNode<I, R>| -> Result<(), ReconstructionError<I, R>> {
                     profile!("visit octree node (reconstruct or stitch)", parent = parent_scope);
 
                     let particles = if let Some(particle_set) = octree_node.data().particle_set() {
@@ -410,7 +420,7 @@ impl<I: Index, R: Real> SurfaceReconstructionOctreeVisitor<I, R> {
                     } else {
                         // If node has no particle set, its children were already processed so it can be stitched
                         octree_node.stitch_surface_patches(self.parameters.iso_surface_threshold);
-                        return;
+                        return Ok(());
                     };
 
                     trace!("Processing octree leaf with {} particles", particles.len());
@@ -457,7 +467,7 @@ impl<I: Index, R: Real> SurfaceReconstructionOctreeVisitor<I, R> {
                             tl_workspace.particle_densities = node_particle_densities;
                         }
 
-                        surface_patch
+                        surface_patch?
                     };
 
                     trace!("Surface patch successfully processed.");
@@ -466,7 +476,9 @@ impl<I: Index, R: Real> SurfaceReconstructionOctreeVisitor<I, R> {
                     octree_node
                         .data_mut()
                         .replace(NodeData::SurfacePatch(surface_patch.into()));
-                });
+
+                    Ok(())
+                })?;
 
             info!("Generation of surface patches is done.");
         };
@@ -482,6 +494,8 @@ impl<I: Index, R: Real> SurfaceReconstructionOctreeVisitor<I, R> {
                 .patch;
             output_surface.mesh = surface_path.mesh;
         }
+
+        Ok(())
     }
 
     /// Computes the subdomain grid for the given octree node
@@ -575,7 +589,7 @@ pub(crate) fn reconstruct_single_surface_append<'a, I: Index, R: Real>(
     particle_densities: Option<&[R]>,
     parameters: &Parameters<R>,
     output_mesh: &'a mut TriMesh3d<R>,
-) {
+) -> Result<(), ReconstructionError<I, R>> {
     let particle_rest_density = parameters.rest_density;
     let particle_rest_volume = R::from_f64((4.0 / 3.0) * std::f64::consts::PI).unwrap()
         * parameters.particle_radius.powi(3);
@@ -609,7 +623,7 @@ pub(crate) fn reconstruct_single_surface_append<'a, I: Index, R: Real>(
         parameters.cube_size,
         parameters.enable_multi_threading,
         &mut density_map,
-    );
+    )?;
 
     marching_cubes::triangulate_density_map_append::<I, R>(
         grid,
@@ -618,6 +632,8 @@ pub(crate) fn reconstruct_single_surface_append<'a, I: Index, R: Real>(
         parameters.iso_surface_threshold,
         output_mesh,
     );
+
+    Ok(())
 }
 
 /// Reconstruct a surface, appends triangulation to the given mesh
@@ -627,7 +643,7 @@ pub(crate) fn reconstruct_surface_patch<I: Index, R: Real>(
     particle_positions: &[Vector3<R>],
     particle_densities: Option<&[R]>,
     parameters: &Parameters<R>,
-) -> SurfacePatch<I, R> {
+) -> Result<SurfacePatch<I, R>, ReconstructionError<I, R>> {
     profile!("reconstruct_surface_patch");
 
     let particle_rest_density = parameters.rest_density;
@@ -663,12 +679,14 @@ pub(crate) fn reconstruct_surface_patch<I: Index, R: Real>(
         parameters.cube_size,
         parameters.enable_multi_threading,
         &mut density_map,
-    );
+    )?;
 
     // Run marching cubes and get boundary data
-    marching_cubes::triangulate_density_map_to_surface_patch::<I, R>(
+    let patch = marching_cubes::triangulate_density_map_to_surface_patch::<I, R>(
         subdomain_grid,
         &density_map,
         parameters.iso_surface_threshold,
-    )
+    );
+
+    Ok(patch)
 }

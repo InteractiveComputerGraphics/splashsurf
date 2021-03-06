@@ -34,6 +34,7 @@ pub use octree::SubdivisionCriterion;
 pub use traits::{Index, Real, ThreadSafe};
 pub use uniform_grid::{GridConstructionError, UniformGrid};
 
+use crate::density_map::DensityMapError;
 use crate::mesh::TriMesh3d;
 use crate::octree::Octree;
 use crate::workspace::ReconstructionWorkspace;
@@ -278,9 +279,12 @@ impl<I: Index, R: Real> From<SurfaceReconstruction<I, R>> for TriMesh3d<R> {
 #[non_exhaustive]
 #[derive(Debug, ThisError)]
 pub enum ReconstructionError<I: Index, R: Real> {
-    /// Errors that occur during the implicit construction of the virtual background grid used for the density map and marching cubes
+    /// Errors that occur during the implicit construction of the implicit background grid used for the density map and marching cubes
     #[error("grid construction: {0}")]
     GridConstructionError(GridConstructionError<I, R>),
+    /// Errors that occur during the generation of the density map
+    #[error("density map generation: {0}")]
+    DensityMapGenerationError(DensityMapError<R>),
     /// Any error that is not represented by some other explicit variant
     #[error("unknown error")]
     Unknown(anyhow::Error),
@@ -290,6 +294,13 @@ impl<I: Index, R: Real> From<GridConstructionError<I, R>> for ReconstructionErro
     /// Allows automatic conversion of a [`GridConstructionError`] to a [`ReconstructionError`]
     fn from(error: GridConstructionError<I, R>) -> Self {
         ReconstructionError::GridConstructionError(error)
+    }
+}
+
+impl<I: Index, R: Real> From<DensityMapError<R>> for ReconstructionError<I, R> {
+    /// Allows automatic conversion of a [`DensityMapError`] to a [`ReconstructionError`]
+    fn from(error: DensityMapError<R>) -> Self {
+        ReconstructionError::DensityMapGenerationError(error)
     }
 }
 
@@ -349,9 +360,9 @@ pub fn reconstruct_surface_inplace<'a, I: Index, R: Real>(
             particle_positions,
             parameters,
             output_surface,
-        );
+        )?;
     } else {
-        reconstruction::reconstruct_surface_global(particle_positions, parameters, output_surface);
+        reconstruction::reconstruct_surface_global(particle_positions, parameters, output_surface)?;
     }
 
     Ok(())
