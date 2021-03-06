@@ -36,7 +36,7 @@ profiling = ["lazy_static"]
 
 [dependencies]
 log = "0.4"
-nalgebra = "0.24"
+nalgebra = { version = "0.25", features = ["rand"] }
 num = "0.3"
 anyhow = "1.0"
 thiserror = "1.0"
