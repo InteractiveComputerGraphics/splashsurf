@@ -28,15 +28,16 @@ use thiserror::Error as ThisError;
 #[cfg(feature = "vtk_extras")]
 pub use vtkio;
 
-pub use aabb::{AxisAlignedBoundingBox, AxisAlignedBoundingBox2d, AxisAlignedBoundingBox3d};
-pub use density_map::DensityMap;
-pub use octree::SubdivisionCriterion;
-pub use traits::{Index, Real, ThreadSafe};
-pub use uniform_grid::{GridConstructionError, UniformGrid};
+pub use crate::aabb::{AxisAlignedBoundingBox, AxisAlignedBoundingBox2d, AxisAlignedBoundingBox3d};
+pub use crate::density_map::DensityMap;
+pub use crate::octree::SubdivisionCriterion;
+pub use crate::traits::{Index, Real, ThreadSafe};
+pub use crate::uniform_grid::UniformGrid;
 
 use crate::density_map::DensityMapError;
 use crate::mesh::TriMesh3d;
 use crate::octree::Octree;
+use crate::uniform_grid::GridConstructionError;
 use crate::workspace::ReconstructionWorkspace;
 
 #[cfg(feature = "profiling")]
