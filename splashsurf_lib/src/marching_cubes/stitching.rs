@@ -1,12 +1,12 @@
 use crate::marching_cubes::narrow_band_extraction::update_mc_input_for_stitching_domain;
 use crate::marching_cubes::triangulation::{
-    triangulate_with_criterion, DefaultTriangleGenerator, TriangulationStitchingInterior,
+    triangulate_with_criterion, DebugTriangleGenerator, TriangulationStitchingInterior,
 };
-use crate::marching_cubes::{CellData, MarchingCubesInput};
+use crate::marching_cubes::{CellData, MarchingCubesError, MarchingCubesInput};
 use crate::mesh::TriMesh3d;
 use crate::topology::{Axis, DirectedAxis, DirectedAxisArray, Direction};
 use crate::uniform_grid::{GridBoundaryFaceFlags, OwningSubdomainGrid, Subdomain, UniformGrid};
-use crate::{profile, Index, MapType, Real};
+use crate::{profile, Index, MapType, Real, ReconstructionError};
 use log::{debug, trace};
 
 /// Stitches the two given surface patches by triangulating the domain between them
@@ -15,7 +15,7 @@ pub(crate) fn stitch_surface_patches<I: Index, R: Real>(
     stitching_axis: Axis,
     mut negative_side: SurfacePatch<I, R>,
     mut positive_side: SurfacePatch<I, R>,
-) -> SurfacePatch<I, R> {
+) -> Result<SurfacePatch<I, R>, ReconstructionError<I, R>> {
     profile!("stitch_surface_patches");
 
     assert_eq!(
@@ -116,8 +116,9 @@ pub(crate) fn stitch_surface_patches<I: Index, R: Real>(
             marching_cubes_input,
             &mut output_mesh,
             TriangulationStitchingInterior::new(stitching_axis),
-            DefaultTriangleGenerator,
-        );
+            DebugTriangleGenerator,
+        )
+        .map_err(MarchingCubesError::from)?;
 
         boundary_cell_data
     };
@@ -203,14 +204,14 @@ pub(crate) fn stitch_surface_patches<I: Index, R: Real>(
         }
     });
 
-    SurfacePatch {
+    Ok(SurfacePatch {
         subdomain: output_subdomain_grid,
         mesh: output_mesh,
         data: output_boundary_data,
         stitching_level: negative_side
             .stitching_level
             .max(positive_side.stitching_level),
-    }
+    })
 }
 
 /// A surface patch representing a local part of a larger surface reconstruction

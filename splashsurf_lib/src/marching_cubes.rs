@@ -4,13 +4,13 @@ use crate::marching_cubes::narrow_band_extraction::{
     construct_mc_input, construct_mc_input_with_stitching_data,
 };
 use crate::marching_cubes::triangulation::{
-    triangulate, triangulate_with_criterion, DefaultTriangleGenerator,
-    TriangulationSkipBoundaryCells,
+    triangulate, triangulate_with_criterion, DebugTriangleGenerator, TriangulationSkipBoundaryCells,
 };
 use crate::mesh::TriMesh3d;
 use crate::uniform_grid::{DummySubdomain, OwningSubdomainGrid, Subdomain};
 use crate::{new_map, profile, DensityMap, Index, MapType, Real, UniformGrid};
 use nalgebra::Vector3;
+use thiserror::Error as ThisError;
 
 pub mod marching_cubes_lut;
 mod narrow_band_extraction;
@@ -18,6 +18,21 @@ mod stitching;
 mod triangulation;
 
 pub(crate) use stitching::{stitch_surface_patches, SurfacePatch};
+pub use triangulation::TriangulationError;
+
+/// Error enum for the marching cubes functions
+#[derive(Debug, ThisError)]
+pub enum MarchingCubesError {
+    /// Error from the triangulation stage of marching cubes
+    #[error("error during triangulation stage: {0}")]
+    TriangulationError(TriangulationError),
+}
+
+impl From<TriangulationError> for MarchingCubesError {
+    fn from(e: TriangulationError) -> Self {
+        MarchingCubesError::TriangulationError(e)
+    }
+}
 
 /// Input data required by the marching cubes triangulation
 #[derive(Clone, Debug)]
@@ -36,7 +51,7 @@ pub(crate) enum RelativeToThreshold {
 
 impl RelativeToThreshold {
     /// Returns if the value is above the iso-surface threshold, panics if the value is indeterminate
-    fn is_above(&self) -> bool {
+    fn is_above_unchecked(&self) -> bool {
         match self {
             RelativeToThreshold::Below => false,
             RelativeToThreshold::Above => true,
@@ -68,16 +83,16 @@ pub(crate) struct CellData {
 
 impl CellData {
     /// Returns an boolean array indicating for each corner vertex of the cell whether it's above the iso-surface threshold
-    fn are_vertices_above(&self) -> [bool; 8] {
+    fn are_vertices_above_unchecked(&self) -> [bool; 8] {
         [
-            self.corner_above_threshold[0].is_above(),
-            self.corner_above_threshold[1].is_above(),
-            self.corner_above_threshold[2].is_above(),
-            self.corner_above_threshold[3].is_above(),
-            self.corner_above_threshold[4].is_above(),
-            self.corner_above_threshold[5].is_above(),
-            self.corner_above_threshold[6].is_above(),
-            self.corner_above_threshold[7].is_above(),
+            self.corner_above_threshold[0].is_above_unchecked(),
+            self.corner_above_threshold[1].is_above_unchecked(),
+            self.corner_above_threshold[2].is_above_unchecked(),
+            self.corner_above_threshold[3].is_above_unchecked(),
+            self.corner_above_threshold[4].is_above_unchecked(),
+            self.corner_above_threshold[5].is_above_unchecked(),
+            self.corner_above_threshold[6].is_above_unchecked(),
+            self.corner_above_threshold[7].is_above_unchecked(),
         ]
     }
 }
@@ -104,12 +119,12 @@ pub fn triangulate_density_map<I: Index, R: Real>(
     grid: &UniformGrid<I, R>,
     density_map: &DensityMap<I, R>,
     iso_surface_threshold: R,
-) -> TriMesh3d<R> {
+) -> Result<TriMesh3d<R>, MarchingCubesError> {
     profile!("triangulate_density_map");
 
     let mut mesh = TriMesh3d::default();
-    triangulate_density_map_append(grid, None, density_map, iso_surface_threshold, &mut mesh);
-    mesh
+    triangulate_density_map_append(grid, None, density_map, iso_surface_threshold, &mut mesh)?;
+    Ok(mesh)
 }
 
 /// Performs a marching cubes triangulation of a density map on the given background grid, appends triangles to the given mesh
@@ -119,7 +134,7 @@ pub fn triangulate_density_map_append<I: Index, R: Real>(
     density_map: &DensityMap<I, R>,
     iso_surface_threshold: R,
     mesh: &mut TriMesh3d<R>,
-) {
+) -> Result<(), MarchingCubesError> {
     profile!("triangulate_density_map_append");
 
     let marching_cubes_data = if let Some(subdomain) = subdomain {
@@ -139,7 +154,8 @@ pub fn triangulate_density_map_append<I: Index, R: Real>(
         )
     };
 
-    triangulate::<I, R>(marching_cubes_data, mesh);
+    triangulate(marching_cubes_data, mesh)?;
+    Ok(())
 }
 
 /// Performs triangulation of the given density map to a surface patch
@@ -147,7 +163,7 @@ pub(crate) fn triangulate_density_map_to_surface_patch<I: Index, R: Real>(
     subdomain: &OwningSubdomainGrid<I, R>,
     density_map: &DensityMap<I, R>,
     iso_surface_threshold: R,
-) -> SurfacePatch<I, R> {
+) -> Result<SurfacePatch<I, R>, MarchingCubesError> {
     profile!("triangulate_density_map_append");
 
     let mut mesh = TriMesh3d::default();
@@ -170,15 +186,15 @@ pub(crate) fn triangulate_density_map_to_surface_patch<I: Index, R: Real>(
         marching_cubes_data,
         &mut mesh,
         TriangulationSkipBoundaryCells,
-        DefaultTriangleGenerator,
-    );
+        DebugTriangleGenerator,
+    )?;
 
-    SurfacePatch {
+    Ok(SurfacePatch {
         mesh,
         subdomain,
         data: boundary_data,
         stitching_level: 0,
-    }
+    })
 }
 
 /// Checks the consistency of the mesh (currently only checks for holes) and returns a string with debug information in case of problems
@@ -376,7 +392,7 @@ fn test_interpolate_cell_data() {
     assert_eq!(
         cell.corner_above_threshold
             .iter()
-            .map(|r| r.is_above())
+            .map(|r| r.is_above_unchecked())
             .collect::<Vec<_>>(),
         vec![false, true, true, true, false, false, true, false]
     );

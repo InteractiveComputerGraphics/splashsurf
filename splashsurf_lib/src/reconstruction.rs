@@ -419,7 +419,7 @@ impl<I: Index, R: Real> SurfaceReconstructionOctreeVisitor<I, R> {
                         &particle_set.particles
                     } else {
                         // If node has no particle set, its children were already processed so it can be stitched
-                        octree_node.stitch_surface_patches(self.parameters.iso_surface_threshold);
+                        octree_node.stitch_surface_patches(self.parameters.iso_surface_threshold)?;
                         return Ok(());
                     };
 
@@ -625,13 +625,13 @@ pub(crate) fn reconstruct_single_surface_append<'a, I: Index, R: Real>(
         &mut density_map,
     )?;
 
-    marching_cubes::triangulate_density_map_append::<I, R>(
+    marching_cubes::triangulate_density_map_append(
         grid,
         subdomain_grid,
         &density_map,
         parameters.iso_surface_threshold,
         output_mesh,
-    );
+    )?;
 
     Ok(())
 }
@@ -686,7 +686,7 @@ pub(crate) fn reconstruct_surface_patch<I: Index, R: Real>(
         subdomain_grid,
         &density_map,
         parameters.iso_surface_threshold,
-    );
+    )?;
 
     Ok(patch)
 }

@@ -12,8 +12,9 @@ use crate::{
 use nalgebra::Vector3;
 use rayon::prelude::*;
 
-// TODO: Replace some unwrap() calls with errors
+// TODO: Replace some unwrap() calls with errors, e.g. if domain excludes some particles that are neighbors
 // TODO: Check if input parameters are valid (valid domain, valid search radius)
+// TODO: Write tests with sample data for neighborhood search
 
 /// Performs a neighborhood search, returning the indices of all neighboring particles in the given search radius per particle
 #[inline(never)]

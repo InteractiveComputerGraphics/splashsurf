@@ -8,6 +8,15 @@ use anyhow::Context;
 use log::trace;
 use nalgebra::Vector3;
 use std::marker::PhantomData;
+use thiserror::Error as ThisError;
+
+/// Error enum for the marching cubes triangulation stage
+#[derive(Debug, ThisError)]
+pub enum TriangulationError {
+    /// Error that occurred while generating the triangle connectivity for a case
+    #[error("triangle connectivity error: {0}")]
+    TriangleConnectivityError(anyhow::Error),
+}
 
 /// Trait that is used by the marching cubes [triangulate_with_criterion] function to query whether a cell should be triangulated
 pub(crate) trait TriangulationCriterion<I: Index, R: Real, S: Subdomain<I, R>> {
@@ -35,7 +44,7 @@ pub(crate) trait TriangleGenerator<I: Index, R: Real, S: Subdomain<I, R>> {
     ) -> Result<[usize; 3], anyhow::Error>;
 }
 
-/// Maps the edges indices directly to the vertex indices in the cell data, panics if vertices are missing
+/// Maps the edges indices directly to the vertex indices in the cell data
 pub(crate) struct DefaultTriangleGenerator;
 /// Tries to map the edge indices to the vertex indices in the cell data, returns an error with debug information if vertices are missing
 pub(crate) struct DebugTriangleGenerator;
@@ -45,14 +54,14 @@ pub(crate) struct DebugTriangleGenerator;
 pub(crate) fn triangulate<I: Index, R: Real>(
     input: MarchingCubesInput<I>,
     mesh: &mut TriMesh3d<R>,
-) {
+) -> Result<(), TriangulationError> {
     triangulate_with_criterion(
         &DummySubdomain::new(&UniformGrid::new_zero()),
         input,
         mesh,
         TriangulationIdentityCriterion,
-        DefaultTriangleGenerator,
-    );
+        DebugTriangleGenerator,
+    )
 }
 
 /// Converts the marching cubes input cell data into a triangle surface mesh, appends triangles to existing mesh with custom criterion to filter out cells during triangulation
@@ -69,7 +78,7 @@ pub(crate) fn triangulate_with_criterion<
     mesh: &mut TriMesh3d<R>,
     triangulation_criterion: C,
     triangle_generator: G,
-) {
+) -> Result<(), TriangulationError> {
     profile!("triangulate_with_criterion");
 
     let MarchingCubesInput { cell_data } = input;
@@ -88,11 +97,13 @@ pub(crate) fn triangulate_with_criterion<
             continue;
         }
 
-        for triangle in marching_cubes_triangulation_iter(&cell_data.are_vertices_above()) {
-            // TODO: Promote this error, allow user to skip invalid triangles?
+        // TODO: Replace `are_vertices_above_unchecked` with something that can return an error
+        for triangle in marching_cubes_triangulation_iter(&cell_data.are_vertices_above_unchecked())
+        {
+            // TODO: Allow user to set option to skip invalid triangles?
             let global_triangle = triangle_generator
                 .triangle_connectivity(subdomain, flat_cell_index, cell_data, triangle)
-                .expect("Failed to generate triangle");
+                .map_err(|e| TriangulationError::TriangleConnectivityError(e))?;
             mesh.triangles.push(global_triangle);
         }
     }
@@ -102,6 +113,8 @@ pub(crate) fn triangulate_with_criterion<
         mesh.triangles.len(),
         mesh.vertices.len()
     );
+
+    Ok(())
 }
 
 /// Forwards to the wrapped triangulation criterion but first makes some assertions on the cell data
@@ -223,15 +236,7 @@ impl<I: Index, R: Real, S: Subdomain<I, R>> TriangleGenerator<I, R, S>
         //  edges would have missing iso-surface vertices and overall this results in an invalid triangulation
         //
         //  If this happens, it's a bug in the cell data map generation.
-        let global_triangle = [
-            cell_data.iso_surface_vertices[edge_indices[0] as usize]
-                .expect("Missing iso surface vertex. This is a bug."),
-            cell_data.iso_surface_vertices[edge_indices[1] as usize]
-                .expect("Missing iso surface vertex. This is a bug."),
-            cell_data.iso_surface_vertices[edge_indices[2] as usize]
-                .expect("Missing iso surface vertex. This is a bug."),
-        ];
-        Ok(global_triangle)
+        get_triangle(cell_data, edge_indices)
     }
 }
 
@@ -244,23 +249,47 @@ impl<I: Index, R: Real, S: Subdomain<I, R>> TriangleGenerator<I, R, S> for Debug
         cell_data: &CellData,
         edge_indices: [i32; 3],
     ) -> Result<[usize; 3], anyhow::Error> {
-        let get_triangle = || -> Result<[usize; 3], anyhow::Error> {
-            Ok([
-                cell_data.iso_surface_vertices[edge_indices[0] as usize].with_context(|| {
-                    format!("Missing iso surface vertex at edge {}.", edge_indices[0])
-                })?,
-                cell_data.iso_surface_vertices[edge_indices[1] as usize].with_context(|| {
-                    format!("Missing iso surface vertex at edge {}.", edge_indices[1])
-                })?,
-                cell_data.iso_surface_vertices[edge_indices[2] as usize].with_context(|| {
-                    format!("Missing iso surface vertex at edge {}.", edge_indices[2])
-                })?,
-            ])
-        };
-        let global_triangle = get_triangle()
-            .with_context(|| cell_debug_string(subdomain, flat_cell_index, cell_data))?;
-        Ok(global_triangle)
+        get_triangle(cell_data, edge_indices)
+            .with_context(|| cell_debug_string(subdomain, flat_cell_index, cell_data))
     }
+}
+
+/// Helper function that extracts vertex indices from the [`CellData`] for the triangle with the given edge indices
+fn get_triangle(cell_data: &CellData, edge_indices: [i32; 3]) -> Result<[usize; 3], anyhow::Error> {
+    let [edge_idx_0, edge_idx_1, edge_idx_2] = edge_indices;
+
+    Ok([
+        cell_data
+            .iso_surface_vertices
+            .get(edge_idx_0 as usize)
+            .with_context(|| "Invalid edge index. This is a bug.")?
+            .with_context(|| {
+                format!(
+                    "Missing iso surface vertex at edge {}. This is a bug.",
+                    edge_idx_0
+                )
+            })?,
+        cell_data
+            .iso_surface_vertices
+            .get(edge_idx_1 as usize)
+            .with_context(|| "Invalid edge index. This is a bug.")?
+            .with_context(|| {
+                format!(
+                    "Missing iso surface vertex at edge {}. This is a bug.",
+                    edge_idx_1
+                )
+            })?,
+        cell_data
+            .iso_surface_vertices
+            .get(edge_idx_2 as usize)
+            .with_context(|| "Invalid edge index. This is a bug.")?
+            .with_context(|| {
+                format!(
+                    "Missing iso surface vertex at edge {}. This is a bug.",
+                    edge_idx_2
+                )
+            })?,
+    ])
 }
 
 /// Helper function that returns a formatted string to debug triangulation failures

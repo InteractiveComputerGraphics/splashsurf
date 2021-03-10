@@ -8,7 +8,7 @@ use crate::uniform_grid::{PointIndex, UniformGrid};
 use crate::utils::{ChunkSize, ParallelPolicy};
 use crate::{
     marching_cubes, new_map, profile, AxisAlignedBoundingBox3d, GridConstructionError, Index,
-    MapType, Real,
+    MapType, Real, ReconstructionError,
 };
 use arrayvec::ArrayVec;
 use log::info;
@@ -677,7 +677,7 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
         children_map: &mut MapType<OctantAxisDirections, SurfacePatch<I, R>>,
         stitching_axis: Axis,
         iso_surface_threshold: R,
-    ) {
+    ) -> Result<(), ReconstructionError<I, R>> {
         profile!("stitch_children_orthogonal_to");
 
         for mut octant in OctantAxisDirections::all().iter().copied() {
@@ -702,15 +702,20 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
                 stitching_axis,
                 negative_side,
                 positive_side,
-            );
+            )?;
 
             // Add stitched surface back to map, setting the direction of the octant of the stitched patch to positive
             children_map.insert(octant, stitched_patch);
         }
+
+        Ok(())
     }
 
     /// Stitches together the [`SurfacePatch`]es stored in the children of this node if this is the direct parent of only leaf nodes
-    pub(crate) fn stitch_surface_patches(&mut self, iso_surface_threshold: R) {
+    pub(crate) fn stitch_surface_patches(
+        &mut self,
+        iso_surface_threshold: R,
+    ) -> Result<(), ReconstructionError<I, R>> {
         profile!("stitch_surface_patches");
 
         // If this node has no children there is nothing to stitch
@@ -744,9 +749,9 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
             children_map
         };
 
-        self.stitch_children_orthogonal_to(&mut children_map, Axis::X, iso_surface_threshold);
-        self.stitch_children_orthogonal_to(&mut children_map, Axis::Y, iso_surface_threshold);
-        self.stitch_children_orthogonal_to(&mut children_map, Axis::Z, iso_surface_threshold);
+        self.stitch_children_orthogonal_to(&mut children_map, Axis::X, iso_surface_threshold)?;
+        self.stitch_children_orthogonal_to(&mut children_map, Axis::Y, iso_surface_threshold)?;
+        self.stitch_children_orthogonal_to(&mut children_map, Axis::Z, iso_surface_threshold)?;
 
         assert_eq!(
             children_map.len(),
@@ -764,6 +769,8 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
             self.children.is_empty(),
             "After stitching, the node should not have any children."
         );
+
+        Ok(())
     }
 }
 
