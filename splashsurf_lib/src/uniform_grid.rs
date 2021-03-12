@@ -649,13 +649,26 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
         cell: &'a CellIndex<I>,
     ) -> impl Iterator<Item = CellIndex<I>> + 'a {
         let index = cell.index();
-        let steps = Direction::all_possible();
-        iproduct!(steps.iter(), steps.iter(), steps.iter()).filter_map(
+        static STEPS: [Option<Direction>; 3] =
+            [Some(Direction::Negative), None, Some(Direction::Positive)];
+
+        iproduct!(STEPS.iter(), STEPS.iter(), STEPS.iter()).filter_map(
             move |(step_x, step_y, step_z)| {
+                // Skip the current cell itself
+                if step_x.is_none() && step_y.is_none() && step_z.is_none() {
+                    return None;
+                }
+
                 let neighbor_cell_ijk = [
-                    step_x.checked_apply_step(index[0], I::one())?,
-                    step_y.checked_apply_step(index[1], I::one())?,
-                    step_z.checked_apply_step(index[2], I::one())?,
+                    step_x
+                        .map(|d| d.checked_apply_step(index[0], I::one()))
+                        .unwrap_or(Some(index[0]))?,
+                    step_y
+                        .map(|d| d.checked_apply_step(index[1], I::one()))
+                        .unwrap_or(Some(index[1]))?,
+                    step_z
+                        .map(|d| d.checked_apply_step(index[2], I::one()))
+                        .unwrap_or(Some(index[2]))?,
                 ];
                 self.get_cell(neighbor_cell_ijk)
             },
