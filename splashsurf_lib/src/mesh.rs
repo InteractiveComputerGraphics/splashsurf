@@ -99,8 +99,16 @@ pub trait Mesh3d<R: Real> {
 pub trait CellConnectivity {
     /// Returns the number of vertices per cell
     fn num_vertices() -> usize;
+    /// Calls the given closure with each vertex index that is part of this cell, stopping at the first error and returning that error
+    fn try_for_each_vertex<E, F: FnMut(usize) -> Result<(), E>>(&self, f: F) -> Result<(), E>;
     /// Calls the given closure with each vertex index that is part of this cell
-    fn for_each_vertex<F: FnMut(usize)>(&self, f: F);
+    fn for_each_vertex<F: FnMut(usize)>(&self, mut f: F) {
+        self.try_for_each_vertex::<(), _>(move |i| {
+            f(i);
+            Ok(())
+        })
+        .unwrap();
+    }
 }
 
 /// Cell type for the [`TriMesh3d`]
@@ -118,8 +126,8 @@ impl CellConnectivity for TriangleCell {
         3
     }
 
-    fn for_each_vertex<F: FnMut(usize)>(&self, f: F) {
-        self.0.iter().copied().for_each(f);
+    fn try_for_each_vertex<E, F: FnMut(usize) -> Result<(), E>>(&self, f: F) -> Result<(), E> {
+        self.0.iter().copied().try_for_each(f)
     }
 }
 
@@ -128,8 +136,8 @@ impl CellConnectivity for HexCell {
         8
     }
 
-    fn for_each_vertex<F: FnMut(usize)>(&self, f: F) {
-        self.0.iter().copied().for_each(f);
+    fn try_for_each_vertex<E, F: FnMut(usize) -> Result<(), E>>(&self, f: F) -> Result<(), E> {
+        self.0.iter().copied().try_for_each(f)
     }
 }
 
@@ -138,8 +146,8 @@ impl CellConnectivity for PointCell {
         1
     }
 
-    fn for_each_vertex<F: FnMut(usize)>(&self, mut f: F) {
-        f(self.0);
+    fn try_for_each_vertex<E, F: FnMut(usize) -> Result<(), E>>(&self, mut f: F) -> Result<(), E> {
+        f(self.0)
     }
 }
 

@@ -21,6 +21,12 @@ pub struct ConvertSubcommandArgs {
     /// Whether to overwrite existing files without asking
     #[structopt(long)]
     overwrite: bool,
+    /// Whether the input files contain particles (instead of surface meshes)
+    #[structopt(long, conflicts_with = "mesh")]
+    particles: bool,
+    /// Whether the input files contains a surface mesh (instead of particles)
+    #[structopt(long, conflicts_with = "particles")]
+    mesh: bool,
     /// Lower corner of the domain of particles to keep, format: domain-min=x_min;y_min;z_min (requires domain-max to be specified)
     #[structopt(
         long,
@@ -41,21 +47,31 @@ pub struct ConvertSubcommandArgs {
 
 /// Executes the `convert` subcommand
 pub fn convert_subcommand(cmd_args: &ConvertSubcommandArgs) -> Result<(), anyhow::Error> {
+    // Check if file already exists
+    if !cmd_args.overwrite {
+        if cmd_args.output_file.exists() {
+            return Err(anyhow!(
+                "Aborting: Output file \"{}\" already exists. Use overwrite flag to ignore this.",
+                cmd_args.output_file.display()
+            ));
+        }
+    }
+
+    if cmd_args.particles || (!cmd_args.particles && !cmd_args.particles) {
+        convert_particles(cmd_args)?;
+    } else {
+        convert_mesh(cmd_args)?;
+    }
+
+    Ok(())
+}
+
+fn convert_particles(cmd_args: &ConvertSubcommandArgs) -> Result<(), anyhow::Error> {
     profile!("particle file conversion cli");
 
     let io_params = io::FormatParameters::default();
     let input_file = &cmd_args.input_file;
     let output_file = &cmd_args.output_file;
-
-    // Check if file already exists
-    if !cmd_args.overwrite {
-        if output_file.exists() {
-            return Err(anyhow!(
-                "Output file \"{}\" already exists. Use overwrite flag to ignore this.",
-                output_file.display()
-            ));
-        }
-    }
 
     // Read particles
     let particle_positions: Vec<Vector3<f32>> =
@@ -91,4 +107,14 @@ pub fn convert_subcommand(cmd_args: &ConvertSubcommandArgs) -> Result<(), anyhow
     )?;
 
     Ok(())
+}
+
+fn convert_mesh(cmd_args: &ConvertSubcommandArgs) -> Result<(), anyhow::Error> {
+    profile!("mesh file conversion cli");
+
+    let io_params = io::FormatParameters::default();
+    let input_file = &cmd_args.input_file;
+    let output_file = &cmd_args.output_file;
+
+    unimplemented!("Mesh file conversion is currently not implemented");
 }
