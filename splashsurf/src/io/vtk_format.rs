@@ -1,15 +1,13 @@
+use anyhow::{anyhow, Context};
+use splashsurf_lib::mesh::{MeshWithData, TriMesh3d};
+use splashsurf_lib::nalgebra::Vector3;
+use splashsurf_lib::vtkio;
 use splashsurf_lib::vtkio::model::{
     Attributes, CellType, Cells, UnstructuredGridPiece, VertexNumbers,
 };
+use splashsurf_lib::Real;
 use std::fs::create_dir_all;
 use std::path::Path;
-
-use anyhow::{anyhow, Context};
-
-use splashsurf_lib::nalgebra::Vector3;
-use splashsurf_lib::vtkio;
-use splashsurf_lib::Real;
-
 use vtkio::model::{ByteOrder, DataSet, Version, Vtk};
 use vtkio::IOBuffer;
 
@@ -31,6 +29,14 @@ pub fn particles_to_vtk<R: Real, P: AsRef<Path>>(
         vtk_file,
         "particles",
     )
+}
+
+/// Tries to read a surface mesh from the VTK file at the given path
+pub fn surface_mesh_from_vtk<R: Real, P: AsRef<Path>>(
+    vtk_file: P,
+) -> Result<MeshWithData<R, TriMesh3d<R>>, anyhow::Error> {
+    let mesh_dataset = read_vtk(vtk_file)?;
+    surface_mesh_from_dataset(mesh_dataset)
 }
 
 /// Tries to write `data` that is convertible to a VTK `DataSet` into a big endian VTK file
@@ -99,6 +105,58 @@ pub fn particles_from_dataset<R: Real>(dataset: DataSet) -> Result<Vec<Vector3<R
                     "Point coordinate IOBuffer does not contain f32 or f64 values"
                 )),
             }
+        } else {
+            Err(anyhow!(
+                "Loaded dataset does not contain an unstructured grid piece"
+            ))
+        }
+    } else {
+        Err(anyhow!(
+            "Loaded dataset does not contain an unstructured grid"
+        ))
+    }
+}
+
+/// Tries to convert a VTK `DataSet` into a surface mesh
+pub fn surface_mesh_from_dataset<R: Real>(
+    dataset: DataSet,
+) -> Result<MeshWithData<R, TriMesh3d<R>>, anyhow::Error> {
+    if let DataSet::UnstructuredGrid { pieces, .. } = dataset {
+        if let Some(piece) = pieces.into_iter().next() {
+            let piece = piece
+                .into_loaded_piece_data(None)
+                .context("Failed to load unstructured grid piece")?;
+
+            let vertices = match piece.points {
+                IOBuffer::F64(coords) => particles_from_coords(&coords),
+                IOBuffer::F32(coords) => particles_from_coords(&coords),
+                _ => Err(anyhow!(
+                    "Point coordinate IOBuffer does not contain f32 or f64 values"
+                )),
+            }?;
+
+            let triangles = {
+                let (num_cells, cell_verts) = piece.cells.cell_verts.into_legacy();
+                if cell_verts.len() % 4 == 0 {
+                    let mut cells = Vec::with_capacity(num_cells as usize);
+                    cell_verts.chunks_exact(4).try_for_each(|cell| {
+                        if cell[0] == 3 {
+                            cells.push([cell[1] as usize, cell[2] as usize, cell[3] as usize]);
+                            Ok(())
+                        } else {
+                            Err(anyhow!("Invalid number of vertex indices per cell"))
+                        }
+                    })?;
+                    cells
+                } else {
+                    return Err(anyhow!("Invalid number of vertex indices per cell"));
+                }
+            };
+
+            Ok(MeshWithData::new(TriMesh3d {
+                vertices,
+                triangles,
+            }))
         } else {
             Err(anyhow!(
                 "Loaded dataset does not contain an unstructured grid piece"

@@ -1,12 +1,12 @@
-use std::fs::File;
-use std::io::{BufWriter, Write};
-use std::path::Path;
-
 use anyhow::{anyhow, Context};
 use log::info;
+use splashsurf_lib::mesh::{Mesh3d, MeshWithData, TriMesh3d};
 use splashsurf_lib::nalgebra::Vector3;
 use splashsurf_lib::profile;
 use splashsurf_lib::Real;
+use std::fs::File;
+use std::io::{BufWriter, Write};
+use std::path::Path;
 
 pub mod bgeo_format;
 pub mod json_format;
@@ -42,7 +42,7 @@ impl Default for OutputFormatParameters {
     }
 }
 
-/// Loads particles positions form the given file path, automatically detects the file format
+/// Loads particles positions from the given file path, automatically detects the file format
 pub fn read_particle_positions<R: Real, P: AsRef<Path>>(
     input_file: P,
     _format_params: &InputFormatParameters,
@@ -87,7 +87,7 @@ pub fn read_particle_positions<R: Real, P: AsRef<Path>>(
     Ok(particle_positions)
 }
 
-/// Stores particles positions in the given file path, automatically detects the file format
+/// Writes particles positions to the given file path, automatically detects the file format
 pub fn write_particle_positions<R: Real, P: AsRef<Path>>(
     particles: &[Vector3<R>],
     output_file: P,
@@ -123,6 +123,85 @@ pub fn write_particle_positions<R: Real, P: AsRef<Path>>(
     };
 
     info!("Successfully wrote particles to file.");
+    Ok(())
+}
+
+/// Loads a surface mesh from the given file path, automatically detects the file format
+pub fn read_surface_mesh<R: Real, P: AsRef<Path>>(
+    input_file: P,
+    _format_params: &InputFormatParameters,
+) -> Result<MeshWithData<R, TriMesh3d<R>>, anyhow::Error> {
+    let input_file = input_file.as_ref();
+    info!("Reading mesh from \"{}\"...", input_file.display());
+
+    let mesh = if let Some(extension) = input_file.extension() {
+        profile!("loading surface mesh");
+
+        let extension = extension
+            .to_str()
+            .ok_or(anyhow!("Invalid extension of input file"))?;
+
+        match extension.to_lowercase().as_str() {
+            "vtk" => vtk_format::surface_mesh_from_vtk(&input_file)?,
+            _ => {
+                return Err(anyhow!(
+                    "Unsupported file format extension \"{}\" for reading surface meshes",
+                    extension
+                ));
+            }
+        }
+    } else {
+        return Err(anyhow!(
+            "Unable to detect file format of mesh input file (file name has to end with supported extension)",
+        ));
+    };
+
+    info!(
+        "Successfully read mesh with {} vertices and {} cells.",
+        mesh.mesh.vertices().len(),
+        mesh.mesh.cells().len()
+    );
+
+    Ok(mesh)
+}
+
+/// Writes a mesh to the given file path, automatically detects the file format
+pub fn write_mesh<R: Real, M: Mesh3d<R>, P: AsRef<Path>>(
+    mesh: &MeshWithData<R, M>,
+    output_file: P,
+    _format_params: &OutputFormatParameters,
+) -> Result<(), anyhow::Error> {
+    let output_file = output_file.as_ref();
+    info!(
+        "Writing mesh with {} vertices and {} cells to \"{}\"...",
+        mesh.mesh.vertices().len(),
+        mesh.mesh.cells().len(),
+        output_file.display()
+    );
+
+    if let Some(extension) = output_file.extension() {
+        profile!("writing mesh");
+
+        let extension = extension
+            .to_str()
+            .ok_or(anyhow!("Invalid extension of output file"))?;
+
+        match extension.to_lowercase().as_str() {
+            "obj" => obj_format::mesh_to_obj(mesh, &output_file)?,
+            _ => {
+                return Err(anyhow!(
+                    "Unsupported file format extension \"{}\" for writing meshes",
+                    extension
+                ));
+            }
+        }
+    } else {
+        return Err(anyhow!(
+            "Unable to detect file format of mesh output file (file name has to end with supported extension)",
+        ));
+    };
+
+    info!("Successfully wrote mesh to file.");
     Ok(())
 }
 

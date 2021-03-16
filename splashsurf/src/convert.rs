@@ -2,6 +2,7 @@ use crate::io;
 use anyhow::anyhow;
 use anyhow::Context;
 use log::info;
+use splashsurf_lib::mesh::MeshWithData;
 use splashsurf_lib::nalgebra::Vector3;
 use splashsurf_lib::{nalgebra, profile, AxisAlignedBoundingBox3d};
 use std::path::PathBuf;
@@ -13,20 +14,25 @@ use structopt::StructOpt;
 #[derive(Clone, Debug, StructOpt)]
 pub struct ConvertSubcommandArgs {
     /// Path to the input file with particles to read
-    #[structopt(short = "-i", parse(from_os_str))]
-    input_file: PathBuf,
+    #[structopt(
+        long = "--particles",
+        parse(from_os_str),
+        conflicts_with = "input_mesh"
+    )]
+    input_particles: Option<PathBuf>,
+    /// Path to the input file with a surface to read
+    #[structopt(
+        long = "--mesh",
+        parse(from_os_str),
+        conflicts_with = "input_particles"
+    )]
+    input_mesh: Option<PathBuf>,
     /// Path to the output file
     #[structopt(short = "-o", parse(from_os_str))]
     output_file: PathBuf,
     /// Whether to overwrite existing files without asking
     #[structopt(long)]
     overwrite: bool,
-    /// Whether the input files contain particles (instead of surface meshes)
-    #[structopt(long, conflicts_with = "mesh")]
-    particles: bool,
-    /// Whether the input files contains a surface mesh (instead of particles)
-    #[structopt(long, conflicts_with = "particles")]
-    mesh: bool,
     /// Lower corner of the domain of particles to keep, format: domain-min=x_min;y_min;z_min (requires domain-max to be specified)
     #[structopt(
         long,
@@ -48,19 +54,13 @@ pub struct ConvertSubcommandArgs {
 /// Executes the `convert` subcommand
 pub fn convert_subcommand(cmd_args: &ConvertSubcommandArgs) -> Result<(), anyhow::Error> {
     // Check if file already exists
-    if !cmd_args.overwrite {
-        if cmd_args.output_file.exists() {
-            return Err(anyhow!(
-                "Aborting: Output file \"{}\" already exists. Use overwrite flag to ignore this.",
-                cmd_args.output_file.display()
-            ));
-        }
-    }
+    overwrite_check(cmd_args)?;
 
-    if cmd_args.particles || (!cmd_args.particles && !cmd_args.particles) {
-        convert_particles(cmd_args)?;
-    } else {
-        convert_mesh(cmd_args)?;
+    match (&cmd_args.input_particles, &cmd_args.input_mesh) {
+        (Some(_), _) => convert_particles(cmd_args)?,
+        (_, Some(_)) => convert_mesh(cmd_args)?,
+        (_, _) => return Err(anyhow!(
+                "Aborting: No input file specified, either a particle or mesh input file has to be specified."))
     }
 
     Ok(())
@@ -70,7 +70,7 @@ fn convert_particles(cmd_args: &ConvertSubcommandArgs) -> Result<(), anyhow::Err
     profile!("particle file conversion cli");
 
     let io_params = io::FormatParameters::default();
-    let input_file = &cmd_args.input_file;
+    let input_file = cmd_args.input_particles.as_ref().unwrap();
     let output_file = &cmd_args.output_file;
 
     // Read particles
@@ -113,8 +113,34 @@ fn convert_mesh(cmd_args: &ConvertSubcommandArgs) -> Result<(), anyhow::Error> {
     profile!("mesh file conversion cli");
 
     let io_params = io::FormatParameters::default();
-    let input_file = &cmd_args.input_file;
+    let input_file = cmd_args.input_mesh.as_ref().unwrap();
     let output_file = &cmd_args.output_file;
 
-    unimplemented!("Mesh file conversion is currently not implemented");
+    // Try to load surface mesh
+    let mesh: MeshWithData<f32, _> = io::read_surface_mesh(input_file.as_path(), &io_params.input)
+        .with_context(|| {
+            format!(
+                "Failed to load surface mesh from file \"{}\"",
+                input_file.as_path().display()
+            )
+        })?;
+
+    // Write mesh
+    io::write_mesh(&mesh, output_file.as_path(), &io_params.output)?;
+
+    Ok(())
+}
+
+/// Returns an error if the file already exists but overwrite is disabled
+fn overwrite_check(cmd_args: &ConvertSubcommandArgs) -> Result<(), anyhow::Error> {
+    if !cmd_args.overwrite {
+        if cmd_args.output_file.exists() {
+            return Err(anyhow!(
+                "Aborting: Output file \"{}\" already exists. Use overwrite flag to ignore this.",
+                cmd_args.output_file.display()
+            ));
+        }
+    }
+
+    Ok(())
 }
