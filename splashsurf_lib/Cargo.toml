@@ -47,7 +47,7 @@ fxhash = "0.2"
 thread_local = "1.1"
 bitflags = "1.2"
 smallvec = { version = "^1.6.1", features = ["union"] }
-arrayvec = "0.5"
+arrayvec = "0.6"
 
 # VTK extras
 vtkio = { version = "0.6", optional = true }
