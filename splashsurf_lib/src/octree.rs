@@ -47,7 +47,7 @@ pub struct OctreeNode<I: Index, R: Real> {
     /// Id of the node used to identify it for debugging
     id: usize,
     /// All child nodes of this octree node
-    children: ArrayVec<[Box<Self>; 8]>,
+    children: ArrayVec<Box<Self>, 8>,
     /// Lower corner point of the octree node on the background grid
     min_corner: PointIndex<I>,
     /// Upper corner point of the octree node on the background grid
@@ -666,7 +666,7 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
                 .collect_into_vec(&mut children);
 
             // Assign children to this node
-            self.children = children.into_iter().collect::<ArrayVec<_>>();
+            self.children = children.into_iter().collect::<ArrayVec<_, 8>>();
         } else {
             panic!("Only nodes with ParticleSet data can be subdivided");
         };
