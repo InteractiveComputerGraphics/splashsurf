@@ -3,36 +3,30 @@
 use std::fmt;
 use std::fmt::Debug;
 
-use nalgebra::allocator::Allocator;
-use nalgebra::{DefaultAllocator, DimName, VectorN, U2, U3};
+use nalgebra::SVector;
 use rayon::prelude::*;
 
 use crate::{Real, ThreadSafe};
 
 /// Type representing an axis aligned bounding box in arbitrary dimensions
 #[derive(Clone, Eq, PartialEq)]
-pub struct AxisAlignedBoundingBox<R: Real, D: DimName>
-where
-    DefaultAllocator: Allocator<R, D>,
-{
-    min: VectorN<R, D>,
-    max: VectorN<R, D>,
+pub struct AxisAlignedBoundingBox<R: Real, const D: usize> {
+    min: SVector<R, D>,
+    max: SVector<R, D>,
 }
 
 /// Convenience type alias for an AABB in two dimensions
-pub type AxisAlignedBoundingBox2d<R> = AxisAlignedBoundingBox<R, U2>;
+pub type AxisAlignedBoundingBox2d<R> = AxisAlignedBoundingBox<R, 2>;
 /// Convenience type alias for an AABB in three dimensions
-pub type AxisAlignedBoundingBox3d<R> = AxisAlignedBoundingBox<R, U3>;
+pub type AxisAlignedBoundingBox3d<R> = AxisAlignedBoundingBox<R, 3>;
 
-impl<R, D> AxisAlignedBoundingBox<R, D>
+impl<R, const D: usize> AxisAlignedBoundingBox<R, D>
 where
     R: Real,
-    D: DimName,
-    DefaultAllocator: Allocator<R, D>,
-    VectorN<R, D>: ThreadSafe,
+    SVector<R, D>: ThreadSafe,
 {
     /// Constructs the smallest AABB fitting around all the given points, parallel version
-    pub fn par_from_points(points: &[VectorN<R, D>]) -> Self {
+    pub fn par_from_points(points: &[SVector<R, D>]) -> Self {
         if points.is_empty() {
             Self::zeros()
         } else if points.len() == 1 {
@@ -59,27 +53,25 @@ where
     }
 }
 
-impl<R, D> AxisAlignedBoundingBox<R, D>
+impl<R, const D: usize> AxisAlignedBoundingBox<R, D>
 where
     R: Real,
-    D: DimName,
-    DefaultAllocator: Allocator<R, D>,
 {
     /// Constructs a degenerate AABB with min and max set to zero
     #[inline(always)]
     pub fn zeros() -> Self {
-        Self::from_point(VectorN::zeros())
+        Self::from_point(SVector::zeros())
     }
 
     /// Constructs an AABB with the given min and max bounding points
     #[inline(always)]
-    pub fn new(min: VectorN<R, D>, max: VectorN<R, D>) -> Self {
+    pub fn new(min: SVector<R, D>, max: SVector<R, D>) -> Self {
         Self { min, max }
     }
 
     /// Constructs a degenerate AABB with zero extents centered at the given point
     #[inline(always)]
-    pub fn from_point(point: VectorN<R, D>) -> Self {
+    pub fn from_point(point: SVector<R, D>) -> Self {
         Self {
             min: point.clone(),
             max: point,
@@ -87,7 +79,7 @@ where
     }
 
     /// Constructs the smallest AABB fitting around all the given points
-    pub fn from_points(points: &[VectorN<R, D>]) -> Self {
+    pub fn from_points(points: &[SVector<R, D>]) -> Self {
         let mut point_iter = points.iter();
         if let Some(first_point) = point_iter.next().cloned() {
             let mut aabb = Self::from_point(first_point);
@@ -104,7 +96,6 @@ where
     pub fn try_convert<T>(&self) -> Option<AxisAlignedBoundingBox<T, D>>
     where
         T: Real,
-        DefaultAllocator: Allocator<T, D>,
     {
         Some(AxisAlignedBoundingBox::new(
             T::try_convert_vec_from(&self.min)?,
@@ -114,19 +105,19 @@ where
 
     /// Returns the min coordinate of the bounding box
     #[inline(always)]
-    pub fn min(&self) -> &VectorN<R, D> {
+    pub fn min(&self) -> &SVector<R, D> {
         &self.min
     }
 
     /// Returns the max coordinate of the bounding box
     #[inline(always)]
-    pub fn max(&self) -> &VectorN<R, D> {
+    pub fn max(&self) -> &SVector<R, D> {
         &self.max
     }
 
     /// Returns whether the AABB is consistent, i.e. `aabb.min()[i] <= aabb.max()[i]` for all `i`
     pub fn is_consistent(&self) -> bool {
-        for i in 0..D::dim() {
+        for i in 0..D {
             if !(self.min[i] <= self.max[i]) {
                 return false;
             }
@@ -136,7 +127,7 @@ where
 
     /// Returns whether the AABB is degenerate in any dimension, i.e. `aabb.min()[i] == aabb.max()[i]` for any `i`
     pub fn is_degenerate(&self) -> bool {
-        for i in 0..D::dim() {
+        for i in 0..D {
             if self.min[i] == self.max[i] {
                 return true;
             }
@@ -146,7 +137,7 @@ where
 
     /// Returns the extents of the bounding box (vector connecting min and max point of the box)
     #[inline(always)]
-    pub fn extents(&self) -> VectorN<R, D> {
+    pub fn extents(&self) -> SVector<R, D> {
         &self.max - &self.min
     }
 
@@ -167,13 +158,13 @@ where
     }
 
     /// Returns the geometric centroid of the AABB (mean of the corner points)
-    pub fn centroid(&self) -> VectorN<R, D> {
+    pub fn centroid(&self) -> SVector<R, D> {
         &self.min + (self.extents() / (R::one() + R::one()))
     }
 
     /// Checks if the given point is inside of the AABB, the AABB is considered to be half-open to its max coordinate
-    pub fn contains_point(&self, point: &VectorN<R, D>) -> bool {
-        for i in 0..D::dim() {
+    pub fn contains_point(&self, point: &SVector<R, D>) -> bool {
+        for i in 0..D {
             if point[i] < self.min[i] || point[i] >= self.max[i] {
                 return false;
             }
@@ -183,7 +174,7 @@ where
     }
 
     /// Translates the AABB by the given vector
-    pub fn translate(&mut self, vector: &VectorN<R, D>) {
+    pub fn translate(&mut self, vector: &SVector<R, D>) {
         self.min += vector;
         self.max += vector;
     }
@@ -204,15 +195,15 @@ where
 
     /// Enlarges this AABB to the smallest AABB enclosing both itself and another AABB
     pub fn join(&mut self, other: &Self) {
-        for i in 0..D::dim() {
+        for i in 0..D {
             self.min[i] = self.min[i].min(other.min[i]);
             self.max[i] = self.max[i].max(other.max[i]);
         }
     }
 
     /// Enlarges this AABB to the smallest AABB enclosing both itself and another point
-    pub fn join_with_point(&mut self, point: &VectorN<R, D>) {
-        for i in 0..D::dim() {
+    pub fn join_with_point(&mut self, point: &SVector<R, D>) {
+        for i in 0..D {
             self.min[i] = self.min[i].min(point[i]);
             self.max[i] = self.max[i].max(point[i]);
         }
@@ -220,8 +211,8 @@ where
 
     /// Grows this AABB uniformly in all directions by the given scalar margin (i.e. adding the margin to min/max extents)
     pub fn grow_uniformly(&mut self, margin: R) {
-        self.min = &self.min - &VectorN::repeat(margin);
-        self.max = &self.max + &VectorN::repeat(margin);
+        self.min = &self.min - &SVector::repeat(margin);
+        self.max = &self.max + &SVector::repeat(margin);
     }
 
     /// Returns the smallest cubical AABB with the same center that encloses this AABB
@@ -230,19 +221,17 @@ where
         let half_max_extent = self.max_extent() / (R::one() + R::one());
 
         let mut cube = Self::new(
-            VectorN::repeat(half_max_extent.neg()),
-            VectorN::repeat(half_max_extent),
+            SVector::repeat(half_max_extent.neg()),
+            SVector::repeat(half_max_extent),
         );
         cube.translate(&center);
         cube
     }
 }
 
-impl<R, D> Debug for AxisAlignedBoundingBox<R, D>
+impl<R, const D: usize> Debug for AxisAlignedBoundingBox<R, D>
 where
     R: Real,
-    D: DimName,
-    DefaultAllocator: Allocator<R, D>,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(

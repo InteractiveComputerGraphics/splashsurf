@@ -2,8 +2,7 @@ use std::fmt::{Debug, Display};
 use std::hash::Hash;
 
 use bitflags::_core::ops::{AddAssign, MulAssign, SubAssign};
-use nalgebra::allocator::Allocator;
-use nalgebra::{DefaultAllocator, DimName, RealField, VectorN};
+use nalgebra::{RealField, SVector};
 use num::{Bounded, CheckedAdd, CheckedMul, CheckedSub, FromPrimitive, Integer, ToPrimitive};
 
 /// Convenience trait that combines `Send` and `Sync`
@@ -52,15 +51,12 @@ pub trait Real: RealField + FromPrimitive + ToPrimitive + Debug + Default + Thre
         Some(T::from_f64(self.to_f64()?)?)
     }
 
-    fn try_convert_vec_from<R, D>(vec: &VectorN<R, D>) -> Option<VectorN<Self, D>>
+    fn try_convert_vec_from<R, const D: usize>(vec: &SVector<R, D>) -> Option<SVector<Self, D>>
     where
         R: Real,
-        D: DimName,
-        DefaultAllocator: Allocator<R, D>,
-        DefaultAllocator: Allocator<Self, D>,
     {
-        let mut converted = VectorN::<Self, D>::zeros();
-        for i in 0..D::dim() {
+        let mut converted = SVector::<Self, D>::zeros();
+        for i in 0..D {
             converted[i] = vec[i].try_convert()?
         }
         Some(converted)
