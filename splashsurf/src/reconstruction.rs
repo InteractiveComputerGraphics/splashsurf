@@ -605,12 +605,41 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
             "Writing surface mesh to \"{}\"...",
             paths.output_file.to_string_lossy()
         );
-        io::vtk_format::write_vtk(&mesh, &paths.output_file, "mesh").with_context(|| {
-            format!(
-                "Failed to write reconstructed surface to output file '{}'",
-                paths.output_file.to_string_lossy()
-            )
-        })?;
+
+        let extension = paths
+            .output_file
+            .extension()
+            .map(|s| s.to_str().unwrap_or("vtk"))
+            .unwrap_or("vtk");
+
+        match extension.to_lowercase().as_str() {
+            "vtk" => {
+                io::vtk_format::write_vtk(&mesh, &paths.output_file, "mesh").with_context(
+                    || {
+                        format!(
+                            "Failed to write reconstructed surface to output file '{}'",
+                            paths.output_file.to_string_lossy()
+                        )
+                    },
+                )?;
+            }
+            "obj" => {
+                io::obj_format::mesh_to_obj(&mesh, &paths.output_file).with_context(|| {
+                    format!(
+                        "Failed to write reconstructed surface to output file '{}'",
+                        paths.output_file.to_string_lossy()
+                    )
+                })?;
+            }
+            _ => {
+                return Err(anyhow!(
+                    "Unsupported file format extension \"{}\" for writing reconstructed surface to output file '{}'",
+                    extension,
+                    paths.output_file.to_string_lossy(),
+                ));
+            }
+        }
+
         info!("Done.");
     }
 
