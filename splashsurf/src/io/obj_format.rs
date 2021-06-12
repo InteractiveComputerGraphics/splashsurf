@@ -43,7 +43,11 @@ pub fn mesh_to_obj<R: Real, M: Mesh3d<R>, P: AsRef<Path>>(
 
     for f in mesh_vertices.cells() {
         write!(writer, "f")?;
-        f.try_for_each_vertex(|v| write!(writer, " {}", v + 1))?;
+        if let Some(_) = normals {
+            f.try_for_each_vertex(|v| write!(writer, " {}//{}", v + 1, v + 1))?;
+        } else {
+            f.try_for_each_vertex(|v| write!(writer, " {}", v + 1))?;
+        }
         write!(writer, "\n")?;
     }
 
