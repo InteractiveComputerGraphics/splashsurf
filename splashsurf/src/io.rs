@@ -143,6 +143,7 @@ pub fn read_surface_mesh<R: Real, P: AsRef<Path>>(
 
         match extension.to_lowercase().as_str() {
             "vtk" => vtk_format::surface_mesh_from_vtk(&input_file)?,
+            "ply" => ply_format::surface_mesh_from_ply(&input_file)?,
             _ => {
                 return Err(anyhow!(
                     "Unsupported file format extension \"{}\" for reading surface meshes",
