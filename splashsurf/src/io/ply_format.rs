@@ -69,52 +69,49 @@ pub fn surface_mesh_from_ply<R: Real, P: AsRef<Path>>(
         .get("vertex")
         .ok_or(anyhow!("PLY file is missing a 'vertex' element"))?;
 
-    let vertices_normals: Vec<(Vector3<_>, Vector3<_>)> = vertices_normals
-        .into_iter()
-        .map(|e| {
-            let vertex = (
-                e.get("x").unwrap(),
-                e.get("y").unwrap(),
-                e.get("z").unwrap(),
-                e.get("nx").unwrap(),
-                e.get("ny").unwrap(),
-                e.get("nz").unwrap(),
-            );
+    let mut vertices = Vec::with_capacity(vertices_normals.len());
+    let mut normals = Vec::with_capacity(vertices_normals.len());
 
-            let v = match vertex {
-                (
-                    Property::Float(x),
-                    Property::Float(y),
-                    Property::Float(z),
-                    Property::Float(nx),
-                    Property::Float(ny),
-                    Property::Float(nz),
-                ) => (
-                    Vector3::new(
-                        R::from_f32(*x).unwrap(),
-                        R::from_f32(*y).unwrap(),
-                        R::from_f32(*z).unwrap(),
-                    ),
-                    Vector3::new(
-                        R::from_f32(*nx).unwrap(),
-                        R::from_f32(*ny).unwrap(),
-                        R::from_f32(*nz).unwrap(),
-                    ),
+    for e in vertices_normals {
+        let vertex = (
+            e.get("x").unwrap(),
+            e.get("y").unwrap(),
+            e.get("z").unwrap(),
+            e.get("nx").unwrap(),
+            e.get("ny").unwrap(),
+            e.get("nz").unwrap(),
+        );
+
+        let (vertex, normal) = match vertex {
+            (
+                Property::Float(x),
+                Property::Float(y),
+                Property::Float(z),
+                Property::Float(nx),
+                Property::Float(ny),
+                Property::Float(nz),
+            ) => (
+                Vector3::new(
+                    R::from_f32(*x).unwrap(),
+                    R::from_f32(*y).unwrap(),
+                    R::from_f32(*z).unwrap(),
                 ),
-                _ => {
-                    return Err(anyhow!(
-                        "Vertex properties have wrong PLY data type (expected float)"
-                    ))
-                }
-            };
+                Vector3::new(
+                    R::from_f32(*nx).unwrap(),
+                    R::from_f32(*ny).unwrap(),
+                    R::from_f32(*nz).unwrap(),
+                ),
+            ),
+            _ => {
+                return Err(anyhow!(
+                    "Vertex properties have wrong PLY data type (expected float)"
+                ))
+            }
+        };
 
-            Ok(v)
-        })
-        .map(|vn| vn.unwrap())
-        .collect();
-
-    let vertices: Vec<Vector3<_>> = vertices_normals.iter().map(|vn| vn.0.clone()).collect();
-    let normals: Vec<Vector3<_>> = vertices_normals.iter().map(|vn| vn.1.clone()).collect();
+        vertices.push(vertex);
+        normals.push(normal);
+    }
 
     let faces = ply
         .payload
@@ -167,7 +164,7 @@ pub mod test {
     use super::*;
 
     #[test]
-    fn test_convert_cube() -> Result<(), anyhow::Error> {
+    fn test_read_ply_cube() -> Result<(), anyhow::Error> {
         let input_file = Path::new("../data/cube.ply");
 
         let mesh: MeshWithData<f32, _> = surface_mesh_from_ply(input_file).with_context(|| {
