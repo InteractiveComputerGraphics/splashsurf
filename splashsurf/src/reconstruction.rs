@@ -584,6 +584,7 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
         profile!("compute normals");
         let normals = mesh.par_vertex_normals();
         // Transmute Unit<Vector3<R>> to Vector3<R>
+        // As shown in: https://doc.rust-lang.org/std/mem/fn.transmute.html#alternatives
         let normals = unsafe {
             let mut normals = std::mem::ManuallyDrop::new(normals);
             Vec::from_raw_parts(

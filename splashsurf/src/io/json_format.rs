@@ -14,11 +14,11 @@ pub fn particles_from_json<R: Real, P: AsRef<Path>>(
     let file = File::open(path).context("Cannot open file for JSON parsing")?;
     let reader = BufReader::new(file);
 
-    // Read the JSON contents of the file as an instance of `User`.
-    let json =
-        serde_json::from_reader(reader).context("Reading of file to JSON structure failed")?;
+    // Read the JSON contents of the file as an instance of `ParticleVecF32`.
+    let json = serde_json::from_reader(reader)
+        .context("Reading of file to JSON structure failed. Not a valid JSON file.")?;
     let particles = serde_json::from_value::<ParticleVecF32>(json)
-        .context("Parsing of JSON structure as particle positions failed")?;
+        .context("Parsing of JSON structure as particle positions failed. Expected JSON file containing particle positions like e.g. '[[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]'.")?;
 
     let particles = particles
         .into_iter()
