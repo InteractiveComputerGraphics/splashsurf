@@ -2,6 +2,7 @@
 [![On crates.io](https://img.shields.io/crates/v/splashsurf)](https://crates.io/crates/splashsurf)
 [![On docs.rs](https://docs.rs/splashsurf_lib/badge.svg)](https://docs.rs/splashsurf_lib)
 [![License: MIT](https://img.shields.io/crates/l/splashsurf)](https://github.com/w1th0utnam3/splashsurf/blob/master/LICENSE)
+[![Dependency status](https://deps.rs/repo/github/w1th0utnam3/splashsurf/status.svg)](https://deps.rs/repo/github/w1th0utnam3/splashsurf)
 ![Build and test GitHub Actions workflow](https://github.com/w1th0utnam3/splashsurf/workflows/Build%20and%20test/badge.svg)
 
 Surface reconstruction library and CLI for particle data from SPH simulations, written in Rust.
@@ -11,7 +12,7 @@ Surface reconstruction library and CLI for particle data from SPH simulations, w
 </p>
 
 `splashsurf` is a tool to reconstruct surfaces meshes from SPH particle data.
-The first image shows the visualization of a set of particles of an SPH fluid simulation from [SPlisHSPlasH](https://github.com/InteractiveComputerGraphics/SPlisHSPlasH).
+The first image shows the visualization of a set of particles from an SPH fluid simulation from [SPlisHSPlasH](https://github.com/InteractiveComputerGraphics/SPlisHSPlasH).
 The particle radius is `0.025`. As the rendering of a fluid should not look like a ball pit, a surface mesh has to be
 reconstructed from this particle data. The next image shows a reconstructed surface mesh of the fluid produced by `splashsurf`
 with a "smoothing length" of `2.2` times the particles radius and a cell size of `1.1` times the particle radius. The
@@ -36,6 +37,7 @@ The result might look something like this (please excuse the lack of 3D renderin
     - [BGEO](#bgeo)
     - [PLY](#ply)
     - [XYZ](#xyz)
+    - [JSON](#json)
   - [Output file formats](#output-file-formats)
   - [All command line options](#all-command-line-options)
     - [The `reconstruct` command](#the-reconstruct-command)
@@ -166,6 +168,16 @@ Files with the "`.ply`" extension are loaded using [`ply-rs`](https://crates.io/
 
 Files with the "`.xyz`" extension are interpreted as raw bytes of `f32` values in native endianness of the system. Three consecutive `f32`s represent a (x,y,z) coordinate triplet of a fluid particle.
 
+### JSON
+
+Files with the "`.json`" extension are interpreted as serializations of a `Vec<[f32; 3]>` where each three component array represents a particle position. This corresponds to a JSON file with a structure like this for example:
+```json
+[
+    [1.0, 2.0, 3.0],
+    [1.0, 2.0, 3.0],
+]
+```
+
 ## Output file formats
 
 Currently, only VTK files are supported for output.
@@ -174,7 +186,7 @@ Currently, only VTK files are supported for output.
 
 ### The `reconstruct` command
 ```
-splashsurf-reconstruct 0.6.0
+splashsurf-reconstruct 0.7.0
 Reconstruct a surface from particle data
 
 USAGE:
@@ -203,7 +215,7 @@ OPTIONS:
     -i, --input-file <input-file>
             Path to the input file where the particle positions are stored (supported formats: VTK, binary f32 XYZ, PLY,
             BGEO)
-    -s, --input_sequence_pattern <input_sequence_pattern>
+    -s, --input-sequence <input-sequence>
             Path to a sequence of particle files that should be processed, use `{}` in the filename to indicate a
             placeholder
     -n, --num-threads <num-threads>
@@ -242,6 +254,9 @@ OPTIONS:
     -o <output-file>
             Filename for writing the reconstructed surface to disk (default: "{original_filename}_surface.vtk")
 
+        --output-normals <output-normals>
+            Whether to write vertex normals to the output file. Note that currently the normals are only computed using
+            an area weighted average of triangle normals [default: off]  [possible values: on, off]
         --output-octree <output-octree>
             Optional filename for writing the octree used to partition the particles to disk
 
@@ -262,12 +277,16 @@ OPTIONS:
 ```
 
 ### The `convert` subcommand
+
+Allows conversion between particle file formats and between mesh file formats. For particles `VTK, BGEO, PLY, XYZ, JSON -> VTK, PLY` 
+is supported. For meshes only `VTK, PLY -> OBJ` is supported.
+
 ```
-splashsurf-convert 0.6.0
-Convert between particle formats (supports the same input and output formats as the reconstruction)
+splashsurf-convert 0.7.0
+Convert particle or mesh files between different file formats
 
 USAGE:
-    splashsurf convert [FLAGS] [OPTIONS] -i <input-file> -o <output-file>
+    splashsurf convert [FLAGS] [OPTIONS] -o <output-file>
 
 FLAGS:
     -h, --help         Prints help information
@@ -281,8 +300,13 @@ OPTIONS:
         --domain-min <domain-min> <domain-min> <domain-min>
             Lower corner of the domain of particles to keep, format: domain-min=x_min;y_min;z_min (requires domain-max
             to be specified)
-    -i <input-file>                                            Path to the input file with particles to read
-    -o <output-file>                                           Path to the output file
+        --mesh <input-mesh>
+            Path to the input file with a surface to read (supported formats: .vtk, .ply)
+        --particles <input-particles>
+            Path to the input file with particles to read (supported formats: .vtk, .bgeo, .ply, .xyz, .json)
+
+    -o <output-file>
+            Path to the output file (supported formats for particles: .vtk, for meshes: .obj)
 ```
 
 # License

@@ -41,7 +41,7 @@ struct CommandlineArgs {
 enum Subcommand {
     /// Reconstruct a surface from particle data
     Reconstruct(reconstruction::ReconstructSubcommandArgs),
-    /// Convert between particle formats (supports the same input and output formats as the reconstruction)
+    /// Convert particle or mesh files between different file formats
     Convert(convert::ConvertSubcommandArgs),
 }
 

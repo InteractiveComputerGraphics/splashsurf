@@ -13,21 +13,21 @@ use structopt::StructOpt;
 /// Command line arguments for the `convert` subcommand
 #[derive(Clone, Debug, StructOpt)]
 pub struct ConvertSubcommandArgs {
-    /// Path to the input file with particles to read
+    /// Path to the input file with particles to read (supported formats: .vtk, .bgeo, .ply, .xyz, .json)
     #[structopt(
         long = "--particles",
         parse(from_os_str),
         conflicts_with = "input_mesh"
     )]
     input_particles: Option<PathBuf>,
-    /// Path to the input file with a surface to read
+    /// Path to the input file with a surface to read (supported formats: .vtk, .ply)
     #[structopt(
         long = "--mesh",
         parse(from_os_str),
         conflicts_with = "input_particles"
     )]
     input_mesh: Option<PathBuf>,
-    /// Path to the output file
+    /// Path to the output file (supported formats for particles: .vtk, for meshes: .obj)
     #[structopt(short = "-o", parse(from_os_str))]
     output_file: PathBuf,
     /// Whether to overwrite existing files without asking

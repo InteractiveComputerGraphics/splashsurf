@@ -1,5 +1,12 @@
 ## Master
 
+ - Lib: Fix a bug that caused the neighborhood search results to be incomplete
+ - Lib: Update to `nalgebra` 0.27. with const generics and removed usage of `nalgebra` types that are deprecated
+ - CLI: Add a command line option `--output-normals` to the `reconstruct` sub-command to write mesh normals to the output file. Note that currently the normals are only computed using an area weighted average of triangle normals.
+ - CLI: Change the `convert` sub-command to allow both conversion of particle files and conversion of mesh formats. Instead of using the `--input` option you now have to either use the `--particles` or `--mesh` option to specify the input file depending on whether you want to convert a particle or mesh file. For particles `VTK, BGEO, PLY, XYZ, JSON -> VTK, PLY` is supported. For meshes only `VTK, PLY -> OBJ` is supported.
+ - CLI: Add JSON files as supported particle input file
+ - CLI: Change the command line option to specify a sequence of input files from `--input-sequence-pattern` to `--input-sequence`
+
 ### Short-term goals
  - Implement export of surface normals via the CLI
 
@@ -21,7 +28,7 @@ Otherwise this release contains just some small changes to command line paramete
  - Lib: Change AABB's `contains_point` method such that it now considers the AABB as "open" to its max value, i.e. it checks if the point is in the half-open set `[min, max[`
  - Lib: Implemented an own `profile!` macro that also works in multi-threaded code, i.e. with together with `rayon`
  - CLI: The CLI now also prints detailed profiling/timing output when running in parallel with domain decomposition thanks to the new `profile` macro
- - CLI: Add `--domain-min` and `--domain-max` flags to the `convert` subcommand that allows to filter out particles
+ - CLI: Add `--domain-min` and `--domain-max` flags to the `convert` sub-command that allows to filter out particles
  - CLI: Remove the `--splash-detection-radius` flag as it did not work for a couple of releases
  - Lib: Update to [`vtkio`](https://github.com/elrnv/vtkio) 0.6.0
 
