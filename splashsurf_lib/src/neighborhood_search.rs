@@ -26,14 +26,14 @@ pub fn search<I: Index, R: Real>(
 ) -> Vec<Vec<usize>> {
     let mut particle_neighbor_lists = Vec::new();
     if enable_multi_threading {
-        parallel_search::<I, R>(
+        neighborhood_search_spatial_hashing_parallel::<I, R>(
             domain,
             particle_positions,
             search_radius,
             &mut particle_neighbor_lists,
         )
     } else {
-        sequential_search::<I, R>(
+        neighborhood_search_spatial_hashing::<I, R>(
             domain,
             particle_positions,
             search_radius,
@@ -53,19 +53,42 @@ pub fn search_inplace<I: Index, R: Real>(
     particle_neighbor_lists: &mut Vec<Vec<usize>>,
 ) {
     if enable_multi_threading {
-        parallel_search::<I, R>(
+        neighborhood_search_spatial_hashing_parallel::<I, R>(
             domain,
             particle_positions,
             search_radius,
             particle_neighbor_lists,
         )
     } else {
-        sequential_search::<I, R>(
+        neighborhood_search_spatial_hashing::<I, R>(
             domain,
             particle_positions,
             search_radius,
             particle_neighbor_lists,
         )
+    }
+}
+
+/// Performs a naive neighborhood search with `O(N^2)` complexity, only recommended for testing
+#[inline(never)]
+pub fn neighborhood_search_naive<R: Real>(
+    particle_positions: &[Vector3<R>],
+    search_radius: R,
+    neighborhood_list: &mut Vec<Vec<usize>>,
+) {
+    profile!("neighborhood_search_naive");
+
+    init_neighborhood_list(neighborhood_list, particle_positions.len());
+    let search_radius_squared = search_radius * search_radius;
+
+    for (idx_i, pos_i) in particle_positions.iter().enumerate() {
+        let neighbors_i = neighborhood_list.get_mut(idx_i).unwrap();
+        for (idx_j, pos_j) in particle_positions.iter().enumerate() {
+            let is_neighbor = (pos_j - pos_i).norm_squared() <= search_radius_squared;
+            if is_neighbor && idx_j != idx_i {
+                neighbors_i.push(idx_j);
+            }
+        }
     }
 }
 
@@ -99,7 +122,7 @@ fn par_init_neighborhood_list(neighborhood_list: &mut Vec<Vec<usize>>, new_len: 
 
 /// Performs a neighborhood search, returning the indices of all neighboring particles in the given search radius per particle, sequential implementation
 #[inline(never)]
-pub fn sequential_search<I: Index, R: Real>(
+pub fn neighborhood_search_spatial_hashing<I: Index, R: Real>(
     domain: &AxisAlignedBoundingBox3d<R>,
     particle_positions: &[Vector3<R>],
     search_radius: R,
@@ -107,7 +130,7 @@ pub fn sequential_search<I: Index, R: Real>(
 ) {
     // TODO: Use ArrayStorage from femproto instead of Vec of Vecs?
     // FIXME: Replace unwraps?
-    profile!("neighborhood_search");
+    profile!("neighborhood_search_spatial_hashing");
 
     assert!(
         search_radius > R::zero(),
@@ -179,15 +202,15 @@ pub fn sequential_search<I: Index, R: Real>(
     }
 }
 
-/// Performs a neighborhood search, returning the indices of all neighboring particles in the given search radius per particle, multi-thread implementation
+/// Performs a neighborhood search, returning the indices of all neighboring particles in the given search radius per particle, multi-threaded implementation
 #[inline(never)]
-pub fn parallel_search<I: Index, R: Real>(
+pub fn neighborhood_search_spatial_hashing_parallel<I: Index, R: Real>(
     domain: &AxisAlignedBoundingBox3d<R>,
     particle_positions: &[Vector3<R>],
     search_radius: R,
     neighborhood_list: &mut Vec<Vec<usize>>,
 ) {
-    profile!("par_neighborhood_search");
+    profile!("neighborhood_search_spatial_hashing_parallel");
 
     assert!(
         search_radius > R::zero(),
