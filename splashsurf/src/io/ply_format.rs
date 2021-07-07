@@ -11,10 +11,11 @@ use splashsurf_lib::mesh::TriMesh3d;
 use splashsurf_lib::nalgebra::Vector3;
 use splashsurf_lib::Real;
 
+/// Tries to read particle positions from the PLY file at the given path
 pub fn particles_from_ply<R: Real, P: AsRef<Path>>(
-    ply_file: P,
+    ply_path: P,
 ) -> Result<Vec<Vector3<R>>, anyhow::Error> {
-    let mut ply_file = std::fs::File::open(ply_file).unwrap();
+    let mut ply_file = std::fs::File::open(ply_path).unwrap();
     let parser = ply::parser::Parser::<ply::ply::DefaultElement>::new();
 
     let ply = parser
@@ -54,16 +55,31 @@ pub fn particles_from_ply<R: Real, P: AsRef<Path>>(
     Ok(particles)
 }
 
-/// Tries to read a surface mesh from the VTK file at the given path
+/// Tries to read a surface mesh from the PLY file at the given path
+///
+/// The PLY file is expected to use the following structure which is used by Blender for export:
+/// ```text
+/// element vertex 24
+/// property float x
+/// property float y
+/// property float z
+/// property float nx
+/// property float ny
+/// property float nz
+/// property float s
+/// property float t
+/// element face 12
+/// property list uchar uint vertex_indices
+/// ```
 pub fn surface_mesh_from_ply<R: Real, P: AsRef<Path>>(
-    ply_file: P,
+    ply_path: P,
 ) -> Result<MeshWithData<R, TriMesh3d<R>>, anyhow::Error> {
-    let mut ply_file = std::fs::File::open(ply_file).unwrap();
+    let mut ply_file = std::fs::File::open(ply_path).unwrap();
     let parser = ply::parser::Parser::<ply::ply::DefaultElement>::new();
 
     let ply = parser
         .read_ply(&mut ply_file)
-        .context("Failed to read PLY file")?;
+        .context("Failed to parse PLY file")?;
     let vertices_normals = ply
         .payload
         .get("vertex")
@@ -90,7 +106,7 @@ pub fn surface_mesh_from_ply<R: Real, P: AsRef<Path>>(
                 Property::Float(nx),
                 Property::Float(ny),
                 Property::Float(nz),
-            ) => (
+            ) => Ok((
                 Vector3::new(
                     R::from_f32(*x).unwrap(),
                     R::from_f32(*y).unwrap(),
@@ -101,13 +117,11 @@ pub fn surface_mesh_from_ply<R: Real, P: AsRef<Path>>(
                     R::from_f32(*ny).unwrap(),
                     R::from_f32(*nz).unwrap(),
                 ),
-            ),
-            _ => {
-                return Err(anyhow!(
-                    "Vertex properties have wrong PLY data type (expected float)"
-                ))
-            }
-        };
+            )),
+            _ => Err(anyhow!(
+                "Vertex properties have wrong PLY data type (expected float)"
+            )),
+        }?;
 
         vertices.push(vertex);
         normals.push(normal);
@@ -121,35 +135,25 @@ pub fn surface_mesh_from_ply<R: Real, P: AsRef<Path>>(
     let triangles = faces
         .into_iter()
         .map(|e| {
-            // This is as per what blender creates for a
-            let indices = e.get("vertex_indices");
-            if let Some(indices) = indices {
-                if let Property::ListUInt(indices) = indices {
-                    if indices.len() == 3 {
-                        return Ok([
-                            indices[0] as usize,
-                            indices[1] as usize,
-                            indices[2] as usize,
-                        ]);
-                    } else {
-                        return Err(anyhow!(
-                            "Invalid number of vertex indices per cell: {}",
-                            indices.len()
-                        ));
-                    }
-                } else {
-                    return Err(anyhow!(
-                        "Index properties have wrong PLY data type (expected uint)"
-                    ));
-                }
-            } else {
-                return Err(anyhow!(
-                    "Vertex properties have wrong PLY data type (expected uint)"
-                ));
+            let indices = e
+                .get("vertex_indices")
+                .ok_or_else(|| anyhow!("A face is missing a 'vertex_indices' element"))?;
+            match indices {
+                Property::ListUInt(indices) if indices.len() == 3 => Ok([
+                    indices[0] as usize,
+                    indices[1] as usize,
+                    indices[2] as usize,
+                ]),
+                Property::ListUInt(indices) => Err(anyhow!(
+                    "Invalid number of vertex indices per face: {} (expected 3)",
+                    indices.len()
+                )),
+                _ => Err(anyhow!(
+                    "Index properties have wrong PLY data type (expected uint)"
+                )),
             }
         })
-        .map(|e| e.unwrap())
-        .collect();
+        .collect::<Result<Vec<_>, _>>()?;
 
     let normals = MeshAttribute::new("normals", AttributeData::Vector3Real(normals));
     Ok(MeshWithData::new(TriMesh3d {
