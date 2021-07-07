@@ -50,6 +50,9 @@ jobs:
       - name: Run tests
         run: |
           cargo test --manifest-path="splashsurf_lib/Cargo.toml" --all-features --verbose
+      - name: Run tests release mode
+        run: |
+          cargo test --manifest-path="splashsurf_lib/Cargo.toml" --release --all-features --verbose
 
   build_lib_no_default_features:
 

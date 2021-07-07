@@ -366,6 +366,7 @@ fn build_octree_double_dam_break() {
 }
 
 #[test]
+#[cfg_attr(debug_assertions, ignore)]
 fn build_octree_dam_break() {
     build_octree_par_consistency::<i64, f64, _>(
         "../data/dam_break_frame_23_24389_particles.vtk",
@@ -386,6 +387,7 @@ fn build_octree_bunny() {
 }
 
 #[test]
+#[cfg_attr(debug_assertions, ignore)]
 fn build_octree_hilbert() {
     build_octree_par_consistency::<i64, f64, _>(
         "../data/hilbert_46843_particles.vtk",
