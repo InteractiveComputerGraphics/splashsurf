@@ -1,8 +1,8 @@
 use std::path::Path;
 
 use anyhow::{anyhow, Context};
-use ply_rs as ply;
-use ply_rs::ply::Property;
+use ply_rs::parser::Parser as PlyParser;
+use ply_rs::ply::{DefaultElement, Ply, Property};
 
 use splashsurf_lib::mesh::AttributeData;
 use splashsurf_lib::mesh::MeshAttribute;
@@ -11,17 +11,31 @@ use splashsurf_lib::mesh::TriMesh3d;
 use splashsurf_lib::nalgebra::Vector3;
 use splashsurf_lib::Real;
 
-/// Tries to read particle positions from the PLY file at the given path
+/// Tries to load the file at the given path as a PLY file and read particle positions from it
 pub fn particles_from_ply<R: Real, P: AsRef<Path>>(
     ply_path: P,
 ) -> Result<Vec<Vector3<R>>, anyhow::Error> {
-    let mut ply_file = std::fs::File::open(ply_path).unwrap();
-    let parser = ply::parser::Parser::<ply::ply::DefaultElement>::new();
+    let ply = PlyParser::new()
+        .read_ply(&mut std::fs::File::open(ply_path).context("Failed to open file for reading")?)
+        .context("Failed to parse PLY file")?;
+    parse_particles_from_ply(&ply)
+}
 
-    let ply = parser
-        .read_ply(&mut ply_file)
-        .context("Failed to read PLY file")?;
-    let elements = ply
+/// Tries to load the file at the given path as a PLY file and read a surface mesh from it
+pub fn surface_mesh_from_ply<R: Real, P: AsRef<Path>>(
+    ply_path: P,
+) -> Result<MeshWithData<R, TriMesh3d<R>>, anyhow::Error> {
+    let ply = PlyParser::new()
+        .read_ply(&mut std::fs::File::open(ply_path).context("Failed to open file for reading")?)
+        .context("Failed to parse PLY file")?;
+    parse_mesh_from_ply(&ply)
+}
+
+/// Tries to extract particle positions from the given PLY structure
+fn parse_particles_from_ply<R: Real>(
+    ply_file: &Ply<DefaultElement>,
+) -> Result<Vec<Vector3<R>>, anyhow::Error> {
+    let elements = ply_file
         .payload
         .get("vertex")
         .ok_or(anyhow!("PLY file is missing a 'vertex' element"))?;
@@ -55,7 +69,7 @@ pub fn particles_from_ply<R: Real, P: AsRef<Path>>(
     Ok(particles)
 }
 
-/// Tries to read a surface mesh from the PLY file at the given path
+/// Tries to extract a surface mesh from the given PLY structure
 ///
 /// The PLY file is expected to use the following structure which is used by Blender for export:
 /// ```text
@@ -71,16 +85,10 @@ pub fn particles_from_ply<R: Real, P: AsRef<Path>>(
 /// element face 12
 /// property list uchar uint vertex_indices
 /// ```
-pub fn surface_mesh_from_ply<R: Real, P: AsRef<Path>>(
-    ply_path: P,
+fn parse_mesh_from_ply<R: Real>(
+    ply_file: &Ply<DefaultElement>,
 ) -> Result<MeshWithData<R, TriMesh3d<R>>, anyhow::Error> {
-    let mut ply_file = std::fs::File::open(ply_path).unwrap();
-    let parser = ply::parser::Parser::<ply::ply::DefaultElement>::new();
-
-    let ply = parser
-        .read_ply(&mut ply_file)
-        .context("Failed to parse PLY file")?;
-    let vertices_normals = ply
+    let vertices_normals = ply_file
         .payload
         .get("vertex")
         .ok_or(anyhow!("PLY file is missing a 'vertex' element"))?;
@@ -127,7 +135,7 @@ pub fn surface_mesh_from_ply<R: Real, P: AsRef<Path>>(
         normals.push(normal);
     }
 
-    let faces = ply
+    let faces = ply_file
         .payload
         .get("face")
         .ok_or(anyhow!("PLY file is missing a 'face' element"))?;
