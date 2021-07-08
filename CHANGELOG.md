@@ -1,14 +1,15 @@
 ## Master
 
+## Version 0.7.0
+
  - Lib: Fix a bug that caused the neighborhood search results to be incomplete
  - Lib: Update to `nalgebra` 0.27. with const generics and removed usage of `nalgebra` types that are deprecated
+ - Lib: Add a "naive" `O(n^2)` neighborhood search for testing purposes
+ - Lib: Rename other neighborhood search functions to `neighborhood_search_spatial_hashing` and `neighborhood_search_spatial_hashing_parallel`
  - CLI: Add a command line option `--output-normals` to the `reconstruct` sub-command to write mesh normals to the output file. Note that currently the normals are only computed using an area weighted average of triangle normals.
  - CLI: Change the `convert` sub-command to allow both conversion of particle files and conversion of mesh formats. Instead of using the `--input` option you now have to either use the `--particles` or `--mesh` option to specify the input file depending on whether you want to convert a particle or mesh file. For particles `VTK, BGEO, PLY, XYZ, JSON -> VTK, PLY` is supported. For meshes only `VTK, PLY -> OBJ` is supported.
  - CLI: Add JSON files as supported particle input file
  - CLI: Change the command line option to specify a sequence of input files from `--input-sequence-pattern` to `--input-sequence`
-
-### Short-term goals
- - Implement export of surface normals via the CLI
 
 ## Version 0.6.1
 
