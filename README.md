@@ -30,7 +30,8 @@ The result might look something like this (please excuse the lack of 3D renderin
   - [Notes](#notes)
   - [Installation](#installation)
   - [Usage](#usage)
-    - [Basic usage](#basic-usage)
+    - [Recommended settings](#recommended-settings)
+    - [Benchmark example](#benchmark-example)
     - [Sequences of files](#sequences-of-files)
   - [Input file formats](#input-file-formats)
     - [VTK](#vtk)
@@ -187,7 +188,7 @@ Files with the "`.json`" extension are interpreted as serializations of a `Vec<[
 
 ## Output file formats
 
-Currently, only VTK files are supported for output.
+Currently, only VTK and OBJ formats are supported to store the reconstructed surface meshes.
 
 ## All command line options
 
@@ -285,7 +286,7 @@ OPTIONS:
 
 ### The `convert` subcommand
 
-Allows conversion between particle file formats and between mesh file formats. For particles `VTK, BGEO, PLY, XYZ, JSON -> VTK, PLY` 
+Allows conversion between particle file formats and between mesh file formats. For particles `VTK, BGEO, PLY, XYZ, JSON -> VTK` 
 is supported. For meshes only `VTK, PLY -> OBJ` is supported.
 
 ```

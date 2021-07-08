@@ -8,7 +8,7 @@
 Surface reconstruction library and CLI for particle data from SPH simulations, written in Rust.
 
 <p align="center">
-<img src="example_particles.png" alt="Image of the original particle data" width="32%"> <img src="example_coarse.png" alt="Image of a coarse reconstructed surface mesh" width="32%"> <img src="example_fine.png" alt="Image of a fine reconstructed surface mesh" width="32%">
+<img src="https://raw.githubusercontent.com/w1th0utnam3/splashsurf/master/example_particles.png" alt="Image of the original particle data" width="32%"> <img src="https://raw.githubusercontent.com/w1th0utnam3/splashsurf/master/example_coarse.png" alt="Image of a coarse reconstructed surface mesh" width="32%"> <img src="https://raw.githubusercontent.com/w1th0utnam3/splashsurf/master/example_fine.png" alt="Image of a fine reconstructed surface mesh" width="32%">
 </p>
 
 `splashsurf` is a tool to reconstruct surfaces meshes from SPH particle data.
@@ -30,7 +30,8 @@ The result might look something like this (please excuse the lack of 3D renderin
   - [Notes](#notes)
   - [Installation](#installation)
   - [Usage](#usage)
-    - [Basic usage](#basic-usage)
+    - [Recommended settings](#recommended-settings)
+    - [Benchmark example](#benchmark-example)
     - [Sequences of files](#sequences-of-files)
   - [Input file formats](#input-file-formats)
     - [VTK](#vtk)
@@ -187,7 +188,7 @@ Files with the "`.json`" extension are interpreted as serializations of a `Vec<[
 
 ## Output file formats
 
-Currently, only VTK files are supported for output.
+Currently, only VTK and OBJ formats are supported to store the reconstructed surface meshes.
 
 ## All command line options
 
@@ -285,7 +286,7 @@ OPTIONS:
 
 ### The `convert` subcommand
 
-Allows conversion between particle file formats and between mesh file formats. For particles `VTK, BGEO, PLY, XYZ, JSON -> VTK, PLY` 
+Allows conversion between particle file formats and between mesh file formats. For particles `VTK, BGEO, PLY, XYZ, JSON -> VTK` 
 is supported. For meshes only `VTK, PLY -> OBJ` is supported.
 
 ```
