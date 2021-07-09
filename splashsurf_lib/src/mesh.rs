@@ -17,6 +17,8 @@
 //!  - `Into<DataSet>` implementations for the basic mesh types
 
 use crate::{new_map, Real};
+use bytemuck::{cast_slice, cast_slice_mut};
+use bytemuck_derive::{Pod, Zeroable};
 use nalgebra::{Unit, Vector3};
 use rayon::prelude::*;
 use std::cell::RefCell;
@@ -112,12 +114,15 @@ pub trait CellConnectivity {
 }
 
 /// Cell type for the [`TriMesh3d`]
+#[derive(Copy, Clone, Pod, Zeroable)]
 #[repr(transparent)]
 pub struct TriangleCell(pub [usize; 3]);
 /// Cell type for the [`HexMesh3d`]
+#[derive(Copy, Clone, Pod, Zeroable)]
 #[repr(transparent)]
 pub struct HexCell(pub [usize; 8]);
 /// Cell type for the [`PointCloud3d`]
+#[derive(Copy, Clone, Pod, Zeroable)]
 #[repr(transparent)]
 pub struct PointCell(pub usize);
 
@@ -159,7 +164,7 @@ impl<R: Real> Mesh3d<R> for TriMesh3d<R> {
     }
 
     fn cells(&self) -> &[TriangleCell] {
-        unsafe { std::mem::transmute::<&[[usize; 3]], &[TriangleCell]>(self.triangles.as_slice()) }
+        cast_slice::<[usize; 3], TriangleCell>(self.triangles.as_slice())
     }
 }
 
@@ -171,7 +176,7 @@ impl<R: Real> Mesh3d<R> for HexMesh3d<R> {
     }
 
     fn cells(&self) -> &[HexCell] {
-        unsafe { std::mem::transmute::<&[[usize; 8]], &[HexCell]>(self.cells.as_slice()) }
+        cast_slice::<[usize; 8], HexCell>(self.cells.as_slice())
     }
 }
 
@@ -183,7 +188,7 @@ impl<R: Real> Mesh3d<R> for PointCloud3d<R> {
     }
 
     fn cells(&self) -> &[PointCell] {
-        unsafe { std::mem::transmute::<&[usize], &[PointCell]>(self.indices.as_slice()) }
+        cast_slice::<usize, PointCell>(self.indices.as_slice())
     }
 }
 
@@ -311,13 +316,7 @@ impl<R: Real> TriMesh3d<R> {
 
         // First, compute the directions of the normals...
         {
-            let normal_directions = unsafe {
-                // This is sound, as Unit<T> has repr(transparent)
-                let vector3_ptr = normals.as_mut_ptr() as *mut Vector3<R>;
-                let normal_directions: &'a mut _ =
-                    std::slice::from_raw_parts_mut(vector3_ptr, normals.len());
-                normal_directions
-            };
+            let normal_directions = cast_slice_mut::<Unit<Vector3<R>>, Vector3<R>>(normals);
             self.vertex_normal_directions_inplace_assume_zeroed(normal_directions);
         }
 
@@ -335,13 +334,7 @@ impl<R: Real> TriMesh3d<R> {
 
         // First, compute the directions of the normals...
         {
-            let normal_directions = unsafe {
-                // This is sound, as Unit<T> has repr(transparent)
-                let vector3_ptr = normals.as_mut_ptr() as *mut Vector3<R>;
-                let normal_directions: &'a mut _ =
-                    std::slice::from_raw_parts_mut(vector3_ptr, normals.len());
-                normal_directions
-            };
+            let normal_directions = cast_slice_mut::<Unit<Vector3<R>>, Vector3<R>>(normals);
             self.par_vertex_normal_directions_inplace_assume_zeroed(normal_directions);
         }
 

@@ -2,6 +2,7 @@ use std::fmt::{Debug, Display};
 use std::hash::Hash;
 
 use bitflags::_core::ops::{AddAssign, MulAssign, SubAssign};
+use bytemuck::Pod;
 use nalgebra::{RealField, SVector};
 use num::{Bounded, CheckedAdd, CheckedMul, CheckedSub, FromPrimitive, Integer, ToPrimitive};
 
@@ -26,6 +27,7 @@ pub trait Index:
     + Default
     + Debug
     + Display
+    + Pod
     + ThreadSafe
     + 'static
 {
@@ -46,7 +48,9 @@ pub trait Index:
 }
 
 /// Trait that has to be implemented for types to be used as floating points values in the context of the library (e.g. for coordinates, density values)
-pub trait Real: RealField + FromPrimitive + ToPrimitive + Debug + Default + ThreadSafe {
+pub trait Real:
+    RealField + FromPrimitive + ToPrimitive + Debug + Default + Pod + ThreadSafe
+{
     fn try_convert<T: Real>(self) -> Option<T> {
         Some(T::from_f64(self.to_f64()?)?)
     }
@@ -99,12 +103,13 @@ impl<T> Index for T where
         + Debug
         + Default
         + Display
+        + Pod
         + ThreadSafe
         + 'static
 {
 }
 
-impl<T: RealField + FromPrimitive + ToPrimitive + Debug + Default + ThreadSafe + 'static> Real
+impl<T: RealField + FromPrimitive + ToPrimitive + Debug + Default + Pod + ThreadSafe + 'static> Real
     for T
 {
 }

@@ -36,7 +36,7 @@ profiling = ["lazy_static"]
 
 [dependencies]
 log = "0.4"
-nalgebra = { version = "0.27", features = ["rand"] }
+nalgebra = { version = "0.27", features = ["rand", "bytemuck"] }
 num = "0.4"
 anyhow = "1.0"
 thiserror = "1.0"
@@ -48,6 +48,8 @@ thread_local = "1.1"
 bitflags = "1.2"
 smallvec = { version = "^1.6.1", features = ["union"] }
 arrayvec = "0.7"
+bytemuck = "1.7"
+bytemuck_derive = "1.0"
 
 # VTK extras
 vtkio = { version = "0.6", optional = true }

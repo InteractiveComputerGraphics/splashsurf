@@ -3,10 +3,11 @@ use anyhow::{anyhow, Context};
 use arguments::{
     ReconstructionRunnerArgs, ReconstructionRunnerPathCollection, ReconstructionRunnerPaths,
 };
+use bytemuck::allocation::cast_vec;
 use log::info;
 use rayon::prelude::*;
 use splashsurf_lib::mesh::{MeshAttribute, MeshWithData, PointCloud3d};
-use splashsurf_lib::nalgebra::Vector3;
+use splashsurf_lib::nalgebra::{Unit, Vector3};
 use splashsurf_lib::profile;
 use splashsurf_lib::{density_map, Index, Real};
 use std::convert::TryFrom;
@@ -582,19 +583,18 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
     // Add normals to mesh if requested
     let mesh = if paths.output_normals {
         profile!("compute normals");
-        let normals = mesh.par_vertex_normals();
-        // Transmute Unit<Vector3<R>> to Vector3<R>
-        // As shown in: https://doc.rust-lang.org/std/mem/fn.transmute.html#alternatives
-        let normals = unsafe {
-            let mut normals = std::mem::ManuallyDrop::new(normals);
-            Vec::from_raw_parts(
-                normals.as_mut_ptr() as *mut Vector3<R>,
-                normals.len(),
-                normals.capacity(),
-            )
+        info!("Computing normals for {} vertices...", mesh.vertices.len());
+
+        let tri_normals = {
+            profile!("mesh.par_vertex_normals");
+            let tri_normals = mesh.par_vertex_normals();
+
+            // Convert unit vectors to plain vectors
+            cast_vec::<Unit<Vector3<R>>, Vector3<R>>(tri_normals)
         };
+
         MeshWithData::new(mesh.clone())
-            .with_point_data(MeshAttribute::new_real_vector3("normals", normals))
+            .with_point_data(MeshAttribute::new_real_vector3("normals", tri_normals))
     } else {
         MeshWithData::new(mesh.clone())
     };
