@@ -54,7 +54,7 @@ The following sections mainly focus on the CLI of `splashsurf`. For more informa
 This is a basic but high-performance implementation of a marching cubes based surface reconstruction for SPH fluid simulations (e.g performed with [SPlisHSPlasH](https://github.com/InteractiveComputerGraphics/SPlisHSPlasH)).
 The output of this tool is the reconstructed triangle surface mesh of the fluid.
 At the moment it does not compute normals or other additional data.
-As input, it supports reading particle positions from `.vtk`, `.bgeo`, `.ply` and binary `.xyz` files (i.e. files containing a binary dump of a particle position array). In addition, required parameters are the kernel radius and particle radius (to compute the volume of particles) used for the original SPH simulation as well as the surface threshold.
+As input, it supports reading particle positions from `.vtk`, `.bgeo`, `.ply`, `.json` and binary `.xyz` files (i.e. files containing a binary dump of a particle position array). In addition, required parameters are the kernel radius and particle radius (to compute the volume of particles) used for the original SPH simulation as well as the surface threshold.
 
 By default, a domain decomposition of the particle set is performed using octree-based subdivision.
 The implementation first computes the density of each particle using the typical SPH approach with a cubic kernel. 
