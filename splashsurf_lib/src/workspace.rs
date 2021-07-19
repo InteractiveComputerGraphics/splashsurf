@@ -16,6 +16,11 @@ pub struct ReconstructionWorkspace<I: Index, R: Real> {
 }
 
 impl<I: Index, R: Real> ReconstructionWorkspace<I, R> {
+    /// Returns a reference to the global particle density vector
+    pub(crate) fn densities(&self) -> &Vec<R> {
+        &self.global_densities
+    }
+
     /// Returns a mutable reference to the global particle density vector
     pub(crate) fn densities_mut(&mut self) -> &mut Vec<R> {
         &mut self.global_densities

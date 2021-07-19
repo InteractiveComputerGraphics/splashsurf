@@ -69,6 +69,7 @@ struct SurfaceReconstructionOctreeVisitor<I: Index, R: Real> {
     octree: Octree<I, R>,
 }
 
+// TODO: Make this less object oriented?
 impl<I: Index, R: Real> SurfaceReconstructionOctreeVisitor<I, R> {
     fn new(
         global_particle_positions: &[Vector3<R>],
@@ -99,7 +100,7 @@ impl<I: Index, R: Real> SurfaceReconstructionOctreeVisitor<I, R> {
             return None;
         };
 
-        // Disable all multi-threading in sub-tasks for now (sub-tasks are processed in parallel instead)
+        // Disable all multi-threading in sub-tasks for now (instead, entire sub-tasks are processed in parallel)
         let parameters = {
             let mut p = parameters.clone();
             p.enable_multi_threading = false;
@@ -119,9 +120,20 @@ impl<I: Index, R: Real> SurfaceReconstructionOctreeVisitor<I, R> {
         global_particle_positions: &[Vector3<R>],
         output_surface: &mut SurfaceReconstruction<I, R>,
     ) -> Result<(), ReconstructionError<I, R>> {
+        // Swap particle densities from output object into the workspace if the former has a larger capacity
+        if let Some(output_densities) = output_surface.particle_densities.as_ref() {
+            if output_densities.capacity() > output_surface.workspace.densities().capacity() {
+                std::mem::swap(
+                    output_surface.particle_densities.as_mut().unwrap(),
+                    output_surface.workspace.densities_mut(),
+                );
+            }
+        }
+
+        // Compute particle densities depending on the selected strategy
         let global_particle_densities_vec =
             match self.spatial_decomposition.particle_density_computation {
-                // Compute particle densities globally
+                // Strategy 1: compute particle densities globally
                 ParticleDensityComputationStrategy::Global => {
                     Some(Self::compute_particle_densities_global(
                         global_particle_positions,
@@ -131,7 +143,7 @@ impl<I: Index, R: Real> SurfaceReconstructionOctreeVisitor<I, R> {
                     ));
                     Some(std::mem::take(output_surface.workspace.densities_mut()))
                 }
-                // Compute and merge particle densities per subdomain
+                // Strategy 2: compute and merge particle densities per subdomain
                 ParticleDensityComputationStrategy::SynchronizeSubdomains => {
                     Some(Self::compute_particle_densities_local(
                         global_particle_positions,
@@ -142,48 +154,45 @@ impl<I: Index, R: Real> SurfaceReconstructionOctreeVisitor<I, R> {
                     ));
                     Some(std::mem::take(output_surface.workspace.densities_mut()))
                 }
-                // Each subdomain will compute densities later on its own
+                // Strategy 3: each subdomain will compute densities later on its own
+                // (can only work correctly if margin is large enough)
                 ParticleDensityComputationStrategy::IndependentSubdomains => None,
             };
 
-        let global_particle_densities =
-            global_particle_densities_vec.as_ref().map(|v| v.as_slice());
+        {
+            let global_particle_densities =
+                global_particle_densities_vec.as_ref().map(|v| v.as_slice());
 
-        // Run surface reconstruction
-        if self.spatial_decomposition.enable_stitching {
-            self.run_with_stitching(
-                global_particle_positions,
-                global_particle_densities,
-                output_surface,
-            )?;
-        } else {
-            self.run_inplace(
-                global_particle_positions,
-                global_particle_densities,
-                output_surface,
-            )?;
+            // Run surface reconstruction
+            if self.spatial_decomposition.enable_stitching {
+                self.run_with_stitching(
+                    global_particle_positions,
+                    global_particle_densities,
+                    output_surface,
+                )?;
+            } else {
+                self.run_without_stitching(
+                    global_particle_positions,
+                    global_particle_densities,
+                    output_surface,
+                )?;
+            }
+
+            info!(
+                "Global mesh has {} triangles and {} vertices.",
+                output_surface.mesh.triangles.len(),
+                output_surface.mesh.vertices.len()
+            );
         }
-
-        info!(
-            "Global mesh has {} triangles and {} vertices.",
-            output_surface.mesh.triangles.len(),
-            output_surface.mesh.vertices.len()
-        );
 
         output_surface.octree = Some(self.octree);
         output_surface.density_map = None;
         output_surface.particle_densities = global_particle_densities_vec;
 
-        /*
-        // Put back global particle density storage
-        if let Some(global_particle_densities_vec) = global_particle_densities_vec {
-            *output_surface.workspace.densities_mut() = global_particle_densities_vec;
-        }
-         */
-
         Ok(())
     }
 
+    /// Computes the particle densities globally on all particles without any domain decomposition
     fn compute_particle_densities_global(
         global_particle_positions: &[Vector3<R>],
         grid: &UniformGrid<I, R>,
@@ -206,6 +215,7 @@ impl<I: Index, R: Real> SurfaceReconstructionOctreeVisitor<I, R> {
         *output_surface.workspace.densities_mut() = densities;
     }
 
+    /// Computes the particles densities per subdomain followed by merging them into a global vector
     fn compute_particle_densities_local(
         global_particle_positions: &[Vector3<R>],
         grid: &UniformGrid<I, R>,
@@ -287,7 +297,8 @@ impl<I: Index, R: Real> SurfaceReconstructionOctreeVisitor<I, R> {
         *output_surface.workspace.densities_mut() = global_densities.into_inner().unwrap();
     }
 
-    fn run_inplace(
+    /// Performs surface reconstruction without stitching by visiting all octree leaf nodes
+    fn run_without_stitching(
         &self,
         global_particle_positions: &[Vector3<R>],
         global_particle_densities: Option<&[R]>,
@@ -318,7 +329,7 @@ impl<I: Index, R: Real> SurfaceReconstructionOctreeVisitor<I, R> {
                     let particles = if let Some(particle_set) = octree_node.data().particle_set() {
                         &particle_set.particles
                     } else {
-                        // Skip non-leaf nodes
+                        // Skip non-leaf nodes: as soon as all leaves are processed all work is done
                         return Ok(());
                     };
 
@@ -395,6 +406,7 @@ impl<I: Index, R: Real> SurfaceReconstructionOctreeVisitor<I, R> {
         Ok(())
     }
 
+    /// Performs surface reconstruction with stitching on octree using DFS visitation: reconstruct leaf nodes first, then stitch the parent node as soon as all children are processed
     fn run_with_stitching(
         &self,
         global_particle_positions: &[Vector3<R>],
@@ -415,14 +427,17 @@ impl<I: Index, R: Real> SurfaceReconstructionOctreeVisitor<I, R> {
 
             octree
                 .root_mut()
+                // Use DFS visitation as we can only start stitching after all child nodes of one node are reconstructed/stitched.
                 .try_par_visit_mut_dfs_post(|octree_node: &mut OctreeNode<I, R>| -> Result<(), ReconstructionError<I, R>> {
                     profile!("visit octree node (reconstruct or stitch)", parent = parent_scope);
 
+                    // Extract the set of particles of the current node
                     let particles = if let Some(particle_set) = octree_node.data().particle_set() {
                         &particle_set.particles
                     } else {
                         // If node has no particle set, its children were already processed so it can be stitched
                         octree_node.stitch_surface_patches(self.parameters.iso_surface_threshold)?;
+                        // After stitching we can directly continue visting the next node
                         return Ok(());
                     };
 
@@ -531,6 +546,7 @@ impl<I: Index, R: Real> SurfaceReconstructionOctreeVisitor<I, R> {
         );
     }
 
+    /// Collects the density values of all particles in the node
     fn collect_node_particle_densities(
         node_particles: &[usize],
         global_particle_densities: &[R],
