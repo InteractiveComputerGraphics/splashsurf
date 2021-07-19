@@ -56,6 +56,7 @@ pub mod mesh;
 pub mod neighborhood_search;
 pub mod octree;
 mod reconstruction;
+pub mod sph_interpolation;
 pub mod topology;
 mod traits;
 pub mod uniform_grid;
@@ -229,6 +230,8 @@ pub struct SurfaceReconstruction<I: Index, R: Real> {
     octree: Option<Octree<I, R>>,
     /// Point-based density map generated from the particles that was used as input to marching cubes
     density_map: Option<DensityMap<I, R>>,
+    /// Per particle densities
+    particle_densities: Option<Vec<R>>,
     /// Surface mesh that is the result of the surface reconstruction
     mesh: TriMesh3d<R>,
     /// Workspace with allocated memory for subsequent surface reconstructions
@@ -242,6 +245,7 @@ impl<I: Index, R: Real> Default for SurfaceReconstruction<I, R> {
             grid: UniformGrid::new_zero(),
             octree: None,
             density_map: None,
+            particle_densities: None,
             mesh: TriMesh3d::default(),
             workspace: ReconstructionWorkspace::default(),
         }
@@ -262,6 +266,10 @@ impl<I: Index, R: Real> SurfaceReconstruction<I, R> {
     /// Returns a reference to the sparse density map (discretized on the vertices of the background grid) that is used as input for marching cubes
     pub fn density_map(&self) -> Option<&DensityMap<I, R>> {
         self.density_map.as_ref()
+    }
+
+    pub fn particle_densities(&self) -> Option<&Vec<R>> {
+        self.particle_densities.as_ref()
     }
 
     /// Returns a reference to the virtual background grid that was used as a basis for discretization of the density map for marching cubes, can be used to convert the density map to a hex mesh (using [sparse_density_map_to_hex_mesh](density_map::sparse_density_map_to_hex_mesh))

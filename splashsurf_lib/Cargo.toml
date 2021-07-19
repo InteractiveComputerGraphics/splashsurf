@@ -51,6 +51,7 @@ arrayvec = "0.7"
 bytemuck = "1.7"
 bytemuck_derive = "1.0"
 numeric_literals = "0.2"
+rstar = "0.9"
 
 # VTK extras
 vtkio = { version = "0.6", optional = true }

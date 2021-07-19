@@ -172,11 +172,14 @@ impl<I: Index, R: Real> SurfaceReconstructionOctreeVisitor<I, R> {
 
         output_surface.octree = Some(self.octree);
         output_surface.density_map = None;
+        output_surface.particle_densities = global_particle_densities_vec;
 
+        /*
         // Put back global particle density storage
         if let Some(global_particle_densities_vec) = global_particle_densities_vec {
             *output_surface.workspace.densities_mut() = global_particle_densities_vec;
         }
+         */
 
         Ok(())
     }

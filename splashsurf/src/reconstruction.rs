@@ -6,9 +6,10 @@ use arguments::{
 use bytemuck::allocation::cast_vec;
 use log::info;
 use rayon::prelude::*;
-use splashsurf_lib::mesh::{MeshAttribute, MeshWithData, PointCloud3d};
+use splashsurf_lib::mesh::{Mesh3d, MeshAttribute, MeshWithData, PointCloud3d};
 use splashsurf_lib::nalgebra::{Unit, Vector3};
 use splashsurf_lib::profile;
+use splashsurf_lib::sph_interpolation;
 use splashsurf_lib::{density_map, Index, Real};
 use std::convert::TryFrom;
 use std::path::PathBuf;
@@ -585,6 +586,7 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
         profile!("compute normals");
         info!("Computing normals for {} vertices...", mesh.vertices.len());
 
+        /*
         let tri_normals = {
             profile!("mesh.par_vertex_normals");
             let tri_normals = mesh.par_vertex_normals();
@@ -592,9 +594,37 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
             // Convert unit vectors to plain vectors
             cast_vec::<Unit<Vector3<R>>, Vector3<R>>(tri_normals)
         };
+        */
+
+        let sph_normals = {
+            let particle_rest_density = params.rest_density;
+            let particle_rest_volume = R::from_f64((4.0 / 3.0) * std::f64::consts::PI).unwrap()
+                * params.particle_radius.powi(3);
+            let particle_rest_mass = particle_rest_volume * particle_rest_density;
+
+            let particle_densities = reconstruction
+                .particle_densities()
+                .expect("Particle densities are missing")
+                .as_slice();
+            assert_eq!(
+                particle_positions.len(),
+                particle_densities.len(),
+                "There has to be one density value per particle"
+            );
+
+            let sph_normals = sph_interpolation::compute_sph_normals(
+                mesh.vertices(),
+                particle_positions.as_slice(),
+                particle_densities,
+                particle_rest_mass,
+                params.compact_support_radius,
+            );
+
+            cast_vec::<Unit<Vector3<R>>, Vector3<R>>(sph_normals)
+        };
 
         MeshWithData::new(mesh.clone())
-            .with_point_data(MeshAttribute::new_real_vector3("normals", tri_normals))
+            .with_point_data(MeshAttribute::new_real_vector3("normals", sph_normals))
     } else {
         MeshWithData::new(mesh.clone())
     };
