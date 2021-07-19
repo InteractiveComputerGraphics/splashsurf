@@ -1,60 +1,129 @@
 //! SPH kernel function implementations
 
 use crate::Real;
-
-const ALPHA: f64 = 3.0 / (2.0 * std::f64::consts::PI);
-const TWO_THIRDS: f64 = 2.0 / 3.0;
-const ONE_SIXTH: f64 = 1.0 / 6.0;
+use nalgebra::Vector3;
+use numeric_literals::replace_float_literals;
 
 // TODO: Add reference for the kernel function, document formula
 
-/// The cubic kernel function based on the parameter `q`
-#[inline(always)]
-fn cubic_function_f64(q: f64) -> f64 {
-    if q < 1.0 {
-        return ALPHA * (TWO_THIRDS - q * q + 0.5 * q * q * q);
-    } else if q < 2.0 {
-        let x = 2.0 - q;
-        return ALPHA * ONE_SIXTH * x * x * x;
-    } else {
-        return 0.0;
+/// Trait for symmetric kernel functions in three dimensions
+pub trait SymmetricKernel3d<R: Real> {
+    /// Evaluates the kernel at the radial distance `r` relative to the origin
+    fn evaluate(&self, r: R) -> R;
+    /// Evaluates the kernel gradient at the position `x` relative to the origin
+    fn evaluate_gradient(&self, x: Vector3<R>) -> Vector3<R>;
+    /// Evaluates the norm of the kernel gradient at the radial distance `r` relative to the origin, this may be faster than computing the full gradient
+    fn evaluate_gradient_norm(&self, r: R) -> R;
+}
+
+/// The commonly used cubic spline kernel
+pub struct CubicSplineKernel<R: Real> {
+    /// Compact support radius of the kernel
+    compact_support_radius: R,
+    /// Kernel normalization factor (sigma)
+    normalization: R,
+}
+
+impl<R: Real> CubicSplineKernel<R> {
+    /// Initializes a cubic spline kernel with the given compact support radius
+    #[replace_float_literals(R::from_f64(literal).expect("Literal must fit in R"))]
+    pub fn new(compact_support_radius: R) -> Self {
+        let h = compact_support_radius;
+        let sigma = 8.0 / (h * h * h);
+
+        Self {
+            compact_support_radius,
+            normalization: sigma,
+        }
+    }
+
+    /// The cubic spline function used by the cubic spline kernel
+    #[replace_float_literals(R::from_f64(literal).expect("Literal must fit in R"))]
+    fn cubic_function(q: R) -> R {
+        if q < R::one() {
+            return (3.0 / (2.0 * R::pi())) * ((2.0 / 3.0) - q * q + 0.5 * q * q * q);
+        } else if q < 2.0 {
+            let x = 2.0 - q;
+            return (R::one() / (4.0 * R::pi())) * x * x * x;
+        } else {
+            return 0.0;
+        }
+    }
+
+    /// The derivative of the cubic spline function used by the cubic spline kernel w.r.t to the parameter `q`
+    #[replace_float_literals(R::from_f64(literal).expect("Literal must fit in R"))]
+    fn cubic_function_dq(q: R) -> R {
+        if q < 1.0 {
+            return (3.0 / (4.0 * R::pi())) * (-4.0 * q + 3.0 * q * q);
+        } else if q < 2.0 {
+            let x = 2.0 - q;
+            return -(3.0 / (4.0 * R::pi())) * x * x;
+        } else {
+            return 0.0;
+        }
     }
 }
 
-/// Evaluates the cubic kernel with compact support radius `h` at the radius `r`, `f64` version
-#[inline(always)]
-pub fn cubic_kernel_r_f64(r: f64, h: f64) -> f64 {
-    let q = (2.0 * r) / h;
-    8.0 * cubic_function_f64(q) / (h * h * h)
-}
+impl<R: Real> SymmetricKernel3d<R> for CubicSplineKernel<R> {
+    /// Evaluates the cubic spline kernel at the radial distance `r`
+    fn evaluate(&self, r: R) -> R {
+        let q = (r + r) / self.compact_support_radius;
+        self.normalization * Self::cubic_function(q)
+    }
 
-/// Evaluates the cubic kernel with compact support radius `h` at the radius `r`, generic version
-#[inline(always)]
-pub fn cubic_kernel_r<R: Real>(r: R, h: R) -> R {
-    let r = r.to_f64().unwrap();
-    let h = h.to_f64().unwrap();
+    /// Evaluates the gradient of the cubic spline kernel at the position `x`
+    fn evaluate_gradient(&self, x: Vector3<R>) -> Vector3<R> {
+        // Kernel gradient is given by
+        //   df/dq * dq/dr * dr/dx
+        // where:
+        //   f is the cubic spline
+        //   q is the spline parameter
+        //   r is the radial distance
+        //   x is the position where the kernel gradient is evaluated
 
-    R::from_f64(cubic_kernel_r_f64(r, h)).unwrap()
+        // Radial distance is norm of position
+        let r = x.norm();
+        // Normalize the position vector: points into direction of gradient due to symmetry
+        let drdx = x.unscale(r);
+
+        let q = (r + r) / self.compact_support_radius;
+
+        let dfdq = Self::cubic_function_dq(q);
+        let dqdr = (R::one() + R::one()) / self.compact_support_radius;
+
+        drdx.scale(self.normalization * dfdq * dqdr)
+    }
+
+    /// Evaluates the norm of the gradient of the cubic spline kernel at the radial distance `r`
+    fn evaluate_gradient_norm(&self, r: R) -> R {
+        let q = (r + r) / self.compact_support_radius;
+
+        let dfdq = Self::cubic_function_dq(q);
+        let dqdr = (R::one() + R::one()) / self.compact_support_radius;
+
+        self.normalization * dfdq * dqdr
+    }
 }
 
 #[test]
 fn test_cubic_kernel_r_compact_support() {
     let hs = [0.025, 0.1, 2.0];
     for &h in hs.iter() {
-        assert_eq!(cubic_kernel_r(h, h), 0.0);
-        assert_eq!(cubic_kernel_r(2.0 * h, h), 0.0);
-        assert_eq!(cubic_kernel_r(10.0 * h, h), 0.0);
+        let kernel = CubicSplineKernel::new(h);
+        assert_eq!(kernel.evaluate(h), 0.0);
+        assert_eq!(kernel.evaluate(2.0 * h), 0.0);
+        assert_eq!(kernel.evaluate(10.0 * h), 0.0);
     }
 }
 
 #[test]
 fn test_cubic_kernel_r_integral() {
-    use nalgebra::Vector3;
-
     let hs = [0.025, 0.1, 2.0];
     let n = 10;
 
     for &h in hs.iter() {
+        let kernel = CubicSplineKernel::new(h);
+
         let dr = h / (n as f64);
         let dvol = dr * dr * dr;
 
@@ -66,7 +135,7 @@ fn test_cubic_kernel_r_integral() {
                     let r_out = Vector3::new((i + 1) as f64, (j + 1) as f64, (k + 1) as f64) * dr;
                     let r = ((r_in + r_out) * 0.5).norm();
 
-                    integral += dvol * cubic_kernel_r(r, h);
+                    integral += dvol * kernel.evaluate(r);
                 }
             }
         }
@@ -90,7 +159,7 @@ fn test_cubic_kernel_r_integral() {
 /// in the value array, i.e. `k(sqrt(s)) ≈ K[s/dr]` (while taking care of rounding and clamping to the
 /// allowed index range).
 pub struct DiscreteSquaredDistanceCubicKernel<R: Real> {
-    /// Precomputed values of the kernel functionclamp
+    /// Precomputed values of the kernel function
     values: Vec<R>,
     /// The radial resolution of the discretization on a quadratic scale
     dr: R,
@@ -98,20 +167,35 @@ pub struct DiscreteSquaredDistanceCubicKernel<R: Real> {
 
 impl<R: Real> DiscreteSquaredDistanceCubicKernel<R> {
     /// Precomputes the discrete cubic kernel with compact support radius `h`, the squared radius `h * h` is divided into `n` segments for the quantization
-    pub fn new(n: usize, h: R) -> Self {
+    pub fn new<PR: Real>(n: usize, h: R) -> Self {
         let mut values = Vec::with_capacity(n);
 
-        let compact_support = h;
+        let compact_support: PR = h
+            .try_convert()
+            .expect("Compact support radius `h` has to fit into kernel pre-computation type `PR`");
         let compact_support_squared = compact_support * compact_support;
 
-        let dr = compact_support_squared / R::from_usize(n).unwrap();
+        let kernel = CubicSplineKernel::new(compact_support);
+
+        // Radial width of one discrete kernel value
+        let dr = compact_support_squared
+            / PR::from_usize(n)
+                .expect("Number of discrete kernel steps `n` has to fit into kernel pre-computation type `PR`");
+        // Evaluate the kernel per discrete segment
         for i in 0..n {
-            let i_and_half = R::from_usize(i).unwrap() + R::from_f64(0.5).unwrap();
+            let i_and_half = PR::from_usize(i).unwrap() + PR::from_f64(0.5).unwrap();
             let r_squared = dr * i_and_half;
             let r = r_squared.sqrt();
-            values.push(cubic_kernel_r(r, h));
+
+            let kernel_value = kernel.evaluate(r);
+            values.push(
+                kernel_value
+                    .try_convert()
+                    .expect("Kernel value has to fit into target type `R`"),
+            );
         }
 
+        let dr = dr.try_convert().unwrap();
         Self { values, dr }
     }
 
@@ -128,7 +212,9 @@ impl<R: Real> DiscreteSquaredDistanceCubicKernel<R> {
 fn test_discrete_kernel() {
     let n = 10000;
     let h = 0.025;
-    let kernel = DiscreteSquaredDistanceCubicKernel::new(n, h);
+
+    let discrete_kernel = DiscreteSquaredDistanceCubicKernel::new::<f64>(n, h);
+    let kernel = CubicSplineKernel::new(h);
 
     // Test the pre-computed values using a linear stepping
     let dr = h / (n as f64);
@@ -136,8 +222,8 @@ fn test_discrete_kernel() {
         let r = (i as f64) * dr;
         let rr = r * r;
 
-        let discrete = kernel.evaluate(rr);
-        let continuous = cubic_kernel_r_f64(r, h);
+        let discrete = discrete_kernel.evaluate(rr);
+        let continuous = kernel.evaluate(r);
 
         let diff = (discrete - continuous).abs();
         let rel_diff = diff / continuous;

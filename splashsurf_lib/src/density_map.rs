@@ -131,7 +131,7 @@ pub fn sequential_compute_particle_densities<I: Index, R: Real>(
     init_density_storage(particle_densities, particle_positions.len());
 
     // Pre-compute the kernel which can be queried using squared distances
-    let kernel = DiscreteSquaredDistanceCubicKernel::new(1000, compact_support_radius);
+    let kernel = DiscreteSquaredDistanceCubicKernel::new::<f64>(1000, compact_support_radius);
 
     for (i, (particle_i_position, particle_i_neighbors)) in particle_positions
         .iter()
@@ -162,7 +162,7 @@ pub fn parallel_compute_particle_densities<I: Index, R: Real>(
     init_density_storage(particle_densities, particle_positions.len());
 
     // Pre-compute the kernel which can be queried using squared distances
-    let kernel = DiscreteSquaredDistanceCubicKernel::new(1000, compact_support_radius);
+    let kernel = DiscreteSquaredDistanceCubicKernel::new::<f64>(1000, compact_support_radius);
 
     particle_positions
         .par_iter()
@@ -597,7 +597,7 @@ impl<I: Index, R: Real> SparseDensityMapGenerator<I, R> {
 
         // Pre-compute the kernel which can be queried using squared distances
         let kernel_evaluation_radius_sq = kernel_evaluation_radius * kernel_evaluation_radius;
-        let kernel = DiscreteSquaredDistanceCubicKernel::new(1000, compact_support_radius);
+        let kernel = DiscreteSquaredDistanceCubicKernel::new::<f64>(1000, compact_support_radius);
 
         // Shrink the allowed domain for particles by the kernel evaluation radius. This ensures that all cells/points
         // that are affected by a particle are actually part of the domain/grid, so it does not have to be checked in the loops below.

@@ -704,6 +704,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "numeric_literals"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "095aa67b0b9f2081746998f4f17106bdb51d56dc8c211afca5531b92b83bf98a"
+dependencies = [
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "once_cell"
 version = "1.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1163,6 +1173,7 @@ dependencies = [
  "log",
  "nalgebra",
  "num",
+ "numeric_literals",
  "rayon",
  "smallvec",
  "thiserror",
