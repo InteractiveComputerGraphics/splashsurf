@@ -17,7 +17,6 @@
 //!  - `Into<DataSet>` implementations for the basic mesh types
 
 use crate::{new_map, Real};
-use bytemuck::{cast_slice, cast_slice_mut};
 use bytemuck_derive::{Pod, Zeroable};
 use nalgebra::{Unit, Vector3};
 use rayon::prelude::*;
@@ -164,7 +163,7 @@ impl<R: Real> Mesh3d<R> for TriMesh3d<R> {
     }
 
     fn cells(&self) -> &[TriangleCell] {
-        cast_slice::<[usize; 3], TriangleCell>(self.triangles.as_slice())
+        bytemuck::cast_slice::<[usize; 3], TriangleCell>(self.triangles.as_slice())
     }
 }
 
@@ -176,7 +175,7 @@ impl<R: Real> Mesh3d<R> for HexMesh3d<R> {
     }
 
     fn cells(&self) -> &[HexCell] {
-        cast_slice::<[usize; 8], HexCell>(self.cells.as_slice())
+        bytemuck::cast_slice::<[usize; 8], HexCell>(self.cells.as_slice())
     }
 }
 
@@ -188,7 +187,7 @@ impl<R: Real> Mesh3d<R> for PointCloud3d<R> {
     }
 
     fn cells(&self) -> &[PointCell] {
-        cast_slice::<usize, PointCell>(self.indices.as_slice())
+        bytemuck::cast_slice::<usize, PointCell>(self.indices.as_slice())
     }
 }
 
@@ -316,7 +315,8 @@ impl<R: Real> TriMesh3d<R> {
 
         // First, compute the directions of the normals...
         {
-            let normal_directions = cast_slice_mut::<Unit<Vector3<R>>, Vector3<R>>(normals);
+            let normal_directions =
+                bytemuck::cast_slice_mut::<Unit<Vector3<R>>, Vector3<R>>(normals);
             self.vertex_normal_directions_inplace_assume_zeroed(normal_directions);
         }
 
@@ -334,7 +334,8 @@ impl<R: Real> TriMesh3d<R> {
 
         // First, compute the directions of the normals...
         {
-            let normal_directions = cast_slice_mut::<Unit<Vector3<R>>, Vector3<R>>(normals);
+            let normal_directions =
+                bytemuck::cast_slice_mut::<Unit<Vector3<R>>, Vector3<R>>(normals);
             self.par_vertex_normal_directions_inplace_assume_zeroed(normal_directions);
         }
 

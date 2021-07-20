@@ -3,7 +3,6 @@ use anyhow::{anyhow, Context};
 use arguments::{
     ReconstructionRunnerArgs, ReconstructionRunnerPathCollection, ReconstructionRunnerPaths,
 };
-use bytemuck::allocation::cast_vec;
 use log::info;
 use rayon::prelude::*;
 use splashsurf_lib::mesh::{Mesh3d, MeshAttribute, MeshWithData, PointCloud3d};
@@ -630,14 +629,14 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
                 params.compact_support_radius,
             );
 
-            cast_vec::<Unit<Vector3<R>>, Vector3<R>>(sph_normals)
+            bytemuck::allocation::cast_vec::<Unit<Vector3<R>>, Vector3<R>>(sph_normals)
         } else {
             info!("Using area weighted triangle normals for surface normals");
             profile!("mesh.par_vertex_normals");
             let tri_normals = mesh.par_vertex_normals();
 
             // Convert unit vectors to plain vectors
-            cast_vec::<Unit<Vector3<R>>, Vector3<R>>(tri_normals)
+            bytemuck::allocation::cast_vec::<Unit<Vector3<R>>, Vector3<R>>(tri_normals)
         };
 
         MeshWithData::new(mesh.clone())
