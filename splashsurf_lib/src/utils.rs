@@ -3,17 +3,34 @@
 use log::info;
 use rayon::prelude::*;
 
-/// Wrapper type to make any type Send + Sync
+/// Macro version of Option::map that allows using e.g. using the ?-operator in the map expression
+///
+/// For example:
+/// ```
+/// let four: f64 = map_option!(Some(2.0_f64), val => val? * 2.0);
+/// ```
+macro_rules! map_option {
+    ($some_optional:expr, $value_identifier:ident => $value_transformation:expr) => {
+        match $some_optional {
+            Some($value_identifier) => Some($value_transformation),
+            None => None,
+        }
+    };
+}
+
+/// Wrapper type to make any type `Send + Sync`
 pub(crate) struct SendSyncWrapper<T>(T);
 
 impl<T> SendSyncWrapper<T> {
+    /// Wraps the given value such that it is `Send + Sync`
     #[inline(always)]
     pub unsafe fn new(value: T) -> Self {
         Self(value)
     }
 
+    /// Returns a reference to the wrapped value
     #[inline(always)]
-    pub fn get(&self) -> &T {
+    pub unsafe fn get(&self) -> &T {
         &self.0
     }
 }
@@ -21,13 +38,14 @@ impl<T> SendSyncWrapper<T> {
 unsafe impl<T> Sync for SendSyncWrapper<T> {}
 unsafe impl<T> Send for SendSyncWrapper<T> {}
 
-/// Ensure that at least the specified total capacity is reserved for the given vector
+/// Ensures that at least the specified total capacity is reserved for the given vector
 pub(crate) fn reserve_total<T>(vec: &mut Vec<T>, total_capacity: usize) {
     if total_capacity > vec.capacity() {
         vec.reserve(total_capacity - vec.capacity());
     }
 }
 
+/// Resizes the given vector to the given length and fills new entries with `value.clone()`, parallel or sequential depending on runtime parameter
 pub(crate) fn resize_and_fill<T: Clone + Send + Sync>(
     vec: &mut Vec<T>,
     new_len: usize,
@@ -41,6 +59,7 @@ pub(crate) fn resize_and_fill<T: Clone + Send + Sync>(
     }
 }
 
+/// Resizes the given vector to the given length and fills new entries with `value.clone()`, sequential version
 pub(crate) fn seq_resize_and_fill<T: Clone>(vec: &mut Vec<T>, new_len: usize, value: T) {
     let old_len = vec.len();
     vec.iter_mut()
@@ -49,6 +68,7 @@ pub(crate) fn seq_resize_and_fill<T: Clone>(vec: &mut Vec<T>, new_len: usize, va
     vec.resize(new_len, value);
 }
 
+/// Resizes the given vector to the given length and fills new entries with `value.clone()`, parallel version
 pub(crate) fn par_resize_and_fill<T: Clone + Send + Sync>(
     vec: &mut Vec<T>,
     new_len: usize,

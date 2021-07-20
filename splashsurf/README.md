@@ -5,7 +5,7 @@
 [![Dependency status](https://deps.rs/repo/github/w1th0utnam3/splashsurf/status.svg)](https://deps.rs/repo/github/w1th0utnam3/splashsurf)
 ![Build and test GitHub Actions workflow](https://github.com/w1th0utnam3/splashsurf/workflows/Build%20and%20test/badge.svg)
 
-Surface reconstruction library and CLI for particle data from SPH simulations, written in Rust.
+CLI for surface reconstruction of particle data from SPH simulations, written in Rust.
 
 <p align="center">
 <img src="https://raw.githubusercontent.com/w1th0utnam3/splashsurf/master/example_particles.png" alt="Image of the original particle data" width="32%"> <img src="https://raw.githubusercontent.com/w1th0utnam3/splashsurf/master/example_coarse.png" alt="Image of a coarse reconstructed surface mesh" width="32%"> <img src="https://raw.githubusercontent.com/w1th0utnam3/splashsurf/master/example_fine.png" alt="Image of a fine reconstructed surface mesh" width="32%">
@@ -263,8 +263,8 @@ OPTIONS:
             Filename for writing the reconstructed surface to disk (default: "{original_filename}_surface.vtk")
 
         --output-normals <output-normals>
-            Whether to write vertex normals to the output file. Note that currently the normals are only computed using
-            an area weighted average of triangle normals [default: off]  [possible values: on, off]
+            Whether to write vertex normals to the output file [default: off]  [possible values: on, off]
+
         --output-octree <output-octree>
             Optional filename for writing the octree used to partition the particles to disk
 
@@ -279,6 +279,9 @@ OPTIONS:
         --smoothing-length <smoothing-length>
             The smoothing length radius used for the SPH kernel, the kernel compact support radius will be twice the
             smoothing length (in multiplies of the particle radius)
+        --sph-normals <sph-normals>
+            Whether to compute the normals using SPH interpolation (more true to actual fluid surface) instead of area
+            weighted triangle normals [default: on]  [possible values: on, off]
         --surface-threshold <surface-threshold>
             The iso-surface threshold for the density, i.e. the normalized value of the reconstructed density level that
             indicates the fluid surface (in multiplies of the rest density) [default: 0.6]
