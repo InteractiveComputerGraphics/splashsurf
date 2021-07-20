@@ -1,5 +1,11 @@
 ## Master
 
+- Lib: Update to `nalgebra` 0.28
+- Lib: Redesign the API for SPH kernel functions
+- Lib: Add module `sph_interpolation` currently containing the computation of surface normals using SPH interpolation
+- Lib: Replace some unsafe usage by using `bytemuck` instead
+- CLI: Add command line switch `--sph-normals` (enabled by default) to control whether to use SPH interpolation to compute normals when `--output-normals` is on
+
 ## Version 0.7.0
 
  - Lib: Fix a bug that caused the neighborhood search results to be incomplete
