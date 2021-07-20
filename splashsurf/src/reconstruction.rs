@@ -28,7 +28,7 @@ pub struct ReconstructSubcommandArgs {
     #[structopt(short = "-s", long, parse(from_os_str))]
     input_sequence: Option<PathBuf>,
     /// Filename for writing the reconstructed surface to disk (default: "{original_filename}_surface.vtk")
-    #[structopt(short = "-o", parse(from_os_str))]
+    #[structopt(short = "-o", long, parse(from_os_str))]
     output_file: Option<PathBuf>,
     /// Optional base directory for all output files (default: current working directory)
     #[structopt(long, parse(from_os_str))]
@@ -108,9 +108,12 @@ pub struct ReconstructSubcommandArgs {
     /// Whether to check the final mesh for problems such as holes (note that when stitching is disabled this will lead to a lot of reported problems)
     #[structopt(long, default_value = "off", possible_values = &["on", "off"], case_insensitive = true)]
     check_mesh: Switch,
-    /// Whether to write vertex normals to the output file. Note that currently the normals are only computed using an area weighted average of triangle normals.
+    /// Whether to write vertex normals to the output file
     #[structopt(long, default_value = "off", possible_values = &["on", "off"], case_insensitive = true)]
     output_normals: Switch,
+    /// Whether to compute the normals using SPH interpolation (smoother and more true to actual fluid surface, but slower) instead of area weighted triangle normals
+    #[structopt(long, default_value = "on", possible_values = &["on", "off"], case_insensitive = true)]
+    sph_normals: Switch,
 }
 
 arg_enum! {
@@ -291,7 +294,10 @@ mod arguments {
         output_density_map_points_file: Option<PathBuf>,
         output_density_map_grid_file: Option<PathBuf>,
         output_octree_file: Option<PathBuf>,
+        /// Whether to enable normal computation for all files
         output_normals: bool,
+        /// Whether to use SPH interpolation to compute the normals for all files
+        sph_normals: bool,
     }
 
     impl ReconstructionRunnerPathCollection {
@@ -304,6 +310,7 @@ mod arguments {
             output_density_map_grid_file: Option<P>,
             output_octree_file: Option<P>,
             output_normals: bool,
+            sph_normals: bool,
         ) -> Result<Self, anyhow::Error> {
             let input_file = input_file.into();
             let output_base_path = output_base_path.map(|p| p.into());
@@ -338,6 +345,7 @@ mod arguments {
                         .map(|f| output_base_path.join(f)),
                     output_octree_file: output_octree_file.map(|f| output_base_path.join(f)),
                     output_normals,
+                    sph_normals,
                 })
             } else {
                 Ok(Self {
@@ -348,6 +356,7 @@ mod arguments {
                     output_density_map_grid_file,
                     output_octree_file,
                     output_normals,
+                    sph_normals,
                 })
             }
         }
@@ -382,6 +391,7 @@ mod arguments {
                             None,
                             None,
                             self.output_normals,
+                            self.sph_normals,
                         ));
                     } else {
                         break;
@@ -400,6 +410,7 @@ mod arguments {
                         self.output_density_map_grid_file.clone(),
                         self.output_octree_file.clone(),
                         self.output_normals,
+                        self.sph_normals,
                     );
                     1
                 ]
@@ -434,6 +445,7 @@ mod arguments {
                         args.output_dm_grid.clone(),
                         args.output_octree.clone(),
                         args.output_normals.into_bool(),
+                        args.sph_normals.into_bool(),
                     )
                 } else {
                     return Err(anyhow!(
@@ -482,6 +494,7 @@ mod arguments {
                         args.output_dm_grid.clone(),
                         args.output_octree.clone(),
                         args.output_normals.into_bool(),
+                        args.sph_normals.into_bool(),
                     )
                 } else {
                     return Err(anyhow!(
@@ -504,7 +517,10 @@ mod arguments {
         pub output_density_map_points_file: Option<PathBuf>,
         pub output_density_map_grid_file: Option<PathBuf>,
         pub output_octree_file: Option<PathBuf>,
+        /// Whether to enable normal computation
         pub output_normals: bool,
+        /// Whether to use SPH interpolation to compute the normals
+        pub sph_normals: bool,
     }
 
     impl ReconstructionRunnerPaths {
@@ -515,6 +531,7 @@ mod arguments {
             output_density_map_grid_file: Option<PathBuf>,
             output_octree_file: Option<PathBuf>,
             output_normals: bool,
+            sph_normals: bool,
         ) -> Self {
             ReconstructionRunnerPaths {
                 input_file,
@@ -523,6 +540,7 @@ mod arguments {
                 output_density_map_grid_file,
                 output_octree_file,
                 output_normals,
+                sph_normals,
             }
         }
     }
@@ -586,17 +604,9 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
         profile!("compute normals");
         info!("Computing normals for {} vertices...", mesh.vertices.len());
 
-        /*
-        let tri_normals = {
-            profile!("mesh.par_vertex_normals");
-            let tri_normals = mesh.par_vertex_normals();
+        let normals = if paths.sph_normals {
+            info!("Using SPH interpolation to compute surface normals");
 
-            // Convert unit vectors to plain vectors
-            cast_vec::<Unit<Vector3<R>>, Vector3<R>>(tri_normals)
-        };
-        */
-
-        let sph_normals = {
             let particle_rest_density = params.rest_density;
             let particle_rest_volume = R::from_f64((4.0 / 3.0) * std::f64::consts::PI).unwrap()
                 * params.particle_radius.powi(3);
@@ -604,7 +614,7 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
 
             let particle_densities = reconstruction
                 .particle_densities()
-                .expect("Particle densities are missing")
+                .ok_or_else(|| anyhow::anyhow!("Particle densities were not returned by surface reconstruction but are required for SPH normal computation"))?
                 .as_slice();
             assert_eq!(
                 particle_positions.len(),
@@ -621,10 +631,17 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
             );
 
             cast_vec::<Unit<Vector3<R>>, Vector3<R>>(sph_normals)
+        } else {
+            info!("Using area weighted triangle normals for surface normals");
+            profile!("mesh.par_vertex_normals");
+            let tri_normals = mesh.par_vertex_normals();
+
+            // Convert unit vectors to plain vectors
+            cast_vec::<Unit<Vector3<R>>, Vector3<R>>(tri_normals)
         };
 
         MeshWithData::new(mesh.clone())
-            .with_point_data(MeshAttribute::new_real_vector3("normals", sph_normals))
+            .with_point_data(MeshAttribute::new_real_vector3("normals", normals))
     } else {
         MeshWithData::new(mesh.clone())
     };
