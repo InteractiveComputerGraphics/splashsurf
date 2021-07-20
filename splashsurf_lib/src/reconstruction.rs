@@ -31,6 +31,16 @@ pub(crate) fn reconstruct_surface_global<'a, I: Index, R: Real>(
         .get_local_with_capacity(particle_positions.len())
         .borrow_mut();
 
+    // Reuse allocated memory: swap particle densities from output object into the workspace if the former has a larger capacity
+    if let Some(output_densities) = output_surface.particle_densities.as_ref() {
+        if output_densities.capacity() > output_surface.workspace.densities().capacity() {
+            std::mem::swap(
+                output_surface.particle_densities.as_mut().unwrap(),
+                &mut workspace.particle_densities,
+            );
+        }
+    }
+
     // Clear the current mesh, as reconstruction will be appended to output
     output_surface.mesh.clear();
     // Perform global reconstruction without octree
@@ -46,6 +56,7 @@ pub(crate) fn reconstruct_surface_global<'a, I: Index, R: Real>(
 
     // TODO: Set this correctly
     output_surface.density_map = None;
+    output_surface.particle_densities = Some(std::mem::take(&mut workspace.particle_densities));
 
     Ok(())
 }
@@ -130,7 +141,7 @@ impl<I: Index, R: Real> OctreeBasedSurfaceReconstruction<I, R> {
         global_particle_positions: &[Vector3<R>],
         output_surface: &mut SurfaceReconstruction<I, R>,
     ) -> Result<(), ReconstructionError<I, R>> {
-        // Swap particle densities from output object into the workspace if the former has a larger capacity
+        // Reuse allocated memory: swap particle densities from output object into the workspace if the former has a larger capacity
         if let Some(output_densities) = output_surface.particle_densities.as_ref() {
             if output_densities.capacity() > output_surface.workspace.densities().capacity() {
                 std::mem::swap(
