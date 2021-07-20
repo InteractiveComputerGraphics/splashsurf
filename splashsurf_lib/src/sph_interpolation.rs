@@ -44,7 +44,6 @@ pub fn compute_sph_normals<R: Real>(
         .collect();
 
     // Build the R-tree to accelerate SPH neighbor queries near the interpolation points
-    // This is faster than a full neighborhood search if there are less interpolation points than particles
     let tree = {
         profile!("build R-tree");
         RTree::bulk_load(particles)

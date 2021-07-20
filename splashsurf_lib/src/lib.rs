@@ -60,6 +60,7 @@ pub mod sph_interpolation;
 pub mod topology;
 mod traits;
 pub mod uniform_grid;
+#[macro_use]
 mod utils;
 pub(crate) mod workspace;
 
@@ -101,16 +102,6 @@ pub(crate) fn new_map<K, V>() -> MapType<K, V> {
 */
 
 pub(crate) type ParallelMapType<K, V> = dashmap::DashMap<K, V, HashState>;
-
-/// Macro version of Option::map that allows using e.g. using the ?-operator in the map expression
-macro_rules! map_option {
-    ($some_optional:expr, $value_identifier:ident => $value_transformation:expr) => {
-        match $some_optional {
-            Some($value_identifier) => Some($value_transformation),
-            None => None,
-        }
-    };
-}
 
 /// Parameters for the spatial decomposition
 #[derive(Clone, Debug)]

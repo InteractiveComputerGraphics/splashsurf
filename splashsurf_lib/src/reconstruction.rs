@@ -15,7 +15,7 @@ use log::{debug, info, trace};
 use nalgebra::Vector3;
 use std::sync::Mutex;
 
-/// Perform a global surface reconstruction without domain decomposition
+/// Performs a global surface reconstruction without domain decomposition
 pub(crate) fn reconstruct_surface_global<'a, I: Index, R: Real>(
     particle_positions: &[Vector3<R>],
     parameters: &Parameters<R>,
@@ -23,6 +23,9 @@ pub(crate) fn reconstruct_surface_global<'a, I: Index, R: Real>(
 ) -> Result<(), ReconstructionError<I, R>> {
     profile!("reconstruct_surface_global");
 
+    // Multiple local workspaces are only needed for processing different subdomains in parallel.
+    // However, in this global surface reconstruction without domain decomposition, each step in the
+    // reconstruction pipeline manages its memory on its own.
     let mut workspace = output_surface
         .workspace
         .get_local_with_capacity(particle_positions.len())
@@ -47,7 +50,7 @@ pub(crate) fn reconstruct_surface_global<'a, I: Index, R: Real>(
     Ok(())
 }
 
-/// Perform a surface reconstruction with an octree for domain decomposition
+/// Performs a surface reconstruction with an octree for domain decomposition
 pub(crate) fn reconstruct_surface_domain_decomposition<'a, I: Index, R: Real>(
     particle_positions: &[Vector3<R>],
     parameters: &Parameters<R>,
@@ -55,22 +58,28 @@ pub(crate) fn reconstruct_surface_domain_decomposition<'a, I: Index, R: Real>(
 ) -> Result<(), ReconstructionError<I, R>> {
     profile!("reconstruct_surface_domain_decomposition");
 
-    SurfaceReconstructionOctreeVisitor::new(particle_positions, parameters, output_surface)
+    OctreeBasedSurfaceReconstruction::new(particle_positions, parameters, output_surface)
         .expect("Unable to construct octree. Missing/invalid decomposition parameters?")
         .run(particle_positions, output_surface)?;
 
     Ok(())
 }
 
-struct SurfaceReconstructionOctreeVisitor<I: Index, R: Real> {
+/// Helper type for performing an octree based surface reconstruction
+struct OctreeBasedSurfaceReconstruction<I: Index, R: Real> {
+    /// General parameters for the surface reconstruction
     parameters: Parameters<R>,
+    /// Spatial decomposition specific parameters extracted from the general parameters
     spatial_decomposition: SpatialDecompositionParameters<R>,
+    /// The implicit global grid for the entire surface reconstruction
     grid: UniformGrid<I, R>,
+    /// Octree containing the individual particle subdomains, built during the construction of this helper type
     octree: Octree<I, R>,
 }
 
 // TODO: Make this less object oriented?
-impl<I: Index, R: Real> SurfaceReconstructionOctreeVisitor<I, R> {
+impl<I: Index, R: Real> OctreeBasedSurfaceReconstruction<I, R> {
+    /// Initializes the octree based surface reconstruction by constructing the corresponding octree
     fn new(
         global_particle_positions: &[Vector3<R>],
         parameters: &Parameters<R>,
@@ -115,6 +124,7 @@ impl<I: Index, R: Real> SurfaceReconstructionOctreeVisitor<I, R> {
         })
     }
 
+    /// Runs the surface reconstruction on the initialized octree
     fn run(
         self,
         global_particle_positions: &[Vector3<R>],

@@ -262,8 +262,18 @@ pub fn neighborhood_search_spatial_hashing_parallel<I: Index, R: Real>(
 
     // TODO: Compute the default capacity of neighborhood lists from rest volume of particles
     par_init_neighborhood_list(neighborhood_list, particle_positions.len());
-    // We are ok with making the ptr Send+Sync because we are only going to write into disjoint fields of the Vec
-    let neighborhood_list_mut_ptr = unsafe { SendSyncWrapper::new(neighborhood_list.as_mut_ptr()) };
+    // We need a mutable pointer to the storage of the neighborhood lists.
+    // This can be safely used below because:
+    //  1. The `Vec` does not go out of scope because we have a mutable reference to it.
+    //  2. We don't have to resize it in the following because we already initialized it to the correct size.
+    let neighborhood_list_mut_ptr = neighborhood_list.as_mut_ptr();
+    // We have to share the pointer to the neighborhood list storage between threads to avoid unnecessary copies and expensive merging.
+    // In principle this can be done without UB because:
+    //  1. UB can only occur when the pointer is actually dereferenced.
+    //  2. When the pointer is incremented to disjoint locations before being dereferenced,
+    //     there can only be one mutable reference to each entry in the storage which is not UB.
+    // These conditions have to be guaranteed by the code that uses the pointer below.
+    let neighborhood_list_mut_ptr = unsafe { SendSyncWrapper::new(neighborhood_list_mut_ptr) };
 
     {
         profile!("calculate_particle_neighbors_par");
@@ -275,14 +285,23 @@ pub fn neighborhood_search_spatial_hashing_parallel<I: Index, R: Real>(
                 // Iterate over all particles of the current cell
                 for (i, &particle_i) in cell_k_particles.iter().enumerate() {
                     let pos_i = &particle_positions[particle_i];
-                    // We know that the we will only access disjoint locations, because a particle index can only appear in one cell
+                    // Get mutable reference to the neighborhood list of `particle_i`
+                    // This is safe because:
+                    //  1. Here, we only write to neighborhood lists of particles in the current cell `cell_k`.
+                    //  2. The particles of the current cell `cell_k` are only handled by this closure invocation in sequence.
+                    //  3. The spatial hashing guarantees that a particle is stored only once and in a single cell.
+                    // => We only dereference and write to strictly disjoint regions in memory
                     let particle_i_neighbors =
                         unsafe { &mut *neighborhood_list_mut_ptr.get().add(particle_i) };
 
                     // Check for neighborhood with particles of all adjacent cells
+                    // Transitive neighborhood relationship is not handled explicitly.
+                    // Instead, it will be handled when the cell of `particle_j` is processed.
                     for &adjacent_cell_particles in cell_k_adjacent_particle_vecs.iter() {
                         for &particle_j in adjacent_cell_particles.iter() {
                             let pos_j = &particle_positions[particle_j];
+                            // TODO: We might not be able to guarantee that this is symmetric.
+                            //  Therefore, it might be possible that only one side of some neighborhood relationships gets detected.
                             if (pos_j - pos_i).norm_squared() < search_radius_squared {
                                 // A neighbor was found
                                 particle_i_neighbors.push(particle_j);
@@ -297,9 +316,14 @@ pub fn neighborhood_search_spatial_hashing_parallel<I: Index, R: Real>(
                             // A neighbor was found
                             particle_i_neighbors.push(particle_j);
 
-                            // Add neighborhood transitively
+                            // Get mutable reference to neighborhood list of `particle_j`
+                            // This is safe because:
+                            //  1. The same reasons why we can get a mutable reference to the neighborhood list of `particle_i` (see above).
+                            //  2. We only access neighborhood lists of particles with j > i, so we have no aliasing with i.
+                            // => We only dereference and write to strictly disjoint regions in memory
                             let particle_j_neighbors =
                                 unsafe { &mut *neighborhood_list_mut_ptr.get().add(particle_j) };
+                            // Add neighborhood relationship transitively
                             particle_j_neighbors.push(particle_i);
                         }
                     }
