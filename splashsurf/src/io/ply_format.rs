@@ -9,7 +9,7 @@ use splashsurf_lib::mesh::MeshAttribute;
 use splashsurf_lib::mesh::MeshWithData;
 use splashsurf_lib::mesh::TriMesh3d;
 use splashsurf_lib::nalgebra::Vector3;
-use splashsurf_lib::Real;
+use splashsurf_lib::{IteratorExt, Real};
 
 /// Tries to load the file at the given path as a PLY file and read particle positions from it
 pub fn particles_from_ply<R: Real, P: AsRef<Path>>(
@@ -161,7 +161,7 @@ fn parse_mesh_from_ply<R: Real>(
                 )),
             }
         })
-        .collect::<Result<Vec<_>, _>>()?;
+        .try_collect_with_capacity(faces.len())?;
 
     let normals = MeshAttribute::new("normals", AttributeData::Vector3Real(normals));
     Ok(MeshWithData::new(TriMesh3d {

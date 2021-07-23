@@ -5,7 +5,7 @@ use splashsurf_lib::vtkio;
 use splashsurf_lib::vtkio::model::{
     Attributes, CellType, Cells, UnstructuredGridPiece, VertexNumbers,
 };
-use splashsurf_lib::Real;
+use splashsurf_lib::{IteratorExt, Real};
 use std::fs::create_dir_all;
 use std::path::Path;
 use vtkio::model::{ByteOrder, DataSet, Version, Vtk};
@@ -73,47 +73,54 @@ pub fn particles_from_coords<RealOut: Real, RealIn: Real>(
     coords: &Vec<RealIn>,
 ) -> Result<Vec<Vector3<RealOut>>, anyhow::Error> {
     if coords.len() % 3 != 0 {
-        anyhow!("The number of values in the particle data point buffer is not divisible by 3");
+        return Err(anyhow!(
+            "Particle point buffer length is not divisible by 3"
+        ));
     }
 
     let num_points = coords.len() / 3;
-    let mut positions = Vec::with_capacity(num_points);
-    for i in 0..num_points {
-        positions.push(Vector3::new(
-            RealOut::from_f64(coords[3 * i + 0].to_f64().unwrap()).unwrap(),
-            RealOut::from_f64(coords[3 * i + 1].to_f64().unwrap()).unwrap(),
-            RealOut::from_f64(coords[3 * i + 2].to_f64().unwrap()).unwrap(),
-        ))
-    }
+    let positions = coords
+        .chunks_exact(3)
+        .map(|triplet| {
+            Some(Vector3::new(
+                triplet[0].try_convert()?,
+                triplet[1].try_convert()?,
+                triplet[2].try_convert()?,
+            ))
+        })
+        .map(|vec| {
+            vec.ok_or_else(|| {
+                anyhow!("Failed to convert coordinate from input to output float type, value out of range?")
+            })
+        })
+        .try_collect_with_capacity(num_points)?;
 
     Ok(positions)
 }
 
 /// Tries to convert a VTK `DataSet` into a vector of particle positions
 pub fn particles_from_dataset<R: Real>(dataset: DataSet) -> Result<Vec<Vector3<R>>, anyhow::Error> {
-    if let DataSet::UnstructuredGrid { pieces, .. } = dataset {
-        if let Some(piece) = pieces.into_iter().next() {
-            let points = piece
-                .into_loaded_piece_data(None)
-                .context("Failed to load unstructured grid piece")?
-                .points;
+    let unstructured_grid_pieces = match dataset {
+        DataSet::UnstructuredGrid { pieces, .. } => Ok(pieces),
+        _ => Err(anyhow!("Loaded dataset is not an unstructured grid")),
+    }?;
 
-            match points {
-                IOBuffer::F64(coords) => particles_from_coords(&coords),
-                IOBuffer::F32(coords) => particles_from_coords(&coords),
-                _ => Err(anyhow!(
-                    "Point coordinate IOBuffer does not contain f32 or f64 values"
-                )),
-            }
-        } else {
-            Err(anyhow!(
-                "Loaded dataset does not contain an unstructured grid piece"
-            ))
-        }
-    } else {
-        Err(anyhow!(
-            "Loaded dataset does not contain an unstructured grid"
-        ))
+    let first_piece = unstructured_grid_pieces
+        .into_iter()
+        .next()
+        .ok_or_else(|| anyhow!("Loaded dataset does not contain any unstructured grid pieces"))?;
+
+    let points = first_piece
+        .into_loaded_piece_data(None)
+        .context("Failed to load unstructured grid piece")?
+        .points;
+
+    match points {
+        IOBuffer::F64(coords) => particles_from_coords(&coords),
+        IOBuffer::F32(coords) => particles_from_coords(&coords),
+        _ => Err(anyhow!(
+            "Point coordinate IOBuffer does not contain f32 or f64 values"
+        )),
     }
 }
 
@@ -121,52 +128,50 @@ pub fn particles_from_dataset<R: Real>(dataset: DataSet) -> Result<Vec<Vector3<R
 pub fn surface_mesh_from_dataset<R: Real>(
     dataset: DataSet,
 ) -> Result<MeshWithData<R, TriMesh3d<R>>, anyhow::Error> {
-    if let DataSet::UnstructuredGrid { pieces, .. } = dataset {
-        if let Some(piece) = pieces.into_iter().next() {
-            let piece = piece
-                .into_loaded_piece_data(None)
-                .context("Failed to load unstructured grid piece")?;
+    let unstructured_grid_pieces = match dataset {
+        DataSet::UnstructuredGrid { pieces, .. } => Ok(pieces),
+        _ => Err(anyhow!("Loaded dataset is not an unstructured grid")),
+    }?;
 
-            let vertices = match piece.points {
-                IOBuffer::F64(coords) => particles_from_coords(&coords),
-                IOBuffer::F32(coords) => particles_from_coords(&coords),
-                _ => Err(anyhow!(
-                    "Point coordinate IOBuffer does not contain f32 or f64 values"
-                )),
-            }?;
+    let first_piece = unstructured_grid_pieces
+        .into_iter()
+        .next()
+        .ok_or_else(|| anyhow!("Loaded dataset does not contain any unstructured grid pieces"))?
+        .into_loaded_piece_data(None)
+        .context("Failed to load unstructured grid piece")?;
 
-            let triangles = {
-                let (num_cells, cell_verts) = piece.cells.cell_verts.into_legacy();
-                if cell_verts.len() % 4 == 0 {
-                    let mut cells = Vec::with_capacity(num_cells as usize);
-                    cell_verts.chunks_exact(4).try_for_each(|cell| {
-                        if cell[0] == 3 {
-                            cells.push([cell[1] as usize, cell[2] as usize, cell[3] as usize]);
-                            Ok(())
-                        } else {
-                            Err(anyhow!("Invalid number of vertex indices per cell"))
-                        }
-                    })?;
-                    cells
-                } else {
-                    return Err(anyhow!("Invalid number of vertex indices per cell"));
-                }
-            };
+    let vertices = match first_piece.points {
+        IOBuffer::F64(coords) => particles_from_coords(&coords),
+        IOBuffer::F32(coords) => particles_from_coords(&coords),
+        _ => Err(anyhow!(
+            "Point coordinate IOBuffer does not contain f32 or f64 values"
+        )),
+    }?;
 
-            Ok(MeshWithData::new(TriMesh3d {
-                vertices,
-                triangles,
-            }))
-        } else {
-            Err(anyhow!(
-                "Loaded dataset does not contain an unstructured grid piece"
-            ))
+    let triangles = {
+        let (num_cells, cell_verts) = first_piece.cells.cell_verts.into_legacy();
+
+        if cell_verts.len() % 4 != 0 {
+            return Err(anyhow!("Length of cell vertex array is invalid. Expected 4 values per cell (3 for each triangle vertex index + 1 for vertex count). There are {} values for {} cells.", cell_verts.len(), num_cells));
         }
-    } else {
-        Err(anyhow!(
-            "Loaded dataset does not contain an unstructured grid"
-        ))
-    }
+
+        let cells = cell_verts
+            .chunks_exact(4)
+            .enumerate()
+            .map(|(cell_idx, cell)| {
+                let is_triangle = cell[0] == 0;
+                is_triangle
+                    .then(|| [cell[1] as usize, cell[2] as usize, cell[3] as usize])
+                    .ok_or_else(|| anyhow!("Expected only triangle cells. Invalid number of vertex indices ({}) of cell {}", cell[0], cell_idx))
+            })
+            .try_collect_with_capacity(num_cells as usize)?;
+        cells
+    };
+
+    Ok(MeshWithData::new(TriMesh3d {
+        vertices,
+        triangles,
+    }))
 }
 
 /// Wrapper for a slice of particle positions for converting it into a VTK `UnstructuredGridPiece`
@@ -187,16 +192,19 @@ where
             points
         };
 
+        // Each particle has a cell of type `Vertex`
+        let cell_types = vec![CellType::Vertex; particles.len()];
+
         let vertices = {
             let mut vertices = Vec::with_capacity(particles.len() * (1 + 1));
             for i in 0..particles.len() {
+                // Number of vertices of the cell
                 vertices.push(1);
+                // Vertex index
                 vertices.push(i as u32);
             }
             vertices
         };
-
-        let cell_types = vec![CellType::Vertex; particles.len()];
 
         UnstructuredGridPiece {
             points: points.into(),
