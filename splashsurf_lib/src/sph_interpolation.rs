@@ -1,9 +1,9 @@
 //! Functions for interpolating quantities (e.g. normals, scalar fields) by evaluating SPH sums
 
-use crate::kernel;
 use crate::kernel::SymmetricKernel3d;
 use crate::profile;
 use crate::Real;
+use crate::kernel;
 use nalgebra::{Unit, Vector3};
 use rayon::prelude::*;
 use rstar::primitives::PointWithData;
@@ -14,32 +14,32 @@ type Particle<R> = PointWithData<ParticleData<R>, [R; 3]>;
 
 /// Data associated with each particle that is stored in the R-tree
 struct ParticleData<R: Real> {
+    /// Index of the particle in the global particle list
+    index: usize,
     /// Volume associated with each particle which is needed to evaluate the SPH density field
     volume: R,
 }
 
-/// Computes the surface normals at the specified interpolation points using the gradient of the SPH density field of the given particles
-pub fn compute_sph_normals<R: Real>(
-    interpolation_points: &[Vector3<R>],
+/// Constructs an R-Tree for the given particles, storing each particle's index and volume in the tree
+fn build_rtree<R: Real>(
     particle_positions: &[Vector3<R>],
     particle_densities: &[R],
     particle_rest_mass: R,
-    compact_support_radius: R,
-) -> Vec<Unit<Vector3<R>>> {
-    profile!("compute_sph_normals");
-
-    let squared_support = compact_support_radius * compact_support_radius;
+) -> RTree<Particle<R>> {
+    assert_eq!(particle_positions.len(), particle_densities.len());
 
     // Prepare data for R-tree insertion:
     // Collect all particles with their position and compute their volume
     let particles = particle_positions
         .iter()
+        .zip(particle_densities.iter().copied())
         .enumerate()
-        .map(|(i, p)| {
+        .map(|(i, (p, rho_i))| {
             let data = ParticleData {
-                volume: particle_rest_mass / particle_densities[i],
+                index: i,
+                volume: particle_rest_mass / rho_i,
             };
-            Particle::new(data, [p.x, p.y, p.z])
+            Particle::new(data, bytemuck::cast(*p))
         })
         .collect();
 
@@ -49,11 +49,44 @@ pub fn compute_sph_normals<R: Real>(
         RTree::bulk_load(particles)
     };
 
-    let kernel = kernel::CubicSplineKernel::new(compact_support_radius);
+    tree
+}
 
-    let normals = {
-        profile!("evaluate normals with SPH sum");
-        let mut normals = Vec::with_capacity(interpolation_points.len());
+/// Acceleration structure for interpolating field quantities of the fluid to arbitrary points using SPH interpolation
+pub struct SphInterpolator<R: Real> {
+    compact_support_radius: R,
+    tree: RTree<Particle<R>>,
+}
+
+impl<R: Real> SphInterpolator<R> {
+    /// Initializes the acceleration structure for interpolating values of the given fluid particles, this is a relatively expensive operation (builds an R-tree)
+    pub fn new(
+        particle_positions: &[Vector3<R>],
+        particle_densities: &[R],
+        particle_rest_mass: R,
+        compact_support_radius: R,
+    ) -> Self {
+        assert_eq!(particle_positions.len(), particle_densities.len());
+
+        let tree = build_rtree(particle_positions, particle_densities, particle_rest_mass);
+
+        Self {
+            compact_support_radius,
+            tree,
+        }
+    }
+
+    /// Interpolates surface normals (i.e. normalized SPH gradient of the indicator function) of the fluid to the given points using SPH interpolation, appends to the given vector
+    pub fn interpolate_normals_inplace(
+        &self,
+        interpolation_points: &[Vector3<R>],
+        normals: &mut Vec<Unit<Vector3<R>>>,
+    ) {
+        profile!("interpolate_normals_inplace");
+
+        let squared_support = self.compact_support_radius * self.compact_support_radius;
+        let kernel = kernel::CubicSplineKernel::new(self.compact_support_radius);
+
         interpolation_points
             .par_iter()
             .map(|x_i| {
@@ -61,11 +94,12 @@ pub fn compute_sph_normals<R: Real>(
                 let mut density_grad = Vector3::zeros();
 
                 // SPH: Iterate over all other particles within the squared support radius
-                for p_j in tree.locate_within_distance([x_i.x, x_i.y, x_i.z], squared_support) {
+                let query_point = bytemuck::cast::<_, [R; 3]>(*x_i);
+                for p_j in self.tree.locate_within_distance(query_point, squared_support) {
                     // Volume of the neighbor particle
                     let vol_j = p_j.data.volume;
                     // Position of the neighbor particle
-                    let x_j = Vector3::new(p_j.position()[0], p_j.position()[1], p_j.position()[2]);
+                    let x_j = bytemuck::cast_ref::<_, Vector3<R>>(p_j.position());
 
                     // Relative position `dx` and distance `r` of the neighbor particle
                     let dx = x_j - x_i;
@@ -80,9 +114,72 @@ pub fn compute_sph_normals<R: Real>(
                 // Normalize the gradient to get the surface normal
                 Unit::new_normalize(density_grad)
             })
-            .collect_into_vec(&mut normals);
-        normals
-    };
+            .collect_into_vec(normals);
+    }
 
-    normals
+    /// Interpolates surface normals (i.e. normalized SPH gradient of the indicator function) of the fluid to the given points using SPH interpolation
+    pub fn interpolate_normals(
+        &self,
+        interpolation_points: &[Vector3<R>],
+    ) -> Vec<Unit<Vector3<R>>> {
+        let mut normals = Vec::with_capacity(interpolation_points.len());
+        self.interpolate_normals_inplace(interpolation_points, &mut normals);
+        normals
+    }
+
+    /// Interpolates the a per particle quantity to the given points, panics if the there are less per-particles values than particles, appends to the given vector
+    #[allow(non_snake_case)]
+    pub fn interpolate_scalar_quantity_inplace(
+        &self,
+        particle_quantity: &[R],
+        interpolation_points: &[Vector3<R>],
+        interpolated_values: &mut Vec<R>,
+    ) {
+        profile!("interpolate_scalar_quantity_inplace");
+        assert_eq!(particle_quantity.len(), self.tree.size());
+
+        let squared_support = self.compact_support_radius * self.compact_support_radius;
+        let kernel = kernel::CubicSplineKernel::new(self.compact_support_radius);
+
+        interpolation_points
+            .par_iter()
+            .map(|x_i| {
+                let mut interpolated_value = R::zero();
+                let mut correction = R::zero();
+
+                // SPH: Iterate over all other particles within the squared support radius
+                let query_point = bytemuck::cast::<_, [R; 3]>(*x_i);
+                for p_j in self.tree.locate_within_distance(query_point, squared_support) {
+                    // Volume of the neighbor particle
+                    let vol_j = p_j.data.volume;
+                    // Position of the neighbor particle
+                    let x_j = bytemuck::cast_ref::<_, Vector3<R>>(p_j.position());
+
+                    // Relative position `dx` and distance `r` of the neighbor particle
+                    let dx = x_j - x_i;
+                    let r = dx.norm();
+
+                    // Unchecked access is fine as we asserted before that the slice has the correct length
+                    let A_j = unsafe { *particle_quantity.get_unchecked(p_j.data.index) };
+                    let W_ij = kernel.evaluate(r);
+
+                    interpolated_value += A_j * vol_j * W_ij;
+                    correction += vol_j * W_ij;
+                }
+
+                interpolated_value / correction
+            })
+            .collect_into_vec(interpolated_values);
+    }
+
+    /// Interpolates the a per particle quantity to the given points, panics if the there are less per-particles values than particles
+    pub fn interpolate_scalar_quantity(
+        &self,
+        particle_quantity: &[R],
+        interpolation_points: &[Vector3<R>],
+    ) -> Vec<R> {
+        let mut values = Vec::with_capacity(interpolation_points.len());
+        self.interpolate_scalar_quantity_inplace(particle_quantity, interpolation_points, &mut values);
+        values
+    }
 }

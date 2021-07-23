@@ -8,7 +8,7 @@ use rayon::prelude::*;
 use splashsurf_lib::mesh::{Mesh3d, MeshAttribute, MeshWithData, PointCloud3d};
 use splashsurf_lib::nalgebra::{Unit, Vector3};
 use splashsurf_lib::profile;
-use splashsurf_lib::sph_interpolation;
+use splashsurf_lib::sph_interpolation::SphInterpolator;
 use splashsurf_lib::{density_map, Index, Real};
 use std::convert::TryFrom;
 use std::path::PathBuf;
@@ -603,32 +603,32 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
         profile!("compute normals");
         info!("Computing normals for {} vertices...", mesh.vertices.len());
 
+        let particle_rest_density = params.rest_density;
+        let particle_rest_volume = R::from_f64((4.0 / 3.0) * std::f64::consts::PI).unwrap()
+            * params.particle_radius.powi(3);
+        let particle_rest_mass = particle_rest_volume * particle_rest_density;
+
+        let particle_densities = reconstruction
+            .particle_densities()
+            .ok_or_else(|| anyhow::anyhow!("Particle densities were not returned by surface reconstruction but are required for SPH normal computation"))?
+            .as_slice();
+        assert_eq!(
+            particle_positions.len(),
+            particle_densities.len(),
+            "There has to be one density value per particle"
+        );
+
+        let interpolator = SphInterpolator::new(
+            &particle_positions,
+            particle_densities,
+            particle_rest_mass,
+            params.compact_support_radius,
+        );
+
         let normals = if paths.sph_normals {
             info!("Using SPH interpolation to compute surface normals");
 
-            let particle_rest_density = params.rest_density;
-            let particle_rest_volume = R::from_f64((4.0 / 3.0) * std::f64::consts::PI).unwrap()
-                * params.particle_radius.powi(3);
-            let particle_rest_mass = particle_rest_volume * particle_rest_density;
-
-            let particle_densities = reconstruction
-                .particle_densities()
-                .ok_or_else(|| anyhow::anyhow!("Particle densities were not returned by surface reconstruction but are required for SPH normal computation"))?
-                .as_slice();
-            assert_eq!(
-                particle_positions.len(),
-                particle_densities.len(),
-                "There has to be one density value per particle"
-            );
-
-            let sph_normals = sph_interpolation::compute_sph_normals(
-                mesh.vertices(),
-                particle_positions.as_slice(),
-                particle_densities,
-                particle_rest_mass,
-                params.compact_support_radius,
-            );
-
+            let sph_normals = interpolator.interpolate_normals(mesh.vertices());
             bytemuck::allocation::cast_vec::<Unit<Vector3<R>>, Vector3<R>>(sph_normals)
         } else {
             info!("Using area weighted triangle normals for surface normals");
