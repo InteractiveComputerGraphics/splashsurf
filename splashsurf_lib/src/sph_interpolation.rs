@@ -1,13 +1,19 @@
 //! Functions for interpolating quantities (e.g. normals, scalar fields) by evaluating SPH sums
 
+use crate::kernel;
 use crate::kernel::SymmetricKernel3d;
 use crate::profile;
 use crate::Real;
-use crate::kernel;
 use nalgebra::{Unit, Vector3};
 use rayon::prelude::*;
 use rstar::primitives::PointWithData;
 use rstar::RTree;
+
+/// Acceleration structure for interpolating field quantities of the fluid to arbitrary points using SPH interpolation
+pub struct SphInterpolator<R: Real> {
+    compact_support_radius: R,
+    tree: RTree<Particle<R>>,
+}
 
 /// Particle type that is stored in the R-tree for fast SPH neighbor queries
 type Particle<R> = PointWithData<ParticleData<R>, [R; 3]>;
@@ -52,12 +58,6 @@ fn build_rtree<R: Real>(
     tree
 }
 
-/// Acceleration structure for interpolating field quantities of the fluid to arbitrary points using SPH interpolation
-pub struct SphInterpolator<R: Real> {
-    compact_support_radius: R,
-    tree: RTree<Particle<R>>,
-}
-
 impl<R: Real> SphInterpolator<R> {
     /// Initializes the acceleration structure for interpolating values of the given fluid particles, this is a relatively expensive operation (builds an R-tree)
     pub fn new(
@@ -95,7 +95,10 @@ impl<R: Real> SphInterpolator<R> {
 
                 // SPH: Iterate over all other particles within the squared support radius
                 let query_point = bytemuck::cast::<_, [R; 3]>(*x_i);
-                for p_j in self.tree.locate_within_distance(query_point, squared_support) {
+                for p_j in self
+                    .tree
+                    .locate_within_distance(query_point, squared_support)
+                {
                     // Volume of the neighbor particle
                     let vol_j = p_j.data.volume;
                     // Position of the neighbor particle
@@ -149,7 +152,10 @@ impl<R: Real> SphInterpolator<R> {
 
                 // SPH: Iterate over all other particles within the squared support radius
                 let query_point = bytemuck::cast::<_, [R; 3]>(*x_i);
-                for p_j in self.tree.locate_within_distance(query_point, squared_support) {
+                for p_j in self
+                    .tree
+                    .locate_within_distance(query_point, squared_support)
+                {
                     // Volume of the neighbor particle
                     let vol_j = p_j.data.volume;
                     // Position of the neighbor particle
@@ -179,7 +185,11 @@ impl<R: Real> SphInterpolator<R> {
         interpolation_points: &[Vector3<R>],
     ) -> Vec<R> {
         let mut values = Vec::with_capacity(interpolation_points.len());
-        self.interpolate_scalar_quantity_inplace(particle_quantity, interpolation_points, &mut values);
+        self.interpolate_scalar_quantity_inplace(
+            particle_quantity,
+            interpolation_points,
+            &mut values,
+        );
         values
     }
 }
