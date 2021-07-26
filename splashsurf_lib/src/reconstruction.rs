@@ -13,7 +13,7 @@ use crate::{
 };
 use log::{debug, info, trace};
 use nalgebra::Vector3;
-use std::sync::Mutex;
+use parking_lot::Mutex;
 
 /// Performs a global surface reconstruction without domain decomposition
 pub(crate) fn reconstruct_surface_global<'a, I: Index, R: Real>(
@@ -299,7 +299,7 @@ impl<I: Index, R: Real> OctreeBasedSurfaceReconstruction<I, R> {
                 {
                     profile!("update global density values");
 
-                    let mut global_densities = global_densities.lock().unwrap();
+                    let mut global_densities = global_densities.lock();
                     for (&global_idx, (&density, position)) in node_particles.iter().zip(
                         tl_workspace
                             .particle_densities
@@ -315,7 +315,7 @@ impl<I: Index, R: Real> OctreeBasedSurfaceReconstruction<I, R> {
             });
 
         // Unpack densities from mutex and move back into workspace
-        *output_surface.workspace.densities_mut() = global_densities.into_inner().unwrap();
+        *output_surface.workspace.densities_mut() = global_densities.into_inner();
     }
 
     /// Performs surface reconstruction without stitching by visiting all octree leaf nodes

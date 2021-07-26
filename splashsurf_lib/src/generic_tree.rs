@@ -15,11 +15,12 @@
 //! before the children are enqueued or after the children were already processed.
 //!
 
+use parking_lot::RwLock;
 use rayon::{Scope, ScopeFifo};
 use std::collections::VecDeque;
 use std::iter::FusedIterator;
 use std::ops::{Deref, DerefMut};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 // TODO: Tests for the algorithms
 
@@ -191,7 +192,7 @@ pub trait ParVisitableTree: TreeNode {
             F: Fn(&T) -> Result<(), E> + Sync,
         {
             // Stop recursion if there is already an error
-            if error.read().unwrap().is_err() {
+            if error.read().is_err() {
                 return;
             }
 
@@ -200,11 +201,11 @@ pub trait ParVisitableTree: TreeNode {
                 let error = error.clone();
                 s.spawn_fifo(move |_| {
                     // Only run visitor if there was no error in the meantime
-                    if error.read().unwrap().is_ok() {
+                    if error.read().is_ok() {
                         // Run visitor and check returned result
                         let res = visitor(node);
                         if res.is_err() {
-                            let mut error_guard = error.write().unwrap();
+                            let mut error_guard = error.write();
                             // Don't overwrite error if there is already one
                             if !error_guard.is_err() {
                                 *error_guard = res;
@@ -229,9 +230,9 @@ pub trait ParVisitableTree: TreeNode {
         }
 
         // Return any potential error collected during visitation
-        if !error.read().unwrap().is_ok() {
+        if !error.read().is_ok() {
             match Arc::try_unwrap(error) {
-                Ok(e) => e.into_inner().unwrap(),
+                Ok(e) => e.into_inner(),
                 Err(_) => panic!("Unable to unwrap Arc that stores error of tree visitation"),
             }
         } else {
@@ -318,7 +319,7 @@ pub trait ParMutVisitableTree: TreeNodeMut {
             F: Fn(&mut T) -> Result<(), E> + Sync,
         {
             // Stop recursion if there is already an error
-            if error.read().unwrap().is_err() {
+            if error.read().is_err() {
                 return;
             }
 
@@ -331,11 +332,11 @@ pub trait ParMutVisitableTree: TreeNodeMut {
             });
 
             // Only run visitor if none of the child nodes returned an error
-            if error.read().unwrap().is_ok() {
+            if error.read().is_ok() {
                 // Run visitor and check returned result
                 let res = visitor(node);
                 if res.is_err() {
-                    let mut error_guard = error.write().unwrap();
+                    let mut error_guard = error.write();
                     // Don't overwrite error if there is already one
                     if !error_guard.is_err() {
                         *error_guard = res;
@@ -352,9 +353,9 @@ pub trait ParMutVisitableTree: TreeNodeMut {
         }
 
         // Return any potential error collected during visitation
-        if !error.read().unwrap().is_ok() {
+        if !error.read().is_ok() {
             match Arc::try_unwrap(error) {
-                Ok(e) => e.into_inner().unwrap(),
+                Ok(e) => e.into_inner(),
                 Err(_) => panic!("Unable to unwrap Arc that stores error of tree visitation"),
             }
         } else {

@@ -1,12 +1,12 @@
 //! Implementation details for the [`profile`](crate::profile) macro
 
 use lazy_static::lazy_static;
+use parking_lot::RwLock;
 use std::collections::hash_map::RandomState;
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::hash::{BuildHasher, Hash, Hasher};
 use std::io;
-use std::sync::RwLock;
 use std::time::{Duration, Instant};
 use thread_local::ThreadLocal;
 
@@ -25,28 +25,24 @@ macro_rules! profile_impl {
         let (_profiling_scope_guard, _) = $crate::profiling::PROFILER
             .get_or(Default::default)
             .write()
-            .expect("Lock poisoned")
             .enter($name);
     };
     ($scope_id:ident, $name:expr) => {
         let (_profiling_scope_guard, $scope_id) = $crate::profiling::PROFILER
             .get_or(Default::default)
             .write()
-            .expect("Lock poisoned")
             .enter($name);
     };
     ($name:expr, parent = $parent_id:ident) => {
         let (_profiling_scope_guard, _) = $crate::profiling::PROFILER
             .get_or(Default::default)
             .write()
-            .expect("Lock poisoned")
             .enter_with_parent($name, &$parent_id);
     };
     ($scope_id:ident, $name:expr, parent = $parent_id:ident) => {
         let (_profiling_scope_guard, $scope_id) = $crate::profiling::PROFILER
             .get_or(Default::default)
             .write()
-            .expect("Lock poisoned")
             .enter_with_parent($name, &$parent_id);
     };
 }
@@ -72,7 +68,6 @@ impl Drop for Guard {
             .get()
             .expect("Missing thread local profiler")
             .write()
-            .expect("Lock poisoned")
             .leave(duration)
     }
 }
@@ -233,15 +228,14 @@ pub fn write<W: io::Write>(out: &mut W) -> io::Result<()> {
 
     // Collect scopes over all threads
     for profiler in PROFILER.iter() {
-        if let Ok(profiler) = profiler.read() {
-            roots.extend(profiler.roots.iter());
+        let profiler = profiler.read();
+        roots.extend(profiler.roots.iter());
 
-            for (&id, scope) in &profiler.scopes {
-                merged_scopes
-                    .entry(id)
-                    .and_modify(|s| s.merge(scope))
-                    .or_insert_with(|| scope.clone());
-            }
+        for (&id, scope) in &profiler.scopes {
+            merged_scopes
+                .entry(id)
+                .and_modify(|s| s.merge(scope))
+                .or_insert_with(|| scope.clone());
         }
     }
 
@@ -289,8 +283,6 @@ pub fn write_to_string() -> Result<String, Box<dyn Error>> {
 /// is created afterwards followed by dropping of an old scope).
 pub fn reset() {
     for profiler in PROFILER.iter() {
-        if let Ok(mut profiler) = profiler.write() {
-            profiler.reset();
-        }
+        profiler.write().reset();
     }
 }
