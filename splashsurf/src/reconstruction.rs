@@ -650,13 +650,15 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
         profile!("write surface mesh to file");
         info!(
             "Writing surface mesh to \"{}\"...",
-            paths.output_file.to_string_lossy()
+            paths.output_file.display()
         );
 
-        let io_params = io::FormatParameters::default();
-
-        io::write_mesh(&mesh, paths.output_file.clone(), &io_params.output)?;
-
+        io::write_mesh(&mesh, paths.output_file.clone(), &io_params.output).with_context(|| {
+            anyhow!(
+                "Failed to write output mesh to file \"{}\"",
+                paths.output_file.display()
+            )
+        })?;
         info!("Done.");
     }
 
@@ -700,7 +702,7 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
 
         info!(
             "Saving density map point cloud to \"{}\"...",
-            output_density_map_points_file.to_string_lossy()
+            output_density_map_points_file.display()
         );
 
         io::vtk_format::write_vtk(
@@ -724,7 +726,7 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
 
         info!(
             "Saving density map hex mesh to \"{}\"...",
-            output_density_map_grid_file.to_string_lossy()
+            output_density_map_grid_file.display()
         );
 
         io::vtk_format::write_vtk(

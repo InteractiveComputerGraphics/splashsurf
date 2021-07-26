@@ -64,23 +64,21 @@ pub fn read_particle_positions<R: Real, P: AsRef<Path>>(
             .ok_or(anyhow!("Invalid extension of input file"))?;
 
         match extension.to_lowercase().as_str() {
-            "vtk" => vtk_format::particles_from_vtk(&input_file)?,
-            "xyz" => xyz_format::particles_from_xyz(&input_file)?,
-            "ply" => ply_format::particles_from_ply(&input_file)?,
-            "bgeo" => bgeo_format::particles_from_bgeo(&input_file)?,
-            "json" => json_format::particles_from_json(&input_file)?,
-            _ => {
-                return Err(anyhow!(
-                    "Unsupported file format extension \"{}\" for reading particles",
-                    extension
-                ));
-            }
+            "vtk" => vtk_format::particles_from_vtk(&input_file),
+            "xyz" => xyz_format::particles_from_xyz(&input_file),
+            "ply" => ply_format::particles_from_ply(&input_file),
+            "bgeo" => bgeo_format::particles_from_bgeo(&input_file),
+            "json" => json_format::particles_from_json(&input_file),
+            _ => Err(anyhow!(
+                "Unsupported file format extension \"{}\" for reading particles",
+                extension
+            )),
         }
     } else {
-        return Err(anyhow!(
+        Err(anyhow!(
             "Unable to detect file format of particle input file (file name has to end with supported extension)",
-        ));
-    };
+        ))
+    }?;
 
     info!(
         "Successfully read dataset with {} particle positions.",
@@ -111,14 +109,12 @@ pub fn write_particle_positions<R: Real, P: AsRef<Path>>(
             .ok_or(anyhow!("Invalid extension of output file"))?;
 
         match extension.to_lowercase().as_str() {
-            "vtk" => vtk_format::particles_to_vtk(particles, &output_file)?,
-            _ => {
-                return Err(anyhow!(
-                    "Unsupported file format extension \"{}\" for writing particles",
-                    extension
-                ));
-            }
-        }
+            "vtk" => vtk_format::particles_to_vtk(particles, &output_file),
+            _ => Err(anyhow!(
+                "Unsupported file format extension \"{}\" for writing particles",
+                extension
+            )),
+        }?;
     } else {
         return Err(anyhow!(
             "Unable to detect file format of particle output file (file name has to end with supported extension)",
@@ -145,20 +141,18 @@ pub fn read_surface_mesh<R: Real, P: AsRef<Path>>(
             .ok_or(anyhow!("Invalid extension of input file"))?;
 
         match extension.to_lowercase().as_str() {
-            "vtk" => vtk_format::surface_mesh_from_vtk(&input_file)?,
-            "ply" => ply_format::surface_mesh_from_ply(&input_file)?,
-            _ => {
-                return Err(anyhow!(
-                    "Unsupported file format extension \"{}\" for reading surface meshes",
-                    extension
-                ));
-            }
+            "vtk" => vtk_format::surface_mesh_from_vtk(&input_file),
+            "ply" => ply_format::surface_mesh_from_ply(&input_file),
+            _ => Err(anyhow!(
+                "Unsupported file format extension \"{}\" for reading surface meshes",
+                extension
+            )),
         }
     } else {
-        return Err(anyhow!(
+        Err(anyhow!(
             "Unable to detect file format of mesh input file (file name has to end with supported extension)",
-        ));
-    };
+        ))
+    }?;
 
     info!(
         "Successfully read mesh with {} vertices and {} cells.",
@@ -169,7 +163,7 @@ pub fn read_surface_mesh<R: Real, P: AsRef<Path>>(
     Ok(mesh)
 }
 
-/// Writes a mesh to the given file path, automatically detects the file format
+/// Writes a mesh and its attribute data to the given file path, automatically detects the file format
 pub fn write_mesh<'a, R: Real, MeshT: Mesh3d<R>, P: AsRef<Path>>(
     mesh: &'a MeshWithData<R, MeshT>,
     output_file: P,
@@ -194,30 +188,13 @@ where
             .ok_or(anyhow!("Invalid extension of output file"))?;
 
         match extension.to_lowercase().as_str() {
-            "vtk" => {
-                vtk_format::write_vtk(mesh, &output_file, "mesh").with_context(|| {
-                    format!(
-                        "Failed to write reconstructed surface to output file '{}'",
-                        output_file.to_string_lossy()
-                    )
-                })?;
-            }
-            "obj" => {
-                obj_format::mesh_to_obj(mesh, &output_file).with_context(|| {
-                    format!(
-                        "Failed to write reconstructed surface to output file '{}'",
-                        output_file.to_string_lossy()
-                    )
-                })?;
-            }
-            _ => {
-                return Err(anyhow!(
-                    "Unsupported file format extension \"{}\" for writing mesh to output file '{}'",
-                    extension,
-                    output_file.to_string_lossy(),
-                ));
-            }
-        }
+            "vtk" => vtk_format::write_vtk(mesh, &output_file, "mesh"),
+            "obj" => obj_format::mesh_to_obj(mesh, &output_file),
+            _ => Err(anyhow!(
+                "Unsupported file format extension \"{}\"",
+                extension,
+            )),
+        }?;
     } else {
         return Err(anyhow!(
             "Unable to detect file format of mesh output file (file name has to end with supported extension)",
