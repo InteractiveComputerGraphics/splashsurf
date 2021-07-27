@@ -5,7 +5,7 @@ use arguments::{
 };
 use log::info;
 use rayon::prelude::*;
-use splashsurf_lib::mesh::{Mesh3d, MeshAttribute, MeshWithData, PointCloud3d};
+use splashsurf_lib::mesh::{AttributeData, Mesh3d, MeshAttribute, MeshWithData, PointCloud3d};
 use splashsurf_lib::nalgebra::{Unit, Vector3};
 use splashsurf_lib::profile;
 use splashsurf_lib::sph_interpolation::SphInterpolator;
@@ -113,6 +113,9 @@ pub struct ReconstructSubcommandArgs {
     /// Whether to compute the normals using SPH interpolation (smoother and more true to actual fluid surface, but slower) instead of area weighted triangle normals
     #[structopt(long, default_value = "on", possible_values = &["on", "off"], case_insensitive = true)]
     sph_normals: Switch,
+    /// List of point attributes from the input file that should be interpolated to the reconstructed surface. Currently this is only supported for VTK input files.
+    #[structopt(long, use_delimiter = true)]
+    attributes: Vec<String>,
 }
 
 arg_enum! {
@@ -145,7 +148,7 @@ pub fn reconstruct_subcommand(cmd_args: &ReconstructSubcommandArgs) -> Result<()
             reconstruction_pipeline(path, &args)
                 .with_context(|| {
                     format!(
-                        "Error while processing input file '{}' from a file sequence",
+                        "Error while processing input file \"{}\" from a file sequence",
                         path.input_file.display()
                     )
                 })
@@ -297,6 +300,8 @@ mod arguments {
         output_normals: bool,
         /// Whether to use SPH interpolation to compute the normals for all files
         sph_normals: bool,
+        /// Additional attributes to load and interpolate to surface
+        attributes: Vec<String>,
     }
 
     impl ReconstructionRunnerPathCollection {
@@ -310,6 +315,7 @@ mod arguments {
             output_octree_file: Option<P>,
             output_normals: bool,
             sph_normals: bool,
+            attributes: Vec<String>,
         ) -> Result<Self, anyhow::Error> {
             let input_file = input_file.into();
             let output_base_path = output_base_path.map(|p| p.into());
@@ -324,10 +330,10 @@ mod arguments {
                 // Ensure that output directory exists/create it
                 if let Some(output_dir) = output_file.parent() {
                     if !output_dir.exists() {
-                        info!("The output directory '{}' of the output file '{}' does not exist. Trying to create it now...", output_dir.display(), output_file.display());
+                        info!("The output directory \"{}\" of the output file \"{}\" does not exist. Trying to create it now...", output_dir.display(), output_file.display());
                         fs::create_dir_all(output_dir).with_context(|| {
                             format!(
-                                "Unable to create output directory '{}'",
+                                "Unable to create output directory \"{}\"",
                                 output_dir.display()
                             )
                         })?;
@@ -345,6 +351,7 @@ mod arguments {
                     output_octree_file: output_octree_file.map(|f| output_base_path.join(f)),
                     output_normals,
                     sph_normals,
+                    attributes,
                 })
             } else {
                 Ok(Self {
@@ -356,6 +363,7 @@ mod arguments {
                     output_octree_file,
                     output_normals,
                     sph_normals,
+                    attributes,
                 })
             }
         }
@@ -391,6 +399,7 @@ mod arguments {
                             None,
                             self.output_normals,
                             self.sph_normals,
+                            self.attributes.clone(),
                         ));
                     } else {
                         break;
@@ -410,6 +419,7 @@ mod arguments {
                         self.output_octree_file.clone(),
                         self.output_normals,
                         self.sph_normals,
+                        self.attributes.clone(),
                     );
                     1
                 ]
@@ -445,6 +455,7 @@ mod arguments {
                         args.output_octree.clone(),
                         args.output_normals.into_bool(),
                         args.sph_normals.into_bool(),
+                        args.attributes.clone(),
                     )
                 } else {
                     return Err(anyhow!(
@@ -458,7 +469,7 @@ mod arguments {
                     Some(input_filename) => input_filename.to_string_lossy(),
                     None => {
                         return Err(anyhow!(
-                            "The input file path '{}' does not end with a filename",
+                            "The input file path \"{}\" does not end with a filename",
                             input_pattern.display()
                         ))
                     }
@@ -468,14 +479,14 @@ mod arguments {
                 if let Some(input_dir) = input_pattern.parent() {
                     if !input_dir.is_dir() && input_dir != Path::new("") {
                         return Err(anyhow!(
-                            "The parent directory '{}' of the input file path '{}' does not exist",
+                            "The parent directory \"{}\" of the input file path \"{}\" does not exist",
                             input_dir.display(),
                             input_pattern.display()
                         ));
                     }
                 }
 
-                // Make sure that we have a placeholder '{}' in the filename part of the sequence pattern
+                // Make sure that we have a placeholder \"{}\" in the filename part of the sequence pattern
                 if input_filename.contains("{}") {
                     let input_stem = input_pattern.file_stem().unwrap().to_string_lossy();
                     // Currently, only VTK files are supported for output
@@ -494,6 +505,7 @@ mod arguments {
                         args.output_octree.clone(),
                         args.output_normals.into_bool(),
                         args.sph_normals.into_bool(),
+                        args.attributes.clone(),
                     )
                 } else {
                     return Err(anyhow!(
@@ -520,6 +532,8 @@ mod arguments {
         pub output_normals: bool,
         /// Whether to use SPH interpolation to compute the normals
         pub sph_normals: bool,
+        /// Additional attributes to load and interpolate to surface
+        pub attributes: Vec<String>,
     }
 
     impl ReconstructionRunnerPaths {
@@ -531,6 +545,7 @@ mod arguments {
             output_octree_file: Option<PathBuf>,
             output_normals: bool,
             sph_normals: bool,
+            attributes: Vec<String>,
         ) -> Self {
             ReconstructionRunnerPaths {
                 input_file,
@@ -540,6 +555,7 @@ mod arguments {
                 output_octree_file,
                 output_normals,
                 sph_normals,
+                attributes,
             }
         }
     }
@@ -582,14 +598,18 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
 ) -> Result<(), anyhow::Error> {
     profile!("surface reconstruction cli");
 
-    // Load particle positions
-    let particle_positions = io::read_particle_positions(&paths.input_file, &io_params.input)
-        .with_context(|| {
-            format!(
-                "Failed to load particle positions from file '{}'",
-                paths.input_file.display()
-            )
-        })?;
+    // Load particle positions and attributes to interpolate
+    let (particle_positions, attributes) = io::read_particle_positions_with_attributes(
+        &paths.input_file,
+        &paths.attributes,
+        &io_params.input,
+    )
+    .with_context(|| {
+        format!(
+            "Failed to load particle positions from file \"{}\"",
+            paths.input_file.display()
+        )
+    })?;
 
     // Perform the surface reconstruction
     let reconstruction =
@@ -599,9 +619,13 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
     let mesh = reconstruction.mesh();
 
     // Add normals to mesh if requested
-    let mesh = if paths.output_normals {
+    let mesh = if paths.output_normals || !attributes.is_empty() {
         profile!("compute normals");
-        info!("Computing normals for {} vertices...", mesh.vertices.len());
+
+        info!(
+            "Constructing global acceleration structure for SPH interpolation to {} vertices...",
+            mesh.vertices.len()
+        );
 
         let particle_rest_density = params.rest_density;
         let particle_rest_volume = R::from_f64((4.0 / 3.0) * std::f64::consts::PI).unwrap()
@@ -625,22 +649,64 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
             params.compact_support_radius,
         );
 
-        let normals = if paths.sph_normals {
-            info!("Using SPH interpolation to compute surface normals");
+        let mut mesh_with_data = MeshWithData::new(mesh.clone());
 
-            let sph_normals = interpolator.interpolate_normals(mesh.vertices());
-            bytemuck::allocation::cast_vec::<Unit<Vector3<R>>, Vector3<R>>(sph_normals)
-        } else {
-            info!("Using area weighted triangle normals for surface normals");
-            profile!("mesh.par_vertex_normals");
-            let tri_normals = mesh.par_vertex_normals();
+        // Compute normals if requested
+        if paths.output_normals {
+            let normals = if paths.sph_normals {
+                info!("Using SPH interpolation to compute surface normals");
 
-            // Convert unit vectors to plain vectors
-            bytemuck::allocation::cast_vec::<Unit<Vector3<R>>, Vector3<R>>(tri_normals)
-        };
+                let sph_normals = interpolator.interpolate_normals(mesh.vertices());
+                bytemuck::allocation::cast_vec::<Unit<Vector3<R>>, Vector3<R>>(sph_normals)
+            } else {
+                info!("Using area weighted triangle normals for surface normals");
+                profile!("mesh.par_vertex_normals");
+                let tri_normals = mesh.par_vertex_normals();
 
-        MeshWithData::new(mesh.clone())
-            .with_point_data(MeshAttribute::new_real_vector3("normals", normals))
+                // Convert unit vectors to plain vectors
+                bytemuck::allocation::cast_vec::<Unit<Vector3<R>>, Vector3<R>>(tri_normals)
+            };
+
+            mesh_with_data.point_attributes.push(MeshAttribute::new(
+                "normals".to_string(),
+                AttributeData::Vector3Real(normals),
+            ));
+        }
+
+        // Interpolate attributes if requested
+        if !attributes.is_empty() {
+            for attribute in attributes.into_iter() {
+                info!("Interpolating attribute \"{}\"...", attribute.name);
+
+                match attribute.data {
+                    AttributeData::ScalarReal(values) => {
+                        let interpolated_values = interpolator.interpolate_scalar_quantity(
+                            values.as_slice(),
+                            mesh.vertices(),
+                            true,
+                        );
+                        mesh_with_data.point_attributes.push(MeshAttribute::new(
+                            attribute.name,
+                            AttributeData::ScalarReal(interpolated_values),
+                        ));
+                    }
+                    AttributeData::Vector3Real(values) => {
+                        let interpolated_values = interpolator.interpolate_vector_quantity(
+                            values.as_slice(),
+                            mesh.vertices(),
+                            true,
+                        );
+                        mesh_with_data.point_attributes.push(MeshAttribute::new(
+                            attribute.name,
+                            AttributeData::Vector3Real(interpolated_values),
+                        ));
+                    }
+                    _ => unimplemented!("Interpolation of this attribute type not implemented"),
+                }
+            }
+        }
+
+        mesh_with_data
     } else {
         MeshWithData::new(mesh.clone())
     };
@@ -676,7 +742,7 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
         )
         .with_context(|| {
             format!(
-                "Failed to write octree to output file '{}'",
+                "Failed to write octree to output file \"{}\"",
                 output_octree_file.display()
             )
         })?;

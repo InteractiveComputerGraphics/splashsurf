@@ -32,7 +32,7 @@ use vtkio::model::{Attribute, DataSet, UnstructuredGridPiece};
 #[derive(Clone, Debug)]
 pub struct MeshAttribute<R: Real> {
     /// Name of the attribute
-    pub name: &'static str,
+    pub name: String,
     /// Data of the attribute
     pub data: AttributeData<R>,
 }
@@ -521,25 +521,25 @@ impl<R: Real, MeshT: Mesh3d<R>> MeshWithData<R, MeshT> {
 
 impl<R: Real> MeshAttribute<R> {
     /// Creates a new named mesh attribute with the given data
-    pub fn new(name: &'static str, data: impl Into<AttributeData<R>>) -> Self {
+    pub fn new<S: Into<String>>(name: S, data: impl Into<AttributeData<R>>) -> Self {
         Self {
-            name,
+            name: name.into(),
             data: data.into(),
         }
     }
 
     /// Creates a new named mesh attribute with scalar values implementing the [`Real`](crate::Real) trait
-    pub fn new_real_scalar(name: &'static str, data: impl Into<Vec<R>>) -> Self {
+    pub fn new_real_scalar<S: Into<String>>(name: S, data: impl Into<Vec<R>>) -> Self {
         Self {
-            name,
+            name: name.into(),
             data: AttributeData::ScalarReal(data.into()),
         }
     }
 
     /// Creates a new named mesh attribute with scalar values implementing the [`Real`](crate::Real) trait
-    pub fn new_real_vector3(name: &'static str, data: impl Into<Vec<Vector3<R>>>) -> Self {
+    pub fn new_real_vector3<S: Into<String>>(name: S, data: impl Into<Vec<Vector3<R>>>) -> Self {
         Self {
-            name,
+            name: name.into(),
             data: AttributeData::Vector3Real(data.into()),
         }
     }
@@ -550,12 +550,12 @@ impl<R: Real> MeshAttribute<R> {
     fn to_vtk_attribute(&self) -> Attribute {
         match &self.data {
             AttributeData::ScalarU64(u64_vec) => {
-                Attribute::scalars(self.name, 1).with_data(u64_vec.clone())
+                Attribute::scalars(&self.name, 1).with_data(u64_vec.clone())
             }
             AttributeData::ScalarReal(real_vec) => {
-                Attribute::scalars(self.name, 1).with_data(real_vec.clone())
+                Attribute::scalars(&self.name, 1).with_data(real_vec.clone())
             }
-            AttributeData::Vector3Real(vec3r_vec) => Attribute::scalars(self.name, 3)
+            AttributeData::Vector3Real(vec3r_vec) => Attribute::scalars(&self.name, 3)
                 .with_data(vec3r_vec.iter().flatten().copied().collect::<Vec<R>>()),
         }
     }

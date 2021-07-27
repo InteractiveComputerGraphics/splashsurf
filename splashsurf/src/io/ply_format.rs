@@ -163,7 +163,7 @@ fn parse_mesh_from_ply<R: Real>(
         })
         .try_collect_with_capacity(faces.len())?;
 
-    let normals = MeshAttribute::new("normals", AttributeData::Vector3Real(normals));
+    let normals = MeshAttribute::new("normals".to_string(), AttributeData::Vector3Real(normals));
     Ok(MeshWithData::new(TriMesh3d {
         vertices,
         triangles,

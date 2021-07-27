@@ -898,5 +898,8 @@ pub fn sparse_density_map_to_hex_mesh<I: Index, R: Real>(
         ]);
     }
 
-    MeshWithData::new(mesh).with_point_data(MeshAttribute::new_real_scalar("density", values))
+    MeshWithData::new(mesh).with_point_data(MeshAttribute::new_real_scalar(
+        "density".to_string(),
+        values,
+    ))
 }

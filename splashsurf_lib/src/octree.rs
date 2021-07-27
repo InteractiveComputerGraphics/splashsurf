@@ -316,7 +316,7 @@ impl<I: Index, R: Real> Octree<I, R> {
         });
 
         assert_eq!(mesh.cells.len(), ids.len());
-        MeshWithData::new(mesh).with_cell_data(MeshAttribute::new("node_id", ids))
+        MeshWithData::new(mesh).with_cell_data(MeshAttribute::new("node_id".to_string(), ids))
     }
 }
 

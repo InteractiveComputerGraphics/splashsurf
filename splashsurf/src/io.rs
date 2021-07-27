@@ -1,5 +1,7 @@
+use crate::io::vtk_format::VtkFile;
 use anyhow::{anyhow, Context};
-use log::info;
+use log::{info, warn};
+use splashsurf_lib::mesh::MeshAttribute;
 use splashsurf_lib::nalgebra::Vector3;
 use splashsurf_lib::profile;
 use splashsurf_lib::Real;
@@ -7,6 +9,7 @@ use splashsurf_lib::{
     mesh::{Mesh3d, MeshWithData, TriMesh3d},
     vtkio::model::DataSet,
 };
+use std::collections::HashSet;
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::Path;
@@ -86,6 +89,88 @@ pub fn read_particle_positions<R: Real, P: AsRef<Path>>(
     );
 
     Ok(particle_positions)
+}
+
+/// Tries to read particle positions as well as attributes with the given names from the specified file
+pub fn read_particle_positions_with_attributes<R: Real, P: AsRef<Path>>(
+    input_file: P,
+    attribute_names: &[String],
+    format_params: &InputFormatParameters,
+) -> Result<(Vec<Vector3<R>>, Vec<MeshAttribute<R>>), anyhow::Error> {
+    if attribute_names.is_empty() {
+        return read_particle_positions(input_file, format_params).map(|p| (p, Vec::new()));
+    }
+
+    let input_file = input_file.as_ref();
+    info!(
+        "Reading particle dataset and attributes from \"{}\"...",
+        input_file.display()
+    );
+
+    profile!("loading particle positions and attributes");
+
+    // Check file extension: only VTK is supported for reading attributes at the moment
+    {
+        let extension = input_file.extension().ok_or(anyhow!(
+            "Unable to detect file format of particle input file (file name has to end with supported extension)",
+        ))?.to_str().ok_or(anyhow!("Invalid extension of input file"))?.to_lowercase();
+
+        if extension != "vtk" {
+            return Err(anyhow!(
+                "Unsupported file format extension \"{}\" for reading particles and attributes",
+                extension
+            ));
+        }
+    }
+
+    let vtk_pieces = VtkFile::load_file(input_file)
+        .map(|f| f.into_pieces())
+        .with_context(|| format!("Failed to load particle positions from file"))?;
+
+    if vtk_pieces.len() > 1 {
+        warn!("VTK file contains more than one \"piece\". Only the first one will be loaded.");
+    }
+
+    let first_piece = vtk_pieces
+        .into_iter()
+        .next()
+        .ok_or(anyhow!("VTK file does not contain a supported \"piece\"."))?;
+
+    // Load particles
+    let particle_positions = first_piece.load_as_particles()?;
+
+    // Load attributes that should be interpolated
+    let attributes = {
+        // Check if all attributes to interpolate are present in the input file
+        {
+            let attributes_to_interpolate = attribute_names.iter().cloned().collect::<HashSet<_>>();
+            let attributes = first_piece
+                .point_attribute_names()
+                .into_iter()
+                .collect::<HashSet<_>>();
+
+            let missing_attributes = attributes_to_interpolate
+                .difference(&attributes)
+                .cloned()
+                .collect::<Vec<_>>();
+            if !missing_attributes.is_empty() {
+                return Err(anyhow!(
+                    "Missing attribute(s) \"{}\" in input file",
+                    missing_attributes.join("\", \""),
+                ));
+            }
+        }
+
+        first_piece.load_point_attributes::<R>(attribute_names)
+    }?;
+
+    info!(
+        "Successfully loaded point {} attribute(s): \"{}\"",
+        attributes.len(),
+        attribute_names.join("\", \"")
+    );
+
+    Ok((particle_positions, attributes))
 }
 
 /// Writes particles positions to the given file path, automatically detects the file format
