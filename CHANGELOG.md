@@ -6,7 +6,9 @@
 - Lib: Add module `sph_interpolation` for the interpolation of normals, scalar fields and vector fields to arbitrary points using SPH based interpolation
 - CLI: Add command line switch `--sph-normals=on/off` (enabled by default) to control whether to use SPH interpolation to compute normals when `--output-normals` is on
 - CLI: Actually support writing surfaces meshes (including normals) to OBJ files (https://github.com/w1th0utnam3/splashsurf/pull/29)
-- CLI: Support for specifying names of point attribute fields via the argument `--attributes=...` that should be interpolated to the reconstructed surface. Currently it is only possible to load these fields from VTK files and the interpolated values can also only be written if the output file format is VTK.
+- CLI: Support for specifying names of point attribute fields via the argument `--interpolate-attributes=...` that should be interpolated to the reconstructed surface. Currently it is only possible to load these fields from VTK files and the interpolated values can also only be written if the output file format is VTK.
+- CLI: The `--output-normals=on/off` argument was renamed to `--normals=on/off`
+- CLI: All `on/off` arguments now require using an equal sign to set them. Primarily, this was done to prevent the CLI from accepting empty values which would be replaced by the respective default arguments. E.g. previously `--normals` was equivalent to the default `--normals=off` which is quite confusing. Now the default is only applied when the argument is not provided at all, `--normals` results in an error and `--normals=on` can be used to override the default.
 
 ## Version 0.7.0
 

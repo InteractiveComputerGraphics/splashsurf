@@ -21,38 +21,39 @@ use structopt::StructOpt;
 #[derive(Clone, Debug, StructOpt)]
 pub struct ReconstructSubcommandArgs {
     /// Path to the input file where the particle positions are stored (supported formats: VTK, binary f32 XYZ, PLY, BGEO)
-    #[structopt(short = "-i", long, parse(from_os_str))]
+    #[structopt(short = "-i", long, parse(from_os_str), display_order = 1)]
     input_file: Option<PathBuf>,
     /// Path to a sequence of particle files that should be processed, use `{}` in the filename to indicate a placeholder
-    #[structopt(short = "-s", long, parse(from_os_str))]
+    #[structopt(short = "-s", long, parse(from_os_str), display_order = 1)]
     input_sequence: Option<PathBuf>,
     /// Filename for writing the reconstructed surface to disk (default: "{original_filename}_surface.vtk")
-    #[structopt(short = "-o", long, parse(from_os_str))]
+    #[structopt(short = "-o", long, parse(from_os_str), display_order = 1)]
     output_file: Option<PathBuf>,
     /// Optional base directory for all output files (default: current working directory)
-    #[structopt(long, parse(from_os_str))]
+    #[structopt(long, parse(from_os_str), display_order = 1)]
     output_dir: Option<PathBuf>,
     /// The particle radius of the input data
-    #[structopt(long)]
+    #[structopt(long, display_order = 2)]
     particle_radius: f64,
     /// The rest density of the fluid
-    #[structopt(long, default_value = "1000.0")]
+    #[structopt(long, default_value = "1000.0", display_order = 2)]
     rest_density: f64,
     /// The smoothing length radius used for the SPH kernel, the kernel compact support radius will be twice the smoothing length (in multiplies of the particle radius)
-    #[structopt(long)]
+    #[structopt(long, display_order = 2)]
     smoothing_length: f64,
     /// The cube edge length used for marching cubes in multiplies of the particle radius, corresponds to the cell size of the implicit background grid
-    #[structopt(long)]
+    #[structopt(long, display_order = 2)]
     cube_size: f64,
     /// The iso-surface threshold for the density, i.e. the normalized value of the reconstructed density level that indicates the fluid surface (in multiplies of the rest density)
-    #[structopt(long, default_value = "0.6")]
+    #[structopt(long, default_value = "0.6", display_order = 2)]
     surface_threshold: f64,
     /// Whether to enable the use of double precision for all computations
-    #[structopt(short = "-d", long, default_value = "off", possible_values = &["on", "off"], case_insensitive = true)]
+    #[structopt(short = "-d", long, default_value = "off", display_order = 3, possible_values = &["on", "off"], case_insensitive = true, require_equals = true)]
     double_precision: Switch,
     /// Lower corner of the domain where surface reconstruction should be performed, format: domain-min=x_min;y_min;z_min (requires domain-max to be specified)
     #[structopt(
         long,
+        display_order = 3,
         number_of_values = 3,
         value_delimiter = ";",
         requires = "domain-max"
@@ -61,61 +62,62 @@ pub struct ReconstructSubcommandArgs {
     /// Upper corner of the domain where surface reconstruction should be performed, format:domain-max=x_max;y_max;z_max (requires domain-min to be specified)
     #[structopt(
         long,
+        display_order = 3,
         number_of_values = 3,
         value_delimiter = ";",
         requires = "domain-min"
     )]
     domain_max: Option<Vec<f64>>,
+    /// Flag to enable multi-threading to process multiple input files in parallel
+    #[structopt(long = "mt-files", default_value = "off", display_order = 4, possible_values = &["on", "off"], case_insensitive = true, require_equals = true)]
+    parallelize_over_files: Switch,
+    /// Flag to enable multi-threading for a single input file by processing chunks of particles in parallel
+    #[structopt(long = "mt-particles", default_value = "on", display_order = 4, possible_values = &["on", "off"], case_insensitive = true, require_equals = true)]
+    parallelize_over_particles: Switch,
+    /// Set the number of threads for the worker thread pool
+    #[structopt(long, short = "-n", display_order = 4)]
+    num_threads: Option<usize>,
     /// Whether to enable spatial decomposition using an octree (faster) instead of a global approach
-    #[structopt(long, default_value = "on", possible_values = &["on", "off"], case_insensitive = true)]
+    #[structopt(long, default_value = "on", display_order = 5, possible_values = &["on", "off"], case_insensitive = true, require_equals = true)]
     octree_decomposition: Switch,
     /// Whether to enable stitching of the disconnected local meshes resulting from the reconstruction when spatial decomposition is enabled (slower, but without stitching meshes will not be closed)
-    #[structopt(long, default_value = "on", possible_values = &["on", "off"], case_insensitive = true)]
+    #[structopt(long, default_value = "on", display_order = 5, possible_values = &["on", "off"], case_insensitive = true, require_equals = true)]
     octree_stitch_subdomains: Switch,
     /// The maximum number of particles for leaf nodes of the octree, default is to compute it based on the number of threads and particles
-    #[structopt(long)]
+    #[structopt(long, display_order = 5)]
     octree_max_particles: Option<usize>,
     /// Safety factor applied to the kernel compact support radius when it's used as a margin to collect ghost particles in the leaf nodes when performing the spatial decomposition
-    #[structopt(long)]
+    #[structopt(long, display_order = 5)]
     octree_ghost_margin_factor: Option<f64>,
     /// Whether to compute particle densities in a global step before domain decomposition (slower)
-    #[structopt(long, default_value = "off", possible_values = &["on", "off"], case_insensitive = true)]
+    #[structopt(long, default_value = "off", display_order = 5, possible_values = &["on", "off"], case_insensitive = true, require_equals = true)]
     octree_global_density: Switch,
     /// Whether to compute particle densities per subdomain but synchronize densities for ghost-particles (faster, recommended).
     /// Note: if both this and global particle density computation is disabled the ghost particle margin has to be increased to at least 2.0
     /// to compute correct density values for ghost particles.
-    #[structopt(long, default_value = "on", possible_values = &["on", "off"], case_insensitive = true)]
+    #[structopt(long, default_value = "on", display_order = 5, possible_values = &["on", "off"], case_insensitive = true, require_equals = true)]
     octree_sync_local_density: Switch,
     /// Optional filename for writing the point cloud representation of the intermediate density map to disk
-    #[structopt(long, parse(from_os_str))]
+    #[structopt(long, parse(from_os_str), display_order = 6)]
     output_dm_points: Option<PathBuf>,
     /// Optional filename for writing the grid representation of the intermediate density map to disk
-    #[structopt(long, parse(from_os_str))]
+    #[structopt(long, parse(from_os_str), display_order = 6)]
     output_dm_grid: Option<PathBuf>,
     /// Optional filename for writing the octree used to partition the particles to disk
-    #[structopt(long, parse(from_os_str))]
+    #[structopt(long, parse(from_os_str), display_order = 6)]
     output_octree: Option<PathBuf>,
-    /// Flag to enable multi-threading to process multiple input files in parallel
-    #[structopt(long = "mt-files", default_value = "off", possible_values = &["on", "off"], case_insensitive = true)]
-    parallelize_over_files: Switch,
-    /// Flag to enable multi-threading for a single input file by processing chunks of particles in parallel
-    #[structopt(long = "mt-particles", default_value = "on", possible_values = &["on", "off"], case_insensitive = true)]
-    parallelize_over_particles: Switch,
-    /// Set the number of threads for the worker thread pool
-    #[structopt(long, short = "-n")]
-    num_threads: Option<usize>,
-    /// Whether to check the final mesh for problems such as holes (note that when stitching is disabled this will lead to a lot of reported problems)
-    #[structopt(long, default_value = "off", possible_values = &["on", "off"], case_insensitive = true)]
+    /// Whether to check the final mesh for topological problems such as holes (note that when stitching is disabled this will lead to a lot of reported problems)
+    #[structopt(long, default_value = "off", possible_values = &["on", "off"], case_insensitive = true, require_equals = true)]
     check_mesh: Switch,
-    /// Whether to write vertex normals to the output file
-    #[structopt(long, default_value = "off", possible_values = &["on", "off"], case_insensitive = true)]
-    output_normals: Switch,
-    /// Whether to compute the normals using SPH interpolation (smoother and more true to actual fluid surface, but slower) instead of area weighted triangle normals
-    #[structopt(long, default_value = "on", possible_values = &["on", "off"], case_insensitive = true)]
+    /// Whether to compute surface normals at the mesh vertices and write them to the output file
+    #[structopt(long, default_value = "off", display_order = 7, possible_values = &["on", "off"], case_insensitive = true, require_equals = true)]
+    normals: Switch,
+    /// Whether to compute the normals using SPH interpolation (smoother and more true to actual fluid surface, but slower) instead of just using area weighted triangle normals
+    #[structopt(long, default_value = "on", display_order = 7, possible_values = &["on", "off"], case_insensitive = true, require_equals = true)]
     sph_normals: Switch,
-    /// List of point attributes from the input file that should be interpolated to the reconstructed surface. Currently this is only supported for VTK input files.
-    #[structopt(long, use_delimiter = true)]
-    attributes: Vec<String>,
+    /// List of point attribute field names from the input file that should be interpolated to the reconstructed surface. Currently this is only supported for VTK input files.
+    #[structopt(long, use_delimiter = true, display_order = 7)]
+    interpolate_attributes: Vec<String>,
 }
 
 arg_enum! {
@@ -297,7 +299,7 @@ mod arguments {
         output_density_map_grid_file: Option<PathBuf>,
         output_octree_file: Option<PathBuf>,
         /// Whether to enable normal computation for all files
-        output_normals: bool,
+        compute_normals: bool,
         /// Whether to use SPH interpolation to compute the normals for all files
         sph_normals: bool,
         /// Additional attributes to load and interpolate to surface
@@ -313,7 +315,7 @@ mod arguments {
             output_density_map_points_file: Option<P>,
             output_density_map_grid_file: Option<P>,
             output_octree_file: Option<P>,
-            output_normals: bool,
+            compute_normals: bool,
             sph_normals: bool,
             attributes: Vec<String>,
         ) -> Result<Self, anyhow::Error> {
@@ -349,7 +351,7 @@ mod arguments {
                     output_density_map_grid_file: output_density_map_grid_file
                         .map(|f| output_base_path.join(f)),
                     output_octree_file: output_octree_file.map(|f| output_base_path.join(f)),
-                    output_normals,
+                    compute_normals,
                     sph_normals,
                     attributes,
                 })
@@ -361,7 +363,7 @@ mod arguments {
                     output_density_map_points_file,
                     output_density_map_grid_file,
                     output_octree_file,
-                    output_normals,
+                    compute_normals,
                     sph_normals,
                     attributes,
                 })
@@ -397,7 +399,7 @@ mod arguments {
                             None,
                             None,
                             None,
-                            self.output_normals,
+                            self.compute_normals,
                             self.sph_normals,
                             self.attributes.clone(),
                         ));
@@ -417,7 +419,7 @@ mod arguments {
                         self.output_density_map_points_file.clone(),
                         self.output_density_map_grid_file.clone(),
                         self.output_octree_file.clone(),
-                        self.output_normals,
+                        self.compute_normals,
                         self.sph_normals,
                         self.attributes.clone(),
                     );
@@ -453,9 +455,9 @@ mod arguments {
                         args.output_dm_points.clone(),
                         args.output_dm_grid.clone(),
                         args.output_octree.clone(),
-                        args.output_normals.into_bool(),
+                        args.normals.into_bool(),
                         args.sph_normals.into_bool(),
-                        args.attributes.clone(),
+                        args.interpolate_attributes.clone(),
                     )
                 } else {
                     return Err(anyhow!(
@@ -503,9 +505,9 @@ mod arguments {
                         args.output_dm_points.clone(),
                         args.output_dm_grid.clone(),
                         args.output_octree.clone(),
-                        args.output_normals.into_bool(),
+                        args.normals.into_bool(),
                         args.sph_normals.into_bool(),
-                        args.attributes.clone(),
+                        args.interpolate_attributes.clone(),
                     )
                 } else {
                     return Err(anyhow!(
@@ -529,7 +531,7 @@ mod arguments {
         pub output_density_map_grid_file: Option<PathBuf>,
         pub output_octree_file: Option<PathBuf>,
         /// Whether to enable normal computation
-        pub output_normals: bool,
+        pub compute_normals: bool,
         /// Whether to use SPH interpolation to compute the normals
         pub sph_normals: bool,
         /// Additional attributes to load and interpolate to surface
@@ -543,7 +545,7 @@ mod arguments {
             output_density_map_points_file: Option<PathBuf>,
             output_density_map_grid_file: Option<PathBuf>,
             output_octree_file: Option<PathBuf>,
-            output_normals: bool,
+            compute_normals: bool,
             sph_normals: bool,
             attributes: Vec<String>,
         ) -> Self {
@@ -553,7 +555,7 @@ mod arguments {
                 output_density_map_points_file,
                 output_density_map_grid_file,
                 output_octree_file,
-                output_normals,
+                compute_normals,
                 sph_normals,
                 attributes,
             }
@@ -619,7 +621,7 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
     let mesh = reconstruction.mesh();
 
     // Add normals to mesh if requested
-    let mesh = if paths.output_normals || !attributes.is_empty() {
+    let mesh = if paths.compute_normals || !attributes.is_empty() {
         profile!("compute normals");
 
         info!(
@@ -652,7 +654,7 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
         let mut mesh_with_data = MeshWithData::new(mesh.clone());
 
         // Compute normals if requested
-        if paths.output_normals {
+        if paths.compute_normals {
             let normals = if paths.sph_normals {
                 info!("Using SPH interpolation to compute surface normals");
 
