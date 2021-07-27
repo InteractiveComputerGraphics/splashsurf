@@ -1,13 +1,14 @@
 //! Functions for interpolating quantities (e.g. normals, scalar fields) by evaluating SPH sums
 
-use crate::kernel;
 use crate::kernel::SymmetricKernel3d;
 use crate::profile;
 use crate::Real;
-use nalgebra::{Unit, Vector3};
+use crate::{kernel, ThreadSafe};
+use nalgebra::{SVector, Unit, Vector3};
 use rayon::prelude::*;
 use rstar::primitives::PointWithData;
 use rstar::RTree;
+use std::ops::AddAssign;
 
 /// Acceleration structure for interpolating field quantities of the fluid to arbitrary points using SPH interpolation
 pub struct SphInterpolator<R: Real> {
@@ -26,36 +27,32 @@ struct ParticleData<R: Real> {
     volume: R,
 }
 
-/// Constructs an R-Tree for the given particles, storing each particle's index and volume in the tree
-fn build_rtree<R: Real>(
-    particle_positions: &[Vector3<R>],
-    particle_densities: &[R],
-    particle_rest_mass: R,
-) -> RTree<Particle<R>> {
-    assert_eq!(particle_positions.len(), particle_densities.len());
+/// Trait for per-particle quantities that can be interpolated using SPH
+trait InterpolationQuantity<R: Real>: Clone + AddAssign + ThreadSafe {
+    /// Initializes a value of zero
+    fn zero() -> Self;
+    /// Scales this quantity by the given factor
+    fn scale(&self, factor: R) -> Self;
+}
 
-    // Prepare data for R-tree insertion:
-    // Collect all particles with their position and compute their volume
-    let particles = particle_positions
-        .iter()
-        .zip(particle_densities.iter().copied())
-        .enumerate()
-        .map(|(i, (p, rho_i))| {
-            let data = ParticleData {
-                index: i,
-                volume: particle_rest_mass / rho_i,
-            };
-            Particle::new(data, bytemuck::cast(*p))
-        })
-        .collect();
+impl<R: Real> InterpolationQuantity<R> for R {
+    fn zero() -> R {
+        R::zero()
+    }
 
-    // Build the R-tree to accelerate SPH neighbor queries near the interpolation points
-    let tree = {
-        profile!("build R-tree");
-        RTree::bulk_load(particles)
-    };
+    fn scale(&self, factor: R) -> R {
+        *self * factor
+    }
+}
 
-    tree
+impl<R: Real, const D: usize> InterpolationQuantity<R> for SVector<R, D> {
+    fn zero() -> Self {
+        Self::zeros()
+    }
+
+    fn scale(&self, factor: R) -> Self {
+        Self::scale(self, factor)
+    }
 }
 
 impl<R: Real> SphInterpolator<R> {
@@ -130,24 +127,99 @@ impl<R: Real> SphInterpolator<R> {
         normals
     }
 
-    /// Interpolates the a per particle quantity to the given points, panics if the there are less per-particles values than particles, appends to the given vector
+    /// Interpolates a scalar per particle quantity to the given points, panics if the there are less per-particles values than particles, appends to the given vector
     #[allow(non_snake_case)]
-    pub fn interpolate_scalar_quantity_inplace(
+    fn interpolate_scalar_quantity_inplace(
         &self,
         particle_quantity: &[R],
         interpolation_points: &[Vector3<R>],
         interpolated_values: &mut Vec<R>,
+        first_order_correction: bool,
     ) {
-        profile!("interpolate_scalar_quantity_inplace");
+        self.interpolate_quantity_inplace(
+            particle_quantity,
+            interpolation_points,
+            interpolated_values,
+            first_order_correction,
+        )
+    }
+
+    /// Interpolates a scalar per particle quantity to the given points, panics if the there are less per-particles values than particles
+    pub fn interpolate_scalar_quantity(
+        &self,
+        particle_quantity: &[R],
+        interpolation_points: &[Vector3<R>],
+        first_order_correction: bool,
+    ) -> Vec<R> {
+        let mut values = Vec::with_capacity(interpolation_points.len());
+        self.interpolate_scalar_quantity_inplace(
+            particle_quantity,
+            interpolation_points,
+            &mut values,
+            first_order_correction,
+        );
+        values
+    }
+
+    /// Interpolates a vectorial per particle quantity to the given points, panics if the there are less per-particles values than particles, appends to the given vector
+    #[allow(non_snake_case)]
+    fn interpolate_vector_quantity_inplace<const D: usize>(
+        &self,
+        particle_quantity: &[SVector<R, D>],
+        interpolation_points: &[Vector3<R>],
+        interpolated_values: &mut Vec<SVector<R, D>>,
+        first_order_correction: bool,
+    ) {
+        self.interpolate_quantity_inplace(
+            particle_quantity,
+            interpolation_points,
+            interpolated_values,
+            first_order_correction,
+        )
+    }
+
+    /// Interpolates a vectorial per particle quantity to the given points, panics if the there are less per-particles values than particles
+    pub fn interpolate_vector_quantity<const D: usize>(
+        &self,
+        particle_quantity: &[SVector<R, D>],
+        interpolation_points: &[Vector3<R>],
+        first_order_correction: bool,
+    ) -> Vec<SVector<R, D>> {
+        let mut values = Vec::with_capacity(interpolation_points.len());
+        self.interpolate_vector_quantity_inplace(
+            particle_quantity,
+            interpolation_points,
+            &mut values,
+            first_order_correction,
+        );
+        values
+    }
+
+    /// Interpolates a per particle quantity to the given points, panics if the there are less per-particles values than particles, appends to the given vector
+    #[allow(non_snake_case)]
+    fn interpolate_quantity_inplace<T: InterpolationQuantity<R>>(
+        &self,
+        particle_quantity: &[T],
+        interpolation_points: &[Vector3<R>],
+        interpolated_values: &mut Vec<T>,
+        first_order_correction: bool,
+    ) {
+        profile!("interpolate_quantity_inplace");
         assert_eq!(particle_quantity.len(), self.tree.size());
 
         let squared_support = self.compact_support_radius * self.compact_support_radius;
         let kernel = kernel::CubicSplineKernel::new(self.compact_support_radius);
 
+        let enable_correction = if first_order_correction {
+            R::one()
+        } else {
+            R::zero()
+        };
+
         interpolation_points
             .par_iter()
             .map(|x_i| {
-                let mut interpolated_value = R::zero();
+                let mut interpolated_value = T::zero();
                 let mut correction = R::zero();
 
                 // SPH: Iterate over all other particles within the squared support radius
@@ -166,30 +238,49 @@ impl<R: Real> SphInterpolator<R> {
                     let r = dx.norm();
 
                     // Unchecked access is fine as we asserted before that the slice has the correct length
-                    let A_j = unsafe { *particle_quantity.get_unchecked(p_j.data.index) };
+                    let A_j = unsafe { particle_quantity.get_unchecked(p_j.data.index).clone() };
                     let W_ij = kernel.evaluate(r);
 
-                    interpolated_value += A_j * vol_j * W_ij;
+                    interpolated_value += A_j.scale(vol_j * W_ij);
                     correction += vol_j * W_ij;
                 }
 
-                interpolated_value / correction
+                let correction_factor =
+                    enable_correction * correction.recip() + (R::one() - enable_correction);
+                interpolated_value.scale(correction_factor)
             })
             .collect_into_vec(interpolated_values);
     }
+}
 
-    /// Interpolates the a per particle quantity to the given points, panics if the there are less per-particles values than particles
-    pub fn interpolate_scalar_quantity(
-        &self,
-        particle_quantity: &[R],
-        interpolation_points: &[Vector3<R>],
-    ) -> Vec<R> {
-        let mut values = Vec::with_capacity(interpolation_points.len());
-        self.interpolate_scalar_quantity_inplace(
-            particle_quantity,
-            interpolation_points,
-            &mut values,
-        );
-        values
-    }
+/// Constructs an R-Tree for the given particles, storing each particle's index and volume in the tree
+fn build_rtree<R: Real>(
+    particle_positions: &[Vector3<R>],
+    particle_densities: &[R],
+    particle_rest_mass: R,
+) -> RTree<Particle<R>> {
+    assert_eq!(particle_positions.len(), particle_densities.len());
+
+    // Prepare data for R-tree insertion:
+    // Collect all particles with their position and compute their volume
+    let particles = particle_positions
+        .iter()
+        .zip(particle_densities.iter().copied())
+        .enumerate()
+        .map(|(i, (p, rho_i))| {
+            let data = ParticleData {
+                index: i,
+                volume: particle_rest_mass / rho_i,
+            };
+            Particle::new(data, bytemuck::cast(*p))
+        })
+        .collect();
+
+    // Build the R-tree to accelerate SPH neighbor queries near the interpolation points
+    let tree = {
+        profile!("build R-tree");
+        RTree::bulk_load(particles)
+    };
+
+    tree
 }
