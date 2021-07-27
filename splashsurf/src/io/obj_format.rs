@@ -15,6 +15,7 @@ pub fn mesh_to_obj<R: Real, M: Mesh3d<R>, P: AsRef<Path>>(
         .read(true)
         .write(true)
         .create(true)
+        .truncate(true)
         .open(filename)
         .context("Failed to open file handle for writing OBJ file")?;
     let mut writer = BufWriter::with_capacity(100000, file);
@@ -41,14 +42,18 @@ pub fn mesh_to_obj<R: Real, M: Mesh3d<R>, P: AsRef<Path>>(
         }
     }
 
-    for f in mesh_vertices.cells() {
-        write!(writer, "f")?;
-        if let Some(_) = normals {
+    if normals.is_some() {
+        for f in mesh_vertices.cells() {
+            write!(writer, "f")?;
             f.try_for_each_vertex(|v| write!(writer, " {}//{}", v + 1, v + 1))?;
-        } else {
-            f.try_for_each_vertex(|v| write!(writer, " {}", v + 1))?;
+            write!(writer, "\n")?;
         }
-        write!(writer, "\n")?;
+    } else {
+        for f in mesh_vertices.cells() {
+            write!(writer, "f")?;
+            f.try_for_each_vertex(|v| write!(writer, " {}", v + 1))?;
+            write!(writer, "\n")?;
+        }
     }
 
     Ok(())
