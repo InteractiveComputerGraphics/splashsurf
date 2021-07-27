@@ -1,10 +1,11 @@
 ## Master
 
 - Lib: Update to `nalgebra` 0.28
+- Lib: Replace some unsafe blocks by using `bytemuck` instead
 - Lib: Redesign the API for SPH kernel functions
-- Lib: Add module `sph_interpolation` currently containing the computation of surface normals using SPH interpolation
-- Lib: Replace some unsafe usage by using `bytemuck` instead
+- Lib: Add module `sph_interpolation` for the interpolation of normals, scalar fields and vector fields to arbitrary points using SPH based interpolation
 - CLI: Add command line switch `--sph-normals` (enabled by default) to control whether to use SPH interpolation to compute normals when `--output-normals` is on
+- CLI: Actually support writing surfaces meshes (including normals) to OBJ files (https://github.com/w1th0utnam3/splashsurf/pull/29)
 
 ## Version 0.7.0
 

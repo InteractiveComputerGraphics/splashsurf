@@ -192,7 +192,7 @@ Files with the "`.json`" extension are interpreted as serializations of a `Vec<[
 
 ## Output file formats
 
-Currently, only VTK and OBJ formats are supported to store the reconstructed surface meshes.
+Currently, only VTK and OBJ formats are supported to store the reconstructed surface meshes. Both formats support output of normals but only VTK supports additional fields such as interpolated scalar or vector fields. The file format is inferred from the extension of output filename.
 
 ## All command line options
 
