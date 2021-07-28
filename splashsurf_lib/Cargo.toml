@@ -33,7 +33,7 @@ exclude = [
 default = []
 vtk_extras = ["vtkio"]
 profiling = ["lazy_static"]
-io = ["vtkio", "ply-rs", "nom", "serde_json", "flate2"]
+io = ["vtk_extras", "vtkio", "ply-rs", "nom", "serde_json", "flate2"]
 
 [dependencies]
 log = "0.4"
