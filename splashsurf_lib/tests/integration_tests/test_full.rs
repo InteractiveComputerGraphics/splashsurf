@@ -1,12 +1,11 @@
 use nalgebra::Vector3;
+use splashsurf_lib::io::vtk_format::{particles_from_vtk, write_vtk};
 use splashsurf_lib::marching_cubes::check_mesh_consistency;
 use splashsurf_lib::{
     reconstruct_surface, AxisAlignedBoundingBox3d, Parameters, ParticleDensityComputationStrategy,
     Real, SpatialDecompositionParameters, SubdivisionCriterion,
 };
 use std::path::Path;
-
-use super::io::vtk::{particles_from_vtk, write_vtk};
 
 // TODO: Compare with a solution file
 // TODO: Test with a fixed grid?

@@ -1,5 +1,5 @@
-use super::io::vtk::particles_from_vtk;
 use criterion::{criterion_group, Criterion};
+use splashsurf_lib::io::vtk_format::particles_from_vtk;
 use splashsurf_lib::nalgebra::Vector3;
 use splashsurf_lib::{
     reconstruct_surface, Parameters, ParticleDensityComputationStrategy,

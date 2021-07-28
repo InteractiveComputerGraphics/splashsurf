@@ -1,16 +1,15 @@
 use splashsurf_lib::generic_tree::VisitableTree;
+use splashsurf_lib::io;
 use splashsurf_lib::nalgebra::Vector3;
 use splashsurf_lib::octree::Octree;
 use splashsurf_lib::{grid_for_reconstruction, Index, Real, SubdivisionCriterion, UniformGrid};
 use std::path::Path;
 
-use super::io;
-
 /*
 #[allow(dead_code)]
 fn particles_to_file<P: AsRef<Path>, R: Real>(particles: Vec<Vector3<R>>, path: P) {
     let points = PointCloud3d { points: particles };
-    io::vtk::write_vtk(
+    io::vtk_format::write_vtk(
         UnstructuredGridPiece::from(&points),
         path.as_ref(),
         "particles",
@@ -26,7 +25,7 @@ fn octree_to_file<P: AsRef<Path>, I: Index, R: Real>(
     path: P,
 ) {
     let mesh = octree.hexmesh(&grid, false);
-    io::vtk::write_vtk(mesh.to_unstructured_grid(), path.as_ref(), "octree").unwrap();
+    io::vtk_format::write_vtk(mesh.to_unstructured_grid(), path.as_ref(), "octree").unwrap();
 }
 
 #[test]
@@ -105,7 +104,7 @@ fn build_octree() {
 #[test]
 fn build_octree_from_vtk() {
     let file = "../data/double_dam_break_frame_26_4732_particles.vtk";
-    let particles = io::vtk::particles_from_vtk::<f64, _>(file).unwrap();
+    let particles = io::vtk_format::particles_from_vtk::<f64, _>(file).unwrap();
     //println!("Loaded {} particles from {}", particles.len(), file);
 
     let grid = grid_for_reconstruction::<i64, _>(
@@ -302,7 +301,7 @@ fn build_octree_par_consistency<I: Index, R: Real, P: AsRef<Path>>(
     file: P,
     parameters: TestParameters<R>,
 ) {
-    let particles = io::vtk::particles_from_vtk::<R, _>(file).unwrap();
+    let particles = io::vtk_format::particles_from_vtk::<R, _>(file).unwrap();
 
     let grid = parameters.build_grid::<I>(particles.as_slice());
 

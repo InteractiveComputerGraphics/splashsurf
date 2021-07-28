@@ -121,10 +121,10 @@ fn test_neighborhood_search_spatial_hashing_simple() {
     }
 }
 
-#[cfg(feature = "vtk_extras")]
+#[cfg(feature = "io")]
 mod tests_from_files {
-    use super::super::io;
     use super::*;
+    use splashsurf_lib::io;
     use splashsurf_lib::AxisAlignedBoundingBox3d;
 
     #[test]
@@ -132,7 +132,7 @@ mod tests_from_files {
         let search_radius: f32 = 2.0 * 0.5;
 
         let file = "../data/free_particles_125_particles.vtk";
-        let particles = io::vtk::particles_from_vtk::<f32, _>(file).unwrap();
+        let particles = io::vtk_format::particles_from_vtk::<f32, _>(file).unwrap();
 
         let mut domain = AxisAlignedBoundingBox3d::par_from_points(particles.as_slice());
         domain.scale_uniformly(1.5);
@@ -169,7 +169,7 @@ mod tests_from_files {
         let search_radius: f32 = 2.0 * 0.5;
 
         let file = "../data/free_particles_1000_particles.vtk";
-        let particles = io::vtk::particles_from_vtk::<f32, _>(file).unwrap();
+        let particles = io::vtk_format::particles_from_vtk::<f32, _>(file).unwrap();
 
         let mut domain = AxisAlignedBoundingBox3d::par_from_points(particles.as_slice());
         domain.scale_uniformly(1.5);
@@ -206,7 +206,7 @@ mod tests_from_files {
         let search_radius: f32 = 4.0 * 0.025;
 
         let file = "../data/cube_2366_particles.vtk";
-        let particles = io::vtk::particles_from_vtk::<f32, _>(file).unwrap();
+        let particles = io::vtk_format::particles_from_vtk::<f32, _>(file).unwrap();
 
         let mut domain = AxisAlignedBoundingBox3d::par_from_points(particles.as_slice());
         domain.scale_uniformly(1.5);

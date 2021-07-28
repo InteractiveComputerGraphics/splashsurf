@@ -1,16 +1,14 @@
 use criterion::{criterion_group, Criterion};
 use nalgebra::Vector3;
+use splashsurf_lib::io::vtk_format::particles_from_vtk;
+#[allow(dead_code)]
+use splashsurf_lib::io::vtk_format::write_vtk;
 use splashsurf_lib::{
     reconstruct_surface, reconstruct_surface_inplace, Parameters,
     ParticleDensityComputationStrategy, SpatialDecompositionParameters, SubdivisionCriterion,
     SurfaceReconstruction,
 };
 use std::time::Duration;
-
-use super::io::vtk::particles_from_vtk;
-
-#[allow(dead_code)]
-use super::io::vtk::write_vtk;
 
 /*
 pub fn surface_reconstruction_canyon(c: &mut Criterion) {

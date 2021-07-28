@@ -1,9 +1,8 @@
 use criterion::{criterion_group, Criterion};
 use nalgebra::Vector3;
+use splashsurf_lib::io::vtk_format::particles_from_vtk;
 use splashsurf_lib::AxisAlignedBoundingBox3d;
 use std::time::Duration;
-
-use super::io::vtk::particles_from_vtk;
 
 pub fn aabb_from_points(c: &mut Criterion) {
     let particle_positions: &Vec<Vector3<f32>> =

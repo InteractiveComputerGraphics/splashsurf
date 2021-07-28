@@ -1,10 +1,9 @@
 use criterion::{criterion_group, BatchSize, Criterion};
 use nalgebra::Vector3;
+use splashsurf_lib::io::vtk_format::particles_from_vtk;
 use splashsurf_lib::octree::Octree;
 use splashsurf_lib::{grid_for_reconstruction, SubdivisionCriterion, UniformGrid};
 use std::time::Duration;
-
-use super::io::vtk::particles_from_vtk;
 
 pub fn subdivide_recursively_benchmark(c: &mut Criterion) {
     let particle_positions: &Vec<Vector3<f32>> =
