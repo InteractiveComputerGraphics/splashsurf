@@ -2,6 +2,7 @@
 
 use anyhow::anyhow;
 use sdfu::SDF;
+#[cfg(feature = "io")]
 use splashsurf_lib::io;
 use splashsurf_lib::marching_cubes::marching_cubes_lut::marching_cubes_triangulation_iter;
 use splashsurf_lib::mesh::TriMesh3d;
@@ -186,6 +187,7 @@ fn main() -> Result<(), anyhow::Error> {
         mesh.triangles.len()
     );
 
+    #[cfg(feature = "io")]
     io::vtk_format::write_vtk(&mesh, "out/sdf_test.vtk", "mesh")?;
 
     Ok(())
