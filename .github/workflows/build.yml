@@ -29,6 +29,8 @@ jobs:
         lfs: true
     - name: Check
       run: cargo check --verbose
+    - name: Check with examples
+      run: cargo check --examples --verbose
     - name: Build
       run: cargo build --verbose
     - name: Run tests
