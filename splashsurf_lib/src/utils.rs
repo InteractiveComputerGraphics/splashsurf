@@ -2,6 +2,7 @@
 
 use log::info;
 use rayon::prelude::*;
+use std::cell::UnsafeCell;
 
 /// Macro version of Option::map that allows using e.g. using the ?-operator in the map expression
 ///
@@ -18,25 +19,47 @@ macro_rules! map_option {
     };
 }
 
-/// Wrapper type to make any type `Send + Sync`
-pub(crate) struct SendSyncWrapper<T>(T);
-
-impl<T> SendSyncWrapper<T> {
-    /// Wraps the given value such that it is `Send + Sync`
-    #[inline(always)]
-    pub unsafe fn new(value: T) -> Self {
-        Self(value)
-    }
-
-    /// Returns a reference to the wrapped value
-    #[inline(always)]
-    pub unsafe fn get(&self) -> &T {
-        &self.0
-    }
+/// Wrapper for unsafe shared mutable access to a slice, disjoint access has to be ensured separately
+/// Implementation based on: https://stackoverflow.com/a/65182786/929037
+#[derive(Copy, Clone)]
+pub struct UnsafeSlice<'a, T> {
+    slice: &'a [UnsafeCell<T>],
 }
 
-unsafe impl<T> Sync for SendSyncWrapper<T> {}
-unsafe impl<T> Send for SendSyncWrapper<T> {}
+unsafe impl<'a, T: Send + Sync> Send for UnsafeSlice<'a, T> {}
+unsafe impl<'a, T: Send + Sync> Sync for UnsafeSlice<'a, T> {}
+
+impl<'a, T> UnsafeSlice<'a, T> {
+    /// Wraps a slice to be able to share mutable access between threads
+    pub fn new(slice: &'a mut [T]) -> Self {
+        // SAFETY: `&mut` ensures unique access.
+        //  See `Cell::from_mut`: https://doc.rust-lang.org/std/cell/struct.Cell.html#method.from_mut
+        // SAFETY: `UnsafeCell<T>` has the same memory layout as `T`.
+        //  See `Cell::as_slice_of_cells`: https://doc.rust-lang.org/std/cell/struct.Cell.html#method.as_slice_of_cells
+        let ptr = slice as *mut [T] as *const [UnsafeCell<T>];
+        Self {
+            slice: unsafe { &*ptr },
+        }
+    }
+
+    /// Returns the length of the wrapped slice
+    pub fn len(&self) -> usize {
+        self.slice.len()
+    }
+
+    /// Returns a mutable reference to an element of the wrapped slice, simultaneous access has to be disjoint!
+    /// SAFETY: It is UB to obtain two mutable references to the same index.
+    pub unsafe fn get_mut(&self, i: usize) -> Option<&mut T> {
+        self.slice.get(i).map(|c| &mut *c.get())
+    }
+
+    /// Returns a mutable reference to an element of the wrapped slice without doing bounds checking, simultaneous access has to be disjoint!
+    /// SAFETY: It is UB to obtain two mutable references to the same index.
+    pub unsafe fn get_mut_unchecked(&self, i: usize) -> &mut T {
+        debug_assert!(i < self.len(), "index out of bounds");
+        &mut *self.slice.get_unchecked(i).get()
+    }
+}
 
 /// Ensures that at least the specified total capacity is reserved for the given vector
 pub(crate) fn reserve_total<T>(vec: &mut Vec<T>, total_capacity: usize) {

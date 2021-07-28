@@ -5,7 +5,7 @@
 //! that are within the given radius of the particle.
 
 use crate::uniform_grid::UniformGrid;
-use crate::utils::SendSyncWrapper;
+use crate::utils::UnsafeSlice;
 use crate::{
     new_map, profile, AxisAlignedBoundingBox3d, HashState, Index, MapType, ParallelMapType, Real,
 };
@@ -262,18 +262,14 @@ pub fn neighborhood_search_spatial_hashing_parallel<I: Index, R: Real>(
 
     // TODO: Compute the default capacity of neighborhood lists from rest volume of particles
     par_init_neighborhood_list(neighborhood_list, particle_positions.len());
-    // We need a mutable pointer to the storage of the neighborhood lists.
-    // This can be safely used below because:
-    //  1. The `Vec` does not go out of scope because we have a mutable reference to it.
-    //  2. We don't have to resize it in the following because we already initialized it to the correct size.
-    let neighborhood_list_mut_ptr = neighborhood_list.as_mut_ptr();
+
     // We have to share the pointer to the neighborhood list storage between threads to avoid unnecessary copies and expensive merging.
-    // In principle this can be done without UB because:
-    //  1. UB can only occur when the pointer is actually dereferenced.
+    // SAFETY: In principle this can be done soundly because
+    //  1. It is only UB when the pointer is actually dereferenced.
     //  2. When the pointer is incremented to disjoint locations before being dereferenced,
     //     there can only be one mutable reference to each entry in the storage which is not UB.
     // These conditions have to be guaranteed by the code that uses the pointer below.
-    let neighborhood_list_mut_ptr = unsafe { SendSyncWrapper::new(neighborhood_list_mut_ptr) };
+    let neighborhood_list_mut_ptr = UnsafeSlice::new(neighborhood_list.as_mut_slice());
 
     {
         profile!("calculate_particle_neighbors_par");
@@ -286,13 +282,13 @@ pub fn neighborhood_search_spatial_hashing_parallel<I: Index, R: Real>(
                 for (i, &particle_i) in cell_k_particles.iter().enumerate() {
                     let pos_i = &particle_positions[particle_i];
                     // Get mutable reference to the neighborhood list of `particle_i`
-                    // This is safe because:
+                    // SAFETY: This is sound because
                     //  1. Here, we only write to neighborhood lists of particles in the current cell `cell_k`.
                     //  2. The particles of the current cell `cell_k` are only handled by this closure invocation in sequence.
                     //  3. The spatial hashing guarantees that a particle is stored only once and in a single cell.
                     // => We only dereference and write to strictly disjoint regions in memory
                     let particle_i_neighbors =
-                        unsafe { &mut *neighborhood_list_mut_ptr.get().add(particle_i) };
+                        unsafe { neighborhood_list_mut_ptr.get_mut_unchecked(particle_i) };
 
                     // Check for neighborhood with particles of all adjacent cells
                     // Transitive neighborhood relationship is not handled explicitly.
@@ -317,14 +313,17 @@ pub fn neighborhood_search_spatial_hashing_parallel<I: Index, R: Real>(
                             particle_i_neighbors.push(particle_j);
 
                             // Get mutable reference to neighborhood list of `particle_j`
-                            // This is safe because:
+                            // SAFETY: This is sound because
                             //  1. The same reasons why we can get a mutable reference to the neighborhood list of `particle_i` (see above).
                             //  2. We only access neighborhood lists of particles with j > i, so we have no aliasing with i.
                             // => We only dereference and write to strictly disjoint regions in memory
-                            let particle_j_neighbors =
-                                unsafe { &mut *neighborhood_list_mut_ptr.get().add(particle_j) };
-                            // Add neighborhood relationship transitively
-                            particle_j_neighbors.push(particle_i);
+                            {
+                                let particle_j_neighbors = unsafe {
+                                    neighborhood_list_mut_ptr.get_mut_unchecked(particle_j)
+                                };
+                                // Add neighborhood relationship transitively
+                                particle_j_neighbors.push(particle_i);
+                            }
                         }
                     }
                 }
