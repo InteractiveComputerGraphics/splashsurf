@@ -1,19 +1,21 @@
+//! Helper functions for the BGEO file format
+
+use crate::Real;
+use anyhow::Context;
+use flate2::read::GzDecoder;
+use nalgebra::Vector3;
+use nom::{Finish, Parser};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
-
-use anyhow::Context;
-use flate2::read::GzDecoder;
-use nom::{Finish, Parser};
-use splashsurf_lib::nalgebra::Vector3;
-use splashsurf_lib::Real;
 
 use parser::bgeo_parser;
 
 // TODO: Find out why there is a 1.0 float value between position vector and id int in splishsplash output
 // TODO: Better error messages, skip nom errors
 
+/// Convenience function for loading particles from a BGEO file
 pub fn particles_from_bgeo<R: Real, P: AsRef<Path>>(
     bgeo_file: P,
 ) -> Result<Vec<Vector3<R>>, anyhow::Error> {

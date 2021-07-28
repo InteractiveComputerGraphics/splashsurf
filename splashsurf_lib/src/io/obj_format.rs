@@ -1,6 +1,8 @@
+//! Helper functions for the OBJ file format
+
+use crate::mesh::{AttributeData, CellConnectivity, Mesh3d, MeshWithData};
+use crate::Real;
 use anyhow::Context;
-use splashsurf_lib::mesh::{CellConnectivity, Mesh3d, MeshWithData};
-use splashsurf_lib::Real;
 use std::fs;
 use std::io::{BufWriter, Write};
 use std::path::Path;
@@ -33,7 +35,7 @@ pub fn mesh_to_obj<R: Real, M: Mesh3d<R>, P: AsRef<Path>>(
 
     if let Some(normals) = normals {
         match &normals.data {
-            splashsurf_lib::mesh::AttributeData::Vector3Real(normals) => {
+            AttributeData::Vector3Real(normals) => {
                 for n in normals {
                     write!(&mut writer, "vn {} {} {}\n", n.x, n.y, n.z)?;
                 }

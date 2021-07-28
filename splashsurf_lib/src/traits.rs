@@ -113,25 +113,3 @@ impl<T: RealField + FromPrimitive + ToPrimitive + Debug + Default + Pod + Thread
     for T
 {
 }
-
-/// Useful extension methods for iterators
-pub trait IteratorExt {
-    /// Tries to collect the items of the iterator into a `Vec` that reserves the given capacity and stops as soon as an error is encountered
-    ///
-    /// Motivation: https://github.com/rust-lang/rust/issues/48994
-    fn try_collect_with_capacity<T, E>(self, capacity: usize) -> Result<Vec<T>, E>
-    where
-        Self: Sized + Iterator<Item = Result<T, E>>;
-}
-
-impl<Iter: Iterator> IteratorExt for Iter {
-    fn try_collect_with_capacity<T, E>(mut self, capacity: usize) -> Result<Vec<T>, E>
-    where
-        Self: Sized + Iterator<Item = Result<T, E>>,
-    {
-        self.try_fold(Vec::with_capacity(capacity), |mut vec, item| {
-            vec.push(item?);
-            Ok(vec)
-        })
-    }
-}

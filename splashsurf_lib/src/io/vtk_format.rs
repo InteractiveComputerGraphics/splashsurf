@@ -1,14 +1,16 @@
+//! Helper functions for the VTK file format
+
+use crate::mesh::{AttributeData, MeshAttribute, MeshWithData, TriMesh3d};
+use crate::utils::IteratorExt;
+use crate::Real;
 use anyhow::{anyhow, Context};
-use splashsurf_lib::mesh::{AttributeData, MeshAttribute, MeshWithData, TriMesh3d};
-use splashsurf_lib::nalgebra::Vector3;
-use splashsurf_lib::vtkio;
-use splashsurf_lib::vtkio::model::{
-    Attribute, Attributes, CellType, Cells, PolyDataPiece, UnstructuredGridPiece, VertexNumbers,
-};
-use splashsurf_lib::{IteratorExt, Real};
+use nalgebra::Vector3;
 use std::borrow::Cow;
 use std::fs::create_dir_all;
 use std::path::{Path, PathBuf};
+use vtkio::model::{
+    Attribute, Attributes, CellType, Cells, PolyDataPiece, UnstructuredGridPiece, VertexNumbers,
+};
 use vtkio::model::{ByteOrder, DataSet, Version, Vtk};
 use vtkio::IOBuffer;
 

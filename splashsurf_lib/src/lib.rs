@@ -31,7 +31,7 @@ pub use vtkio;
 pub use crate::aabb::{AxisAlignedBoundingBox, AxisAlignedBoundingBox2d, AxisAlignedBoundingBox3d};
 pub use crate::density_map::DensityMap;
 pub use crate::octree::SubdivisionCriterion;
-pub use crate::traits::{Index, IteratorExt, Real, ThreadSafe};
+pub use crate::traits::{Index, Real, ThreadSafe};
 pub use crate::uniform_grid::UniformGrid;
 
 use crate::density_map::DensityMapError;
@@ -50,6 +50,9 @@ pub mod profiling_macro;
 mod aabb;
 pub mod density_map;
 pub mod generic_tree;
+#[cfg(feature = "io")]
+#[cfg_attr(doc_cfg, doc(cfg(feature = "io")))]
+pub mod io;
 pub mod kernel;
 pub mod marching_cubes;
 pub mod mesh;

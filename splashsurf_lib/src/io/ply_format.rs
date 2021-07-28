@@ -1,15 +1,13 @@
-use std::path::Path;
+//! Helper functions for the PLY file format
 
+use crate::mesh::{AttributeData, MeshAttribute, MeshWithData, TriMesh3d};
+use crate::utils::IteratorExt;
+use crate::Real;
 use anyhow::{anyhow, Context};
+use nalgebra::Vector3;
 use ply_rs::parser::Parser as PlyParser;
 use ply_rs::ply::{DefaultElement, Ply, Property};
-
-use splashsurf_lib::mesh::AttributeData;
-use splashsurf_lib::mesh::MeshAttribute;
-use splashsurf_lib::mesh::MeshWithData;
-use splashsurf_lib::mesh::TriMesh3d;
-use splashsurf_lib::nalgebra::Vector3;
-use splashsurf_lib::{IteratorExt, Real};
+use std::path::Path;
 
 /// Tries to load the file at the given path as a PLY file and read particle positions from it
 pub fn particles_from_ply<R: Real, P: AsRef<Path>>(

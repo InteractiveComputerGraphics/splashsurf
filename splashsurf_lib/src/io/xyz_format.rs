@@ -1,11 +1,11 @@
+//! Helper functions for the binary `.xyz` float coordinate format
+
+use crate::Real;
+use anyhow::Context;
+use nalgebra::Vector3;
 use std::fs::File;
 use std::io::{BufReader, Read};
 use std::path::Path;
-
-use anyhow::Context;
-
-use splashsurf_lib::nalgebra::Vector3;
-use splashsurf_lib::Real;
 
 pub fn particles_from_xyz<R: Real, P: AsRef<Path>>(
     xyz_file: P,

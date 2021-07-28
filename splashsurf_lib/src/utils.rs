@@ -19,10 +19,32 @@ macro_rules! map_option {
     };
 }
 
+/// Useful extension methods for iterators
+pub(crate) trait IteratorExt {
+    /// Tries to collect the items of the iterator into a `Vec` that reserves the given capacity and stops as soon as an error is encountered
+    ///
+    /// Motivation: <https://github.com/rust-lang/rust/issues/48994>
+    fn try_collect_with_capacity<T, E>(self, capacity: usize) -> Result<Vec<T>, E>
+    where
+        Self: Sized + Iterator<Item = Result<T, E>>;
+}
+
+impl<Iter: Iterator> IteratorExt for Iter {
+    fn try_collect_with_capacity<T, E>(mut self, capacity: usize) -> Result<Vec<T>, E>
+    where
+        Self: Sized + Iterator<Item = Result<T, E>>,
+    {
+        self.try_fold(Vec::with_capacity(capacity), |mut vec, item| {
+            vec.push(item?);
+            Ok(vec)
+        })
+    }
+}
+
 /// Wrapper for unsafe shared mutable access to a slice, disjoint access has to be ensured separately
 /// Implementation based on: https://stackoverflow.com/a/65182786/929037
 #[derive(Copy, Clone)]
-pub struct UnsafeSlice<'a, T> {
+pub(crate) struct UnsafeSlice<'a, T> {
     slice: &'a [UnsafeCell<T>],
 }
 
@@ -45,12 +67,6 @@ impl<'a, T> UnsafeSlice<'a, T> {
     /// Returns the length of the wrapped slice
     pub fn len(&self) -> usize {
         self.slice.len()
-    }
-
-    /// Returns a mutable reference to an element of the wrapped slice, simultaneous access has to be disjoint!
-    /// SAFETY: It is UB to obtain two mutable references to the same index.
-    pub unsafe fn get_mut(&self, i: usize) -> Option<&mut T> {
-        self.slice.get(i).map(|c| &mut *c.get())
     }
 
     /// Returns a mutable reference to an element of the wrapped slice without doing bounds checking, simultaneous access has to be disjoint!

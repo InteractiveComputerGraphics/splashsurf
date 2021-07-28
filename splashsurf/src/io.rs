@@ -14,12 +14,7 @@ use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::Path;
 
-pub mod bgeo_format;
-pub mod json_format;
-pub mod obj_format;
-pub mod ply_format;
-pub mod vtk_format;
-pub mod xyz_format;
+pub(crate) use splashsurf_lib::io::*;
 
 /// File format parameters for all io
 #[derive(Clone, Debug, Default)]
