@@ -32,6 +32,22 @@ pub struct PointIndex<I: Index> {
 }
 
 /// Unique identifier for a cell on a grid, represented by an index triplet on the 3D cartesian grid
+///
+/// The local indexing of points and edges are given as follows:
+/// ```text
+///  Points:                Edges:
+///          7 ________ 6           _____6__
+///          /|       /|         7/|       /|
+///        /  |     /  |        /  |     /5 |
+///    4 /_______ /    |      /__4____ /    10
+///     |     |  |5    |     |    11  |     |
+///     |    3|__|_____|2    |     |__|__2__|
+///     |    /   |    /      8   3/   9    /
+///     |  /     |  /        |  /     |  /1
+///     |/_______|/          |/___0___|/
+///    0          1
+/// ```
+/// Point with index 0 is closest to the coordinate origin.
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct CellIndex<I: Index> {
     index: [I; 3],
@@ -201,7 +217,7 @@ pub type UniformGrid<I, R> = UniformCartesianCubeGrid3d<I, R>;
 /// ## Connectivity information
 /// The grid then provides helper functions e.g. to find valid neighbors
 /// of points, edges and cells on the grid. These entities can either be indexed using index triplets `(i,j,k)` along
-/// the cartesian axes or using a flattened index `i*n_x + j*n_y + k*n_z` that is used e.g. for lookup
+/// the cartesian axes or using a flattened index `i*n_y*n_z + j*n_z + k` that is used e.g. for lookup
 /// in the [`DensityMap`](crate::DensityMap). This struct provides helper functions to convert between these representations.
 /// For some functions, strongly typed [`PointIndex`] and [`CellIndex`] indices are used, these can be
 /// obtained using the [`get_point`](UniformCartesianCubeGrid3d::get_point) and [`get_cell`](UniformCartesianCubeGrid3d::get_cell)
@@ -497,6 +513,22 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
             normalized_coord[1].floor().to_index_unchecked(),
             normalized_coord[2].floor().to_index_unchecked(),
         ]
+    }
+
+    /// Returns an AABB of the given cell
+    #[inline(always)]
+    pub fn cell_aabb(&self, cell: &CellIndex<I>) -> AxisAlignedBoundingBox3d<R> {
+        let min_point_ijk = cell.index;
+        let max_point_ijk = [
+            min_point_ijk[0] + I::one(),
+            min_point_ijk[1] + I::one(),
+            min_point_ijk[2] + I::one(),
+        ];
+
+        let min_point = self.point_coordinates_array(&min_point_ijk);
+        let max_point = self.point_coordinates_array(&max_point_ijk);
+
+        AxisAlignedBoundingBox3d::new(min_point, max_point)
     }
 
     /// If part of the grid, returns the neighbor of a point following the given directed axis along the grid
@@ -892,9 +924,9 @@ impl<I: Index> CellIndex<I> {
     pub fn global_point_index_of(&self, local_index: usize) -> Option<PointIndex<I>> {
         let local_coords = CELL_LOCAL_POINT_COORDS.get(local_index)?;
         Some(PointIndex::from_ijk([
-            self.index[0] + I::from_i32(local_coords[0])?,
-            self.index[1] + I::from_i32(local_coords[1])?,
-            self.index[2] + I::from_i32(local_coords[2])?,
+            self.index[0] + I::from_i8(local_coords[0])?,
+            self.index[1] + I::from_i8(local_coords[1])?,
+            self.index[2] + I::from_i8(local_coords[2])?,
         ]))
     }
 
@@ -904,9 +936,9 @@ impl<I: Index> CellIndex<I> {
         let (origin_local_point, axis) = CELL_LOCAL_EDGES.get(local_edge_index).copied()?;
         let origin_local_coords = CELL_LOCAL_POINT_COORDS[origin_local_point];
         let origin = [
-            self.index[0] + I::from_i32(origin_local_coords[0])?,
-            self.index[1] + I::from_i32(origin_local_coords[1])?,
-            self.index[2] + I::from_i32(origin_local_coords[2])?,
+            self.index[0] + I::from_i8(origin_local_coords[0])?,
+            self.index[1] + I::from_i8(origin_local_coords[1])?,
+            self.index[2] + I::from_i8(origin_local_coords[2])?,
         ];
 
         Some(EdgeIndex {
@@ -951,7 +983,7 @@ fn test_cube_cell_local_point_index() {
 const CELL_LOCAL_POINTS: [usize; 8] = [0, 1, 3, 2, 4, 5, 7, 6];
 
 /// Maps from the local numbering of the cell vertices to their coordinates in the cell
-const CELL_LOCAL_POINT_COORDS: [[i32; 3]; 8] = [
+const CELL_LOCAL_POINT_COORDS: [[i8; 3]; 8] = [
     [0, 0, 0], // vertex 0
     [1, 0, 0], // vertex 1
     [1, 1, 0], // vertex 2

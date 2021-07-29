@@ -7,8 +7,9 @@ use std::fs;
 use std::io::{BufWriter, Write};
 use std::path::Path;
 
-// TODO: Support for mesh data, e.g. normals?
+// TODO: Support for other mesh data (interpolated fields)?
 
+/// Writes the given mesh to an OBJ file, supports outputting normals
 pub fn mesh_to_obj<R: Real, M: Mesh3d<R>, P: AsRef<Path>>(
     mesh: &MeshWithData<R, M>,
     filename: P,

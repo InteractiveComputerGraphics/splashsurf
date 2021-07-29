@@ -245,7 +245,10 @@ where
 #[test]
 fn test_aabb_contains_point() {
     use crate::nalgebra::Vector3;
-    let aabb = AxisAlignedBoundingBox3d::<f64>::new(Vector3::new(0.0, 0.0, 0.0), Vector3::new(1.0, 1.0, 1.0));
+    let aabb = AxisAlignedBoundingBox3d::<f64>::new(
+        Vector3::new(0.0, 0.0, 0.0),
+        Vector3::new(1.0, 1.0, 1.0),
+    );
 
     assert!(aabb.contains_point(&Vector3::new(0.5, 0.5, 0.5)));
     assert!(aabb.contains_point(&Vector3::new(0.0, 0.5, 0.5)));

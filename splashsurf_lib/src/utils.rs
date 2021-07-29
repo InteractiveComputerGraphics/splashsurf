@@ -42,7 +42,7 @@ impl<Iter: Iterator> IteratorExt for Iter {
 }
 
 /// Wrapper for unsafe shared mutable access to a slice, disjoint access has to be ensured separately
-/// Implementation based on: https://stackoverflow.com/a/65182786/929037
+/// Implementation based on: <https://stackoverflow.com/a/65182786/929037>
 #[derive(Copy, Clone)]
 pub(crate) struct UnsafeSlice<'a, T> {
     slice: &'a [UnsafeCell<T>],
