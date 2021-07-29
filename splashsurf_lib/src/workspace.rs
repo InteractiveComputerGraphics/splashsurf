@@ -73,6 +73,7 @@ pub(crate) struct LocalReconstructionWorkspace<I: Index, R: Real> {
     /// Storage for the final surface mesh
     pub mesh: TriMesh3d<R>,
     /// Storage for the density level-set
+    #[allow(unused)]
     pub density_map: DensityMap<I, R>,
 }
 
