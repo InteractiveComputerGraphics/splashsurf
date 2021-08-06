@@ -6,7 +6,7 @@ use crate::Real;
 use crate::{kernel, ThreadSafe};
 use nalgebra::{SVector, Unit, Vector3};
 use rayon::prelude::*;
-use rstar::primitives::PointWithData;
+use rstar::primitives::GeomWithData;
 use rstar::RTree;
 use std::ops::AddAssign;
 
@@ -17,7 +17,7 @@ pub struct SphInterpolator<R: Real> {
 }
 
 /// Particle type that is stored in the R-tree for fast SPH neighbor queries
-type Particle<R> = PointWithData<ParticleData<R>, [R; 3]>;
+type Particle<R> = GeomWithData<[R; 3], ParticleData<R>>;
 
 /// Data associated with each particle that is stored in the R-tree
 struct ParticleData<R: Real> {
@@ -99,7 +99,7 @@ impl<R: Real> SphInterpolator<R> {
                     // Volume of the neighbor particle
                     let vol_j = p_j.data.volume;
                     // Position of the neighbor particle
-                    let x_j = bytemuck::cast_ref::<_, Vector3<R>>(p_j.position());
+                    let x_j = bytemuck::cast_ref::<_, Vector3<R>>(p_j.geom());
 
                     // Relative position `dx` and distance `r` of the neighbor particle
                     let dx = x_j - x_i;
@@ -231,7 +231,7 @@ impl<R: Real> SphInterpolator<R> {
                     // Volume of the neighbor particle
                     let vol_j = p_j.data.volume;
                     // Position of the neighbor particle
-                    let x_j = bytemuck::cast_ref::<_, Vector3<R>>(p_j.position());
+                    let x_j = bytemuck::cast_ref::<_, Vector3<R>>(p_j.geom());
 
                     // Relative position `dx` and distance `r` of the neighbor particle
                     let dx = x_j - x_i;
@@ -272,7 +272,7 @@ fn build_rtree<R: Real>(
                 index: i,
                 volume: particle_rest_mass / rho_i,
             };
-            Particle::new(data, bytemuck::cast(*p))
+            Particle::new(bytemuck::cast(*p), data)
         })
         .collect();
 
