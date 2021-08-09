@@ -12,6 +12,10 @@
 //!  In particular it adds `From` impls for the [mesh](crate::mesh) types used by this crate to convert them to
 //!  [`vtkio::model::UnstructuredGridPiece`](https://docs.rs/vtkio/0.6.*/vtkio/model/struct.UnstructuredGridPiece.html) and [`vtkio::model::DataSet`](https://docs.rs/vtkio/0.6.*/vtkio/model/enum.DataSet.html)
 //!  types. If the feature is enabled, The crate exposes its `vtkio` dependency as `splashsurflib::vtkio`.
+//! - **`io`**: Enables the [`io`] module, containing functions to load and store particle and mesh files
+//!  from various file formats, e.g. `VTK`, `OBJ`, `BGEO` etc. This feature implies the `vtk_extras` feature.
+//!  It is disabled by default because a pure "online" surface reconstruction might not need any file IO.
+//!  The feature adds several dependencies to support the file formats.
 //! - **`profiling`**: Enables profiling of internal functions. The resulting data can be displayed using the functions
 //!  from the [`profiling`] module. Furthermore, it exposes the [`profile`] macro that can be used e.g.
 //!  by binary crates calling into this library to add their own profiling scopes to the measurements.
@@ -160,7 +164,7 @@ pub enum ParticleDensityComputationStrategy {
 }
 
 impl<R: Real> SpatialDecompositionParameters<R> {
-    /// Tries to convert the parameters from one [Real] type to another [Real] type, returns None if conversion fails
+    /// Tries to convert the parameters from one [`Real`] type to another [`Real`] type, returns `None` if conversion fails
     pub fn try_convert<T: Real>(&self) -> Option<SpatialDecompositionParameters<T>> {
         Some(SpatialDecompositionParameters {
             subdivision_criterion: self.subdivision_criterion.clone(),
@@ -265,7 +269,7 @@ impl<I: Index, R: Real> SurfaceReconstruction<I, R> {
         self.particle_densities.as_ref()
     }
 
-    /// Returns a reference to the virtual background grid that was used as a basis for discretization of the density map for marching cubes, can be used to convert the density map to a hex mesh (using [sparse_density_map_to_hex_mesh](density_map::sparse_density_map_to_hex_mesh))
+    /// Returns a reference to the virtual background grid that was used as a basis for discretization of the density map for marching cubes, can be used to convert the density map to a hex mesh (using [`density_map::sparse_density_map_to_hex_mesh`])
     pub fn grid(&self) -> &UniformGrid<I, R> {
         &self.grid
     }

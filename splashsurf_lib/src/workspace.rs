@@ -62,7 +62,7 @@ impl<I: Index, R: Real> Debug for ReconstructionWorkspace<I, R> {
     }
 }
 
-/// Workspace used by [crate::reconstruct_surface_inplace] internally to re-use allocated memory
+/// Workspace used by [`reconstruct_surface_inplace`] internally to re-use allocated memory
 pub(crate) struct LocalReconstructionWorkspace<I: Index, R: Real> {
     /// Storage for the particle positions (only used in octree based approach)
     pub particle_positions: Vec<Vector3<R>>,

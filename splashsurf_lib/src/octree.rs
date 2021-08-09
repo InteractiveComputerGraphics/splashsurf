@@ -833,7 +833,7 @@ impl<I: Index, R: Real> NodeData<I, R> {
     }
 }
 
-/// Returns the [PointIndex] of the octree subdivision point for an [OctreeNode] with the given lower and upper points
+/// Returns the [`PointIndex`] of the octree subdivision point for an [`OctreeNode`] with the given lower and upper points
 fn get_split_point<I: Index, R: Real>(
     grid: &UniformGrid<I, R>,
     lower: &PointIndex<I>,
