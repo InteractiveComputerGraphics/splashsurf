@@ -1,6 +1,6 @@
 ## Master
 
-- Lib: Update to `nalgebra` 0.28
+- Lib: Update to `nalgebra` 0.29
 - Lib: Replace some unsafe blocks by using `bytemuck` instead
 - Lib: Redesign the API for SPH kernel functions
 - Lib: Add module `sph_interpolation` for the interpolation of normals, scalar fields and vector fields to arbitrary points using SPH based interpolation
