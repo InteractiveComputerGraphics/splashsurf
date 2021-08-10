@@ -97,46 +97,15 @@ impl DataPiece {
     ) -> Result<Vec<MeshAttribute<R>>, anyhow::Error> {
         let mut mesh_attributes = Vec::new();
 
-        // Converts an IOBuffer to the corresponding supported AttributeData
-        let io_buffer_to_attribute_data = |num_comp: usize,
-                                           io_buffer: &vtkio::model::IOBuffer|
-         -> Result<AttributeData<R>, anyhow::Error> {
-            match num_comp {
-                1 => {
-                    if let IOBuffer::U32(vec) = &io_buffer {
-                        Ok(AttributeData::ScalarReal(
-                            vec.iter()
-                                .copied()
-                                .map(|val| R::from_u32(val).unwrap())
-                                .collect(),
-                        ))
-                    } else {
-                        Err(anyhow!("Unsupported IOBuffer scalar type"))
-                    }
-                }
-                3 => match &io_buffer {
-                    IOBuffer::F32(coords) => {
-                        particles_from_coords(coords).map(|p| AttributeData::Vector3Real(p))
-                    }
-                    IOBuffer::F64(coords) => {
-                        particles_from_coords(coords).map(|p| AttributeData::Vector3Real(p))
-                    }
-                    _ => Err(anyhow!("Unsupported IOBuffer vector type")),
-                },
-                _ => Err(anyhow!(
-                    "Unsupported number of components ({}) in VTK DataArray",
-                    num_comp
-                )),
-            }
-        };
-
         'fields: for field_name in names {
             for attribute in self.point_attributes() {
                 match attribute {
                     Attribute::DataArray(data_array) if data_array.name == *field_name => {
-                        let attribute_data =
-                            io_buffer_to_attribute_data(data_array.num_comp(), &data_array.data)
-                                .with_context(|| anyhow!("Attribute \"{}\"", field_name))?;
+                        let attribute_data = try_convert_io_buffer_to_attribute(
+                            &data_array.data,
+                            data_array.num_comp(),
+                        )
+                        .with_context(|| anyhow!("Attribute \"{}\"", field_name))?;
                         let mesh_attribute = MeshAttribute::new(field_name, attribute_data);
                         mesh_attributes.push(mesh_attribute);
                         continue 'fields;
@@ -144,9 +113,9 @@ impl DataPiece {
                     Attribute::Field { data_array, .. } => {
                         for field_array in data_array {
                             if field_array.name == *field_name {
-                                let attribute_data = io_buffer_to_attribute_data(
-                                    field_array.num_comp(),
+                                let attribute_data = try_convert_io_buffer_to_attribute(
                                     &field_array.data,
+                                    field_array.num_comp(),
                                 )
                                 .with_context(|| anyhow!("Attribute \"{}\"", field_name))?;
                                 let mesh_attribute = MeshAttribute::new(field_name, attribute_data);
@@ -331,6 +300,60 @@ fn surface_mesh_from_unstructured_grid<R: Real>(
         vertices,
         triangles,
     }))
+}
+
+/// Converts a VTK IOBuffer to the corresponding supported AttributeData
+fn try_convert_io_buffer_to_attribute<R: Real>(
+    io_buffer: &vtkio::model::IOBuffer,
+    num_comp: usize,
+) -> Result<AttributeData<R>, anyhow::Error> {
+    match num_comp {
+        1 => match &io_buffer {
+            IOBuffer::U32(vec) => try_map_scalars_to_real(&vec, |val| {
+                R::from_u32(val).ok_or_else(|| {
+                    anyhow!("Cannot convert an attribute value from u32 to Real type")
+                })
+            })
+            .map(|v| AttributeData::ScalarReal(v)),
+            IOBuffer::F32(vec) => try_map_scalars_to_real(&vec, |val| {
+                R::from_f32(val).ok_or_else(|| {
+                    anyhow!("Cannot convert an attribute value from f32 to Real type")
+                })
+            })
+            .map(|v| AttributeData::ScalarReal(v)),
+            IOBuffer::F64(vec) => try_map_scalars_to_real(&vec, |val| {
+                R::from_f64(val).ok_or_else(|| {
+                    anyhow!("Cannot convert an attribute value from f64 to Real type")
+                })
+            })
+            .map(|v| AttributeData::ScalarReal(v)),
+            _ => Err(anyhow!("Unsupported IOBuffer scalar data type")),
+        },
+        3 => match &io_buffer {
+            IOBuffer::F32(coords) => {
+                particles_from_coords(coords).map(|p| AttributeData::Vector3Real(p))
+            }
+            IOBuffer::F64(coords) => {
+                particles_from_coords(coords).map(|p| AttributeData::Vector3Real(p))
+            }
+            _ => Err(anyhow!("Unsupported IOBuffer vector data type")),
+        },
+        _ => Err(anyhow!(
+            "Unsupported number of components ({}) in VTK IO buffer",
+            num_comp
+        )),
+    }
+}
+
+fn try_map_scalars_to_real<R: Real, T: Copy, F: Fn(T) -> Result<R, anyhow::Error>>(
+    io_buffer: &[T],
+    f: F,
+) -> Result<Vec<R>, anyhow::Error> {
+    io_buffer
+        .iter()
+        .copied()
+        .map(f)
+        .try_collect_with_capacity(io_buffer.len())
 }
 
 /// Tries to convert a vector of consecutive coordinate triplets into a vector of `Vector3`, also converts between floating point types
