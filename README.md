@@ -1,6 +1,7 @@
 # ![splashsurf logo](https://raw.githubusercontent.com/w1th0utnam3/splashsurf/master/logos/logo_small.svg "splashsurf")
 [![On crates.io](https://img.shields.io/crates/v/splashsurf)](https://crates.io/crates/splashsurf)
 [![On docs.rs](https://docs.rs/splashsurf_lib/badge.svg)](https://docs.rs/splashsurf_lib)
+[![Commits since last release](https://img.shields.io/github/commits-since/w1th0utnam3/splashsurf/latest)](https://github.com/w1th0utnam3/splashsurf)
 [![License: MIT](https://img.shields.io/crates/l/splashsurf)](https://github.com/w1th0utnam3/splashsurf/blob/master/LICENSE)
 [![Dependency status](https://deps.rs/repo/github/w1th0utnam3/splashsurf/status.svg)](https://deps.rs/repo/github/w1th0utnam3/splashsurf)
 ![Build and test GitHub Actions workflow](https://github.com/w1th0utnam3/splashsurf/workflows/Build%20and%20test/badge.svg)
@@ -8,8 +9,10 @@
 Surface reconstruction library and CLI for particle data from SPH simulations, written in Rust.
 
 This repository consists of the following crates:
- - `splashsurf`: A binary crate with a CLI to quickly run surface reconstructions of SPH particle data files from the terminal
- - `splashsurf_lib`: The library used by the CLI allowing to incorporate surface reconstruction in other Rust projects directly in memory
+ - `splashsurf`: Binary crate with a CLI (command line interface) to quickly run surface reconstructions of SPH particle data files from the terminal
+ - `splashsurf_lib`: Library that implements the reconstruction pipeline used by the CLI. Allows to integrate the reconstruction procedure directly into other Rust applications. Furthermore, it resembles a framework providing access to individual building blocks to create your own surface reconstruction pipeline.
+
+This page provides an overview of the CLI's features and high-level notes on the algorithmic structure and implementation of the reconstruction.
 
 <p align="center">
 <img src="example_particles.png" alt="Image of the original particle data" width="32%"> <img src="example_coarse.png" alt="Image of a coarse reconstructed surface mesh" width="32%"> <img src="example_fine.png" alt="Image of a fine reconstructed surface mesh" width="32%">
@@ -51,7 +54,7 @@ The result might look something like this (please excuse the lack of 3D renderin
 
 # The `splashsurf` CLI
 
-The following sections mainly focus on the CLI of `splashsurf`. For more information on the library, see the [corresponding readme](https://github.com/w1th0utnam3/splashsurf/blob/master/splashsurf_lib/README.md) in the `splashsurf_lib` subfolder or the [`splashsurf_lib` crate](https://crates.io/crates/splashsurf_lib) on crates.io.
+The following sections mainly focus on the CLI of `splashsurf`. For more information on the library, see the [corresponding readme](https://github.com/w1th0utnam3/splashsurf/blob/master/splashsurf_lib) in the `splashsurf_lib` subfolder or the [`splashsurf_lib` crate](https://crates.io/crates/splashsurf_lib) on crates.io.
 
 ## Introduction
 
@@ -327,4 +330,5 @@ OPTIONS:
 # License
 
 For license information of this project, see the LICENSE file.
-The splashsurf logo is based on two graphics ([1](https://www.svgrepo.com/svg/295647/wave), [2](https://www.svgrepo.com/svg/295652/surfboard-surfboard)) published on SVG Repo under a CC0 ("No Rights Reserved") license.
+The splashsurf logo is based on two graphics ([1](https://www.svgrepo.com/svg/295647/wave), [2](https://www.svgrepo.com/svg/295652/surfboard-surfboard)) published on SVG Repo under a CC0 ("No Rights Reserved") license. 
+The dragon model shown in the images on this page are part of the ["Stanford 3D Scanning Repository"](https://graphics.stanford.edu/data/3Dscanrep/).
