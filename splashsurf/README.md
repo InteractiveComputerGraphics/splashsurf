@@ -22,7 +22,7 @@ then be fed into 3D rendering software such as [Blender](https://www.blender.org
 The result might look something like this (please excuse the lack of 3D rendering skills):
 
 <p align="center">
-<img src="https://raw.githubusercontent.com/w1th0utnam3/w1th0utnam3.github.io/main/splashsurf.gif" alt="Rendered water animation" width="96%">
+<img src="https://raw.githubusercontent.com/w1th0utnam3/w1th0utnam3.github.io/master/splashsurf.gif" alt="Rendered water animation" width="96%">
 </p>
 
 **Contents**
