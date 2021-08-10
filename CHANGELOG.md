@@ -1,4 +1,4 @@
-## Master
+## Main
 
 - Lib: Update to `nalgebra` 0.29
 - Lib: Replace some unsafe blocks by using `bytemuck` instead

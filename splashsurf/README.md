@@ -1,15 +1,15 @@
-# ![splashsurf logo](https://raw.githubusercontent.com/w1th0utnam3/splashsurf/master/logos/logo_small.svg "splashsurf")
+# ![splashsurf logo](https://raw.githubusercontent.com/w1th0utnam3/splashsurf/main/logos/logo_small.svg "splashsurf")
 [![On crates.io](https://img.shields.io/crates/v/splashsurf)](https://crates.io/crates/splashsurf)
 [![On docs.rs](https://docs.rs/splashsurf_lib/badge.svg)](https://docs.rs/splashsurf_lib)
 [![Commits since last release](https://img.shields.io/github/commits-since/w1th0utnam3/splashsurf/latest)](https://github.com/w1th0utnam3/splashsurf)
-[![License: MIT](https://img.shields.io/crates/l/splashsurf)](https://github.com/w1th0utnam3/splashsurf/blob/master/LICENSE)
+[![License: MIT](https://img.shields.io/crates/l/splashsurf)](https://github.com/w1th0utnam3/splashsurf/blob/main/LICENSE)
 [![Dependency status](https://deps.rs/repo/github/w1th0utnam3/splashsurf/status.svg)](https://deps.rs/repo/github/w1th0utnam3/splashsurf)
 ![Build and test GitHub Actions workflow](https://github.com/w1th0utnam3/splashsurf/workflows/Build%20and%20test/badge.svg)
 
-CLI for surface reconstruction of particle data from SPH simulations, written in Rust.
+CLI for surface reconstruction of particle data from SPH simulations, written in Rust. For a the library used by the CLI see the [`splashsurf_lib`](https://crates.io/crates/splashsurf_lib) crate.
 
 <p align="center">
-<img src="https://raw.githubusercontent.com/w1th0utnam3/splashsurf/master/example_particles.png" alt="Image of the original particle data" width="32%"> <img src="https://raw.githubusercontent.com/w1th0utnam3/splashsurf/master/example_coarse.png" alt="Image of a coarse reconstructed surface mesh" width="32%"> <img src="https://raw.githubusercontent.com/w1th0utnam3/splashsurf/master/example_fine.png" alt="Image of a fine reconstructed surface mesh" width="32%">
+<img src="https://raw.githubusercontent.com/w1th0utnam3/splashsurf/main/example_particles.png" alt="Image of the original particle data" width="32%"> <img src="https://raw.githubusercontent.com/w1th0utnam3/splashsurf/main/example_coarse.png" alt="Image of a coarse reconstructed surface mesh" width="32%"> <img src="https://raw.githubusercontent.com/w1th0utnam3/splashsurf/main/example_fine.png" alt="Image of a fine reconstructed surface mesh" width="32%">
 </p>
 
 `splashsurf` is a tool to reconstruct surfaces meshes from SPH particle data.
@@ -22,10 +22,11 @@ then be fed into 3D rendering software such as [Blender](https://www.blender.org
 The result might look something like this (please excuse the lack of 3D rendering skills):
 
 <p align="center">
-<img src="https://raw.githubusercontent.com/w1th0utnam3/w1th0utnam3.github.io/master/splashsurf.gif" alt="Rendered water animation" width="96%">
+<img src="https://raw.githubusercontent.com/w1th0utnam3/w1th0utnam3.github.io/main/splashsurf.gif" alt="Rendered water animation" width="96%">
 </p>
 
 **Contents**
+- [!splashsurf logo](#)
 - [The `splashsurf` CLI](#the-splashsurf-cli)
   - [Introduction](#introduction)
   - [Notes](#notes)
@@ -48,7 +49,7 @@ The result might look something like this (please excuse the lack of 3D renderin
 
 # The `splashsurf` CLI
 
-The following sections mainly focus on the CLI of `splashsurf`. For more information on the library, see the [corresponding readme](https://github.com/w1th0utnam3/splashsurf/blob/master/splashsurf_lib) in the `splashsurf_lib` subfolder or the [`splashsurf_lib` crate](https://crates.io/crates/splashsurf_lib) on crates.io.
+The following sections mainly focus on the CLI of `splashsurf`. For more information on the library, see the [corresponding readme](https://github.com/w1th0utnam3/splashsurf/blob/main/splashsurf_lib) in the `splashsurf_lib` subfolder or the [`splashsurf_lib` crate](https://crates.io/crates/splashsurf_lib) on crates.io.
 
 ## Introduction
 
@@ -61,7 +62,7 @@ By default, a domain decomposition of the particle set is performed using octree
 The implementation first computes the density of each particle using the typical SPH approach with a cubic kernel. 
 This density is then evaluated or mapped onto a sparse grid using spatial hashing in the support radius of each particle.
 This implies that memory is only allocated in areas where the fluid density is non-zero. This is in contrast to a naive approach where the marching cubes background grid is allocated for the whole domain. 
-The marching cubes reconstruction is performed only in the narrow band of grid cells where the density values cross the surface threshold. Cells completely in the interior of the fluid are skipped. For more details, please refer to the [readme of the library]((https://github.com/w1th0utnam3/splashsurf/blob/master/splashsurf_lib/README.md)).
+The marching cubes reconstruction is performed only in the narrow band of grid cells where the density values cross the surface threshold. Cells completely in the interior of the fluid are skipped. For more details, please refer to the [readme of the library]((https://github.com/w1th0utnam3/splashsurf/blob/main/splashsurf_lib/README.md)).
 Finally, all surface patches are stitched together by walking the octree back up, resulting in a closed surface.
 
 ## Notes
