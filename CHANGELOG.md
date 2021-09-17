@@ -2,8 +2,12 @@
 
 The following changes are present in the `main` branch of the repository and are not yet part of a release:
 
+ - No major changes since last release
+
+## Version 0.8.0
+
 - Lib: Update to `nalgebra` 0.29
-- Lib: All the particle/mesh file IO code was moved from the `splashsurf` binary crate to the `splashsurf_lib` crate. They are behind the optional `io` feature flag. This allows using the IO code in tests of the library itself (previously the code was duplicated). But these functions may also be helpful to library users building their own pipeline if they wanto to quickly test code by e.g. loading particle data from files.
+- Lib: All the particle/mesh file IO code was moved from the `splashsurf` binary crate to the `splashsurf_lib` crate. They are behind the optional `io` feature flag. This allows using the IO code in tests of the library itself (previously the code was duplicated). But these functions may also be helpful to library users building their own pipeline if they wan to to quickly test code by e.g. loading particle data from files.
 - Lib: Replace some unsafe blocks by using `bytemuck` instead
 - Lib: Redesign the API for SPH kernel functions
 - Lib: Add module `sph_interpolation` for the interpolation of normals, scalar fields and vector fields to arbitrary points using SPH based interpolation

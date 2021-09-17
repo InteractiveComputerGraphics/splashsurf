@@ -1,6 +1,6 @@
 [package]
 name = "splashsurf"
-version = "0.7.0"
+version = "0.8.0"
 authors = ["Fabian Löschner <loeschner@cs.rwth-aachen.de>"]
 license = "MIT"
 description = "Command-line tool for surface reconstruction of SPH particle data"
@@ -13,7 +13,7 @@ homepage = "https://github.com/w1th0utnam3/splashsurf"
 repository = "https://github.com/w1th0utnam3/splashsurf"
 
 [dependencies]
-splashsurf_lib = { path = "../splashsurf_lib", version = "0.7", features = ["vtk_extras", "profiling", "io"] }
+splashsurf_lib = { path = "../splashsurf_lib", version = "0.8", features = ["vtk_extras", "profiling", "io"] }
 structopt = "0.3"
 log = "0.4"
 fern = "0.6"
