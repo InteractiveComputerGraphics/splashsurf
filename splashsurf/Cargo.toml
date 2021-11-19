@@ -7,7 +7,7 @@ description = "Command-line tool for surface reconstruction of SPH particle data
 keywords = ["sph", "particle", "surface", "reconstruction", "marching-cubes"]
 categories = ["command-line-utilities", "graphics", "science", "simulation", "visualization"]
 readme = "README.md"
-edition = "2018"
+edition = "2021"
 
 homepage = "https://github.com/w1th0utnam3/splashsurf"
 repository = "https://github.com/w1th0utnam3/splashsurf"
