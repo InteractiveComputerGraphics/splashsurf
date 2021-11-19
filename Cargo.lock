@@ -1074,9 +1074,9 @@ dependencies = [
 
 [[package]]
 name = "rstar"
-version = "0.9.1"
+version = "0.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d535e658ada8c1987a113e5261f8b907f721b2854d666e72820671481b7ee125"
+checksum = "1fc6fc513b8c3853e43a0c3f909ded14ffa82e5170c9c5f6fb175f9c85c8a433"
 dependencies = [
  "heapless",
  "num-traits",
