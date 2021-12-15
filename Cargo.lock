@@ -1134,8 +1134,8 @@ checksum = "d29ab0c6d3fc0ee92fe66e2d99f700eab17a8d57d1c1d3b748380fb20baa78cd"
 
 [[package]]
 name = "sdfu"
-version = "0.3.1-alpha.0"
-source = "git+https://github.com/termhn/sdfu#089e517c33fc4e8d46a405ed3839c387bf5440a9"
+version = "0.3.1-alpha.1"
+source = "git+https://github.com/termhn/sdfu#9c9653e884dae55015c4a33d26e949998ab68161"
 dependencies = [
  "ultraviolet",
 ]
