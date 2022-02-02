@@ -13,6 +13,7 @@ use crate::{
 };
 use log::{debug, info, trace};
 use nalgebra::Vector3;
+use num::Bounded;
 use parking_lot::Mutex;
 
 /// Performs a global surface reconstruction without domain decomposition
@@ -255,7 +256,7 @@ impl<I: Index, R: Real> OctreeBasedSurfaceReconstruction<I, R> {
         utils::resize_and_fill(
             &mut global_densities,
             global_particle_positions.len(),
-            R::min_value(),
+            <R as Bounded>::min_value(),
             parameters.enable_multi_threading,
         );
         let global_densities = Mutex::new(global_densities);

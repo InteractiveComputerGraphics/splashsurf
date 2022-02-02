@@ -49,7 +49,17 @@ pub trait Index:
 
 /// Trait that has to be implemented for types to be used as floating points values in the context of the library (e.g. for coordinates, density values)
 pub trait Real:
-    RealField + FromPrimitive + ToPrimitive + Debug + Default + Pod + ThreadSafe
+    RealField
+        // Required by RStar and not part of RealFied anymore
+        + Bounded
+        // Not part of RealField anymore
+        + Copy
+        + FromPrimitive
+        + ToPrimitive
+        + Debug
+        + Default
+        + Pod
+        + ThreadSafe
 {
     /// Tries to convert this value to another [`Real`] type `T` by converting first to `f64` followed by `T::from_f64`. If the value cannot be represented by the target type, `None` is returned.
     fn try_convert<T: Real>(self) -> Option<T> {
@@ -111,7 +121,17 @@ impl<T> Index for T where
 {
 }
 
-impl<T: RealField + FromPrimitive + ToPrimitive + Debug + Default + Pod + ThreadSafe + 'static> Real
-    for T
+impl<
+        T: RealField
+            + Bounded
+            + Copy
+            + FromPrimitive
+            + ToPrimitive
+            + Debug
+            + Default
+            + Pod
+            + ThreadSafe
+            + 'static,
+    > Real for T
 {
 }

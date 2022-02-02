@@ -6,6 +6,7 @@ use bitflags::bitflags;
 use itertools::iproduct;
 use log::trace;
 use nalgebra::Vector3;
+use num::Bounded;
 use std::iter::Iterator;
 use thiserror::Error as ThisError;
 
@@ -259,7 +260,7 @@ pub enum GridConstructionError<I: Index, R: Real> {
     #[error("index type is too small to index the total number of points in the whole domain ({0}x{1}x{2}, max index: {})", I::max_value())]
     IndexTypeTooSmallTotalPoints(I, I, I),
     /// The real type is too small to store the coordinates of all possible points in the domain
-    #[error("real type is too small to store the coordinates of all points in the domain (max value: {})", R::max_value())]
+    #[error("real type is too small to store the coordinates of all points in the domain (max value: {})", <R as Bounded>::max_value())]
     RealTypeTooSmallDomainSize,
 }
 
