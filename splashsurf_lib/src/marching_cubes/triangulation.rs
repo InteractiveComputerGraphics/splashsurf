@@ -14,8 +14,12 @@ use thiserror::Error as ThisError;
 #[derive(Debug, ThisError)]
 pub enum TriangulationError {
     /// Error that occurred while generating the triangle connectivity for a case
-    #[error("triangle connectivity error: {0}")]
-    TriangleConnectivityError(anyhow::Error),
+    #[error("triangle connectivity error")]
+    TriangleConnectivityError(
+        #[source]
+        #[from]
+        anyhow::Error,
+    ),
 }
 
 /// Trait that is used by the marching cubes [triangulate_with_criterion] function to query whether a cell should be triangulated

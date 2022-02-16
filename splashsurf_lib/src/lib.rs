@@ -287,45 +287,29 @@ impl<I: Index, R: Real> From<SurfaceReconstruction<I, R>> for TriMesh3d<R> {
 #[derive(Debug, ThisError)]
 pub enum ReconstructionError<I: Index, R: Real> {
     /// Error that occurred during the initialization of the implicit background grid used for all subsequent stages
-    #[error("grid construction: {0}")]
-    GridConstructionError(GridConstructionError<I, R>),
+    #[error("grid construction")]
+    GridConstructionError(
+        #[source]
+        #[from]
+        GridConstructionError<I, R>,
+    ),
     /// Error that occurred during the construction of the density map
-    #[error("density map generation: {0}")]
-    DensityMapGenerationError(DensityMapError<R>),
+    #[error("density map generation")]
+    DensityMapGenerationError(
+        #[source]
+        #[from]
+        DensityMapError<R>,
+    ),
     /// Error that occurred during the marching cubes stage of the reconstruction
-    #[error("marching cubes: {0}")]
-    MarchingCubesError(MarchingCubesError),
+    #[error("marching cubes")]
+    MarchingCubesError(
+        #[source]
+        #[from]
+        MarchingCubesError,
+    ),
     /// Any error that is not represented by some other explicit variant
-    #[error("unknown error")]
-    Unknown(anyhow::Error),
-}
-
-impl<I: Index, R: Real> From<GridConstructionError<I, R>> for ReconstructionError<I, R> {
-    /// Wraps a [`GridConstructionError`] in a [`ReconstructionError`] for error propagation
-    fn from(error: GridConstructionError<I, R>) -> Self {
-        ReconstructionError::GridConstructionError(error)
-    }
-}
-
-impl<I: Index, R: Real> From<DensityMapError<R>> for ReconstructionError<I, R> {
-    /// Wraps a [`DensityMapError`] in a [`ReconstructionError`] for error propagation
-    fn from(error: DensityMapError<R>) -> Self {
-        ReconstructionError::DensityMapGenerationError(error)
-    }
-}
-
-impl<I: Index, R: Real> From<MarchingCubesError> for ReconstructionError<I, R> {
-    /// Wraps a [`MarchingCubesError`] in a [`ReconstructionError`] for error propagation
-    fn from(error: MarchingCubesError) -> Self {
-        ReconstructionError::MarchingCubesError(error)
-    }
-}
-
-impl<I: Index, R: Real> From<anyhow::Error> for ReconstructionError<I, R> {
-    /// Wraps an `anyhow::Error` in a [`ReconstructionError`] for error propagation
-    fn from(error: anyhow::Error) -> Self {
-        ReconstructionError::Unknown(error)
-    }
+    #[error(transparent)]
+    Unknown(#[from] anyhow::Error),
 }
 
 /// Initializes the global thread pool used by this library with the given parameters.

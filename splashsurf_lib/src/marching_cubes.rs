@@ -24,14 +24,12 @@ pub use triangulation::TriangulationError;
 #[derive(Debug, ThisError)]
 pub enum MarchingCubesError {
     /// Error from the triangulation stage of marching cubes
-    #[error("error during triangulation stage: {0}")]
-    TriangulationError(TriangulationError),
-}
-
-impl From<TriangulationError> for MarchingCubesError {
-    fn from(e: TriangulationError) -> Self {
-        MarchingCubesError::TriangulationError(e)
-    }
+    #[error("error during triangulation stage")]
+    TriangulationError(
+        #[source]
+        #[from]
+        TriangulationError,
+    ),
 }
 
 /// Input data required by the marching cubes triangulation
