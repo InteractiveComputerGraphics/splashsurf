@@ -67,7 +67,7 @@ lazy_static = { version = "1.4", optional = true }
 
 [dev-dependencies]
 criterion = "0.3"
-ultraviolet = "0.8"
+ultraviolet = "0.9"
 sdfu = { git = "https://github.com/termhn/sdfu", features = ["ultraviolet"] }
 
 [[bench]]

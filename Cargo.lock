@@ -1151,7 +1151,7 @@ name = "sdfu"
 version = "0.3.1-alpha.1"
 source = "git+https://github.com/termhn/sdfu#9c9653e884dae55015c4a33d26e949998ab68161"
 dependencies = [
- "ultraviolet",
+ "ultraviolet 0.8.1",
 ]
 
 [[package]]
@@ -1282,7 +1282,7 @@ dependencies = [
  "smallvec",
  "thiserror",
  "thread_local",
- "ultraviolet",
+ "ultraviolet 0.9.0",
  "vtkio",
 ]
 
@@ -1418,6 +1418,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "16b9e3507eba17043af05c8a72fce3ec2c24b58945f45732e71dbc6646d904a7"
 dependencies = [
  "wide 0.6.5",
+]
+
+[[package]]
+name = "ultraviolet"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bf2728f3858937f50df6d92b741f53ef8fd5b5ae23b03b73fb9ac891e980df3b"
+dependencies = [
+ "wide 0.7.4",
 ]
 
 [[package]]
