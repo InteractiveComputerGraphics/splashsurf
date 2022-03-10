@@ -67,8 +67,8 @@ lazy_static = { version = "1.4", optional = true }
 
 [dev-dependencies]
 criterion = "0.3"
-ultraviolet = "0.8"
-sdfu = { git = "https://github.com/termhn/sdfu", features = ["ultraviolet"] }
+ultraviolet = "0.9"
+sdfu = { git = "https://github.com/w1th0utnam3/sdfu", features = ["ultraviolet"], rev = "e39a4a8685a56a3430218b9f2dfd546ab2dbe2d6" }
 
 [[bench]]
 name = "splashsurf_lib_benches"
