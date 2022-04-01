@@ -287,7 +287,7 @@ fn surface_mesh_from_unstructured_grid<R: Real>(
             .chunks_exact(4)
             .enumerate()
             .map(|(cell_idx, cell)| {
-                let is_triangle = cell[0] == 0;
+                let is_triangle = cell[0] == 3;
                 is_triangle
                     .then(|| [cell[1] as usize, cell[2] as usize, cell[3] as usize])
                     .ok_or_else(|| anyhow!("Expected only triangle cells. Invalid number of vertex indices ({}) of cell {}", cell[0], cell_idx))
