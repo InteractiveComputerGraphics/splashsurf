@@ -37,7 +37,7 @@ io = ["vtk_extras", "vtkio", "ply-rs", "nom", "serde_json", "flate2"]
 
 [dependencies]
 log = "0.4"
-nalgebra = { version = "0.30.1", features = ["rand", "bytemuck"] }
+nalgebra = { version = "0.31.0", features = ["rand", "bytemuck"] }
 num = "0.4"
 anyhow = "1.0"
 thiserror = "1.0"
