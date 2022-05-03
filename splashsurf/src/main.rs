@@ -141,7 +141,10 @@ fn initialize_logging(verbosity: VerbosityLevel, quiet_mode: bool) -> Result<(),
         .format(|out, message, record| {
             out.finish(format_args!(
                 "[{}][{}][{}] {}",
-                chrono::Local::now().to_rfc3339_opts(chrono::SecondsFormat::Micros, false),
+                time::OffsetDateTime::now_local()
+                    .unwrap_or_else(|_| time::OffsetDateTime::now_utc())
+                    .format(&time::format_description::well_known::Rfc3339)
+                    .unwrap_or_else(|_| String::new()),
                 record.target(),
                 record.level(),
                 message
