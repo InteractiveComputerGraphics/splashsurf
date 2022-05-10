@@ -174,7 +174,7 @@ pub mod test {
     use super::*;
 
     #[test]
-    fn test_read_ply_cube() -> Result<(), anyhow::Error> {
+    fn test_ply_read_cube() -> Result<(), anyhow::Error> {
         let input_file = Path::new("../data/cube.ply");
 
         let mesh: MeshWithData<f32, _> = surface_mesh_from_ply(input_file).with_context(|| {

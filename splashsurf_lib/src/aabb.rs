@@ -162,6 +162,21 @@ where
         &self.min + (self.extents() / (R::one() + R::one()))
     }
 
+    /// Checks if the given AABB is inside of the AABB, the AABB is considered to be half-open to its max coordinate
+    pub fn contains_aabb(&self, other: &Self) -> bool {
+        for i in 0..D {
+            if other.min[i] < self.min[i] || other.min[i] >= self.max[i] {
+                return false;
+            }
+
+            if other.max[i] < self.min[i] || other.max[i] >= self.max[i] {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     /// Checks if the given point is inside of the AABB, the AABB is considered to be half-open to its max coordinate
     pub fn contains_point(&self, point: &SVector<R, D>) -> bool {
         for i in 0..D {

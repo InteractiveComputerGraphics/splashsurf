@@ -290,9 +290,10 @@ mod parser {
 
         let (input, num_points) = number::be_i32(input)?;
         let (input, num_prims) = number::be_i32(input)?;
-        let (input, num_point_groups) = number::be_i32(input)?;
 
+        let (input, num_point_groups) = number::be_i32(input)?;
         let (input, num_prim_groups) = number::be_i32(input)?;
+
         let (input, num_point_attrib) = number::be_i32(input)?;
         let (input, num_vertex_attrib) = number::be_i32(input)?;
         let (input, num_prim_attrib) = number::be_i32(input)?;
@@ -649,4 +650,21 @@ mod error {
             Err(Err::Failure(e)) => Err(Err::Failure(e.with_append(i, kind.clone()))),
         }
     }
+}
+
+#[test]
+fn test_bgeo_read_dam_break() {
+    let input_file = Path::new("../data/dam_break_frame_9_6859_particles.bgeo");
+    let particles = particles_from_bgeo::<f32, _>(input_file).unwrap();
+
+    assert_eq!(particles.len(), 6859);
+
+    use crate::AxisAlignedBoundingBox3d;
+    let aabb = AxisAlignedBoundingBox3d::from_points(&particles);
+    let enclosing = AxisAlignedBoundingBox3d::new(
+        Vector3::new(-2.0, 0.03, -0.8),
+        Vector3::new(-0.3, 0.7, 0.72),
+    );
+
+    assert!(enclosing.contains_aabb(&aabb));
 }
