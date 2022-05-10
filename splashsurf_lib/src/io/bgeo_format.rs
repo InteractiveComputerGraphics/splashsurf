@@ -3,10 +3,12 @@
 use crate::Real;
 use anyhow::Context;
 use flate2::read::GzDecoder;
+use flate2::write::GzEncoder;
+use flate2::Compression;
 use nalgebra::Vector3;
 use nom::{Finish, Parser};
-use std::collections::HashMap;
 use std::fs::File;
+use std::io;
 use std::io::Read;
 use std::path::Path;
 
@@ -21,15 +23,12 @@ pub fn particles_from_bgeo<R: Real, P: AsRef<Path>>(
 ) -> Result<Vec<Vector3<R>>, anyhow::Error> {
     // Load positions from BGEO file
     let position_storage = {
-        let mut bgeo_file = load_bgeo_file(bgeo_file).context("Error while loading BGEO file")?;
+        let bgeo_file = load_bgeo_file(bgeo_file).context("Error while loading BGEO file")?;
 
         //println!("header: {:?}", bgeo_file.header);
         //println!("attrs: {:?}", bgeo_file.point_attributes);
 
-        let storage = bgeo_file
-            .points
-            .remove("position")
-            .expect("Positions should always be in BGEO file");
+        let storage = bgeo_file.positions;
 
         if let AttributeStorage::Vector(dim, storage) = storage {
             assert_eq!(dim, 3);
@@ -88,12 +87,91 @@ pub fn load_bgeo_file<P: AsRef<Path>>(bgeo_file: P) -> Result<BgeoFile, anyhow::
     Ok(file)
 }
 
+pub fn write_bgeo_file<W: io::Write>(
+    bgeo: &BgeoFile,
+    writer: W,
+    enable_compression: bool,
+) -> Result<(), anyhow::Error> {
+    fn write_bgeo<W2: io::Write>(bgeo: &BgeoFile, mut writer: W2) -> Result<(), anyhow::Error> {
+        writer.write_all(&bgeo.header.magic_bytes)?;
+        writer.write_all(&bgeo.header.version_char.to_be_bytes())?;
+        writer.write_all(&bgeo.header.version.to_be_bytes())?;
+
+        writer.write_all(&bgeo.header.num_points.to_be_bytes())?;
+        writer.write_all(&bgeo.header.num_prims.to_be_bytes())?;
+        writer.write_all(&bgeo.header.num_point_groups.to_be_bytes())?;
+        writer.write_all(&bgeo.header.num_prim_groups.to_be_bytes())?;
+        writer.write_all(&bgeo.header.num_point_attrib.to_be_bytes())?;
+        writer.write_all(&bgeo.header.num_vertex_attrib.to_be_bytes())?;
+        writer.write_all(&bgeo.header.num_prim_attrib.to_be_bytes())?;
+        writer.write_all(&bgeo.header.num_attrib.to_be_bytes())?;
+
+        // Write attribute definitions
+        for attrib in &bgeo.attribute_definitions {
+            writer.write_all(&(attrib.name.as_bytes().len() as u16).to_be_bytes())?;
+            writer.write_all(attrib.name.as_bytes())?;
+            writer.write_all(&(attrib.size as u16).to_be_bytes())?;
+            writer.write_all(&(attrib.attr_type.to_i32()).to_be_bytes())?;
+            for &default_val in &attrib.default_values {
+                writer.write_all(&(default_val.to_be_bytes()))?;
+            }
+        }
+
+        let special_attribs = [&bgeo.positions, &bgeo.weights];
+        let attrib_iter = || {
+            special_attribs
+                .iter()
+                .copied()
+                .chain(bgeo.attribute_data.iter().map(|(_, s)| s))
+        };
+
+        let num_points = attrib_iter().map(|s| s.num_points()).max().unwrap();
+        for i in 0..num_points {
+            for attrib in attrib_iter() {
+                // TODO: Use default values
+                match attrib {
+                    AttributeStorage::Int(v) => {
+                        writer.write_all(&(v[i].to_be_bytes()))?;
+                    }
+                    AttributeStorage::Float(v) => {
+                        writer.write_all(&(v[i].to_be_bytes()))?;
+                    }
+                    AttributeStorage::Vector(n, v) => {
+                        for j in 0..*n {
+                            writer.write_all(&(v[i * n + j].to_be_bytes()))?;
+                        }
+                    }
+                }
+            }
+        }
+
+        // End bytes
+        writer.write_all(&(0x00 as u8).to_be_bytes())?;
+        writer.write_all(&(0xff as u8).to_be_bytes())?;
+
+        Ok(())
+    }
+
+    if enable_compression {
+        write_bgeo(bgeo, GzEncoder::new(writer, Compression::fast()))
+    } else {
+        write_bgeo(bgeo, writer)
+    }
+}
+
 /// Struct representing a parsed BGEO file
 #[derive(Clone, Debug)]
 pub struct BgeoFile {
+    /// Header data of the BGEO file
     pub header: BgeoHeader,
-    pub point_attributes: Vec<AttribDefinition>,
-    pub points: HashMap<String, AttributeStorage>,
+    /// Positions of all points
+    pub positions: AttributeStorage,
+    /// An unknown float attribute of all points
+    pub weights: AttributeStorage,
+    /// Definitions of all remaining point attributes
+    pub attribute_definitions: Vec<AttribDefinition>,
+    /// Data of all remaining point attributes
+    pub attribute_data: Vec<(String, AttributeStorage)>,
 }
 
 /// The header data of a BGEO file
@@ -133,6 +211,16 @@ impl BgeoAttributeType {
             _ => None,
         }
     }
+
+    fn to_i32(self) -> i32 {
+        match self {
+            BgeoAttributeType::Float => 0,
+            BgeoAttributeType::Int => 1,
+            BgeoAttributeType::String => 2,
+            BgeoAttributeType::IndexedString => 4,
+            BgeoAttributeType::Vector => 5,
+        }
+    }
 }
 
 /// Definition of a BGEO attribute
@@ -152,10 +240,19 @@ pub enum AttributeStorage {
     Vector(usize, Vec<f32>),
 }
 
+impl AttributeStorage {
+    /// Returns the number of points for this attribute storage
+    fn num_points(&self) -> usize {
+        match self {
+            AttributeStorage::Int(v) => v.len(),
+            AttributeStorage::Float(v) => v.len(),
+            AttributeStorage::Vector(n, v) => v.len() / n,
+        }
+    }
+}
+
 /// Parsers used to parse the BGEO format
 mod parser {
-    use std::collections::HashMap;
-
     use nom::branch::alt;
     use nom::bytes::streaming::{tag, take};
     use nom::combinator::{map, map_opt, map_res, not, recognize, value, verify};
@@ -170,46 +267,48 @@ mod parser {
         move |input: &'a [u8]| -> IResult<&'a [u8], BgeoFile, BgeoParserError<&'a [u8]>> {
             // Parse file header and attribute definitions
             let (input, header) = parse_header(input)?;
-            let (input, point_attributes) =
+            let (input, named_attribute_definitions) =
                 count(parse_attr_def, header.num_point_attrib as usize)(input)?;
 
             // Add the "position" attribute which should always be present
-            let point_attributes = {
-                let mut point_attributes = point_attributes;
-                point_attributes.insert(
-                    0,
-                    AttribDefinition {
-                        name: String::from("position"),
-                        size: 3,
-                        attr_type: BgeoAttributeType::Vector,
-                        default_values: vec![0, 0, 0],
-                    },
-                );
+            let special_attribute_definitions = {
+                let mut special_attribute_definitions = Vec::new();
+                special_attribute_definitions.push(AttribDefinition {
+                    name: String::from("position"),
+                    size: 3,
+                    attr_type: BgeoAttributeType::Vector,
+                    default_values: vec![0, 0, 0],
+                });
                 // TODO: This additional float value appears between positions and ids in splishsplash BGEO files
                 //  Not sure what this is exactly
-                point_attributes.insert(
-                    1,
-                    AttribDefinition {
-                        name: String::from("density"),
-                        size: 1,
-                        attr_type: BgeoAttributeType::Float,
-                        default_values: vec![0],
-                    },
-                );
-                point_attributes
+                special_attribute_definitions.push(AttribDefinition {
+                    name: String::from("unknown"),
+                    size: 1,
+                    attr_type: BgeoAttributeType::Float,
+                    default_values: vec![0],
+                });
+                special_attribute_definitions
             };
 
             // Parse the point attribute data
-            let (input, point_data) = parse_points(
+            let (input, (mut special_attribute_data, attribute_data)) = parse_points(
                 input,
                 header.num_points as usize,
-                point_attributes.as_slice(),
+                special_attribute_definitions.as_slice(),
+                named_attribute_definitions.as_slice(),
             )?;
+
+            assert_eq!(special_attribute_data.len(), 2);
+
+            let weights = special_attribute_data.pop().unwrap();
+            let positions = special_attribute_data.pop().unwrap();
 
             let file = BgeoFile {
                 header,
-                point_attributes,
-                points: point_data,
+                positions,
+                weights,
+                attribute_definitions: named_attribute_definitions,
+                attribute_data,
             };
 
             Ok((input, file))
@@ -363,11 +462,17 @@ mod parser {
     fn parse_points<'a>(
         input: &'a [u8],
         num_points: usize,
-        attribs: &[AttribDefinition],
-    ) -> IResult<&'a [u8], HashMap<String, AttributeStorage>, BgeoParserError<&'a [u8]>> {
+        special_attribs: &[AttribDefinition],
+        named_attribs: &[AttribDefinition],
+    ) -> IResult<
+        &'a [u8],
+        (Vec<AttributeStorage>, Vec<(String, AttributeStorage)>),
+        BgeoParserError<&'a [u8]>,
+    > {
         // Construct a parser for each attribute
-        let mut parsers: Vec<_> = attribs
+        let mut parsers: Vec<_> = special_attribs
             .iter()
+            .chain(named_attribs.iter())
             .cloned()
             .map(|attrib| {
                 // Allocate storage for the attribute
@@ -395,14 +500,20 @@ mod parser {
             input
         };
 
-        // Collect the individual attribute storages into a hashmap
-        let mut attrib_data = HashMap::new();
+        // Collect the individual attribute storages
+        let mut special_attrib_data = Vec::new();
+        let mut named_attrib_data = Vec::new();
+
         for parser in parsers.into_iter() {
             assert_eq!(num_points * parser.attrib.size, parser.storage.len());
-            attrib_data.insert(parser.attrib.name, parser.storage);
+            if special_attrib_data.len() < special_attribs.len() {
+                special_attrib_data.push(parser.storage);
+            } else {
+                named_attrib_data.push((parser.attrib.name, parser.storage));
+            }
         }
 
-        Ok((input, attrib_data))
+        Ok((input, (special_attrib_data, named_attrib_data)))
     }
 
     impl AttributeStorage {
@@ -667,4 +778,40 @@ fn test_bgeo_read_dam_break() {
     );
 
     assert!(enclosing.contains_aabb(&aabb));
+}
+
+#[test]
+fn test_bgeo_roundtrip_uncompressed() {
+    let input_file = Path::new("../data/dam_break_frame_9_6859_particles.bgeo");
+    let bgeo = load_bgeo_file(input_file).unwrap();
+
+    let mut orig = Vec::new();
+    let mut is_compressed = false;
+
+    // First check if the file is gzip compressed
+    {
+        let file = File::open(input_file)
+            .context("Unable to open file for reading")
+            .unwrap();
+        let mut gz = GzDecoder::new(file);
+        if gz.header().is_some() {
+            is_compressed = true;
+            gz.read_to_end(&mut orig)
+                .context("Error during gzip decompression")
+                .unwrap();
+        }
+    }
+
+    if !is_compressed {
+        File::open(&input_file)
+            .unwrap()
+            .read_to_end(&mut orig)
+            .unwrap();
+    }
+
+    let mut buffer: Vec<u8> = Vec::new();
+    write_bgeo_file(&bgeo, &mut buffer, false).unwrap();
+
+    assert_eq!(orig.len(), buffer.len());
+    assert_eq!(&orig[0..buffer.len()], buffer.as_slice());
 }
