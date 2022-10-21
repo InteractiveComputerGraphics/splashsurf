@@ -9,3 +9,5 @@ updates:
   labels:
       - "dependabot"
       - "dependencies"
+  ignore:
+      - update-types: ["version-update:semver-patch"]
