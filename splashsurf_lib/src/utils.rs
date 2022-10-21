@@ -7,7 +7,7 @@ use std::cell::UnsafeCell;
 /// Macro version of Option::map that allows using e.g. using the ?-operator in the map expression
 ///
 /// For example:
-/// ```
+/// ```ignore
 /// let four: f64 = map_option!(Some(2.0_f64), val => val? * 2.0);
 /// ```
 macro_rules! map_option {
