@@ -190,6 +190,7 @@ pub fn write_particle_positions<R: Real, P: AsRef<Path>>(
 
         match extension.to_lowercase().as_str() {
             "vtk" => vtk_format::particles_to_vtk(particles, &output_file),
+            "json" => json_format::particles_to_json(particles, &output_file),
             _ => Err(anyhow!(
                 "Unsupported file format extension \"{}\" for writing particles",
                 extension

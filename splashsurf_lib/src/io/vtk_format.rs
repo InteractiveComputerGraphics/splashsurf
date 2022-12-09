@@ -152,7 +152,7 @@ pub fn particles_from_vtk<R: Real, P: AsRef<Path>>(
         .load_as_particles()
 }
 
-/// Tries to write a set of particles to the VTK file at the given path
+/// Tries to write a set of particles to a VTK file at the given path
 pub fn particles_to_vtk<R: Real, P: AsRef<Path>>(
     particles: &[Vector3<R>],
     vtk_file: P,

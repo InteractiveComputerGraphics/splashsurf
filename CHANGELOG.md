@@ -3,6 +3,8 @@
 The following changes are present in the `main` branch of the repository and are not yet part of a release:
 
  - Lib: Update to `nalgebra` 0.31
+ - Lib: Support for writing particles as JSON
+ - CLI: Support for new writers in `convert` subcommand
 
 ## Version 0.8.0
 
