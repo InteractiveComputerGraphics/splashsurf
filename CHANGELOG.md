@@ -2,7 +2,7 @@
 
 The following changes are present in the `main` branch of the repository and are not yet part of a release:
 
- - No major changes since last release
+ - Lib: Update to `nalgebra` 0.31
 
 ## Version 0.8.0
 

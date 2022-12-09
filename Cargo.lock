@@ -1194,7 +1194,7 @@ dependencies = [
 
 [[package]]
 name = "splashsurf"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -1209,7 +1209,7 @@ dependencies = [
 
 [[package]]
 name = "splashsurf_lib"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "arrayvec",

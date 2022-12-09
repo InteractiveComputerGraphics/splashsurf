@@ -213,7 +213,7 @@ The file format is inferred from the extension of output filename.
 
 ### The `reconstruct` command
 ```
-splashsurf-reconstruct 0.8.0
+splashsurf-reconstruct 0.9.0
 Reconstruct a surface from particle data
 
 USAGE:
@@ -277,10 +277,10 @@ OPTIONS:
 ### The `convert` subcommand
 
 Allows conversion between particle file formats and between mesh file formats. For particles `VTK, BGEO, PLY, XYZ, JSON -> VTK` 
-is supported. For meshes only `VTK, PLY -> OBJ` is supported.
+is supported. For meshes only `VTK, PLY -> VTK, OBJ` is supported.
 
 ```
-splashsurf-convert 0.7.0
+splashsurf-convert 0.9.0
 Convert particle or mesh files between different file formats
 
 USAGE:
@@ -293,18 +293,19 @@ FLAGS:
 
 OPTIONS:
         --domain-max <domain-max> <domain-max> <domain-max>
-            Lower corner of the domain of particles to keep, format:domain-max=x_max;y_max;z_max (requires domain-min to
-            be specified)
+            Lower corner of the domain of particles to keep, format:domain-max="x_max;y_max;z_max" (requires domain-min
+            to be specified)
         --domain-min <domain-min> <domain-min> <domain-min>
-            Lower corner of the domain of particles to keep, format: domain-min=x_min;y_min;z_min (requires domain-max
+            Lower corner of the domain of particles to keep, format: domain-min="x_min;y_min;z_min" (requires domain-max
             to be specified)
         --mesh <input-mesh>
             Path to the input file with a surface to read (supported formats: .vtk, .ply)
+
         --particles <input-particles>
             Path to the input file with particles to read (supported formats: .vtk, .bgeo, .ply, .xyz, .json)
 
     -o <output-file>
-            Path to the output file (supported formats for particles: .vtk, for meshes: .obj)
+            Path to the output file (supported formats for particles: .vtk, for meshes: .obj, .vtk)
 ```
 
 # License
