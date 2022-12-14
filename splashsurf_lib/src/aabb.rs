@@ -117,28 +117,18 @@ where
 
     /// Returns whether the AABB is consistent, i.e. `aabb.min()[i] <= aabb.max()[i]` for all `i`
     pub fn is_consistent(&self) -> bool {
-        for i in 0..D {
-            if !(self.min[i] <= self.max[i]) {
-                return false;
-            }
-        }
-        return true;
+        self.min <= self.max
     }
 
     /// Returns whether the AABB is degenerate in any dimension, i.e. `aabb.min()[i] == aabb.max()[i]` for any `i`
     pub fn is_degenerate(&self) -> bool {
-        for i in 0..D {
-            if self.min[i] == self.max[i] {
-                return true;
-            }
-        }
-        return false;
+        self.min == self.max
     }
 
     /// Returns the extents of the bounding box (vector connecting min and max point of the box)
     #[inline(always)]
     pub fn extents(&self) -> SVector<R, D> {
-        &self.max - &self.min
+        self.max - self.min
     }
 
     /// Returns the smallest scalar extent of the AABB over all of its dimensions
@@ -164,28 +154,12 @@ where
 
     /// Checks if the given AABB is inside of the AABB, the AABB is considered to be half-open to its max coordinate
     pub fn contains_aabb(&self, other: &Self) -> bool {
-        for i in 0..D {
-            if other.min[i] < self.min[i] || other.min[i] >= self.max[i] {
-                return false;
-            }
-
-            if other.max[i] < self.min[i] || other.max[i] >= self.max[i] {
-                return false;
-            }
-        }
-
-        return true;
+        self.contains_point(&other.min) || self.contains_point(&other.max)
     }
 
     /// Checks if the given point is inside of the AABB, the AABB is considered to be half-open to its max coordinate
     pub fn contains_point(&self, point: &SVector<R, D>) -> bool {
-        for i in 0..D {
-            if point[i] < self.min[i] || point[i] >= self.max[i] {
-                return false;
-            }
-        }
-
-        return true;
+        point >= &self.min && point < &self.max
     }
 
     /// Translates the AABB by the given vector
@@ -210,24 +184,20 @@ where
 
     /// Enlarges this AABB to the smallest AABB enclosing both itself and another AABB
     pub fn join(&mut self, other: &Self) {
-        for i in 0..D {
-            self.min[i] = self.min[i].min(other.min[i]);
-            self.max[i] = self.max[i].max(other.max[i]);
-        }
+        self.min = self.min.inf(&other.min);
+        self.max = self.max.sup(&other.max);
     }
 
     /// Enlarges this AABB to the smallest AABB enclosing both itself and another point
     pub fn join_with_point(&mut self, point: &SVector<R, D>) {
-        for i in 0..D {
-            self.min[i] = self.min[i].min(point[i]);
-            self.max[i] = self.max[i].max(point[i]);
-        }
+        self.min = self.min.inf(point);
+        self.max = self.max.sup(point);
     }
 
     /// Grows this AABB uniformly in all directions by the given scalar margin (i.e. adding the margin to min/max extents)
     pub fn grow_uniformly(&mut self, margin: R) {
-        self.min = &self.min - &SVector::repeat(margin);
-        self.max = &self.max + &SVector::repeat(margin);
+        self.min -= SVector::repeat(margin);
+        self.max += SVector::repeat(margin);
     }
 
     /// Returns the smallest cubical AABB with the same center that encloses this AABB
