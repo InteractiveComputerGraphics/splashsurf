@@ -1,15 +1,17 @@
 //! Helper functions for the BGEO file format
 
+use crate::utils::IteratorExt;
 use crate::Real;
-use anyhow::Context;
+use anyhow::{anyhow, Context};
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use nalgebra::Vector3;
 use nom::{Finish, Parser};
-use std::fs::File;
+use num::ToPrimitive;
+use std::fs::{File, OpenOptions};
 use std::io;
-use std::io::Read;
+use std::io::{BufWriter, Read};
 use std::path::Path;
 
 use parser::bgeo_parser;
@@ -22,12 +24,14 @@ pub fn particles_from_bgeo<R: Real, P: AsRef<Path>>(
     bgeo_file: P,
 ) -> Result<Vec<Vector3<R>>, anyhow::Error> {
     // Load positions from BGEO file
+    let bgeo_file = load_bgeo_file(bgeo_file).context("Error while loading BGEO file")?;
+    particles_from_bgeo_impl(bgeo_file)
+}
+
+fn particles_from_bgeo_impl<R: Real>(
+    bgeo_file: BgeoFile,
+) -> Result<Vec<Vector3<R>>, anyhow::Error> {
     let position_storage = {
-        let bgeo_file = load_bgeo_file(bgeo_file).context("Error while loading BGEO file")?;
-
-        //println!("header: {:?}", bgeo_file.header);
-        //println!("attrs: {:?}", bgeo_file.point_attributes);
-
         let storage = bgeo_file.positions;
 
         if let AttributeStorage::Vector(dim, storage) = storage {
@@ -85,6 +89,59 @@ pub fn load_bgeo_file<P: AsRef<Path>>(bgeo_file: P) -> Result<BgeoFile, anyhow::
         .context("Error while parsing the BGEO file contents")?;
 
     Ok(file)
+}
+
+pub fn particles_to_bgeo<R: Real, P: AsRef<Path>>(
+    particles: &[Vector3<R>],
+    bgeo_file: P,
+    enable_compression: bool,
+) -> Result<(), anyhow::Error> {
+    let path = bgeo_file.as_ref();
+    let file = OpenOptions::new()
+        .write(true)
+        .create(true)
+        .open(path)
+        .context("Cannot open file for writing JSON")?;
+    let writer = BufWriter::new(file);
+
+    let bgeo = particles_to_bgeo_impl(particles)?;
+    write_bgeo_file(&bgeo, writer, enable_compression)
+}
+
+fn particles_to_bgeo_impl<R: Real>(particles: &[Vector3<R>]) -> Result<BgeoFile, anyhow::Error> {
+    let particles_f32 = particles.iter().map(|x| x.as_slice()).flatten().copied().map(|x| Some(x.to_f32())?)
+        .map(|vec| {
+            vec.ok_or_else(|| {
+                anyhow!("Failed to convert coordinate from input float type to f32, value out of range?")
+            })
+        })
+        .try_collect_with_capacity(particles.len())?;
+
+    Ok(BgeoFile {
+        header: BgeoHeader {
+            magic_bytes: [66, 103, 101, 111],
+            version_char: 86,
+            version: 5,
+            num_points: particles.len().to_i32().ok_or_else(|| {
+                anyhow!(
+                    "number of particles ({}) is too large for bgeo format (max {})",
+                    particles.len(),
+                    i32::MAX
+                )
+            })?,
+            num_prims: 0,
+            num_point_groups: 0,
+            num_prim_groups: 0,
+            num_point_attrib: 0,
+            num_vertex_attrib: 0,
+            num_prim_attrib: 0,
+            num_attrib: 0,
+        },
+        positions: AttributeStorage::Vector(3, particles_f32),
+        weights: AttributeStorage::Float(vec![1.0; particles.len()]),
+        attribute_definitions: Vec::new(),
+        attribute_data: Vec::new(),
+    })
 }
 
 pub fn write_bgeo_file<W: io::Write>(
@@ -781,6 +838,31 @@ fn test_bgeo_read_dam_break() {
 }
 
 #[test]
+fn test_bgeo_write_dam_break() {
+    let input_file = Path::new("../data/dam_break_frame_9_6859_particles.bgeo");
+    let particles = particles_from_bgeo::<f32, _>(input_file).unwrap();
+
+    assert_eq!(particles.len(), 6859);
+
+    let bgeo_to_write = particles_to_bgeo_impl(&particles).unwrap();
+
+    let mut buffer: Vec<u8> = Vec::new();
+    write_bgeo_file(&bgeo_to_write, &mut buffer, false).unwrap();
+
+    let (_, bgeo_read) = bgeo_parser()
+        .parse(buffer.as_slice())
+        .finish()
+        .map_err(|err| err.into_anyhow())
+        .context("Error while parsing the BGEO file contents")
+        .unwrap();
+
+    let particles_read = particles_from_bgeo_impl(bgeo_read).unwrap();
+
+    assert_eq!(particles_read.len(), 6859);
+    assert_eq!(particles, particles_read);
+}
+
+#[test]
 fn test_bgeo_roundtrip_uncompressed() {
     let input_file = Path::new("../data/dam_break_frame_9_6859_particles.bgeo");
     let bgeo = load_bgeo_file(input_file).unwrap();
@@ -796,12 +878,14 @@ fn test_bgeo_roundtrip_uncompressed() {
         let mut gz = GzDecoder::new(file);
         if gz.header().is_some() {
             is_compressed = true;
+            // Read if compressed
             gz.read_to_end(&mut orig)
                 .context("Error during gzip decompression")
                 .unwrap();
         }
     }
 
+    // Read if not compressed
     if !is_compressed {
         File::open(&input_file)
             .unwrap()

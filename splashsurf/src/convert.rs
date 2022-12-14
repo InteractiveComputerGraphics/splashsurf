@@ -27,7 +27,7 @@ pub struct ConvertSubcommandArgs {
         conflicts_with = "input_particles"
     )]
     input_mesh: Option<PathBuf>,
-    /// Path to the output file (supported formats for particles: .vtk, for meshes: .obj, .vtk)
+    /// Path to the output file (supported formats for particles: .vtk, .bgeo, .json, for meshes: .obj, .vtk)
     #[structopt(short = "-o", parse(from_os_str))]
     output_file: PathBuf,
     /// Whether to overwrite existing files without asking

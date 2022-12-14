@@ -35,11 +35,16 @@ impl Default for InputFormatParameters {
 
 /// File format parameters for output files
 #[derive(Clone, Debug)]
-pub struct OutputFormatParameters {}
+pub struct OutputFormatParameters {
+    /// Enable compression for formats that support it
+    enable_compression: bool,
+}
 
 impl Default for OutputFormatParameters {
     fn default() -> Self {
-        Self {}
+        Self {
+            enable_compression: true,
+        }
     }
 }
 
@@ -172,7 +177,7 @@ pub fn read_particle_positions_with_attributes<R: Real, P: AsRef<Path>>(
 pub fn write_particle_positions<R: Real, P: AsRef<Path>>(
     particles: &[Vector3<R>],
     output_file: P,
-    _format_params: &OutputFormatParameters,
+    format_params: &OutputFormatParameters,
 ) -> Result<(), anyhow::Error> {
     let output_file = output_file.as_ref();
     info!(
@@ -190,6 +195,11 @@ pub fn write_particle_positions<R: Real, P: AsRef<Path>>(
 
         match extension.to_lowercase().as_str() {
             "vtk" => vtk_format::particles_to_vtk(particles, &output_file),
+            "bgeo" => bgeo_format::particles_to_bgeo(
+                particles,
+                &output_file,
+                format_params.enable_compression,
+            ),
             "json" => json_format::particles_to_json(particles, &output_file),
             _ => Err(anyhow!(
                 "Unsupported file format extension \"{}\" for writing particles",
