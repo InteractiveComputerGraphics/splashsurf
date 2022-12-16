@@ -605,11 +605,10 @@ impl<I: Index, R: Real> SparseDensityMapGenerator<I, R> {
         //
         // This also implies that this density map should always represent a closed surfaces.
         // If particles were closer to the AABB boundary than this margin, there could be holes in the resulting level-set.
-        let allowed_domain = {
-            let mut aabb = grid.aabb().clone();
-            aabb.grow_uniformly(kernel_evaluation_radius.neg());
-            aabb
-        };
+        let allowed_domain = grid
+            .aabb()
+            .clone()
+            .grow_uniformly(-kernel_evaluation_radius);
 
         if allowed_domain.is_degenerate() || !allowed_domain.is_consistent() {
             warn!(

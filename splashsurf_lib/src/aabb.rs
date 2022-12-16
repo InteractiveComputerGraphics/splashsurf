@@ -37,17 +37,11 @@ where
                 .par_iter()
                 .fold(
                     || initial_aabb.clone(),
-                    |mut aabb, next_point| {
-                        aabb.join_with_point(next_point);
-                        aabb
-                    },
+                    |aabb, next_point| aabb.join_with_point(next_point),
                 )
                 .reduce(
                     || initial_aabb.clone(),
-                    |mut final_aabb, aabb| {
-                        final_aabb.join(&aabb);
-                        final_aabb
-                    },
+                    |final_aabb, aabb| final_aabb.join(&aabb),
                 )
         }
     }
@@ -69,27 +63,29 @@ where
         Self { min, max }
     }
 
+    /// Constructs an AABB with the given centroid and extents
+    #[inline]
+    pub fn with_centroid(centroid: SVector<R, D>, extent: SVector<R, D>) -> Self {
+        let half_extent = extent / (R::one() + R::one());
+        Self::new(centroid - half_extent, centroid + half_extent)
+    }
+
     /// Constructs a degenerate AABB with zero extents centered at the given point
     #[inline(always)]
     pub fn from_point(point: SVector<R, D>) -> Self {
         Self {
-            min: point.clone(),
+            min: point,
             max: point,
         }
     }
 
     /// Constructs the smallest AABB fitting around all the given points
     pub fn from_points(points: &[SVector<R, D>]) -> Self {
-        let mut point_iter = points.iter();
-        if let Some(first_point) = point_iter.next().cloned() {
-            let mut aabb = Self::from_point(first_point);
-            for next_point in point_iter {
-                aabb.join_with_point(next_point)
-            }
-            aabb
-        } else {
-            Self::zeros()
-        }
+        points[1..]
+            .iter()
+            .fold(Self::from_point(points[0]), |aabb, point| {
+                aabb.join_with_point(point)
+            })
     }
 
     /// Tries to convert the AABB from one real type to another real type, returns None if conversion fails
@@ -134,22 +130,18 @@ where
     /// Returns the smallest scalar extent of the AABB over all of its dimensions
     #[inline(always)]
     pub fn min_extent(&self) -> R {
-        let extents = self.extents();
-        // Use imin indirectly, because min is broken in nalgebra
-        extents[extents.imin()]
+        self.extents().min()
     }
 
     /// Returns the largest scalar extent of the AABB over all of its dimensions
     #[inline(always)]
     pub fn max_extent(&self) -> R {
-        let extents = self.extents();
-        // Use imax indirectly, because max is broken in nalgebra
-        extents[extents.imax()]
+        self.extents().max()
     }
 
     /// Returns the geometric centroid of the AABB (mean of the corner points)
     pub fn centroid(&self) -> SVector<R, D> {
-        &self.min + (self.extents() / (R::one() + R::one()))
+        self.min + (self.extents() / (R::one() + R::one()))
     }
 
     /// Checks if the given AABB is inside of the AABB, the AABB is considered to be half-open to its max coordinate
@@ -163,54 +155,56 @@ where
     }
 
     /// Translates the AABB by the given vector
-    pub fn translate(&mut self, vector: &SVector<R, D>) {
-        self.min += vector;
-        self.max += vector;
+    pub fn translate(self, vector: &SVector<R, D>) -> Self {
+        Self {
+            min: self.min + vector,
+            max: self.max + vector,
+        }
     }
 
     /// Translates the AABB to center it at the coordinate origin (moves the centroid to the coordinate origin)
-    pub fn center_at_origin(&mut self) {
-        self.translate(&(self.centroid() * R::one().neg()));
+    pub fn center_at_origin(self) -> Self {
+        let vector = -self.centroid();
+        self.translate(&vector)
     }
 
     /// Multiplies a uniform, local scaling to the AABB (i.e. multiplying its extents as if it was centered at the origin)
-    pub fn scale_uniformly(&mut self, scaling: R) {
+    pub fn scale_uniformly(self, scaling: R) -> Self {
         let center = self.centroid();
-        self.translate(&(&center * R::one().neg()));
-        self.min *= scaling;
-        self.max *= scaling;
-        self.translate(&center);
+        let mut aabb = self.center_at_origin();
+        aabb.min *= scaling;
+        aabb.max *= scaling;
+        aabb.translate(&center)
     }
 
     /// Enlarges this AABB to the smallest AABB enclosing both itself and another AABB
-    pub fn join(&mut self, other: &Self) {
-        self.min = self.min.inf(&other.min);
-        self.max = self.max.sup(&other.max);
+    pub fn join(self, other: &Self) -> Self {
+        Self {
+            min: self.min.inf(&other.min),
+            max: self.max.sup(&other.max),
+        }
     }
 
     /// Enlarges this AABB to the smallest AABB enclosing both itself and another point
-    pub fn join_with_point(&mut self, point: &SVector<R, D>) {
-        self.min = self.min.inf(point);
-        self.max = self.max.sup(point);
+    pub fn join_with_point(self, point: &SVector<R, D>) -> Self {
+        Self {
+            min: self.min.inf(point),
+            max: self.max.sup(point),
+        }
     }
 
     /// Grows this AABB uniformly in all directions by the given scalar margin (i.e. adding the margin to min/max extents)
-    pub fn grow_uniformly(&mut self, margin: R) {
-        self.min -= SVector::repeat(margin);
-        self.max += SVector::repeat(margin);
+    pub fn grow_uniformly(self, margin: R) -> Self {
+        Self {
+            min: self.min.add_scalar(-margin),
+            max: self.max.add_scalar(margin),
+        }
     }
 
     /// Returns the smallest cubical AABB with the same center that encloses this AABB
     pub fn enclosing_cube(&self) -> Self {
-        let center = self.centroid();
-        let half_max_extent = self.max_extent() / (R::one() + R::one());
-
-        let mut cube = Self::new(
-            SVector::repeat(half_max_extent.neg()),
-            SVector::repeat(half_max_extent),
-        );
-        cube.translate(&center);
-        cube
+        let centroid = self.centroid();
+        Self::with_centroid(centroid, SVector::repeat(self.max_extent()))
     }
 }
 

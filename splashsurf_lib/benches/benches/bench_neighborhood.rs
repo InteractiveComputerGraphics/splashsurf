@@ -50,8 +50,8 @@ pub fn neighborhood_search_spatial_hashing(c: &mut Criterion) {
         &io::vtk_format::particles_from_vtk(PARTICLE_FILE).unwrap();
     let particle_positions = particle_subset(particle_positions.as_slice());
 
-    let mut domain = AxisAlignedBoundingBox3d::from_points(particle_positions);
-    domain.grow_uniformly(COMPACT_SUPPORT_RADIUS as f32);
+    let domain = AxisAlignedBoundingBox3d::from_points(particle_positions)
+        .grow_uniformly(COMPACT_SUPPORT_RADIUS as f32);
 
     let mut group = c.benchmark_group("neighborhood_search");
     group.sample_size(100);
@@ -79,8 +79,8 @@ pub fn neighborhood_search_spatial_hashing_parallel(c: &mut Criterion) {
         &io::vtk_format::particles_from_vtk(PARTICLE_FILE).unwrap();
     let particle_positions = particle_subset(particle_positions.as_slice());
 
-    let mut domain = AxisAlignedBoundingBox3d::from_points(particle_positions);
-    domain.grow_uniformly(COMPACT_SUPPORT_RADIUS as f32);
+    let domain = AxisAlignedBoundingBox3d::from_points(particle_positions)
+        .grow_uniformly(COMPACT_SUPPORT_RADIUS as f32);
 
     let mut group = c.benchmark_group("neighborhood_search");
     group.sample_size(100);

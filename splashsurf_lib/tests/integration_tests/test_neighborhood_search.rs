@@ -101,8 +101,8 @@ fn test_neighborhood_search_spatial_hashing_simple() {
 
     for (particles, mut solution) in generate_simple_test_cases(search_radius) {
         let mut nl = Vec::new();
-        let mut domain = AxisAlignedBoundingBox3d::from_points(particles.as_slice());
-        domain.grow_uniformly(search_radius);
+        let domain = AxisAlignedBoundingBox3d::from_points(particles.as_slice())
+            .grow_uniformly(search_radius);
         neighborhood_search_spatial_hashing::<i32, f32>(
             &domain,
             particles.as_slice(),
@@ -134,8 +134,8 @@ mod tests_from_files {
         let file = "../data/free_particles_125_particles.vtk";
         let particles = io::vtk_format::particles_from_vtk::<f32, _>(file).unwrap();
 
-        let mut domain = AxisAlignedBoundingBox3d::par_from_points(particles.as_slice());
-        domain.scale_uniformly(1.5);
+        let domain =
+            AxisAlignedBoundingBox3d::par_from_points(particles.as_slice()).scale_uniformly(1.5);
 
         let mut nl_naive = Vec::new();
         let mut nl_hashed = Vec::new();
@@ -171,8 +171,8 @@ mod tests_from_files {
         let file = "../data/free_particles_1000_particles.vtk";
         let particles = io::vtk_format::particles_from_vtk::<f32, _>(file).unwrap();
 
-        let mut domain = AxisAlignedBoundingBox3d::par_from_points(particles.as_slice());
-        domain.scale_uniformly(1.5);
+        let domain =
+            AxisAlignedBoundingBox3d::par_from_points(particles.as_slice()).scale_uniformly(1.5);
 
         let mut nl_naive = Vec::new();
         let mut nl_hashed = Vec::new();
@@ -208,8 +208,8 @@ mod tests_from_files {
         let file = "../data/cube_2366_particles.vtk";
         let particles = io::vtk_format::particles_from_vtk::<f32, _>(file).unwrap();
 
-        let mut domain = AxisAlignedBoundingBox3d::par_from_points(particles.as_slice());
-        domain.scale_uniformly(1.5);
+        let domain =
+            AxisAlignedBoundingBox3d::par_from_points(particles.as_slice()).scale_uniformly(1.5);
 
         let mut nl_naive = Vec::new();
         let mut nl_hashed = Vec::new();

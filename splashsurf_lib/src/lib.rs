@@ -383,14 +383,13 @@ pub fn grid_for_reconstruction<I: Index, R: Real>(
     } else {
         profile!("compute minimum enclosing aabb");
 
-        let mut domain_aabb = {
-            let mut aabb = if enable_multi_threading {
+        let domain_aabb = {
+            let aabb = if enable_multi_threading {
                 AxisAlignedBoundingBox3d::par_from_points(particle_positions)
             } else {
                 AxisAlignedBoundingBox3d::from_points(particle_positions)
             };
-            aabb.grow_uniformly(particle_radius);
-            aabb
+            aabb.grow_uniformly(particle_radius)
         };
 
         info!(
@@ -404,9 +403,7 @@ pub fn grid_for_reconstruction<I: Index, R: Real>(
             cube_size,
         )
         .kernel_evaluation_radius;
-        domain_aabb.grow_uniformly(kernel_margin);
-
-        domain_aabb
+        domain_aabb.grow_uniformly(kernel_margin)
     };
 
     Ok(UniformGrid::from_aabb(&domain_aabb, cube_size)?)
