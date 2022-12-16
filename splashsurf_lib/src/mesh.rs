@@ -668,9 +668,7 @@ pub mod vtk_helper {
     {
         let points = {
             let mut points: Vec<R> = Vec::with_capacity(mesh.vertices().len() * 3);
-            for v in mesh.vertices().iter() {
-                points.extend(v.as_slice());
-            }
+            points.extend(mesh.vertices().iter().map(|p| p.as_slice()).flatten());
             points
         };
 
@@ -678,7 +676,7 @@ pub mod vtk_helper {
         let vertices = {
             let mut vertices = Vec::with_capacity(mesh.cells().len() * (vertices_per_cell + 1));
             for cell in mesh.cells().iter() {
-                vertices.push(3);
+                vertices.push(vertices_per_cell as u32);
                 cell.for_each_vertex(|v| vertices.push(v as u32));
             }
             vertices
