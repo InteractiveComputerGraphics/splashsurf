@@ -562,7 +562,10 @@ mod parser {
         let mut named_attrib_data = Vec::new();
 
         for parser in parsers.into_iter() {
-            assert_eq!(num_points * parser.attrib.size, parser.storage.len());
+            assert_eq!(num_points * parser.attrib.size, parser.storage.len(),
+                       "failed to read attribute \"{}\" (type {:?}): number of read attribute values ({}) does not match expected number of attribute values ({} = {} points * {} attribute components)",
+                       parser.attrib.name, parser.attrib.attr_type, parser.storage.len(), num_points * parser.attrib.size, num_points, parser.attrib.size
+            );
             if special_attrib_data.len() < special_attribs.len() {
                 special_attrib_data.push(parser.storage);
             } else {
@@ -645,22 +648,32 @@ mod parser {
             match self.attrib.attr_type {
                 BgeoAttributeType::Int => {
                     let storage = self.storage.as_int_mut();
+                    let size = self.attrib.size;
                     Box::new(
                         move |input: &'a [u8]| -> IResult<&'a [u8], (), BgeoParserError<&'a [u8]>> {
-                            let (input, value) = number::be_i32(input)?;
-                            //println!("i32: {}", value);
-                            storage.push(value);
+                            let (input, _) = count(
+                                map(number::be_i32, |val| {
+                                    //println!("i32: {}", val);
+                                    storage.push(val);
+                                }),
+                                size,
+                            )(input)?;
                             Ok((input, ()))
                         },
                     )
                 }
                 BgeoAttributeType::Float => {
                     let storage = self.storage.as_float_mut();
+                    let size = self.attrib.size;
                     Box::new(
                         move |input: &'a [u8]| -> IResult<&'a [u8], (), BgeoParserError<&'a [u8]>> {
-                            let (input, value) = number::be_f32(input)?;
-                            //println!("f32: {}", value);
-                            storage.push(value);
+                            let (input, _) = count(
+                                map(number::be_f32, |val| {
+                                    //println!("f32: {}", val);
+                                    storage.push(val);
+                                }),
+                                size,
+                            )(input)?;
                             Ok((input, ()))
                         },
                     )
