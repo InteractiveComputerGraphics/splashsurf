@@ -634,9 +634,9 @@ dependencies = [
 
 [[package]]
 name = "nom"
-version = "7.1.2"
+version = "7.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e5507769c4919c998e69e49c839d9dc6e693ede4cc4290d6ad8b41d4f09c548c"
+checksum = "a8903e5a29a317527874d0402f867152a3d21c908bb0b933e416c65e301d4c36"
 dependencies = [
  "memchr 2.5.0",
  "minimal-lexical",
@@ -1232,7 +1232,7 @@ dependencies = [
  "lazy_static",
  "log",
  "nalgebra",
- "nom 7.1.2",
+ "nom 7.1.1",
  "num",
  "numeric_literals",
  "parking_lot",
