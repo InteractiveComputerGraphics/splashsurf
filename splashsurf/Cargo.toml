@@ -21,4 +21,4 @@ time = { version = "0.3.9", features = ["formatting", "local-offset"] }
 anyhow = "1.0"
 num = "0.4"
 rayon = "1.6"
-bytemuck = "1.9"
+bytemuck = "1.13"
