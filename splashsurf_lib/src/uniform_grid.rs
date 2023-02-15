@@ -1,7 +1,7 @@
 //! Helper types for the implicit background grid used for marching cubes
 
 use crate::topology::{Axis, DirectedAxis, DirectedAxisArray, Direction};
-use crate::{AxisAlignedBoundingBox3d, Index, Real};
+use crate::{Aabb3d, Index, Real};
 use bitflags::bitflags;
 use itertools::iproduct;
 use log::trace;
@@ -227,7 +227,7 @@ pub type UniformGrid<I, R> = UniformCartesianCubeGrid3d<I, R>;
 #[derive(Clone, PartialEq, Debug)]
 pub struct UniformCartesianCubeGrid3d<I: Index, R: Real> {
     /// AABB of the grid. Note that the grid may extend beyond the max coordinate of the AABB by less than the `cell_size`.
-    aabb: AxisAlignedBoundingBox3d<R>,
+    aabb: Aabb3d<R>,
     /// The edge length of the cubes in the grid
     cell_size: R,
 
@@ -269,7 +269,7 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
     ///
     /// The grid will at least contain the AABB but may be larger depending on the cell size.
     pub fn from_aabb(
-        aabb: &AxisAlignedBoundingBox3d<R>,
+        aabb: &Aabb3d<R>,
         cell_size: R,
     ) -> Result<Self, GridConstructionError<I, R>> {
         if !(cell_size > R::zero()) {
@@ -325,7 +325,7 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
     /// Constructs a degenerate grid with zero extents, zero cells and zero points
     pub(crate) fn new_zero() -> Self {
         Self {
-            aabb: AxisAlignedBoundingBox3d::new(Vector3::zeros(), Vector3::zeros()),
+            aabb: Aabb3d::new(Vector3::zeros(), Vector3::zeros()),
             cell_size: R::zero(),
             n_points_per_dim: [I::zero(); 3],
             n_cells_per_dim: [I::zero(); 3],
@@ -334,7 +334,7 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
 
     /// Returns the bounding box of the grid
     #[inline(always)]
-    pub fn aabb(&self) -> &AxisAlignedBoundingBox3d<R> {
+    pub fn aabb(&self) -> &Aabb3d<R> {
         &self.aabb
     }
 
@@ -518,7 +518,7 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
 
     /// Returns an AABB of the given cell
     #[inline(always)]
-    pub fn cell_aabb(&self, cell: &CellIndex<I>) -> AxisAlignedBoundingBox3d<R> {
+    pub fn cell_aabb(&self, cell: &CellIndex<I>) -> Aabb3d<R> {
         let min_point_ijk = cell.index;
         let max_point_ijk = [
             min_point_ijk[0] + I::one(),
@@ -529,7 +529,7 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
         let min_point = self.point_coordinates_array(&min_point_ijk);
         let max_point = self.point_coordinates_array(&max_point_ijk);
 
-        AxisAlignedBoundingBox3d::new(min_point, max_point)
+        Aabb3d::new(min_point, max_point)
     }
 
     /// If part of the grid, returns the neighbor of a point following the given directed axis along the grid
@@ -732,7 +732,7 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
         min: &Vector3<R>,
         n_cells_per_dim: &[I; 3],
         cell_size: R,
-    ) -> Option<AxisAlignedBoundingBox3d<R>> {
+    ) -> Option<Aabb3d<R>> {
         let max = min
             + Vector3::new(
                 cell_size * n_cells_per_dim[0].to_real()?,
@@ -740,7 +740,7 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
                 cell_size * n_cells_per_dim[2].to_real()?,
             );
 
-        Some(AxisAlignedBoundingBox3d::new(min.clone(), max))
+        Some(Aabb3d::new(min.clone(), max))
     }
 
     fn checked_num_points(n_points_per_dim: &[I; 3]) -> Option<I> {

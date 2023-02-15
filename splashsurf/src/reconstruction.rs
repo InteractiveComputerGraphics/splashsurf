@@ -187,7 +187,7 @@ mod arguments {
     use anyhow::{anyhow, Context};
     use log::info;
     use splashsurf_lib::nalgebra::Vector3;
-    use splashsurf_lib::{AxisAlignedBoundingBox3d, ParticleDensityComputationStrategy};
+    use splashsurf_lib::{Aabb3d, ParticleDensityComputationStrategy};
     use std::convert::TryFrom;
     use std::fs;
     use std::path::{Path, PathBuf};
@@ -212,7 +212,7 @@ mod arguments {
                     assert_eq!(domain_min.len(), 3);
                     assert_eq!(domain_max.len(), 3);
 
-                    let aabb = AxisAlignedBoundingBox3d::new(
+                    let aabb = Aabb3d::new(
                         Vector3::from_iterator(domain_min.clone()),
                         Vector3::from_iterator(domain_max.clone()),
                     );

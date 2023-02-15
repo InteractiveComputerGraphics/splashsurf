@@ -18,7 +18,7 @@
 //! Note that all density mapping functions always use the global background grid for flat point
 //! indices, even if the density map is only generated for a smaller subdomain.
 
-use crate::aabb::AxisAlignedBoundingBox3d;
+use crate::aabb::Aabb3d;
 use crate::kernel::DiscreteSquaredDistanceCubicKernel;
 use crate::mesh::{HexMesh3d, MeshAttribute, MeshWithData};
 use crate::uniform_grid::{OwningSubdomainGrid, Subdomain, UniformGrid};
@@ -48,7 +48,7 @@ pub enum DensityMapError<R: Real> {
         /// The margin by which the user specified domain is shrunk
         margin: R,
         /// The final (invalid) domain after the margin is applied to the user specified domain
-        domain: AxisAlignedBoundingBox3d<R>,
+        domain: Aabb3d<R>,
     },
 }
 
@@ -544,7 +544,7 @@ struct SparseDensityMapGenerator<I: Index, R: Real> {
     supported_points: I,
     kernel_evaluation_radius_sq: R,
     kernel: DiscreteSquaredDistanceCubicKernel<R>,
-    allowed_domain: AxisAlignedBoundingBox3d<R>,
+    allowed_domain: Aabb3d<R>,
 }
 
 pub(crate) struct GridKernelExtents<I: Index, R: Real> {

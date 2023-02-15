@@ -840,9 +840,9 @@ fn test_bgeo_read_dam_break() {
 
     assert_eq!(particles.len(), 6859);
 
-    use crate::AxisAlignedBoundingBox3d;
-    let aabb = AxisAlignedBoundingBox3d::from_points(&particles);
-    let enclosing = AxisAlignedBoundingBox3d::new(
+    use crate::Aabb3d;
+    let aabb = Aabb3d::from_points(&particles);
+    let enclosing = Aabb3d::new(
         Vector3::new(-2.0, 0.03, -0.8),
         Vector3::new(-0.3, 0.7, 0.72),
     );

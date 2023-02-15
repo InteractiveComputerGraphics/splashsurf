@@ -1,6 +1,6 @@
 use nalgebra::Vector3;
 use splashsurf_lib::neighborhood_search::*;
-use splashsurf_lib::AxisAlignedBoundingBox3d;
+use splashsurf_lib::Aabb3d;
 
 fn sort_neighborhood_lists(neighborhood_list: &mut Vec<Vec<usize>>) {
     for neighbors in neighborhood_list.iter_mut() {
@@ -101,7 +101,7 @@ fn test_neighborhood_search_spatial_hashing_simple() {
 
     for (particles, mut solution) in generate_simple_test_cases(search_radius) {
         let mut nl = Vec::new();
-        let mut domain = AxisAlignedBoundingBox3d::from_points(particles.as_slice());
+        let mut domain = Aabb3d::from_points(particles.as_slice());
         domain.grow_uniformly(search_radius);
         neighborhood_search_spatial_hashing::<i32, f32>(
             &domain,
@@ -125,7 +125,7 @@ fn test_neighborhood_search_spatial_hashing_simple() {
 mod tests_from_files {
     use super::*;
     use splashsurf_lib::io;
-    use splashsurf_lib::AxisAlignedBoundingBox3d;
+    use splashsurf_lib::Aabb3d;
 
     #[test]
     fn test_compare_free_particles_125() {
@@ -134,7 +134,7 @@ mod tests_from_files {
         let file = "../data/free_particles_125_particles.vtk";
         let particles = io::vtk_format::particles_from_vtk::<f32, _>(file).unwrap();
 
-        let mut domain = AxisAlignedBoundingBox3d::par_from_points(particles.as_slice());
+        let mut domain = Aabb3d::par_from_points(particles.as_slice());
         domain.scale_uniformly(1.5);
 
         let mut nl_naive = Vec::new();
@@ -171,7 +171,7 @@ mod tests_from_files {
         let file = "../data/free_particles_1000_particles.vtk";
         let particles = io::vtk_format::particles_from_vtk::<f32, _>(file).unwrap();
 
-        let mut domain = AxisAlignedBoundingBox3d::par_from_points(particles.as_slice());
+        let mut domain = Aabb3d::par_from_points(particles.as_slice());
         domain.scale_uniformly(1.5);
 
         let mut nl_naive = Vec::new();
@@ -208,7 +208,7 @@ mod tests_from_files {
         let file = "../data/cube_2366_particles.vtk";
         let particles = io::vtk_format::particles_from_vtk::<f32, _>(file).unwrap();
 
-        let mut domain = AxisAlignedBoundingBox3d::par_from_points(particles.as_slice());
+        let mut domain = Aabb3d::par_from_points(particles.as_slice());
         domain.scale_uniformly(1.5);
 
         let mut nl_naive = Vec::new();

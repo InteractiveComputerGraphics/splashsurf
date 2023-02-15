@@ -8,7 +8,7 @@ use splashsurf_lib::marching_cubes::marching_cubes_lut::marching_cubes_triangula
 use splashsurf_lib::mesh::TriMesh3d;
 use splashsurf_lib::nalgebra::Vector3;
 use splashsurf_lib::uniform_grid::UniformCartesianCubeGrid3d;
-use splashsurf_lib::AxisAlignedBoundingBox3d;
+use splashsurf_lib::Aabb3d;
 use splashsurf_lib::Real;
 use std::collections::HashMap;
 use ultraviolet::vec::Vec3;
@@ -33,7 +33,7 @@ pub trait MarchingCubesLevelSet<R: Real> {
     ///  - return `true` if it *cannot* be ruled out that the region contains parts of the support of the level set
     ///  - return `false` if it can be guaranteed that level set is not supported at all in the region
     ///
-    fn is_region_supported(&self, aabb: &AxisAlignedBoundingBox3d<R>) -> bool;
+    fn is_region_supported(&self, aabb: &Aabb3d<R>) -> bool;
     /// Returns the sign of the level set function at the given coordinate
     fn evaluate_sign(&self, coordinate: &Vector3<R>) -> LevelSetSign;
     /// Returns the value of the level set function at the given coordinate
@@ -43,7 +43,7 @@ pub trait MarchingCubesLevelSet<R: Real> {
 /// Reconstructs a triangle mesh from a level set function
 pub fn marching_cubes<R: Real, L: MarchingCubesLevelSet<R>>(
     level_set: L,
-    domain: &AxisAlignedBoundingBox3d<R>,
+    domain: &Aabb3d<R>,
     cube_size: R,
 ) -> Result<TriMesh3d<R>, anyhow::Error> {
     let mut mesh = TriMesh3d::default();
@@ -130,7 +130,7 @@ impl<S> MarchingCubesLevelSet<f32> for SdfuLevelSet<S>
 where
     S: sdfu::SDF<f32, Vec3>,
 {
-    fn is_region_supported(&self, aabb: &AxisAlignedBoundingBox3d<f32>) -> bool {
+    fn is_region_supported(&self, aabb: &Aabb3d<f32>) -> bool {
         let min = aabb.min();
         let max = aabb.max();
         let diag = (max - min).norm();
@@ -176,7 +176,7 @@ fn main() -> Result<(), anyhow::Error> {
     let level_set = example_level_set();
 
     let domain =
-        AxisAlignedBoundingBox3d::new(Vector3::new(-1.5, -1.5, -1.5), Vector3::new(1.5, 1.5, 1.5));
+        Aabb3d::new(Vector3::new(-1.5, -1.5, -1.5), Vector3::new(1.5, 1.5, 1.5));
     let cube_size = 0.05;
 
     let mesh = marching_cubes(level_set, &domain, cube_size)?;

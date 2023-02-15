@@ -1,7 +1,7 @@
 use criterion::{criterion_group, Criterion};
 use nalgebra::Vector3;
 use splashsurf_lib::io;
-use splashsurf_lib::{neighborhood_search, AxisAlignedBoundingBox3d};
+use splashsurf_lib::{neighborhood_search, Aabb3d};
 use std::time::Duration;
 
 static PARTICLE_RADIUS: f64 = 0.025;
@@ -50,7 +50,7 @@ pub fn neighborhood_search_spatial_hashing(c: &mut Criterion) {
         &io::vtk_format::particles_from_vtk(PARTICLE_FILE).unwrap();
     let particle_positions = particle_subset(particle_positions.as_slice());
 
-    let mut domain = AxisAlignedBoundingBox3d::from_points(particle_positions);
+    let mut domain = Aabb3d::from_points(particle_positions);
     domain.grow_uniformly(COMPACT_SUPPORT_RADIUS as f32);
 
     let mut group = c.benchmark_group("neighborhood_search");
@@ -79,7 +79,7 @@ pub fn neighborhood_search_spatial_hashing_parallel(c: &mut Criterion) {
         &io::vtk_format::particles_from_vtk(PARTICLE_FILE).unwrap();
     let particle_positions = particle_subset(particle_positions.as_slice());
 
-    let mut domain = AxisAlignedBoundingBox3d::from_points(particle_positions);
+    let mut domain = Aabb3d::from_points(particle_positions);
     domain.grow_uniformly(COMPACT_SUPPORT_RADIUS as f32);
 
     let mut group = c.benchmark_group("neighborhood_search");

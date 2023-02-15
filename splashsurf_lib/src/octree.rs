@@ -7,7 +7,7 @@ use crate::topology::{Axis, Direction};
 use crate::uniform_grid::{PointIndex, UniformGrid};
 use crate::utils::{ChunkSize, ParallelPolicy};
 use crate::{
-    marching_cubes, new_map, profile, AxisAlignedBoundingBox3d, GridConstructionError, Index,
+    marching_cubes, new_map, profile, Aabb3d, GridConstructionError, Index,
     MapType, Real, ReconstructionError,
 };
 use arrayvec::ArrayVec;
@@ -53,7 +53,7 @@ pub struct OctreeNode<I: Index, R: Real> {
     /// Upper corner point of the octree node on the background grid
     max_corner: PointIndex<I>,
     /// AABB of the octree node
-    aabb: AxisAlignedBoundingBox3d<R>,
+    aabb: Aabb3d<R>,
     /// Additional data associated to this octree node
     data: NodeData<I, R>,
 }
@@ -325,7 +325,7 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
         id: usize,
         min_corner: PointIndex<I>,
         max_corner: PointIndex<I>,
-        aabb: AxisAlignedBoundingBox3d<R>,
+        aabb: Aabb3d<R>,
     ) -> Self {
         Self::with_data(id, min_corner, max_corner, aabb, NodeData::None)
     }
@@ -354,7 +354,7 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
         id: usize,
         min_corner: PointIndex<I>,
         max_corner: PointIndex<I>,
-        aabb: AxisAlignedBoundingBox3d<R>,
+        aabb: Aabb3d<R>,
         data: NodeData<I, R>,
     ) -> Self {
         Self {
@@ -393,7 +393,7 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
     }
 
     /// Returns the AABB represented by this octree node
-    pub fn aabb(&self) -> &AxisAlignedBoundingBox3d<R> {
+    pub fn aabb(&self) -> &Aabb3d<R> {
         &self.aabb
     }
 
@@ -485,7 +485,7 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
                     .combine_point_index(grid, &split_point, &self.max_corner)
                     .expect("Failed to get corner point of octree subcell");
 
-                let child_aabb = AxisAlignedBoundingBox3d::new(
+                let child_aabb = Aabb3d::new(
                     grid.point_coordinates(&min_corner),
                     grid.point_coordinates(&max_corner),
                 );
@@ -630,7 +630,7 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
                             .combine_point_index(grid, &split_point, &self.max_corner)
                             .expect("Failed to get corner point of octree subcell");
 
-                        let child_aabb = AxisAlignedBoundingBox3d::new(
+                        let child_aabb = Aabb3d::new(
                             grid.point_coordinates(&min_corner),
                             grid.point_coordinates(&max_corner),
                         );

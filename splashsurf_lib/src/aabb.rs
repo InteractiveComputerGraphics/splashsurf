@@ -16,9 +16,9 @@ pub struct AxisAlignedBoundingBox<R: Real, const D: usize> {
 }
 
 /// Convenience type alias for an AABB in two dimensions
-pub type AxisAlignedBoundingBox2d<R> = AxisAlignedBoundingBox<R, 2>;
+pub type Aabb2d<R> = AxisAlignedBoundingBox<R, 2>;
 /// Convenience type alias for an AABB in three dimensions
-pub type AxisAlignedBoundingBox3d<R> = AxisAlignedBoundingBox<R, 3>;
+pub type Aabb3d<R> = AxisAlignedBoundingBox<R, 3>;
 
 impl<R, const D: usize> AxisAlignedBoundingBox<R, D>
 where
@@ -79,6 +79,27 @@ where
     }
 
     /// Constructs the smallest AABB fitting around all the given points
+    /// ```
+    /// use crate::splashsurf_lib::Aabb3d;
+    /// use nalgebra::Vector3;
+    ///
+    /// assert_eq!(
+    ///     Aabb3d::<f64>::from_points(&[]),
+    ///     Aabb3d::<f64>::zeros()
+    /// );
+    /// assert_eq!(
+    ///     Aabb3d::<f64>::from_points(&[Vector3::new(1.0, 1.0, 1.0)]),
+    ///     Aabb3d::<f64>::from_point(Vector3::new(1.0, 1.0, 1.0))
+    /// );
+    ///
+    /// let aabb = Aabb3d::<f64>::from_points(&[
+    ///     Vector3::new(1.0, 1.0, 1.0),
+    ///     Vector3::new(0.5, 3.0, 5.0),
+    ///     Vector3::new(-1.0, 1.0, 1.0)
+    /// ]);
+    /// assert_eq!(aabb.min(), &Vector3::new(-1.0, 1.0, 1.0));
+    /// assert_eq!(aabb.max(), &Vector3::new(1.0, 3.0, 5.0));
+    /// ```
     pub fn from_points(points: &[SVector<R, D>]) -> Self {
         let mut point_iter = points.iter();
         if let Some(first_point) = point_iter.next().cloned() {
@@ -116,22 +137,53 @@ where
     }
 
     /// Returns whether the AABB is consistent, i.e. `aabb.min()[i] <= aabb.max()[i]` for all `i`
+    /// ```
+    /// use crate::splashsurf_lib::Aabb3d;
+    /// use nalgebra::Vector3;
+    /// assert_eq!(
+    ///     Aabb3d::<f64>::zeros().is_consistent(), true);
+    /// assert_eq!(Aabb3d::new(Vector3::new(-1.0, -1.0, -1.0), Vector3::new(1.0, 1.0, 1.0)).is_consistent(), true);
+    /// assert_eq!(Aabb3d::new(Vector3::new(-1.0, 1.0, -1.0), Vector3::new(1.0, -1.0, 1.0)).is_consistent(), false);
+    /// ```
     pub fn is_consistent(&self) -> bool {
         self.min <= self.max
     }
 
     /// Returns whether the AABB is degenerate in any dimension, i.e. `aabb.min()[i] == aabb.max()[i]` for any `i`
+    /// ```
+    /// use crate::splashsurf_lib::Aabb3d;
+    /// use nalgebra::Vector3;
+    /// assert_eq!(Aabb3d::<f64>::zeros().is_degenerate(), true);
+    /// assert_eq!(Aabb3d::new(Vector3::new(1.0, 1.0, 1.0), Vector3::new(1.0, 1.0, 1.0)).is_degenerate(), true);
+    /// assert_eq!(Aabb3d::new(Vector3::new(-1.0, 0.0, -3.0), Vector3::new(2.0, 2.0, 4.0)).is_degenerate(), false);
+    /// ```
     pub fn is_degenerate(&self) -> bool {
         self.min == self.max
     }
 
     /// Returns the extents of the bounding box (vector connecting min and max point of the box)
+    /// ```
+    /// use crate::splashsurf_lib::Aabb3d;
+    /// use nalgebra::Vector3;
+    /// assert_eq!(Aabb3d::<f64>::zeros().extents(), Vector3::new(0.0, 0.0, 0.0));
+    /// assert_eq!(Aabb3d::new(Vector3::new(-1.0, -1.0, -1.0), Vector3::new(1.0, 1.0, 1.0)).extents(), Vector3::new(2.0, 2.0, 2.0));
+    /// assert_eq!(Aabb3d::new(Vector3::new(-1.0, 0.0, -3.0), Vector3::new(2.0, 2.0, 4.0)).extents(), Vector3::new(3.0, 2.0, 7.0));
+    /// assert_eq!(Aabb3d::new(Vector3::new(-1.0, 5.0, -3.0), Vector3::new(2.0, 15.0, 4.0)).extents(), Vector3::new(3.0, 10.0, 7.0));
+    /// ```
     #[inline(always)]
     pub fn extents(&self) -> SVector<R, D> {
         self.max - self.min
     }
 
     /// Returns the smallest scalar extent of the AABB over all of its dimensions
+    /// ```
+    /// use crate::splashsurf_lib::Aabb3d;
+    /// use nalgebra::Vector3;
+    /// assert_eq!(Aabb3d::<f64>::zeros().min_extent(), 0.0);
+    /// assert_eq!(Aabb3d::new(Vector3::new(-1.0, -2.0, -3.0), Vector3::new(2.0, 3.0, 4.0)).min_extent(), 3.0);
+    /// assert_eq!(Aabb3d::new(Vector3::new(-1.0, 0.0, -3.0), Vector3::new(2.0, 2.0, 4.0)).min_extent(), 2.0);
+    /// assert_eq!(Aabb3d::new(Vector3::new(-1.0, 0.0, 1.0), Vector3::new(2.0, 1.0, 1.0)).min_extent(), 0.0);
+    /// ```
     #[inline(always)]
     pub fn min_extent(&self) -> R {
         let extents = self.extents();
@@ -140,6 +192,14 @@ where
     }
 
     /// Returns the largest scalar extent of the AABB over all of its dimensions
+    /// ```
+    /// use crate::splashsurf_lib::Aabb3d;
+    /// use nalgebra::Vector3;
+    /// assert_eq!(Aabb3d::<f64>::zeros().max_extent(), 0.0);
+    /// assert_eq!(Aabb3d::new(Vector3::new(-10.0, 0.0, -3.0), Vector3::new(2.0, 2.0, 4.0)).max_extent(), 12.0);
+    /// assert_eq!(Aabb3d::new(Vector3::new(-1.0, -2.0, -3.0), Vector3::new(2.0, 3.0, 4.0)).max_extent(), 7.0);
+    /// assert_eq!(Aabb3d::new(Vector3::new(-1.0, 5.0, -3.0), Vector3::new(2.0, 15.0, 4.0)).max_extent(), 10.0);
+    /// ```
     #[inline(always)]
     pub fn max_extent(&self) -> R {
         let extents = self.extents();
@@ -230,7 +290,7 @@ where
 #[test]
 fn test_aabb_contains_point() {
     use crate::nalgebra::Vector3;
-    let aabb = AxisAlignedBoundingBox3d::<f64>::new(
+    let aabb = Aabb3d::<f64>::new(
         Vector3::new(0.0, 0.0, 0.0),
         Vector3::new(1.0, 1.0, 1.0),
     );

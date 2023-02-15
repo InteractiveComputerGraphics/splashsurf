@@ -2,7 +2,7 @@ use nalgebra::Vector3;
 use splashsurf_lib::io::vtk_format::{particles_from_vtk, write_vtk};
 use splashsurf_lib::marching_cubes::check_mesh_consistency;
 use splashsurf_lib::{
-    reconstruct_surface, AxisAlignedBoundingBox3d, Parameters, ParticleDensityComputationStrategy,
+    reconstruct_surface, Aabb3d, Parameters, ParticleDensityComputationStrategy,
     Real, SpatialDecompositionParameters, SubdivisionCriterion,
 };
 use std::path::Path;
@@ -21,7 +21,7 @@ fn params_with_aabb<R: Real>(
     compact_support_radius: R,
     cube_size: R,
     iso_surface_threshold: R,
-    domain_aabb: Option<AxisAlignedBoundingBox3d<R>>,
+    domain_aabb: Option<Aabb3d<R>>,
     strategy: Strategy,
 ) -> Parameters<R> {
     let compact_support_radius = particle_radius * compact_support_radius;
@@ -167,4 +167,4 @@ generate_test!(f32, surface_reconstruction_knot_global, "sailors_knot_19539_part
 generate_test!(f32, surface_reconstruction_knot_stitching, "sailors_knot_19539_particles.vtk" => "reconstruct_surface_knot_par_stitching.vtk", params(0.025, 4.0, 1.1, 0.6, Strategy::OctreeStitching), 40000, 70000);
 
 generate_test!(f32, surface_reconstruction_free_particles_01, "free_particles_1000_particles.vtk" => "reconstruct_surface_free_particles_01_global.vtk", params(0.5, 4.0, 1.5, 0.45, Strategy::Global), 21000, 25000);
-generate_test!(f32, surface_reconstruction_free_particles_02, "free_particles_125_particles.vtk" => "reconstruct_surface_free_particles_02_global.vtk", params_with_aabb(0.5, 4.0, 1.5, 0.45, Some(AxisAlignedBoundingBox3d::new(Vector3::new(-10.0, -10.0, -10.0), Vector3::new(210.0, 210.0, 210.0))), Strategy::Global), 1450, 1550);
+generate_test!(f32, surface_reconstruction_free_particles_02, "free_particles_125_particles.vtk" => "reconstruct_surface_free_particles_02_global.vtk", params_with_aabb(0.5, 4.0, 1.5, 0.45, Some(Aabb3d::new(Vector3::new(-10.0, -10.0, -10.0), Vector3::new(210.0, 210.0, 210.0))), Strategy::Global), 1450, 1550);

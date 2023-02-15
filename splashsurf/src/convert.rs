@@ -4,7 +4,7 @@ use anyhow::Context;
 use log::info;
 use splashsurf_lib::mesh::MeshWithData;
 use splashsurf_lib::nalgebra::Vector3;
-use splashsurf_lib::{nalgebra, profile, AxisAlignedBoundingBox3d};
+use splashsurf_lib::{nalgebra, profile, Aabb3d};
 use std::path::PathBuf;
 use structopt::StructOpt;
 
@@ -88,7 +88,7 @@ fn convert_particles(cmd_args: &ConvertSubcommandArgs) -> Result<(), anyhow::Err
     {
         let min = nalgebra::convert(Vector3::from_iterator(min));
         let max = nalgebra::convert(Vector3::from_iterator(max));
-        let aabb = AxisAlignedBoundingBox3d::new(min, max);
+        let aabb = Aabb3d::new(min, max);
         info!("Filtering out particles outside of {:?}", aabb);
 
         particle_positions

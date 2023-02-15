@@ -32,7 +32,7 @@ use thiserror::Error as ThisError;
 #[cfg(feature = "vtk_extras")]
 pub use vtkio;
 
-pub use crate::aabb::{AxisAlignedBoundingBox, AxisAlignedBoundingBox2d, AxisAlignedBoundingBox3d};
+pub use crate::aabb::{AxisAlignedBoundingBox, Aabb2d, Aabb3d};
 pub use crate::density_map::DensityMap;
 pub use crate::octree::SubdivisionCriterion;
 pub use crate::traits::{Index, Real, ThreadSafe};
@@ -193,7 +193,7 @@ pub struct Parameters<R: Real> {
     pub iso_surface_threshold: R,
     /// Manually restrict the domain to the surface reconstruction.
     /// If not provided, the smallest AABB enclosing all particles is computed instead.
-    pub domain_aabb: Option<AxisAlignedBoundingBox3d<R>>,
+    pub domain_aabb: Option<Aabb3d<R>>,
     /// Whether to allow multi threading within the surface reconstruction procedure
     pub enable_multi_threading: bool,
     /// Parameters for the spatial decomposition (octree subdivision) of the particles.
@@ -375,7 +375,7 @@ pub fn grid_for_reconstruction<I: Index, R: Real>(
     particle_radius: R,
     compact_support_radius: R,
     cube_size: R,
-    domain_aabb: Option<&AxisAlignedBoundingBox3d<R>>,
+    domain_aabb: Option<&Aabb3d<R>>,
     enable_multi_threading: bool,
 ) -> Result<UniformGrid<I, R>, ReconstructionError<I, R>> {
     let domain_aabb = if let Some(domain_aabb) = domain_aabb {
@@ -385,9 +385,9 @@ pub fn grid_for_reconstruction<I: Index, R: Real>(
 
         let mut domain_aabb = {
             let mut aabb = if enable_multi_threading {
-                AxisAlignedBoundingBox3d::par_from_points(particle_positions)
+                Aabb3d::par_from_points(particle_positions)
             } else {
-                AxisAlignedBoundingBox3d::from_points(particle_positions)
+                Aabb3d::from_points(particle_positions)
             };
             aabb.grow_uniformly(particle_radius);
             aabb

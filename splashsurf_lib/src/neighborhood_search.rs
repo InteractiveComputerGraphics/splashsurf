@@ -7,7 +7,7 @@
 use crate::uniform_grid::UniformGrid;
 use crate::utils::UnsafeSlice;
 use crate::{
-    new_map, profile, AxisAlignedBoundingBox3d, HashState, Index, MapType, ParallelMapType, Real,
+    new_map, profile, Aabb3d, HashState, Index, MapType, ParallelMapType, Real,
 };
 use nalgebra::Vector3;
 use rayon::prelude::*;
@@ -19,7 +19,7 @@ use rayon::prelude::*;
 /// Performs a neighborhood search, returning the indices of all neighboring particles in the given search radius per particle
 #[inline(never)]
 pub fn search<I: Index, R: Real>(
-    domain: &AxisAlignedBoundingBox3d<R>,
+    domain: &Aabb3d<R>,
     particle_positions: &[Vector3<R>],
     search_radius: R,
     enable_multi_threading: bool,
@@ -46,7 +46,7 @@ pub fn search<I: Index, R: Real>(
 /// Performs a neighborhood search inplace, stores the indices of all neighboring particles in the given search radius per particle in the given vector
 #[inline(never)]
 pub fn search_inplace<I: Index, R: Real>(
-    domain: &AxisAlignedBoundingBox3d<R>,
+    domain: &Aabb3d<R>,
     particle_positions: &[Vector3<R>],
     search_radius: R,
     enable_multi_threading: bool,
@@ -123,7 +123,7 @@ fn par_init_neighborhood_list(neighborhood_list: &mut Vec<Vec<usize>>, new_len: 
 /// Performs a neighborhood search, returning the indices of all neighboring particles in the given search radius per particle, sequential implementation
 #[inline(never)]
 pub fn neighborhood_search_spatial_hashing<I: Index, R: Real>(
-    domain: &AxisAlignedBoundingBox3d<R>,
+    domain: &Aabb3d<R>,
     particle_positions: &[Vector3<R>],
     search_radius: R,
     neighborhood_list: &mut Vec<Vec<usize>>,
@@ -205,7 +205,7 @@ pub fn neighborhood_search_spatial_hashing<I: Index, R: Real>(
 /// Performs a neighborhood search, returning the indices of all neighboring particles in the given search radius per particle, multi-threaded implementation
 #[inline(never)]
 pub fn neighborhood_search_spatial_hashing_parallel<I: Index, R: Real>(
-    domain: &AxisAlignedBoundingBox3d<R>,
+    domain: &Aabb3d<R>,
     particle_positions: &[Vector3<R>],
     search_radius: R,
     neighborhood_list: &mut Vec<Vec<usize>>,

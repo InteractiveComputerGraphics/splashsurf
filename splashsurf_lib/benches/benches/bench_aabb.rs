@@ -1,7 +1,7 @@
 use criterion::{criterion_group, Criterion};
 use nalgebra::Vector3;
 use splashsurf_lib::io::vtk_format::particles_from_vtk;
-use splashsurf_lib::AxisAlignedBoundingBox3d;
+use splashsurf_lib::Aabb3d;
 use std::time::Duration;
 
 pub fn aabb_from_points(c: &mut Criterion) {
@@ -14,7 +14,7 @@ pub fn aabb_from_points(c: &mut Criterion) {
     group.measurement_time(Duration::from_secs(5));
 
     group.bench_function("aabb_from_points", move |b| {
-        b.iter(|| AxisAlignedBoundingBox3d::from_points(particle_positions))
+        b.iter(|| Aabb3d::from_points(particle_positions))
     });
 
     group.finish();
@@ -30,7 +30,7 @@ pub fn aabb_from_points_par(c: &mut Criterion) {
     group.measurement_time(Duration::from_secs(5));
 
     group.bench_function("aabb_from_points_par", move |b| {
-        b.iter(|| AxisAlignedBoundingBox3d::par_from_points(particle_positions))
+        b.iter(|| Aabb3d::par_from_points(particle_positions))
     });
 
     group.finish();
