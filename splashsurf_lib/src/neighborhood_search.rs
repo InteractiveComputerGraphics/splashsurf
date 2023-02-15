@@ -6,9 +6,7 @@
 
 use crate::uniform_grid::UniformGrid;
 use crate::utils::UnsafeSlice;
-use crate::{
-    new_map, profile, Aabb3d, HashState, Index, MapType, ParallelMapType, Real,
-};
+use crate::{new_map, profile, Aabb3d, HashState, Index, MapType, ParallelMapType, Real};
 use nalgebra::Vector3;
 use rayon::prelude::*;
 

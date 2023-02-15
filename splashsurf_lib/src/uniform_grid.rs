@@ -268,10 +268,7 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
     /// Construct a new grid enclosing the given AABB
     ///
     /// The grid will at least contain the AABB but may be larger depending on the cell size.
-    pub fn from_aabb(
-        aabb: &Aabb3d<R>,
-        cell_size: R,
-    ) -> Result<Self, GridConstructionError<I, R>> {
+    pub fn from_aabb(aabb: &Aabb3d<R>, cell_size: R) -> Result<Self, GridConstructionError<I, R>> {
         if !(cell_size > R::zero()) {
             return Err(GridConstructionError::InvalidCellSize(cell_size));
         }
@@ -728,11 +725,7 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
         ])
     }
 
-    fn checked_aabb(
-        min: &Vector3<R>,
-        n_cells_per_dim: &[I; 3],
-        cell_size: R,
-    ) -> Option<Aabb3d<R>> {
+    fn checked_aabb(min: &Vector3<R>, n_cells_per_dim: &[I; 3], cell_size: R) -> Option<Aabb3d<R>> {
         let max = min
             + Vector3::new(
                 cell_size * n_cells_per_dim[0].to_real()?,

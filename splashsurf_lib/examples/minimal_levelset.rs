@@ -175,8 +175,7 @@ fn example_level_set() -> SdfuLevelSet<impl sdfu::SDF<f32, Vec3>> {
 fn main() -> Result<(), anyhow::Error> {
     let level_set = example_level_set();
 
-    let domain =
-        Aabb3d::new(Vector3::new(-1.5, -1.5, -1.5), Vector3::new(1.5, 1.5, 1.5));
+    let domain = Aabb3d::new(Vector3::new(-1.5, -1.5, -1.5), Vector3::new(1.5, 1.5, 1.5));
     let cube_size = 0.05;
 
     let mesh = marching_cubes(level_set, &domain, cube_size)?;

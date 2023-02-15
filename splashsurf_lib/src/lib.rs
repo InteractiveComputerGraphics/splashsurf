@@ -32,7 +32,7 @@ use thiserror::Error as ThisError;
 #[cfg(feature = "vtk_extras")]
 pub use vtkio;
 
-pub use crate::aabb::{AxisAlignedBoundingBox, Aabb2d, Aabb3d};
+pub use crate::aabb::{Aabb2d, Aabb3d, AxisAlignedBoundingBox};
 pub use crate::density_map::DensityMap;
 pub use crate::octree::SubdivisionCriterion;
 pub use crate::traits::{Index, Real, ThreadSafe};

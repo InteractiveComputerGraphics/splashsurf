@@ -7,8 +7,8 @@ use crate::topology::{Axis, Direction};
 use crate::uniform_grid::{PointIndex, UniformGrid};
 use crate::utils::{ChunkSize, ParallelPolicy};
 use crate::{
-    marching_cubes, new_map, profile, Aabb3d, GridConstructionError, Index,
-    MapType, Real, ReconstructionError,
+    marching_cubes, new_map, profile, Aabb3d, GridConstructionError, Index, MapType, Real,
+    ReconstructionError,
 };
 use arrayvec::ArrayVec;
 use log::info;

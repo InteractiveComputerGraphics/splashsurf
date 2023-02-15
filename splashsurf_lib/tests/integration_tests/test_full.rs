@@ -2,8 +2,8 @@ use nalgebra::Vector3;
 use splashsurf_lib::io::vtk_format::{particles_from_vtk, write_vtk};
 use splashsurf_lib::marching_cubes::check_mesh_consistency;
 use splashsurf_lib::{
-    reconstruct_surface, Aabb3d, Parameters, ParticleDensityComputationStrategy,
-    Real, SpatialDecompositionParameters, SubdivisionCriterion,
+    reconstruct_surface, Aabb3d, Parameters, ParticleDensityComputationStrategy, Real,
+    SpatialDecompositionParameters, SubdivisionCriterion,
 };
 use std::path::Path;
 
