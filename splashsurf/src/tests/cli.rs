@@ -196,8 +196,8 @@ fn test_main_cli() {
             "2.0",
             "-2.0",
         ])
-            .expect_err("this command is supposed to fail")
-            .kind(),
+        .expect_err("this command is supposed to fail")
+        .kind(),
         clap::error::ErrorKind::UnknownArgument
     );
 }

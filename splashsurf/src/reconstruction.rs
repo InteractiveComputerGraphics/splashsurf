@@ -66,9 +66,7 @@ pub struct ReconstructSubcommandArgs {
         default_value = "off",
         value_name = "off|on",
         ignore_case = true,
-    )]
-    #[arg(
-    require_equals = true
+        require_equals = true
     )]
     pub double_precision: Switch,
     /// Lower corner of the domain where surface reconstruction should be performed (requires domain-max to be specified)
