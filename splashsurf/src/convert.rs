@@ -33,23 +33,22 @@ pub struct ConvertSubcommandArgs {
     /// Whether to overwrite existing files without asking
     #[arg(long)]
     overwrite: bool,
-    /// Lower corner of the domain of particles to keep, format: --domain-min=x_min;y_min;z_min (requires domain-max to be specified)
+    /// Lower corner of the domain of particles to keep (requires domain-max to be specified)
     #[arg(
         long,
         number_of_values = 1,
-        value_delimiter = ';',
-        value_name = "X_MIN;Y_MIN;Z_MIN",
-        require_equals = true,
+        number_of_values = 3,
+        value_names = ["X_MIN", "Y_MIN", "Z_MIN"],
+        allow_negative_numbers = true,
         requires = "domain_max"
     )]
     domain_min: Option<Vec<f64>>,
-    /// Lower corner of the domain of particles to keep, format: --domain-max=x_max;y_max;z_max (requires domain-min to be specified)
+    /// Lower corner of the domain of particles to keep (requires domain-min to be specified)
     #[arg(
         long,
-        number_of_values = 1,
-        value_delimiter = ';',
-        value_name = "X_MAX;Y_MAX;Z_MAX",
-        require_equals = true,
+        number_of_values = 3,
+        value_names = ["X_MIN", "Y_MIN", "Z_MIN"],
+        allow_negative_numbers = true,
         requires = "domain_min"
     )]
     domain_max: Option<Vec<f64>>,

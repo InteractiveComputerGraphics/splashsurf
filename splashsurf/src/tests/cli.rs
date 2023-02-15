@@ -22,7 +22,6 @@ fn verify_convert_cli() {
 
 #[test]
 fn test_main_cli() {
-    use crate::reconstruction::ReconstructSubcommandArgs;
     use clap::Parser;
 
     // Display help
@@ -150,7 +149,7 @@ fn test_main_cli() {
         clap::error::ErrorKind::NoEquals
     );
 
-    // Test domain min/max
+    // Test domain min/max: correct values
     if let Subcommand::Reconstruct(rec_args) = crate::CommandlineArgs::try_parse_from([
         "splashsurf",
         "reconstruct",
@@ -159,8 +158,14 @@ fn test_main_cli() {
         "--particle-radius=0.05",
         "--smoothing-length=3.0",
         "--cube-size=0.75",
-        "--domain-min=-1.0;1.0;-1.0",
-        "--domain-max=-2.0;2.0;-2.0",
+        "--domain-min",
+        "-1.0",
+        "1.0",
+        "-1.0",
+        "--domain-max",
+        "-2.0",
+        "2.0",
+        "-2.0",
     ])
     .expect("this command is supposed to work")
     .subcommand
@@ -168,4 +173,31 @@ fn test_main_cli() {
         assert_eq!(rec_args.domain_min, Some(vec![-1.0, 1.0, -1.0]));
         assert_eq!(rec_args.domain_max, Some(vec![-2.0, 2.0, -2.0]));
     };
+
+    // Test domain min/max: too many values
+    assert_eq!(
+        crate::CommandlineArgs::try_parse_from([
+            "splashsurf",
+            "reconstruct",
+            "--input-file",
+            "test.vtk",
+            "--input-sequence",
+            "test.vtk",
+            "--particle-radius=0.05",
+            "--smoothing-length=3.0",
+            "--cube-size=0.75",
+            "--domain-min",
+            "-1.0",
+            "1.0",
+            "-1.0",
+            "2.0",
+            "--domain-max",
+            "-2.0",
+            "2.0",
+            "-2.0",
+        ])
+            .expect_err("this command is supposed to fail")
+            .kind(),
+        clap::error::ErrorKind::UnknownArgument
+    );
 }

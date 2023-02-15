@@ -71,26 +71,24 @@ pub struct ReconstructSubcommandArgs {
     require_equals = true
     )]
     pub double_precision: Switch,
-    /// Lower corner of the domain where surface reconstruction should be performed, format: --domain-min=x_min;y_min;z_min (requires domain-max to be specified)
+    /// Lower corner of the domain where surface reconstruction should be performed (requires domain-max to be specified)
     #[arg(
         help_heading = ARGS_BASIC,
         long,
-        number_of_values = 1,
-        value_delimiter = ';',
-        value_name = "X_MIN;Y_MIN;Z_MIN",
-        require_equals = true,
-        requires = "domain_max"
+        number_of_values = 3,
+        value_names = ["X_MIN", "Y_MIN", "Z_MIN"],
+        allow_negative_numbers = true,
+        requires = "domain_max",
     )]
     pub domain_min: Option<Vec<f64>>,
-    /// Upper corner of the domain where surface reconstruction should be performed, format: --domain-max=x_max;y_max;z_max (requires domain-min to be specified)
+    /// Upper corner of the domain where surface reconstruction should be performed (requires domain-min to be specified)
     #[arg(
         help_heading = ARGS_BASIC,
         long,
-        number_of_values = 1,
-        value_delimiter = ';',
-        value_name = "X_MAX;Y_MAX;Z_MAX",
-        require_equals = true,
-        requires = "domain_min"
+        number_of_values = 3,
+        value_names = ["X_MIN", "Y_MIN", "Z_MIN"],
+        allow_negative_numbers = true,
+        requires = "domain_min",
     )]
     pub domain_max: Option<Vec<f64>>,
 
