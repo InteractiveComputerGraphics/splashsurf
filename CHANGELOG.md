@@ -3,9 +3,11 @@
 The following changes are present in the `main` branch of the repository and are not yet part of a release:
 
  - Upgrade to Rust edition 2021
- - Lib: Update to `nalgebra` 0.31
+ - Lib: Update to `nalgebra` 0.32.1
  - Lib: Support for writing particles as JSON
+ - Lib: Support for writing particles as BGEO
  - CLI: Support for new writers in `convert` subcommand
+ - Lib: Rename `AxisAlignedBoundingBox*d` typedefs to `Aabb3d` and `Aabb2d` 
 
 ## Version 0.8.0
 
