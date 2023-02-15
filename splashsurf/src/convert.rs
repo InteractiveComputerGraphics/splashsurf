@@ -1,52 +1,56 @@
 use crate::io;
 use anyhow::anyhow;
 use anyhow::Context;
+use clap::value_parser;
 use log::info;
 use splashsurf_lib::mesh::MeshWithData;
 use splashsurf_lib::nalgebra::Vector3;
 use splashsurf_lib::{nalgebra, profile, Aabb3d};
 use std::path::PathBuf;
-use structopt::StructOpt;
 
 // TODO: Support double input/output
 
 /// Command line arguments for the `convert` subcommand
-#[derive(Clone, Debug, StructOpt)]
+#[derive(Clone, Debug, clap::Parser)]
 pub struct ConvertSubcommandArgs {
     /// Path to the input file with particles to read (supported formats: .vtk, .bgeo, .ply, .xyz, .json)
-    #[structopt(
-        long = "--particles",
-        parse(from_os_str),
+    #[arg(
+        long = "particles",
+        value_parser = value_parser!(PathBuf),
         conflicts_with = "input_mesh"
     )]
     input_particles: Option<PathBuf>,
     /// Path to the input file with a surface to read (supported formats: .vtk, .ply)
-    #[structopt(
-        long = "--mesh",
-        parse(from_os_str),
+    #[arg(
+        long = "mesh",
+        value_parser = value_parser!(PathBuf),
         conflicts_with = "input_particles"
     )]
     input_mesh: Option<PathBuf>,
     /// Path to the output file (supported formats for particles: .vtk, .bgeo, .json, for meshes: .obj, .vtk)
-    #[structopt(short = "-o", parse(from_os_str))]
+    #[arg(short = 'o', value_parser = value_parser!(PathBuf))]
     output_file: PathBuf,
     /// Whether to overwrite existing files without asking
-    #[structopt(long)]
+    #[arg(long)]
     overwrite: bool,
-    /// Lower corner of the domain of particles to keep, format: domain-min="x_min;y_min;z_min" (requires domain-max to be specified)
-    #[structopt(
+    /// Lower corner of the domain of particles to keep, format: --domain-min=x_min;y_min;z_min (requires domain-max to be specified)
+    #[arg(
         long,
-        number_of_values = 3,
-        value_delimiter = ";",
-        requires = "domain-max"
+        number_of_values = 1,
+        value_delimiter = ';',
+        value_name = "X_MIN;Y_MIN;Z_MIN",
+        require_equals = true,
+        requires = "domain_max"
     )]
     domain_min: Option<Vec<f64>>,
-    /// Lower corner of the domain of particles to keep, format:domain-max="x_max;y_max;z_max" (requires domain-min to be specified)
-    #[structopt(
+    /// Lower corner of the domain of particles to keep, format: --domain-max=x_max;y_max;z_max (requires domain-min to be specified)
+    #[arg(
         long,
-        number_of_values = 3,
-        value_delimiter = ";",
-        requires = "domain-min"
+        number_of_values = 1,
+        value_delimiter = ';',
+        value_name = "X_MAX;Y_MAX;Z_MAX",
+        require_equals = true,
+        requires = "domain_min"
     )]
     domain_max: Option<Vec<f64>>,
 }

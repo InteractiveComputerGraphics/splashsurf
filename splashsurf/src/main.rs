@@ -3,12 +3,14 @@ mod io;
 mod reconstruction;
 #[macro_use]
 mod allocator;
+#[cfg(test)]
+mod tests;
 
 use crate::allocator::GetPeakAllocatedMemory;
 use anyhow::{anyhow, Context};
+use clap::Parser;
 use log::{error, info};
 use std::env;
-use structopt::StructOpt;
 
 // Register allocator to track memory usage, might decrease performance if enabled
 register_counting_allocator!(GLOBAL_ALLOCATOR, enable = false);
@@ -19,25 +21,25 @@ register_counting_allocator!(GLOBAL_ALLOCATOR, enable = false);
 // TODO: Check if all paths supplied using the cmd args are valid
 // TODO: Clean up the parameter structs and conversions
 
-#[derive(Clone, Debug, StructOpt)]
-#[structopt(
+#[derive(Clone, Debug, clap::Parser)]
+#[command(
     name = "splashsurf",
     author = "Fabian Löschner <loeschner@cs.rwth-aachen.de>",
     about = "Surface reconstruction for particle data from SPH simulations (https://github.com/w1th0utnam3/splashsurf)"
 )]
 struct CommandlineArgs {
     /// Enable quiet mode (no output except for severe panic messages), overrides verbosity level
-    #[structopt(long, short = "-q")]
+    #[arg(long, short = 'q')]
     quiet: bool,
     /// Print more verbose output, use multiple "v"s for even more verbose output (-v, -vv)
-    #[structopt(short, parse(from_occurrences))]
-    verbosity: u64,
+    #[arg(short, action = clap::ArgAction::Count)]
+    verbosity: u8,
     /// Subcommands
-    #[structopt(subcommand)]
+    #[command(subcommand)]
     subcommand: Subcommand,
 }
 
-#[derive(Clone, Debug, StructOpt)]
+#[derive(Clone, Debug, clap::Parser)]
 enum Subcommand {
     /// Reconstruct a surface from particle data
     Reconstruct(reconstruction::ReconstructSubcommandArgs),
@@ -64,7 +66,7 @@ fn main() -> Result<(), anyhow::Error> {
 }
 
 fn run_splashsurf() -> Result<(), anyhow::Error> {
-    let cmd_args = CommandlineArgs::from_args();
+    let cmd_args = CommandlineArgs::parse();
 
     let verbosity = VerbosityLevel::from(cmd_args.verbosity);
     let is_quiet = cmd_args.quiet;
@@ -193,8 +195,8 @@ enum VerbosityLevel {
     VeryVerbose,
 }
 
-impl From<u64> for VerbosityLevel {
-    fn from(value: u64) -> Self {
+impl From<u8> for VerbosityLevel {
+    fn from(value: u8) -> Self {
         match value {
             0 => VerbosityLevel::None,
             1 => VerbosityLevel::Verbose,

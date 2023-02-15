@@ -3,6 +3,7 @@ use anyhow::{anyhow, Context};
 use arguments::{
     ReconstructionRunnerArgs, ReconstructionRunnerPathCollection, ReconstructionRunnerPaths,
 };
+use clap::value_parser;
 use log::info;
 use rayon::prelude::*;
 use splashsurf_lib::mesh::{AttributeData, Mesh3d, MeshAttribute, MeshWithData, PointCloud3d};
@@ -12,127 +13,199 @@ use splashsurf_lib::sph_interpolation::SphInterpolator;
 use splashsurf_lib::{density_map, Index, Real};
 use std::convert::TryFrom;
 use std::path::PathBuf;
-use structopt::clap::arg_enum;
-use structopt::StructOpt;
 
 // TODO: Detect smallest index type (i.e. check if ok to use i32 as index)
 
 /// Command line arguments for the `reconstruct` subcommand
-#[derive(Clone, Debug, StructOpt)]
+#[derive(Clone, Debug, clap::Parser)]
+#[clap(group = clap::ArgGroup::new("input").required(true))]
 pub struct ReconstructSubcommandArgs {
     /// Path to the input file where the particle positions are stored (supported formats: VTK, binary f32 XYZ, PLY, BGEO)
-    #[structopt(display_order = 1, short = "-i", long, parse(from_os_str))]
-    input_file: Option<PathBuf>,
+    #[arg(display_order = 1, short = 'i', long, group = "input", value_parser = value_parser!(PathBuf))]
+    pub input_file: Option<PathBuf>,
     /// Path to a sequence of particle files that should be processed, use `{}` in the filename to indicate a placeholder
-    #[structopt(display_order = 1, short = "-s", long, parse(from_os_str))]
-    input_sequence: Option<PathBuf>,
+    #[arg(display_order = 1, short = 's', long, group = "input", value_parser = value_parser!(PathBuf))]
+    pub input_sequence: Option<PathBuf>,
     /// Filename for writing the reconstructed surface to disk (default: "{original_filename}_surface.vtk")
-    #[structopt(display_order = 1, short = "-o", long, parse(from_os_str))]
-    output_file: Option<PathBuf>,
+    #[arg(display_order = 1, short = 'o', long, value_parser = value_parser!(PathBuf))]
+    pub output_file: Option<PathBuf>,
     /// Optional base directory for all output files (default: current working directory)
-    #[structopt(display_order = 1, long, parse(from_os_str))]
-    output_dir: Option<PathBuf>,
+    #[arg(display_order = 1, long, value_parser = value_parser!(PathBuf))]
+    pub output_dir: Option<PathBuf>,
 
     /// The particle radius of the input data
-    #[structopt(display_order = 2, long)]
-    particle_radius: f64,
+    #[arg(display_order = 2, long)]
+    pub particle_radius: f64,
     /// The rest density of the fluid
-    #[structopt(display_order = 2, long, default_value = "1000.0")]
-    rest_density: f64,
+    #[arg(display_order = 2, long, default_value = "1000.0")]
+    pub rest_density: f64,
     /// The smoothing length radius used for the SPH kernel, the kernel compact support radius will be twice the smoothing length (in multiplies of the particle radius)
-    #[structopt(display_order = 2, long)]
-    smoothing_length: f64,
+    #[arg(display_order = 2, long)]
+    pub smoothing_length: f64,
     /// The cube edge length used for marching cubes in multiplies of the particle radius, corresponds to the cell size of the implicit background grid
-    #[structopt(display_order = 2, long)]
-    cube_size: f64,
+    #[arg(display_order = 2, long)]
+    pub cube_size: f64,
     /// The iso-surface threshold for the density, i.e. the normalized value of the reconstructed density level that indicates the fluid surface (in multiplies of the rest density)
-    #[structopt(display_order = 2, long, default_value = "0.6")]
-    surface_threshold: f64,
+    #[arg(display_order = 2, long, default_value = "0.6")]
+    pub surface_threshold: f64,
 
     /// Whether to enable the use of double precision for all computations
-    #[structopt(display_order = 3, short = "-d", long, default_value = "off", possible_values = &["on", "off"], case_insensitive = true, require_equals = true)]
-    double_precision: Switch,
-    /// Lower corner of the domain where surface reconstruction should be performed, format: domain-min=x_min;y_min;z_min (requires domain-max to be specified)
-    #[structopt(
+    #[arg(
+        display_order = 3,
+        short = 'd',
+        long,
+        default_value = "off",
+        value_name = "off|on",
+        ignore_case = true,
+        require_equals = true
+    )]
+    pub double_precision: Switch,
+    /// Lower corner of the domain where surface reconstruction should be performed, format: --domain-min=x_min;y_min;z_min (requires domain-max to be specified)
+    #[arg(
         display_order = 3,
         long,
-        number_of_values = 3,
-        value_delimiter = ";",
-        requires = "domain-max"
+        number_of_values = 1,
+        value_delimiter = ';',
+        value_name = "X_MIN;Y_MIN;Z_MIN",
+        require_equals = true,
+        requires = "domain_max"
     )]
-    domain_min: Option<Vec<f64>>,
-    /// Upper corner of the domain where surface reconstruction should be performed, format:domain-max=x_max;y_max;z_max (requires domain-min to be specified)
-    #[structopt(
+    pub domain_min: Option<Vec<f64>>,
+    /// Upper corner of the domain where surface reconstruction should be performed, format: --domain-max=x_max;y_max;z_max (requires domain-min to be specified)
+    #[arg(
         display_order = 3,
         long,
-        number_of_values = 3,
-        value_delimiter = ";",
-        requires = "domain-min"
+        number_of_values = 1,
+        value_delimiter = ';',
+        value_name = "X_MAX;Y_MAX;Z_MAX",
+        require_equals = true,
+        requires = "domain_min"
     )]
-    domain_max: Option<Vec<f64>>,
+    pub domain_max: Option<Vec<f64>>,
 
     /// Flag to enable multi-threading to process multiple input files in parallel
-    #[structopt(display_order = 4, long = "mt-files", default_value = "off", possible_values = &["on", "off"], case_insensitive = true, require_equals = true)]
-    parallelize_over_files: Switch,
+    #[arg(
+        display_order = 4,
+        long = "mt-files",
+        default_value = "off",
+        value_name = "off|on",
+        ignore_case = true,
+        require_equals = true
+    )]
+    pub parallelize_over_files: Switch,
     /// Flag to enable multi-threading for a single input file by processing chunks of particles in parallel
-    #[structopt(display_order = 4, long = "mt-particles", default_value = "on", possible_values = &["on", "off"], case_insensitive = true, require_equals = true)]
-    parallelize_over_particles: Switch,
+    #[arg(
+        display_order = 4,
+        long = "mt-particles",
+        default_value = "on",
+        value_name = "off|on",
+        ignore_case = true,
+        require_equals = true
+    )]
+    pub parallelize_over_particles: Switch,
     /// Set the number of threads for the worker thread pool
-    #[structopt(display_order = 4, long, short = "-n")]
-    num_threads: Option<usize>,
+    #[arg(display_order = 4, long, short = 'n')]
+    pub num_threads: Option<usize>,
 
     /// Whether to enable spatial decomposition using an octree (faster) instead of a global approach
-    #[structopt(display_order = 5, long, default_value = "on", possible_values = &["on", "off"], case_insensitive = true, require_equals = true)]
-    octree_decomposition: Switch,
+    #[arg(
+        display_order = 5,
+        long,
+        default_value = "on",
+        value_name = "off|on",
+        ignore_case = true,
+        require_equals = true
+    )]
+    pub octree_decomposition: Switch,
     /// Whether to enable stitching of the disconnected local meshes resulting from the reconstruction when spatial decomposition is enabled (slower, but without stitching meshes will not be closed)
-    #[structopt(display_order = 5, long, default_value = "on", possible_values = &["on", "off"], case_insensitive = true, require_equals = true)]
-    octree_stitch_subdomains: Switch,
+    #[arg(
+        display_order = 5,
+        long,
+        default_value = "on",
+        value_name = "off|on",
+        ignore_case = true,
+        require_equals = true
+    )]
+    pub octree_stitch_subdomains: Switch,
     /// The maximum number of particles for leaf nodes of the octree, default is to compute it based on the number of threads and particles
-    #[structopt(display_order = 5, long)]
-    octree_max_particles: Option<usize>,
+    #[arg(display_order = 5, long)]
+    pub octree_max_particles: Option<usize>,
     /// Safety factor applied to the kernel compact support radius when it's used as a margin to collect ghost particles in the leaf nodes when performing the spatial decomposition
-    #[structopt(display_order = 5, long)]
-    octree_ghost_margin_factor: Option<f64>,
+    #[arg(display_order = 5, long)]
+    pub octree_ghost_margin_factor: Option<f64>,
     /// Whether to compute particle densities in a global step before domain decomposition (slower)
-    #[structopt(display_order = 5, long, default_value = "off", possible_values = &["on", "off"], case_insensitive = true, require_equals = true)]
-    octree_global_density: Switch,
+    #[arg(
+        display_order = 5,
+        long,
+        default_value = "off",
+        value_name = "off|on",
+        ignore_case = true,
+        require_equals = true
+    )]
+    pub octree_global_density: Switch,
     /// Whether to compute particle densities per subdomain but synchronize densities for ghost-particles (faster, recommended).
     /// Note: if both this and global particle density computation is disabled the ghost particle margin has to be increased to at least 2.0
     /// to compute correct density values for ghost particles.
-    #[structopt(display_order = 5, long, default_value = "on", possible_values = &["on", "off"], case_insensitive = true, require_equals = true)]
-    octree_sync_local_density: Switch,
+    #[arg(
+        display_order = 5,
+        long,
+        default_value = "on",
+        value_name = "off|on",
+        ignore_case = true,
+        require_equals = true
+    )]
+    pub octree_sync_local_density: Switch,
 
     /// Optional filename for writing the point cloud representation of the intermediate density map to disk
-    #[structopt(display_order = 6, long, parse(from_os_str))]
-    output_dm_points: Option<PathBuf>,
+    #[arg(display_order = 6, long, value_parser = value_parser!(PathBuf))]
+    pub output_dm_points: Option<PathBuf>,
     /// Optional filename for writing the grid representation of the intermediate density map to disk
-    #[structopt(display_order = 6, long, parse(from_os_str))]
-    output_dm_grid: Option<PathBuf>,
+    #[arg(display_order = 6, long, value_parser = value_parser!(PathBuf))]
+    pub output_dm_grid: Option<PathBuf>,
     /// Optional filename for writing the octree used to partition the particles to disk
-    #[structopt(display_order = 6, long, parse(from_os_str))]
-    output_octree: Option<PathBuf>,
+    #[arg(display_order = 6, long, value_parser = value_parser!(PathBuf))]
+    pub output_octree: Option<PathBuf>,
 
     /// Whether to compute surface normals at the mesh vertices and write them to the output file
-    #[structopt(display_order = 7, long, default_value = "off", possible_values = &["on", "off"], case_insensitive = true, require_equals = true)]
-    normals: Switch,
+    #[arg(
+        display_order = 7,
+        long,
+        default_value = "off",
+        value_name = "off|on",
+        ignore_case = true,
+        require_equals = true
+    )]
+    pub normals: Switch,
     /// Whether to compute the normals using SPH interpolation (smoother and more true to actual fluid surface, but slower) instead of just using area weighted triangle normals
-    #[structopt(display_order = 7, long, default_value = "on", possible_values = &["on", "off"], case_insensitive = true, require_equals = true)]
-    sph_normals: Switch,
+    #[arg(
+        display_order = 7,
+        long,
+        default_value = "on",
+        value_name = "off|on",
+        ignore_case = true,
+        require_equals = true
+    )]
+    pub sph_normals: Switch,
     /// List of point attribute field names from the input file that should be interpolated to the reconstructed surface. Currently this is only supported for VTK input files.
-    #[structopt(display_order = 7, long, use_delimiter = true)]
-    interpolate_attributes: Vec<String>,
+    #[arg(display_order = 7, long)]
+    pub interpolate_attributes: Vec<String>,
 
     /// Whether to check the final mesh for topological problems such as holes (note that when stitching is disabled this will lead to a lot of reported problems)
-    #[structopt(display_order = 100, long, default_value = "off", possible_values = &["on", "off"], case_insensitive = true, require_equals = true)]
-    check_mesh: Switch,
+    #[arg(
+        display_order = 100,
+        long,
+        default_value = "off",
+        value_name = "off|on",
+        ignore_case = true,
+        require_equals = true
+    )]
+    pub check_mesh: Switch,
 }
 
-arg_enum! {
-    #[derive(Copy, Clone, Debug)]
-    pub enum Switch {
-        Off,
-        On
-    }
+#[derive(Copy, Clone, Debug, PartialEq, Eq, clap::ValueEnum)]
+pub enum Switch {
+    Off,
+    On,
 }
 
 impl Switch {
