@@ -4,7 +4,8 @@ use std::hash::Hash;
 use bitflags::_core::ops::{AddAssign, MulAssign, SubAssign};
 use bytemuck::Pod;
 use nalgebra::{RealField, SVector};
-use num::{Bounded, CheckedAdd, CheckedMul, CheckedSub, FromPrimitive, Integer, ToPrimitive};
+use num_integer::Integer;
+use num_traits::{Bounded, CheckedAdd, CheckedMul, CheckedSub, FromPrimitive, ToPrimitive};
 
 /// Convenience trait that combines `Send` and `Sync`
 pub trait ThreadSafe: Sync + Send {}

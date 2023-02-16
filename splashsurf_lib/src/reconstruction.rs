@@ -13,7 +13,7 @@ use crate::{
 };
 use log::{debug, info, trace};
 use nalgebra::Vector3;
-use num::Bounded;
+use num_traits::Bounded;
 use parking_lot::Mutex;
 
 /// Performs a global surface reconstruction without domain decomposition

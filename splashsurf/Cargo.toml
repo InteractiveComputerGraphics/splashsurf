@@ -17,8 +17,7 @@ splashsurf_lib = { path = "../splashsurf_lib", version = "0.9", features = ["vtk
 clap = { version = "4.1", features = ["derive"] }
 log = "0.4"
 fern = "0.6"
-chrono = "0.4"
+chrono = "0.4.20"
 anyhow = "1.0"
-num = "0.4"
 rayon = "1.6"
 bytemuck = "1.9"

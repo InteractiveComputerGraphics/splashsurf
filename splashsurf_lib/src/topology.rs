@@ -1,6 +1,6 @@
 //! Helper types for cartesian coordinate system topology
 
-use num::{CheckedAdd, CheckedSub, One};
+use num_traits::{CheckedAdd, CheckedSub, One};
 use std::ops::{Add, Sub};
 
 /// Direction on a number line/coordinate axis or identifiers for the end points of a line

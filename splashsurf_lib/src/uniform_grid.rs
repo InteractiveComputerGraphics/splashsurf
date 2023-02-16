@@ -6,7 +6,7 @@ use bitflags::bitflags;
 use itertools::iproduct;
 use log::trace;
 use nalgebra::Vector3;
-use num::Bounded;
+use num_traits::Bounded;
 use std::iter::Iterator;
 use thiserror::Error as ThisError;
 

@@ -8,7 +8,7 @@ use flate2::write::GzEncoder;
 use flate2::Compression;
 use nalgebra::Vector3;
 use nom::{Finish, Parser};
-use num::ToPrimitive;
+use num_traits::ToPrimitive;
 use std::fs::{File, OpenOptions};
 use std::io;
 use std::io::{BufWriter, Read};
