@@ -32,7 +32,7 @@ pub struct ReconstructSubcommandArgs {
     /// Path to the input file where the particle positions are stored (supported formats: VTK 4.2, VTU, binary f32 XYZ, PLY, BGEO)
     #[arg(help_heading = ARGS_IO, short = 'i', long, group = "input", value_parser = value_parser!(PathBuf))]
     pub input_file: Option<PathBuf>,
-    /// Path to a sequence of particle files that should be processed, use `{}` in the filename to indicate a placeholder
+    /// Path to a sequence of particle files that should be processed, use "{}" in the filename to indicate a placeholder. To specify an output format, use e.g. --output_file="filename_{}.obj".
     #[arg(help_heading = ARGS_IO, short = 's', long, group = "input", value_parser = value_parser!(PathBuf))]
     pub input_sequence: Option<PathBuf>,
     /// Filename for writing the reconstructed surface to disk (default: "{original_filename}_surface.vtk")
@@ -574,14 +574,20 @@ mod arguments {
                     }
                 }
 
-                // Make sure that we have a placeholder \"{}\" in the filename part of the sequence pattern
+                // Make sure that we have a placeholder "{}" in the filename part of the sequence pattern
                 if input_filename.contains("{}") {
-                    let input_stem = input_pattern.file_stem().unwrap().to_string_lossy();
-                    // Currently, only VTK files are supported for output
-                    let output_filename = format!(
-                        "{}.vtk",
-                        input_stem.replace("{}", &format!("{}_{{}}", output_suffix))
-                    );
+                    let output_filename = if let Some(output_file) = &args.output_file {
+                        let output_pattern = output_file.to_string_lossy();
+                        if output_pattern.contains("{}") {
+                            output_pattern.to_string()
+                        } else {
+                            return Err(anyhow!("The output filename \"{}\" does not contain a place holder \"{{}}\"", output_file.display()));
+                        }
+                    } else {
+                        let input_stem = input_pattern.file_stem().unwrap().to_string_lossy();
+                        // Use VTK format as default fallback
+                        format!("{}.vtk", input_stem.replace("{}", &format!("{}_{{}}", output_suffix)))
+                    };
 
                     Self::try_new(
                         true,
