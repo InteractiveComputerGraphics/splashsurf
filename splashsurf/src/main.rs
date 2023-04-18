@@ -21,11 +21,16 @@ register_counting_allocator!(GLOBAL_ALLOCATOR, enable = false);
 // TODO: Check if all paths supplied using the cmd args are valid
 // TODO: Clean up the parameter structs and conversions
 
+static HELP_TEMPLATE: &str = "{before-help}{name} (v{version}) - {author-with-newline}{about-with-newline}\n{usage-heading} {usage}\n\n{all-args}{after-help}";
+
 #[derive(Clone, Debug, clap::Parser)]
 #[command(
     name = "splashsurf",
     author = "Fabian Löschner <loeschner@cs.rwth-aachen.de>",
-    about = "Surface reconstruction for particle data from SPH simulations (https://github.com/w1th0utnam3/splashsurf)"
+    about = "Surface reconstruction for particle data from SPH simulations (https://github.com/w1th0utnam3/splashsurf)",
+    version,
+    propagate_version = true,
+    help_template = HELP_TEMPLATE,
 )]
 struct CommandlineArgs {
     /// Enable quiet mode (no output except for severe panic messages), overrides verbosity level
@@ -42,8 +47,10 @@ struct CommandlineArgs {
 #[derive(Clone, Debug, clap::Parser)]
 enum Subcommand {
     /// Reconstruct a surface from particle data
+    #[command(help_template = HELP_TEMPLATE)]
     Reconstruct(reconstruction::ReconstructSubcommandArgs),
     /// Convert particle or mesh files between different file formats
+    #[command(help_template = HELP_TEMPLATE)]
     Convert(convert::ConvertSubcommandArgs),
 }
 
