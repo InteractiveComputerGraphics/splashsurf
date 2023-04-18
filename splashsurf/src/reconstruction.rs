@@ -270,6 +270,8 @@ mod arguments {
     use std::convert::TryFrom;
     use std::fs;
     use std::path::{Path, PathBuf};
+    use walkdir::WalkDir;
+    use regex::{Regex, escape};
 
     /// All arguments that can be supplied to the surface reconstruction tool converted to useful types
     pub struct ReconstructionRunnerArgs {
@@ -465,17 +467,34 @@ mod arguments {
                 let input_dir = input_file.parent().unwrap();
                 let output_dir = output_file.parent().unwrap();
 
-                let input_filename = input_file.file_name().unwrap().to_string_lossy();
-                let output_filename = output_file.file_name().unwrap().to_string_lossy();
+                let input_pattern = input_file.file_name().unwrap().to_string_lossy();
+                let output_pattern = output_file.file_name().unwrap().to_string_lossy();
+
+                let (input_prefix, input_suffix) = input_pattern
+                    .split_once("{}")
+                    .expect("sequence input filename has to include pattern");
+
+                let input_re_str = format!(r"{}(\d+){}", escape(input_prefix), escape(input_suffix));
+                let input_re = Regex::new(&input_re_str).expect("expected a valid regex");
 
                 let mut paths = Vec::new();
-                let mut i: usize = 1;
-                loop {
-                    let input_filename_i = input_filename.replace("{}", &i.to_string());
-                    let input_file_i = input_dir.join(input_filename_i);
 
-                    if input_file_i.is_file() {
-                        let output_filename_i = output_filename.replace("{}", &i.to_string());
+                for entry in WalkDir::new(input_dir)
+                    .max_depth(1)
+                    .contents_first(true)
+                    .sort_by_file_name()
+                    .into_iter()
+                    .filter_map(|e| e.ok())
+                    .filter(|e| e.file_type().is_file())
+                {
+                    let entry_name = entry.file_name().to_string_lossy();
+                    if input_re.is_match(&entry_name) {
+                        let index = &input_re.captures(&entry_name).expect("there should be a match")[1];
+
+                        let input_filename_i = entry_name.as_ref();
+                        let input_file_i = input_dir.join(input_filename_i);
+
+                        let output_filename_i = output_pattern.replace("{}", index);
                         let output_file_i = output_dir.join(output_filename_i);
 
                         paths.push(ReconstructionRunnerPaths::new(
@@ -489,13 +508,14 @@ mod arguments {
                             self.sph_normals,
                             self.attributes.clone(),
                         ));
-                    } else {
-                        break;
                     }
-
-                    i += 1;
                 }
 
+                info!(
+                    "Found {} input files matching the pattern \"{}\"",
+                    paths.len(),
+                    input_re_str
+                );
                 paths
             } else {
                 vec![
@@ -586,7 +606,10 @@ mod arguments {
                     } else {
                         let input_stem = input_pattern.file_stem().unwrap().to_string_lossy();
                         // Use VTK format as default fallback
-                        format!("{}.vtk", input_stem.replace("{}", &format!("{}_{{}}", output_suffix)))
+                        format!(
+                            "{}.vtk",
+                            input_stem.replace("{}", &format!("{}_{{}}", output_suffix))
+                        )
                     };
 
                     Self::try_new(
