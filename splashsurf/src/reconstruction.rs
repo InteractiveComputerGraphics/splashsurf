@@ -265,13 +265,13 @@ mod arguments {
     use crate::io;
     use anyhow::{anyhow, Context};
     use log::info;
+    use regex::{escape, Regex};
     use splashsurf_lib::nalgebra::Vector3;
     use splashsurf_lib::{Aabb3d, ParticleDensityComputationStrategy};
     use std::convert::TryFrom;
     use std::fs;
     use std::path::{Path, PathBuf};
     use walkdir::WalkDir;
-    use regex::{Regex, escape};
 
     /// All arguments that can be supplied to the surface reconstruction tool converted to useful types
     pub struct ReconstructionRunnerArgs {
@@ -474,7 +474,8 @@ mod arguments {
                     .split_once("{}")
                     .expect("sequence input filename has to include pattern");
 
-                let input_re_str = format!(r"{}(\d+){}", escape(input_prefix), escape(input_suffix));
+                let input_re_str =
+                    format!(r"{}(\d+){}", escape(input_prefix), escape(input_suffix));
                 let input_re = Regex::new(&input_re_str).expect("expected a valid regex");
 
                 let mut paths = Vec::new();
@@ -489,7 +490,9 @@ mod arguments {
                 {
                     let entry_name = entry.file_name().to_string_lossy();
                     if input_re.is_match(&entry_name) {
-                        let index = &input_re.captures(&entry_name).expect("there should be a match")[1];
+                        let index = &input_re
+                            .captures(&entry_name)
+                            .expect("there should be a match")[1];
 
                         let input_filename_i = entry_name.as_ref();
                         let input_file_i = input_dir.join(input_filename_i);
