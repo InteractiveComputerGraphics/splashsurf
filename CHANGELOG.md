@@ -2,6 +2,10 @@
 
 The following changes are present in the `main` branch of the repository and are not yet part of a release:
 
+ - No major changes since last release
+
+## Version 0.9.0
+
  - Upgrade to Rust edition 2021
  - Lib: Update to `nalgebra` 0.32.1
  - Lib: Support for writing particles as JSON
