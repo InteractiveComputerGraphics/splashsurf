@@ -10,6 +10,8 @@ The following changes are present in the `main` branch of the repository and are
  - Lib: Rename `AxisAlignedBoundingBox*d` typedefs to `Aabb3d` and `Aabb2d` 
  - Lib: Support reading VTU (VTK XML) files
  - CLI: Support reconstruction of particles from VTU (VTK XML) files, including attributes
+ - CLI: Support for specifying an output pattern (e.g. "surface_{}.obj") using `--output-file`/`-o` when processing sequences of files, this allows to specify a different output format than VTK for sequences (which was the only available output format for sequences before)
+ - CLI: Files belonging to a sequence are now detected by treating the placeholder "{}" as a "(\d+)" regex (i.e. any number of digits) and sorting the matching files lexicographically (previously, the tool just counted up from 1) 
 
 ## Version 0.8.0
 
