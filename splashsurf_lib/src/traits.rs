@@ -1,7 +1,7 @@
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
+use std::ops::{AddAssign, MulAssign, SubAssign};
 
-use bitflags::_core::ops::{AddAssign, MulAssign, SubAssign};
 use bytemuck::Pod;
 use nalgebra::{RealField, SVector};
 use num_integer::Integer;

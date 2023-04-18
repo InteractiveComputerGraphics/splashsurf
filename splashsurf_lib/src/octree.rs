@@ -985,6 +985,7 @@ mod octant_helper {
     }
 
     bitflags! {
+        #[derive(Copy, Clone, Debug)]
         pub struct HalfspaceFlags: u8 {
             const X_NEG = 0b00000001;
             const X_POS = 0b00000010;
@@ -993,14 +994,14 @@ mod octant_helper {
             const Z_NEG = 0b00010000;
             const Z_POS = 0b00100000;
 
-            const NEG_NEG_NEG = Self::X_NEG.bits | Self::Y_NEG.bits | Self::Z_NEG.bits;
-            const POS_NEG_NEG = Self::X_POS.bits | Self::Y_NEG.bits | Self::Z_NEG.bits;
-            const NEG_POS_NEG = Self::X_NEG.bits | Self::Y_POS.bits | Self::Z_NEG.bits;
-            const POS_POS_NEG = Self::X_POS.bits | Self::Y_POS.bits | Self::Z_NEG.bits;
-            const NEG_NEG_POS = Self::X_NEG.bits | Self::Y_NEG.bits | Self::Z_POS.bits;
-            const POS_NEG_POS = Self::X_POS.bits | Self::Y_NEG.bits | Self::Z_POS.bits;
-            const NEG_POS_POS = Self::X_NEG.bits | Self::Y_POS.bits | Self::Z_POS.bits;
-            const POS_POS_POS = Self::X_POS.bits | Self::Y_POS.bits | Self::Z_POS.bits;
+            const NEG_NEG_NEG = Self::X_NEG.bits() | Self::Y_NEG.bits() | Self::Z_NEG.bits();
+            const POS_NEG_NEG = Self::X_POS.bits() | Self::Y_NEG.bits() | Self::Z_NEG.bits();
+            const NEG_POS_NEG = Self::X_NEG.bits() | Self::Y_POS.bits() | Self::Z_NEG.bits();
+            const POS_POS_NEG = Self::X_POS.bits() | Self::Y_POS.bits() | Self::Z_NEG.bits();
+            const NEG_NEG_POS = Self::X_NEG.bits() | Self::Y_NEG.bits() | Self::Z_POS.bits();
+            const POS_NEG_POS = Self::X_POS.bits() | Self::Y_NEG.bits() | Self::Z_POS.bits();
+            const NEG_POS_POS = Self::X_NEG.bits() | Self::Y_POS.bits() | Self::Z_POS.bits();
+            const POS_POS_POS = Self::X_POS.bits() | Self::Y_POS.bits() | Self::Z_POS.bits();
         }
     }
 

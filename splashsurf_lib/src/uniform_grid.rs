@@ -183,6 +183,7 @@ pub trait Subdomain<I: Index, R: Real> {
 
 bitflags! {
     /// Flags naming the outer faces of a grid cell or an entire grid, can be used to select multiple faces at once
+    #[derive(Copy, Clone, Debug)]
     struct FaceFlags: u8 {
         const X_NEG = 0b00000001;
         const X_POS = 0b00000010;
@@ -1153,18 +1154,18 @@ const FACE_FLAGS_TO_DIRECTED_AXIS: [(FaceFlags, DirectedAxis); 6] = [
 
 /// Classifies a local edge index in a cell to the corresponding boundaries of the cell (or faces of the cell)
 const CELL_LOCAL_EDGE_TO_FACE_FLAGS: [FaceFlags; 12] = [
-    FaceFlags::from_bits_truncate(FaceFlags::Y_NEG.bits | FaceFlags::Z_NEG.bits),
-    FaceFlags::from_bits_truncate(FaceFlags::X_POS.bits | FaceFlags::Z_NEG.bits),
-    FaceFlags::from_bits_truncate(FaceFlags::Y_POS.bits | FaceFlags::Z_NEG.bits),
-    FaceFlags::from_bits_truncate(FaceFlags::X_NEG.bits | FaceFlags::Z_NEG.bits),
-    FaceFlags::from_bits_truncate(FaceFlags::Y_NEG.bits | FaceFlags::Z_POS.bits),
-    FaceFlags::from_bits_truncate(FaceFlags::X_POS.bits | FaceFlags::Z_POS.bits),
-    FaceFlags::from_bits_truncate(FaceFlags::Y_POS.bits | FaceFlags::Z_POS.bits),
-    FaceFlags::from_bits_truncate(FaceFlags::X_NEG.bits | FaceFlags::Z_POS.bits),
-    FaceFlags::from_bits_truncate(FaceFlags::X_NEG.bits | FaceFlags::Y_NEG.bits),
-    FaceFlags::from_bits_truncate(FaceFlags::X_POS.bits | FaceFlags::Y_NEG.bits),
-    FaceFlags::from_bits_truncate(FaceFlags::X_POS.bits | FaceFlags::Y_POS.bits),
-    FaceFlags::from_bits_truncate(FaceFlags::X_NEG.bits | FaceFlags::Y_POS.bits),
+    FaceFlags::from_bits_truncate(FaceFlags::Y_NEG.bits() | FaceFlags::Z_NEG.bits()),
+    FaceFlags::from_bits_truncate(FaceFlags::X_POS.bits() | FaceFlags::Z_NEG.bits()),
+    FaceFlags::from_bits_truncate(FaceFlags::Y_POS.bits() | FaceFlags::Z_NEG.bits()),
+    FaceFlags::from_bits_truncate(FaceFlags::X_NEG.bits() | FaceFlags::Z_NEG.bits()),
+    FaceFlags::from_bits_truncate(FaceFlags::Y_NEG.bits() | FaceFlags::Z_POS.bits()),
+    FaceFlags::from_bits_truncate(FaceFlags::X_POS.bits() | FaceFlags::Z_POS.bits()),
+    FaceFlags::from_bits_truncate(FaceFlags::Y_POS.bits() | FaceFlags::Z_POS.bits()),
+    FaceFlags::from_bits_truncate(FaceFlags::X_NEG.bits() | FaceFlags::Z_POS.bits()),
+    FaceFlags::from_bits_truncate(FaceFlags::X_NEG.bits() | FaceFlags::Y_NEG.bits()),
+    FaceFlags::from_bits_truncate(FaceFlags::X_POS.bits() | FaceFlags::Y_NEG.bits()),
+    FaceFlags::from_bits_truncate(FaceFlags::X_POS.bits() | FaceFlags::Y_POS.bits()),
+    FaceFlags::from_bits_truncate(FaceFlags::X_NEG.bits() | FaceFlags::Y_POS.bits()),
 ];
 
 impl<'a, I: Index> Neighborhood<'a, I> {
