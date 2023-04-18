@@ -13,7 +13,7 @@ use std::path::PathBuf;
 /// Command line arguments for the `convert` subcommand
 #[derive(Clone, Debug, clap::Parser)]
 pub struct ConvertSubcommandArgs {
-    /// Path to the input file with particles to read (supported formats: .vtk, .bgeo, .ply, .xyz, .json)
+    /// Path to the input file with particles to read (supported formats: .vtk, .vtu, .bgeo, .ply, .xyz, .json)
     #[arg(
         long = "particles",
         value_parser = value_parser!(PathBuf),

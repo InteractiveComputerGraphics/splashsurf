@@ -8,6 +8,8 @@ The following changes are present in the `main` branch of the repository and are
  - Lib: Support for writing particles as BGEO
  - CLI: Support for new writers in `convert` subcommand
  - Lib: Rename `AxisAlignedBoundingBox*d` typedefs to `Aabb3d` and `Aabb2d` 
+ - Lib: Support reading VTU (VTK XML) files
+ - CLI: Support reconstruction of particles from VTU (VTK XML) files, including attributes
 
 ## Version 0.8.0
 

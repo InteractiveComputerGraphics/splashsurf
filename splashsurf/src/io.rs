@@ -68,6 +68,7 @@ pub fn read_particle_positions<R: Real, P: AsRef<Path>>(
 
         match extension.to_lowercase().as_str() {
             "vtk" => vtk_format::particles_from_vtk(&input_file),
+            "vtu" => vtk_format::particles_from_vtk(&input_file),
             "xyz" => xyz_format::particles_from_xyz(&input_file),
             "ply" => ply_format::particles_from_ply(&input_file),
             "bgeo" => bgeo_format::particles_from_bgeo(&input_file),
@@ -115,11 +116,14 @@ pub fn read_particle_positions_with_attributes<R: Real, P: AsRef<Path>>(
             "Unable to detect file format of particle input file (file name has to end with supported extension)",
         ))?.to_str().ok_or(anyhow!("Invalid extension of input file"))?.to_lowercase();
 
-        if extension != "vtk" {
-            return Err(anyhow!(
-                "Unsupported file format extension \"{}\" for reading particles and attributes",
-                extension
-            ));
+        match extension.as_str() {
+            "vtk" | "vtu" => {}
+            _ => {
+                return Err(anyhow!(
+                    "Unsupported file format extension \"{}\" for reading particles and attributes",
+                    extension
+                ));
+            }
         }
     }
 

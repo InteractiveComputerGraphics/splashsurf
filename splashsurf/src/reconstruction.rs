@@ -29,7 +29,7 @@ static ARGS_OTHER: &str = "Remaining options";
 #[clap(group = clap::ArgGroup::new("input").required(true))]
 #[command(next_help_heading = ARGS_OTHER)]
 pub struct ReconstructSubcommandArgs {
-    /// Path to the input file where the particle positions are stored (supported formats: VTK, binary f32 XYZ, PLY, BGEO)
+    /// Path to the input file where the particle positions are stored (supported formats: VTK 4.2, VTU, binary f32 XYZ, PLY, BGEO)
     #[arg(help_heading = ARGS_IO, short = 'i', long, group = "input", value_parser = value_parser!(PathBuf))]
     pub input_file: Option<PathBuf>,
     /// Path to a sequence of particle files that should be processed, use `{}` in the filename to indicate a placeholder
@@ -183,7 +183,7 @@ pub struct ReconstructSubcommandArgs {
         require_equals = true
     )]
     pub sph_normals: Switch,
-    /// List of point attribute field names from the input file that should be interpolated to the reconstructed surface. Currently this is only supported for VTK input files.
+    /// List of point attribute field names from the input file that should be interpolated to the reconstructed surface. Currently this is only supported for VTK and VTU input files.
     #[arg(help_heading = ARGS_INTERP, long)]
     pub interpolate_attributes: Vec<String>,
 

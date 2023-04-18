@@ -188,7 +188,7 @@ pub fn write_vtk<P: AsRef<Path>>(
     title: &str,
 ) -> Result<(), anyhow::Error> {
     let vtk_file = Vtk {
-        version: Version::new((4, 1)),
+        version: Version::new((4, 2)),
         title: title.to_string(),
         file_path: None,
         byte_order: ByteOrder::BigEndian,
