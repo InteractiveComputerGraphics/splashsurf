@@ -32,7 +32,6 @@ The result might look something like this (please excuse the lack of 3D renderin
 </p>
 
 **Contents**
-- [!splashsurf logo](#)
 - [The `splashsurf` CLI](#the-splashsurf-cli)
   - [Introduction](#introduction)
   - [Notes](#notes)
@@ -43,6 +42,7 @@ The result might look something like this (please excuse the lack of 3D renderin
     - [Sequences of files](#sequences-of-files)
   - [Input file formats](#input-file-formats)
     - [VTK](#vtk)
+    - [VTU](#vtu)
     - [BGEO](#bgeo)
     - [PLY](#ply)
     - [XYZ](#xyz)
