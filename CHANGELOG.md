@@ -4,6 +4,10 @@ The following changes are present in the `main` branch of the repository and are
 
  - No major changes since last release
 
+## Version 0.9.1
+
+ - CLI: Fix bug where no input sequence files were found if the sequence pattern path did not contain any "parent" path (e.g. `file_{}.vtk` instead of `./file_{}.vtk`) 
+
 ## Version 0.9.0
 
  - Upgrade to Rust edition 2021
