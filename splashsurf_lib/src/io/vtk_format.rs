@@ -436,7 +436,10 @@ where
 pub mod test {
     use super::*;
 
-    fn test_load_num_particles<P: AsRef<Path>>(input_file: P, num_particles: usize) -> Result<(), anyhow::Error> {
+    fn test_load_num_particles<P: AsRef<Path>>(
+        input_file: P,
+        num_particles: usize,
+    ) -> Result<(), anyhow::Error> {
         let input_file = input_file.as_ref();
         let particles: Vec<Vector3<f32>> = particles_from_vtk(input_file).with_context(|| {
             format!(
