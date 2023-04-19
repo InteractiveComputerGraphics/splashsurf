@@ -1,4 +1,4 @@
-//! Provides the [`profile`] macro or a dummy implementation depending on the selected feature
+//! Provides the [`profile`](crate::profile) macro or a dummy implementation depending on the selected feature
 
 #[cfg(feature = "profiling")]
 /// Creates a scope for profiling

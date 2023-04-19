@@ -431,3 +431,49 @@ where
         }
     }
 }
+
+#[cfg(test)]
+pub mod test {
+    use super::*;
+
+    fn test_load_num_particles<P: AsRef<Path>>(input_file: P, num_particles: usize) -> Result<(), anyhow::Error> {
+        let input_file = input_file.as_ref();
+        let particles: Vec<Vector3<f32>> = particles_from_vtk(input_file).with_context(|| {
+            format!(
+                "Failed to load surface mesh from file \"{}\"",
+                input_file.display()
+            )
+        })?;
+
+        assert_eq!(particles.len(), num_particles);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_cube_8_particles_from_vtu() -> Result<(), anyhow::Error> {
+        test_load_num_particles("../data/cube_8_particles.vtu", 8)
+    }
+
+    #[test]
+    #[ignore = "Disabled due to bug in vtkio (https://github.com/elrnv/vtkio/issues/21#issuecomment-1513195315)"]
+    fn test_cube_8_particles_from_vtk() -> Result<(), anyhow::Error> {
+        test_load_num_particles("../data/cube_8_particles.vtk", 250)
+    }
+
+    #[test]
+    fn test_hilbert_46843_particles_from_vtk() -> Result<(), anyhow::Error> {
+        test_load_num_particles("../data/hilbert_46843_particles.vtk", 46843)
+    }
+
+    #[test]
+    fn test_fluid_250_particles_from_vtu_encoded() -> Result<(), anyhow::Error> {
+        test_load_num_particles("../data/fluid_encoded_250_particles.vtu", 250)
+    }
+
+    #[test]
+    #[ignore = "Disabled due to bug in vtkio/XML parser (https://github.com/elrnv/vtkio/issues/27)"]
+    fn test_fluid_250_particles_from_vtu() -> Result<(), anyhow::Error> {
+        test_load_num_particles("../data/fluid_250_particles.vtu", 250)
+    }
+}
