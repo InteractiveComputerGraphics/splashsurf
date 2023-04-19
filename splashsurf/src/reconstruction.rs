@@ -464,8 +464,12 @@ mod arguments {
                 let input_file = &self.input_file;
                 let output_file = &self.output_file;
 
-                let input_dir = input_file.parent().expect("expected an input path ending in a filename");
-                let output_dir = output_file.parent().expect("expected an output path ending in a filename");
+                let input_dir = input_file
+                    .parent()
+                    .expect("expected an input path ending in a filename");
+                let output_dir = output_file
+                    .parent()
+                    .expect("expected an output path ending in a filename");
 
                 let input_pattern = input_file.file_name().unwrap().to_string_lossy();
                 let output_pattern = output_file.file_name().unwrap().to_string_lossy();
@@ -478,8 +482,15 @@ mod arguments {
                     format!(r"{}(\d+){}", escape(input_prefix), escape(input_suffix));
                 let input_re = Regex::new(&input_re_str).expect("expected a valid regex");
 
-                let input_root = if input_dir == Path::new("") { Path::new(".") } else { input_dir };
-                info!("Looking for input sequence files in root \"{}\"", input_root.display());
+                let input_root = if input_dir == Path::new("") {
+                    Path::new(".")
+                } else {
+                    input_dir
+                };
+                info!(
+                    "Looking for input sequence files in root \"{}\"",
+                    input_root.display()
+                );
 
                 let mut paths = Vec::new();
 
