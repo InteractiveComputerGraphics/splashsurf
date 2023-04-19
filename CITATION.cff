@@ -1,13 +1,21 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
 cff-version: 1.2.0
-message: "If you use this software in your work, please consider citing it using these metadata."
-authors:
-- family-names: "Löschner"
-  given-names: Fabian
-  affiliation: "RWTH Aachen University"
-  orcid: "https://orcid.org/0000-0001-6818-2953"
 title: splashsurf
-abstract: "Splashsurf is a surface reconstruction tool and framework for reconstructing surfaces from particle data."
-version: 0.7.0
-# doi: 00.0000/zenodo.0000
-# date-released: 2000-00-00
-url: "https://www.floeschner.de/splashsurf"
+message: >-
+  If you use this software in your work, please consider
+  citing it using these metadata.
+type: software
+authors:
+  - family-names: Löschner
+    given-names: Fabian
+    affiliation: RWTH Aachen University
+    orcid: 'https://orcid.org/0000-0001-6818-2953'
+url: 'https://www.floeschner.de/splashsurf'
+abstract: >-
+  Splashsurf is a surface reconstruction tool and framework
+  for reconstructing surfaces from particle data.
+license: MIT
+version: 0.9.1
+date-released: '2023-04-19'
