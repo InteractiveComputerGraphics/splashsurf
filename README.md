@@ -70,17 +70,17 @@ By default, a domain decomposition of the particle set is performed using octree
 The implementation first computes the density of each particle using the typical SPH approach with a cubic kernel. 
 This density is then evaluated or mapped onto a sparse grid using spatial hashing in the support radius of each particle.
 This implies that memory is only allocated in areas where the fluid density is non-zero. This is in contrast to a naive approach where the marching cubes background grid is allocated for the whole domain. 
-The marching cubes reconstruction is performed only in the narrow band of grid cells where the density values cross the surface threshold. Cells completely in the interior of the fluid are skipped. For more details, please refer to the [readme of the library]((https://github.com/w1th0utnam3/splashsurf/blob/main/splashsurf_lib/README.md)).
+The marching cubes reconstruction is performed only in the narrowband of grid cells where the density values cross the surface threshold. Cells completely in the interior of the fluid are skipped. For more details, please refer to the [readme of the library]((https://github.com/w1th0utnam3/splashsurf/blob/main/splashsurf_lib/README.md)).
 Finally, all surface patches are stitched together by walking the octree back up, resulting in a closed surface.
 
 ## Notes
 
-Due the use of hash maps and multi-threading (if enabled), the output of this implementation is not deterministic.
-In the future, flags may be added to switch the internal data structures to use binary trees for debugging purposes.
-
-Note that for small numbers of fluid particles (i.e. in the low thousands or less) the multi-threaded implementation may have worse performance due to the task based parallelism and the additional overhead of domain decomposition and stitching.
+For small numbers of fluid particles (i.e. in the low thousands or less) the multithreaded implementation may have worse performance due to the task based parallelism and the additional overhead of domain decomposition and stitching.
 In this case, you can try to disable the domain decomposition. The reconstruction will then use a global approach that is parallelized using thread-local hashmaps.
-For larger quantities of particles the decomposition approach will be faster, however.
+For larger quantities of particles the decomposition approach is expected to be always faster.
+
+Due to the use of hash maps and multi-threading (if enabled), the output of this implementation is not deterministic.
+In the future, flags may be added to switch the internal data structures to use binary trees for debugging purposes.
 
 As shown below, the tool can handle the output of large simulations.
 However, it was not tested with a wide range of parameters and may not be totally robust against corner-cases or extreme parameters.
@@ -101,7 +101,7 @@ Good settings for the surface reconstruction depend on the original simulation a
  - `particle-radius`: should be a bit larger than the particle radius used for the actual simulation. A radius around 1.4 to 1.6 times larger than the original SPH particle radius seems to be appropriate.
  - `smoothing-length`: should be set around `1.2`. Larger values smooth out the iso-surface more but also artificially increase the fluid volume.
  - `surface-threshold`: a good value depends on the selected `particle-radius` and `smoothing-length` and can be used to counteract a fluid volume increase e.g. due to a larger particle radius. In combination with the other recommended values a threshold of `0.6` seemed to work well.
- - `cube-size` i.e. marching cubes resolution of less than `1.0`, e.g. start with `0.5` and increase/decrease it if the result is not smooth enough or the reconstruction takes too long.
+ - `cube-size` usually should not be chosen larger than `1.0` to avoid artifacts (e.g. single particles decaying into rhomboids), start with a value in the range of `0.75` to `0.5` and decrease/increase it if the result is too coarse or the reconstruction takes too long.
 
 ### Benchmark example
 For example:
