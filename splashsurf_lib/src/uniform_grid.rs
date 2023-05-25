@@ -282,6 +282,14 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
             return Err(GridConstructionError::InconsistentAabb);
         }
 
+        // Align the min coordinate of the AABB to the cube grid to get consistent results between frames
+        let aligned_min = aabb
+            .min()
+            .unscale(cell_size)
+            .map(|x| x.floor())
+            .scale(cell_size);
+        let aabb = Aabb3d::new(aligned_min, aabb.max().clone());
+
         let n_cells_real = aabb.extents() / cell_size;
         let n_cells_per_dim = Self::checked_n_cells_per_dim(&n_cells_real)
             .ok_or(GridConstructionError::IndexTypeTooSmallCellsPerDim)?;
