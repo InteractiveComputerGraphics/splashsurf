@@ -231,7 +231,7 @@ The file format is inferred from the extension of output filename.
 
 ### The `reconstruct` command
 ```
-splashsurf-reconstruct (v0.9.0) - Reconstruct a surface from particle data
+splashsurf-reconstruct (v0.9.2) - Reconstruct a surface from particle data
 
 Usage: splashsurf.exe reconstruct [OPTIONS] --particle-radius <PARTICLE_RADIUS> --smoothing-length <SMOOTHING_LENGTH> --cube-size <CUBE_SIZE> <--input-file <INPUT_FILE>|--input-sequence <INPUT_SEQUENCE>>
 

@@ -2,6 +2,10 @@
 
 The following changes are present in the `main` branch of the repository and are not yet part of a release:
 
+ - No major changes since last release
+
+## Version 0.9.2
+
  - Lib: In the `UniformCartesianCubeGrid3d::from_aabb` constructor, re-align the min-coordinate of the AABB to multiples of the cube size by default. This way multiple frames of an animation will be automatically consistent in terms of marching cubes grid alignment without having to manually specify an AABB for the entire simulation.
 
 ## Version 0.9.1
