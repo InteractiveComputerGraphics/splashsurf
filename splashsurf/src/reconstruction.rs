@@ -497,7 +497,11 @@ mod arguments {
                 for entry in WalkDir::new(input_root)
                     .max_depth(1)
                     .contents_first(true)
-                    .sort_by_file_name()
+                    .sort_by(|a, b| {
+                        let a = a.file_name().to_string_lossy();
+                        let b = b.file_name().to_string_lossy();
+                        lexical_sort::natural_cmp(&a, &b)
+                    })
                     .into_iter()
                     .filter_map(|e| e.ok())
                     .filter(|e| e.file_type().is_file())
