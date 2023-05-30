@@ -4,6 +4,14 @@ The following changes are present in the `main` branch of the repository and are
 
  - No major changes since last release
 
+## Version 0.9.3
+
+ - CLI: Make input filename/input sequence pattern a positional argument instead of separate arguments, arguments `--input-file` and `--input-sequence` are removed
+ - CLI: Introduce some short arguments: `-r` for `--particle-radius`, `-l` for `--smoothing-length`, `-c` for `--cube-size`, `-t` for `--surface-threshold`
+ - CLI: Add arguments `-s`/`--start-index` and `-e`/`--end-index` to specify the first and last index to process for a sequence of files
+ - CLI: Process sequences of files in natural sort order instead of alphabetical order
+ - CLI: Show progress bar when reconstructing a sequence of files
+
 ## Version 0.9.2
 
  - Lib: In the `UniformCartesianCubeGrid3d::from_aabb` constructor, re-align the min-coordinate of the AABB to multiples of the cube size by default. This way multiple frames of an animation will be automatically consistent in terms of marching cubes grid alignment without having to manually specify an AABB for the entire simulation.
