@@ -40,10 +40,10 @@ pub struct ReconstructSubcommandArgs {
     #[arg(help_heading = ARGS_IO, long, value_parser = value_parser!(PathBuf))]
     pub output_dir: Option<PathBuf>,
     /// Index of the first input file to process when processing a sequence of files (default: lowest index of the sequence)
-    #[arg(help_heading = ARGS_IO, long)]
+    #[arg(help_heading = ARGS_IO, short = 's', long)]
     pub start_index: Option<usize>,
     /// Index of the last input file to process when processing a sequence of files (default: highest index of the sequence)
-    #[arg(help_heading = ARGS_IO, long)]
+    #[arg(help_heading = ARGS_IO, short = 'e', long)]
     pub end_index: Option<usize>,
 
     /// The particle radius of the input data
