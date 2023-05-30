@@ -1,9 +1,10 @@
-use crate::{io, log_error};
+use crate::{io, logging};
 use anyhow::{anyhow, Context};
 use arguments::{
     ReconstructionRunnerArgs, ReconstructionRunnerPathCollection, ReconstructionRunnerPaths,
 };
 use clap::value_parser;
+use indicatif::{ProgressBar, ProgressStyle};
 use log::info;
 use rayon::prelude::*;
 use splashsurf_lib::mesh::{AttributeData, Mesh3d, MeshAttribute, MeshWithData, PointCloud3d};
@@ -237,6 +238,17 @@ pub fn reconstruct_subcommand(cmd_args: &ReconstructSubcommandArgs) -> Result<()
     let args = ReconstructionRunnerArgs::try_from(cmd_args)
         .context("Failed processing parameters from command line")?;
 
+    let _pb = if paths.len() > 1 {
+        let pb = ProgressBar::new(paths.len() as u64);
+        pb.set_style(ProgressStyle::with_template("{spinner:.green} [{elapsed_precise}] [{bar:40}] {pos}/{len} ({percent}%) - remaining: [{eta_precise}]")
+            .unwrap()
+            .progress_chars("=> "));
+        logging::set_progress_bar(Some(pb.downgrade()));
+        Some(pb)
+    } else {
+        None
+    };
+
     let result = if cmd_args.parallelize_over_files.into_bool() {
         paths.par_iter().try_for_each(|path| {
             reconstruction_pipeline(path, &args)
@@ -248,15 +260,27 @@ pub fn reconstruct_subcommand(cmd_args: &ReconstructSubcommandArgs) -> Result<()
                 })
                 .map_err(|err| {
                     // Already log the error in case there are multiple errors
-                    log_error(&err);
+                    logging::log_error(&err);
                     err
+                })
+                .and_then(|_| {
+                    logging::get_progress_bar().map(|pb| pb.inc(1));
+                    Ok(())
                 })
         })
     } else {
-        paths
-            .iter()
-            .try_for_each(|path| reconstruction_pipeline(path, &args))
+        paths.iter().try_for_each(|path| {
+            reconstruction_pipeline(path, &args).and_then(|_| {
+                logging::get_progress_bar().map(|pb| pb.inc(1));
+                Ok(())
+            })
+        })
     };
+
+    if paths.len() > 1 {
+        logging::get_progress_bar().map(|pb| pb.finish());
+        logging::set_progress_bar(None);
+    }
 
     if result.is_ok() {
         info!("Successfully finished processing all inputs.");
@@ -425,7 +449,11 @@ mod arguments {
 
             if let (Some(start), Some(end)) = sequence_range {
                 if start > end {
-                    return Err(anyhow!("Invalid input sequence range: \"{} to {}\"", start, end));
+                    return Err(anyhow!(
+                        "Invalid input sequence range: \"{} to {}\"",
+                        start,
+                        end
+                    ));
                 }
             }
 
@@ -528,7 +556,8 @@ mod arguments {
                         let index = &input_re
                             .captures(&entry_name)
                             .expect("there should be a match")[1];
-                        let index_usize = usize::from_str(index).expect("index should be convertible to usize");
+                        let index_usize =
+                            usize::from_str(index).expect("index should be convertible to usize");
 
                         if let Some(start) = self.sequence_range.0 {
                             if index_usize < start {
@@ -566,8 +595,14 @@ mod arguments {
                     "Found {} input files matching the pattern \"{}\" between in range {} to {}",
                     paths.len(),
                     input_re_str,
-                    self.sequence_range.0.map(|i| i.to_string()).unwrap_or_else(|| "*".to_string()),
-                    self.sequence_range.1.map(|i| i.to_string()).unwrap_or_else(|| "*".to_string()),
+                    self.sequence_range
+                        .0
+                        .map(|i| i.to_string())
+                        .unwrap_or_else(|| "*".to_string()),
+                    self.sequence_range
+                        .1
+                        .map(|i| i.to_string())
+                        .unwrap_or_else(|| "*".to_string()),
                 );
                 paths
             } else {

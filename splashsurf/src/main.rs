@@ -3,14 +3,14 @@ mod io;
 mod reconstruction;
 #[macro_use]
 mod allocator;
+mod logging;
 #[cfg(test)]
 mod tests;
 
 use crate::allocator::GetPeakAllocatedMemory;
-use anyhow::{anyhow, Context};
+use anyhow::Context;
 use clap::Parser;
-use log::{error, info};
-use std::env;
+use log::info;
 
 // Register allocator to track memory usage, might decrease performance if enabled
 register_counting_allocator!(GLOBAL_ALLOCATOR, enable = false);
@@ -66,7 +66,7 @@ fn main() -> Result<(), anyhow::Error> {
     std::process::exit(match run_splashsurf() {
         Ok(_) => 0,
         Err(err) => {
-            log_error(&err);
+            logging::log_error(&err);
             1
         }
     });
@@ -78,8 +78,8 @@ fn run_splashsurf() -> Result<(), anyhow::Error> {
     let verbosity = VerbosityLevel::from(cmd_args.verbosity);
     let is_quiet = cmd_args.quiet;
 
-    initialize_logging(verbosity, is_quiet).context("Failed to initialize logging")?;
-    log_program_info();
+    logging::initialize_logging(verbosity, is_quiet).context("Failed to initialize logging")?;
+    logging::log_program_info();
 
     // Delegate to subcommands
     match &cmd_args.subcommand {
@@ -105,91 +105,6 @@ fn run_splashsurf() -> Result<(), anyhow::Error> {
     }
 
     Ok(())
-}
-
-/// Prints an anyhow error and its full error chain using the log::error macro
-pub fn log_error(err: &anyhow::Error) {
-    error!("Error occurred: {}", err);
-    err.chain()
-        .skip(1)
-        .for_each(|cause| error!("  caused by: {}", cause));
-}
-
-/// Initializes logging with fern
-fn initialize_logging(verbosity: VerbosityLevel, quiet_mode: bool) -> Result<(), anyhow::Error> {
-    let mut unknown_log_filter_level = None;
-    let log_filter_level = if quiet_mode {
-        // First option: disable logging in quiet mode
-        log::LevelFilter::Off
-    } else {
-        // Second option: use verbosity level
-        verbosity.into_filter().unwrap_or_else(|| {
-            // Third option: use log level from env
-            if let Some(log_level) = std::env::var_os("RUST_LOG") {
-                let log_level = log_level.to_string_lossy().to_ascii_lowercase();
-                match log_level.as_str() {
-                    "off" => log::LevelFilter::Off,
-                    "error" => log::LevelFilter::Error,
-                    "warn" => log::LevelFilter::Warn,
-                    "info" => log::LevelFilter::Info,
-                    "debug" => log::LevelFilter::Debug,
-                    "trace" => log::LevelFilter::Trace,
-                    _ => {
-                        unknown_log_filter_level = Some(log_level);
-                        log::LevelFilter::Info
-                    }
-                }
-            } else {
-                // Fourth option: use default level
-                log::LevelFilter::Info
-            }
-        })
-    };
-
-    fern::Dispatch::new()
-        .format(|out, message, record| {
-            out.finish(format_args!(
-                "[{}][{}][{}] {}",
-                chrono::Local::now().to_rfc3339_opts(chrono::SecondsFormat::Micros, false),
-                record.target(),
-                record.level(),
-                message
-            ))
-        })
-        .level(log_filter_level)
-        .chain(std::io::stdout())
-        .apply()
-        .map_err(|e| anyhow!("Unable to apply logger configuration ({:?})", e))?;
-
-    if let Some(filter_level) = unknown_log_filter_level {
-        error!(
-            "Unknown log filter level '{}' defined in 'RUST_LOG' env variable, using INFO instead.",
-            filter_level
-        );
-    }
-
-    Ok(())
-}
-
-/// Prints program name, version etc. and command line arguments to log
-fn log_program_info() {
-    info!(
-        "{} v{} ({})",
-        env!("CARGO_BIN_NAME"),
-        env!("CARGO_PKG_VERSION"),
-        env!("CARGO_PKG_NAME")
-    );
-
-    let cmd_line: String = {
-        let mut cmd_line = String::new();
-        for arg in env::args() {
-            cmd_line.push_str(&arg);
-            cmd_line.push(' ');
-        }
-        cmd_line.pop();
-        cmd_line
-    };
-    info!("Called with command line: {}", cmd_line);
 }
 
 #[derive(Copy, Clone, Debug)]
