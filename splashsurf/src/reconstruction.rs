@@ -50,19 +50,19 @@ pub struct ReconstructSubcommandArgs {
     pub end_index: Option<usize>,
 
     /// The particle radius of the input data
-    #[arg(help_heading = ARGS_BASIC, long)]
+    #[arg(help_heading = ARGS_BASIC, short = 'r', long)]
     pub particle_radius: f64,
     /// The rest density of the fluid
     #[arg(help_heading = ARGS_BASIC, long, default_value = "1000.0")]
     pub rest_density: f64,
     /// The smoothing length radius used for the SPH kernel, the kernel compact support radius will be twice the smoothing length (in multiplies of the particle radius)
-    #[arg(help_heading = ARGS_BASIC, long)]
+    #[arg(help_heading = ARGS_BASIC, short = 'l', long)]
     pub smoothing_length: f64,
     /// The cube edge length used for marching cubes in multiplies of the particle radius, corresponds to the cell size of the implicit background grid
-    #[arg(help_heading = ARGS_BASIC, long)]
+    #[arg(help_heading = ARGS_BASIC, short = 'c', long)]
     pub cube_size: f64,
     /// The iso-surface threshold for the density, i.e. the normalized value of the reconstructed density level that indicates the fluid surface (in multiplies of the rest density)
-    #[arg(help_heading = ARGS_BASIC, long, default_value = "0.6")]
+    #[arg(help_heading = ARGS_BASIC, short = 't', long, default_value = "0.6")]
     pub surface_threshold: f64,
 
     /// Whether to enable the use of double precision for all computations
