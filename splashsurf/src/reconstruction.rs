@@ -41,6 +41,12 @@ pub struct ReconstructSubcommandArgs {
     /// Optional base directory for all output files (default: current working directory)
     #[arg(help_heading = ARGS_IO, long, value_parser = value_parser!(PathBuf))]
     pub output_dir: Option<PathBuf>,
+    /// Index of the first input file to process when processing a sequence of files (default: lowest index of the sequence)
+    #[arg(help_heading = ARGS_IO, long)]
+    pub start_index: Option<usize>,
+    /// Index of the last input file to process when processing a sequence of files (default: highest index of the sequence)
+    #[arg(help_heading = ARGS_IO, long)]
+    pub end_index: Option<usize>,
 
     /// The particle radius of the input data
     #[arg(help_heading = ARGS_BASIC, long)]
@@ -271,6 +277,7 @@ mod arguments {
     use std::convert::TryFrom;
     use std::fs;
     use std::path::{Path, PathBuf};
+    use std::str::FromStr;
     use walkdir::WalkDir;
 
     /// All arguments that can be supplied to the surface reconstruction tool converted to useful types
@@ -386,6 +393,7 @@ mod arguments {
         output_density_map_points_file: Option<PathBuf>,
         output_density_map_grid_file: Option<PathBuf>,
         output_octree_file: Option<PathBuf>,
+        sequence_range: (Option<usize>, Option<usize>),
         /// Whether to enable normal computation for all files
         compute_normals: bool,
         /// Whether to use SPH interpolation to compute the normals for all files
@@ -403,6 +411,7 @@ mod arguments {
             output_density_map_points_file: Option<P>,
             output_density_map_grid_file: Option<P>,
             output_octree_file: Option<P>,
+            sequence_range: (Option<usize>, Option<usize>),
             compute_normals: bool,
             sph_normals: bool,
             attributes: Vec<String>,
@@ -413,6 +422,12 @@ mod arguments {
             let output_density_map_points_file = output_density_map_points_file.map(|p| p.into());
             let output_density_map_grid_file = output_density_map_grid_file.map(|p| p.into());
             let output_octree_file = output_octree_file.map(|p| p.into());
+
+            if let (Some(start), Some(end)) = sequence_range {
+                if start > end {
+                    return Err(anyhow!("Invalid input sequence range: \"{} to {}\"", start, end));
+                }
+            }
 
             if let Some(output_base_path) = output_base_path {
                 let output_file = output_base_path.join(output_file);
@@ -439,6 +454,7 @@ mod arguments {
                     output_density_map_grid_file: output_density_map_grid_file
                         .map(|f| output_base_path.join(f)),
                     output_octree_file: output_octree_file.map(|f| output_base_path.join(f)),
+                    sequence_range,
                     compute_normals,
                     sph_normals,
                     attributes,
@@ -451,6 +467,7 @@ mod arguments {
                     output_density_map_points_file,
                     output_density_map_grid_file,
                     output_octree_file,
+                    sequence_range,
                     compute_normals,
                     sph_normals,
                     attributes,
@@ -511,6 +528,19 @@ mod arguments {
                         let index = &input_re
                             .captures(&entry_name)
                             .expect("there should be a match")[1];
+                        let index_usize = usize::from_str(index).expect("index should be convertible to usize");
+
+                        if let Some(start) = self.sequence_range.0 {
+                            if index_usize < start {
+                                continue;
+                            }
+                        }
+
+                        if let Some(end) = self.sequence_range.1 {
+                            if index_usize > end {
+                                continue;
+                            }
+                        }
 
                         let input_filename_i = entry_name.as_ref();
                         let input_file_i = input_dir.join(input_filename_i);
@@ -533,9 +563,11 @@ mod arguments {
                 }
 
                 info!(
-                    "Found {} input files matching the pattern \"{}\"",
+                    "Found {} input files matching the pattern \"{}\" between in range {} to {}",
                     paths.len(),
-                    input_re_str
+                    input_re_str,
+                    self.sequence_range.0.map(|i| i.to_string()).unwrap_or_else(|| "*".to_string()),
+                    self.sequence_range.1.map(|i| i.to_string()).unwrap_or_else(|| "*".to_string()),
                 );
                 paths
             } else {
@@ -582,6 +614,7 @@ mod arguments {
                         args.output_dm_points.clone(),
                         args.output_dm_grid.clone(),
                         args.output_octree.clone(),
+                        (args.start_index, args.end_index),
                         args.normals.into_bool(),
                         args.sph_normals.into_bool(),
                         args.interpolate_attributes.clone(),
@@ -641,6 +674,7 @@ mod arguments {
                         args.output_dm_points.clone(),
                         args.output_dm_grid.clone(),
                         args.output_octree.clone(),
+                        (args.start_index, args.end_index),
                         args.normals.into_bool(),
                         args.sph_normals.into_bool(),
                         args.interpolate_attributes.clone(),
