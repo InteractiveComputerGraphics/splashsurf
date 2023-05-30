@@ -61,9 +61,9 @@ As input, it supports reading particle positions from `.vtk`, `.bgeo`, `.ply`, `
 In addition, required parameters are the kernel radius and particle radius (to compute the volume of particles) used for the original SPH simulation as well as the surface threshold.
 
 By default, a domain decomposition of the particle set is performed using octree-based subdivision.
-The implementation first computes the density of each particle using the typical SPH approach with a cubic kernel.
+The implementation first computes the density of each particle using the typical SPH approach with a cubic kernel. 
 This density is then evaluated or mapped onto a sparse grid using spatial hashing in the support radius of each particle.
-This implies that memory is only allocated in areas where the fluid density is non-zero. This is in contrast to a naive approach where the marching cubes background grid is allocated for the whole domain.
+This implies that memory is only allocated in areas where the fluid density is non-zero. This is in contrast to a naive approach where the marching cubes background grid is allocated for the whole domain. 
 The marching cubes reconstruction is performed only in the narrowband of grid cells where the density values cross the surface threshold. Cells completely in the interior of the fluid are skipped. For more details, please refer to the [readme of the library]((https://github.com/w1th0utnam3/splashsurf/blob/main/splashsurf_lib/README.md)).
 Finally, all surface patches are stitched together by walking the octree back up, resulting in a closed surface.
 
@@ -92,15 +92,15 @@ cargo install splashsurf
 
 ### Recommended settings
 Good settings for the surface reconstruction depend on the original simulation and can be influenced by different conventions of different simulators. The following settings appear to work well with [SPlisHSPlasH](https://github.com/InteractiveComputerGraphics/SPlisHSPlasH):
-- `particle-radius`: should be a bit larger than the particle radius used for the actual simulation. A radius around 1.4 to 1.6 times larger than the original SPH particle radius seems to be appropriate.
-- `smoothing-length`: should be set around `1.2`. Larger values smooth out the iso-surface more but also artificially increase the fluid volume.
-- `surface-threshold`: a good value depends on the selected `particle-radius` and `smoothing-length` and can be used to counteract a fluid volume increase e.g. due to a larger particle radius. In combination with the other recommended values a threshold of `0.6` seemed to work well.
-- `cube-size` usually should not be chosen larger than `1.0` to avoid artifacts (e.g. single particles decaying into rhomboids), start with a value in the range of `0.75` to `0.5` and decrease/increase it if the result is too coarse or the reconstruction takes too long.
+ - `particle-radius`: should be a bit larger than the particle radius used for the actual simulation. A radius around 1.4 to 1.6 times larger than the original SPH particle radius seems to be appropriate.
+ - `smoothing-length`: should be set around `1.2`. Larger values smooth out the iso-surface more but also artificially increase the fluid volume.
+ - `surface-threshold`: a good value depends on the selected `particle-radius` and `smoothing-length` and can be used to counteract a fluid volume increase e.g. due to a larger particle radius. In combination with the other recommended values a threshold of `0.6` seemed to work well.
+ - `cube-size` usually should not be chosen larger than `1.0` to avoid artifacts (e.g. single particles decaying into rhomboids), start with a value in the range of `0.75` to `0.5` and decrease/increase it if the result is too coarse or the reconstruction takes too long.
 
 ### Benchmark example
 For example:
 ```
-splashsurf reconstruct -i data/canyon_13353401_particles.xyz --output-dir=out --particle-radius=0.011 --smoothing-length=2.0 --cube-size=1.5 --surface-threshold=0.6
+splashsurf reconstruct data/canyon_13353401_particles.xyz --output-dir=out --particle-radius=0.011 --smoothing-length=2.0 --cube-size=1.5 --surface-threshold=0.6
 ```
 With these parameters, a scene with 13353401 particles is reconstructed in less than 3 seconds on a Ryzen 9 5950X. The output is a mesh with 6023244 triangles.
 ```
@@ -158,8 +158,9 @@ You can either process a single file or let the tool automatically process a seq
 A sequence of files is indicated by specifying a filename with a `{}` placeholder pattern in the name.
 The tool will treat the placeholder as a `(\d+)` regex, i.e. a group matching to at least one digit.
 This allows for any zero padding as well as non-zero padded incrementing indices.
-All files in the input path matching this pattern will then be processed in lexicographical order (i.e. silently skipping missing files in the sequence).
+All files in the input path matching this pattern will then be processed in natural sort order (i.e. silently skipping missing files in the sequence).
 Note that the tool collects all existing filenames as soon as the command is invoked and does not update the list while running.
+The first and last file of a sequences that should be processed can be specified with the `-s`/`--start-index` and/or `-e`/`--end-index` arguments.
 
 By specifying the flag `--mt-files=on`, several files can be processed in parallel.
 If this is enabled, you should ideally also set `--mt-particles=off` as enabling both will probably degrade performance.
@@ -169,9 +170,9 @@ The combination of `--mt-files=on` and `--mt-particles=off` can be faster if man
 
 ### VTK
 
-Legacy VTK files with the "`.vtk`" extension are loaded using [`vtkio`](https://crates.io/crates/vtkio).
-The VTK file is loaded as a big endian binary file and has to contain an "Unstructured Grid" with either `f32` or `f64` vertex coordinates.
-Any other data or attributes are ignored except for those attributes that were specified with the ` --interpolate-attributes` command line argument.
+Legacy VTK files with the "`.vtk`" extension are loaded using [`vtkio`](https://crates.io/crates/vtkio). 
+The VTK file is loaded as a big endian binary file and has to contain an "Unstructured Grid" with either `f32` or `f64` vertex coordinates. 
+Any other data or attributes are ignored except for those attributes that were specified with the ` --interpolate-attributes` command line argument. 
 Currently supported attribute data types are scalar integers, floats and three-component float vectors.
 Only the first "Unstructured Grid" is loaded, other entities are ignored.
 
@@ -186,27 +187,27 @@ Files using "raw" binary sections (i.e. a `<AppendedData encoding="raw">...</App
 
 ### BGEO
 
-Files with the "`.bgeo`" extension are loaded using a custom parser.
-Note, that only the "old" `BGEOV` format is supported (which is the format supported by "Partio").
-Both uncompressed and (gzip) compressed files are supported.
-Only points and their implicit position vector attributes are loaded from the file.
-All other entities (e.g. vertices) and other attributes are ignored/discarded.
-Notably, the parser supports BGEO files written by [SPlisHSPlasH](https://github.com/InteractiveComputerGraphics/SPlisHSPlasH) ("Partio export").
+Files with the "`.bgeo`" extension are loaded using a custom parser. 
+Note, that only the "old" `BGEOV` format is supported (which is the format supported by "Partio"). 
+Both uncompressed and (gzip) compressed files are supported. 
+Only points and their implicit position vector attributes are loaded from the file. 
+All other entities (e.g. vertices) and other attributes are ignored/discarded. 
+Notably, the parser supports BGEO files written by [SPlisHSPlasH](https://github.com/InteractiveComputerGraphics/SPlisHSPlasH) ("Partio export"). 
 
 ### PLY
 
-Files with the "`.ply`" extension are loaded using [`ply-rs`](https://crates.io/crates/ply-rs).
-The PLY file has to contain an element called "`vertex`" with the properties `x`, `y` and `z` of type `f32`/["`Property::Float`"](https://docs.rs/ply-rs/0.1.3/ply_rs/ply/enum.Property.html#variant.Float).
+Files with the "`.ply`" extension are loaded using [`ply-rs`](https://crates.io/crates/ply-rs). 
+The PLY file has to contain an element called "`vertex`" with the properties `x`, `y` and `z` of type `f32`/["`Property::Float`"](https://docs.rs/ply-rs/0.1.3/ply_rs/ply/enum.Property.html#variant.Float). 
 Any other properties or elements are ignored.
 
 ### XYZ
 
-Files with the "`.xyz`" extension are interpreted as raw bytes of `f32` values in native endianness of the system.
+Files with the "`.xyz`" extension are interpreted as raw bytes of `f32` values in native endianness of the system. 
 Three consecutive `f32`s represent a (x,y,z) coordinate triplet of a fluid particle.
 
 ### JSON
 
-Files with the "`.json`" extension are interpreted as serializations of a `Vec<[f32; 3]>` where each three component array represents a particle position.
+Files with the "`.json`" extension are interpreted as serializations of a `Vec<[f32; 3]>` where each three component array represents a particle position. 
 This corresponds to a JSON file with a structure like this for example:
 ```json
 [
@@ -217,42 +218,39 @@ This corresponds to a JSON file with a structure like this for example:
 
 ## Output file formats
 
-Currently, only VTK and OBJ formats are supported to store the reconstructed surface meshes.
-Both formats support output of normals but only VTK supports additional fields such as interpolated scalar or vector fields.
+Currently, only VTK and OBJ formats are supported to store the reconstructed surface meshes. 
+Both formats support output of normals but only VTK supports additional fields such as interpolated scalar or vector fields. 
 The file format is inferred from the extension of output filename.
 
 ## All command line options
 
 ### The `reconstruct` command
 ```
-splashsurf-reconstruct (v0.9.2) - Reconstruct a surface from particle data
+splashsurf-reconstruct (v0.9.3) - Reconstruct a surface from particle data
 
-Usage: splashsurf.exe reconstruct [OPTIONS] --particle-radius <PARTICLE_RADIUS> --smoothing-length <SMOOTHING_LENGTH> --cube-size <CUBE_SIZE> <--input-file <INPUT_FILE>|--input-sequence <INPUT_SEQUENCE>>
+Usage: splashsurf reconstruct [OPTIONS] --particle-radius <PARTICLE_RADIUS> --smoothing-length <SMOOTHING_LENGTH> --cube-size <CUBE_SIZE> <INPUT_FILE_OR_SEQUENCE>
 
 Options:
   -h, --help     Print help
   -V, --version  Print version
 
 Input/output:
-  -i, --input-file <INPUT_FILE>
-          Path to the input file where the particle positions are stored (supported formats: VTK 4.2, VTU, binary f32 XYZ, PLY, BGEO)
-  -s, --input-sequence <INPUT_SEQUENCE>
-          Path to a sequence of particle files that should be processed, use "{}" in the filename to indicate a placeholder. To specify an output format, use e.g. --output_file="filename_{}.obj"
-  -o, --output-file <OUTPUT_FILE>
-          Filename for writing the reconstructed surface to disk (default: "{original_filename}_surface.vtk")
-      --output-dir <OUTPUT_DIR>
-          Optional base directory for all output files (default: current working directory)
+  -o, --output-file <OUTPUT_FILE>  Filename for writing the reconstructed surface to disk (default: "{original_filename}_surface.vtk")
+      --output-dir <OUTPUT_DIR>    Optional base directory for all output files (default: current working directory)
+  -s, --start-index <START_INDEX>  Index of the first input file to process when processing a sequence of files (default: lowest index of the sequence)
+  -e, --end-index <END_INDEX>      Index of the last input file to process when processing a sequence of files (default: highest index of the sequence)
+  <INPUT_FILE_OR_SEQUENCE>     Path to the input file where the particle positions are stored (supported formats: VTK 4.2, VTU, binary f32 XYZ, PLY, BGEO), use "{}" in the filename to indicate a placeholder for a sequence
 
 Numerical reconstruction parameters:
-      --particle-radius <PARTICLE_RADIUS>
+  -r, --particle-radius <PARTICLE_RADIUS>
           The particle radius of the input data
       --rest-density <REST_DENSITY>
           The rest density of the fluid [default: 1000.0]
-      --smoothing-length <SMOOTHING_LENGTH>
+  -l, --smoothing-length <SMOOTHING_LENGTH>
           The smoothing length radius used for the SPH kernel, the kernel compact support radius will be twice the smoothing length (in multiplies of the particle radius)
-      --cube-size <CUBE_SIZE>
+  -c, --cube-size <CUBE_SIZE>
           The cube edge length used for marching cubes in multiplies of the particle radius, corresponds to the cell size of the implicit background grid
-      --surface-threshold <SURFACE_THRESHOLD>
+  -t, --surface-threshold <SURFACE_THRESHOLD>
           The iso-surface threshold for the density, i.e. the normalized value of the reconstructed density level that indicates the fluid surface (in multiplies of the rest density) [default: 0.6]
       --domain-min <X_MIN> <Y_MIN> <Z_MIN>
           Lower corner of the domain where surface reconstruction should be performed (requires domain-max to be specified)
@@ -300,7 +298,7 @@ Debug options:
 
 ### The `convert` subcommand
 
-Allows conversion between particle file formats and between mesh file formats. For particles `VTK, BGEO, PLY, XYZ, JSON -> VTK`
+Allows conversion between particle file formats and between mesh file formats. For particles `VTK, BGEO, PLY, XYZ, JSON -> VTK` 
 is supported. For meshes only `VTK, PLY -> VTK, OBJ` is supported.
 
 ```
@@ -330,5 +328,5 @@ Options:
 # License
 
 For license information of this project, see the LICENSE file.
-The splashsurf logo is based on two graphics ([1](https://www.svgrepo.com/svg/295647/wave), [2](https://www.svgrepo.com/svg/295652/surfboard-surfboard)) published on SVG Repo under a CC0 ("No Rights Reserved") license.
+The splashsurf logo is based on two graphics ([1](https://www.svgrepo.com/svg/295647/wave), [2](https://www.svgrepo.com/svg/295652/surfboard-surfboard)) published on SVG Repo under a CC0 ("No Rights Reserved") license. 
 The dragon model shown in the images on this page are part of the ["Stanford 3D Scanning Repository"](https://graphics.stanford.edu/data/3Dscanrep/).

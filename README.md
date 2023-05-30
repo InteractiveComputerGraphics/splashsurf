@@ -106,7 +106,7 @@ Good settings for the surface reconstruction depend on the original simulation a
 ### Benchmark example
 For example:
 ```
-splashsurf reconstruct -i data/canyon_13353401_particles.xyz --output-dir=out --particle-radius=0.011 --smoothing-length=2.0 --cube-size=1.5 --surface-threshold=0.6
+splashsurf reconstruct data/canyon_13353401_particles.xyz --output-dir=out --particle-radius=0.011 --smoothing-length=2.0 --cube-size=1.5 --surface-threshold=0.6
 ```
 With these parameters, a scene with 13353401 particles is reconstructed in less than 3 seconds on a Ryzen 9 5950X. The output is a mesh with 6023244 triangles.
 ```
@@ -164,8 +164,9 @@ You can either process a single file or let the tool automatically process a seq
 A sequence of files is indicated by specifying a filename with a `{}` placeholder pattern in the name.
 The tool will treat the placeholder as a `(\d+)` regex, i.e. a group matching to at least one digit.
 This allows for any zero padding as well as non-zero padded incrementing indices.
-All files in the input path matching this pattern will then be processed in lexicographical order (i.e. silently skipping missing files in the sequence).
+All files in the input path matching this pattern will then be processed in natural sort order (i.e. silently skipping missing files in the sequence).
 Note that the tool collects all existing filenames as soon as the command is invoked and does not update the list while running.
+The first and last file of a sequences that should be processed can be specified with the `-s`/`--start-index` and/or `-e`/`--end-index` arguments.
 
 By specifying the flag `--mt-files=on`, several files can be processed in parallel.
 If this is enabled, you should ideally also set `--mt-particles=off` as enabling both will probably degrade performance.
@@ -231,34 +232,31 @@ The file format is inferred from the extension of output filename.
 
 ### The `reconstruct` command
 ```
-splashsurf-reconstruct (v0.9.2) - Reconstruct a surface from particle data
+splashsurf-reconstruct (v0.9.3) - Reconstruct a surface from particle data
 
-Usage: splashsurf.exe reconstruct [OPTIONS] --particle-radius <PARTICLE_RADIUS> --smoothing-length <SMOOTHING_LENGTH> --cube-size <CUBE_SIZE> <--input-file <INPUT_FILE>|--input-sequence <INPUT_SEQUENCE>>
+Usage: splashsurf reconstruct [OPTIONS] --particle-radius <PARTICLE_RADIUS> --smoothing-length <SMOOTHING_LENGTH> --cube-size <CUBE_SIZE> <INPUT_FILE_OR_SEQUENCE>
 
 Options:
   -h, --help     Print help
   -V, --version  Print version
 
 Input/output:
-  -i, --input-file <INPUT_FILE>
-          Path to the input file where the particle positions are stored (supported formats: VTK 4.2, VTU, binary f32 XYZ, PLY, BGEO)
-  -s, --input-sequence <INPUT_SEQUENCE>
-          Path to a sequence of particle files that should be processed, use "{}" in the filename to indicate a placeholder. To specify an output format, use e.g. --output_file="filename_{}.obj"
-  -o, --output-file <OUTPUT_FILE>
-          Filename for writing the reconstructed surface to disk (default: "{original_filename}_surface.vtk")
-      --output-dir <OUTPUT_DIR>
-          Optional base directory for all output files (default: current working directory)
+  -o, --output-file <OUTPUT_FILE>  Filename for writing the reconstructed surface to disk (default: "{original_filename}_surface.vtk")
+      --output-dir <OUTPUT_DIR>    Optional base directory for all output files (default: current working directory)
+  -s, --start-index <START_INDEX>  Index of the first input file to process when processing a sequence of files (default: lowest index of the sequence)
+  -e, --end-index <END_INDEX>      Index of the last input file to process when processing a sequence of files (default: highest index of the sequence)
+  <INPUT_FILE_OR_SEQUENCE>     Path to the input file where the particle positions are stored (supported formats: VTK 4.2, VTU, binary f32 XYZ, PLY, BGEO), use "{}" in the filename to indicate a placeholder for a sequence
 
 Numerical reconstruction parameters:
-      --particle-radius <PARTICLE_RADIUS>
+  -r, --particle-radius <PARTICLE_RADIUS>
           The particle radius of the input data
       --rest-density <REST_DENSITY>
           The rest density of the fluid [default: 1000.0]
-      --smoothing-length <SMOOTHING_LENGTH>
+  -l, --smoothing-length <SMOOTHING_LENGTH>
           The smoothing length radius used for the SPH kernel, the kernel compact support radius will be twice the smoothing length (in multiplies of the particle radius)
-      --cube-size <CUBE_SIZE>
+  -c, --cube-size <CUBE_SIZE>
           The cube edge length used for marching cubes in multiplies of the particle radius, corresponds to the cell size of the implicit background grid
-      --surface-threshold <SURFACE_THRESHOLD>
+  -t, --surface-threshold <SURFACE_THRESHOLD>
           The iso-surface threshold for the density, i.e. the normalized value of the reconstructed density level that indicates the fluid surface (in multiplies of the rest density) [default: 0.6]
       --domain-min <X_MIN> <Y_MIN> <Z_MIN>
           Lower corner of the domain where surface reconstruction should be performed (requires domain-max to be specified)
