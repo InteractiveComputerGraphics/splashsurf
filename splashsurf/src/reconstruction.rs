@@ -676,7 +676,8 @@ mod arguments {
                     format!(
                         "{}.vtk",
                         input_stem.replace("{}", &format!("{}_{{}}", output_suffix))
-                    ).into()
+                    )
+                    .into()
                 };
             } else {
                 is_sequence = false;
