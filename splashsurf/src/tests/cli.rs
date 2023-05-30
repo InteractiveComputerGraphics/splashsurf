@@ -52,7 +52,6 @@ fn test_main_cli() {
     if let Subcommand::Reconstruct(rec_args) = crate::CommandlineArgs::try_parse_from([
         "splashsurf",
         "reconstruct",
-        "--input-file",
         "test.vtk",
         "--particle-radius=0.05",
         "--smoothing-length=3.0",
@@ -61,48 +60,13 @@ fn test_main_cli() {
     .expect("this command is supposed to work")
     .subcommand
     {
-        assert_eq!(rec_args.input_file, Some(PathBuf::from("test.vtk")));
+        assert_eq!(rec_args.input_file_or_sequence, PathBuf::from("test.vtk"));
     };
-
-    // Minimum arguments: input sequence
-    if let Subcommand::Reconstruct(rec_args) = crate::CommandlineArgs::try_parse_from([
-        "splashsurf",
-        "reconstruct",
-        "--input-sequence",
-        "test.vtk",
-        "--particle-radius=0.05",
-        "--smoothing-length=3.0",
-        "--cube-size=0.75",
-    ])
-    .expect("this command is supposed to work")
-    .subcommand
-    {
-        assert_eq!(rec_args.input_sequence, Some(PathBuf::from("test.vtk")));
-    };
-
-    // Input file & sequence conflict
-    assert_eq!(
-        crate::CommandlineArgs::try_parse_from([
-            "splashsurf",
-            "reconstruct",
-            "--input-file",
-            "test.vtk",
-            "--input-sequence",
-            "test.vtk",
-            "--particle-radius=0.05",
-            "--smoothing-length=3.0",
-            "--cube-size=0.75"
-        ])
-        .expect_err("this command is supposed to fail")
-        .kind(),
-        clap::error::ErrorKind::ArgumentConflict
-    );
 
     // Test on/off switch
     if let Subcommand::Reconstruct(rec_args) = crate::CommandlineArgs::try_parse_from([
         "splashsurf",
         "reconstruct",
-        "--input-file",
         "test.vtk",
         "--particle-radius=0.05",
         "--smoothing-length=3.0",
@@ -118,7 +82,6 @@ fn test_main_cli() {
     if let Subcommand::Reconstruct(rec_args) = crate::CommandlineArgs::try_parse_from([
         "splashsurf",
         "reconstruct",
-        "--input-file",
         "test.vtk",
         "--particle-radius=0.05",
         "--smoothing-length=3.0",
@@ -131,29 +94,10 @@ fn test_main_cli() {
         assert_eq!(rec_args.normals, Switch::Off);
     };
 
-    assert_eq!(
-        crate::CommandlineArgs::try_parse_from([
-            "splashsurf",
-            "reconstruct",
-            "--input-file",
-            "test.vtk",
-            "--input-sequence",
-            "test.vtk",
-            "--particle-radius=0.05",
-            "--smoothing-length=3.0",
-            "--cube-size=0.75",
-            "--normals"
-        ])
-        .expect_err("this command is supposed to fail")
-        .kind(),
-        clap::error::ErrorKind::NoEquals
-    );
-
     // Test domain min/max: correct values
     if let Subcommand::Reconstruct(rec_args) = crate::CommandlineArgs::try_parse_from([
         "splashsurf",
         "reconstruct",
-        "--input-file",
         "test.vtk",
         "--particle-radius=0.05",
         "--smoothing-length=3.0",
@@ -179,9 +123,6 @@ fn test_main_cli() {
         crate::CommandlineArgs::try_parse_from([
             "splashsurf",
             "reconstruct",
-            "--input-file",
-            "test.vtk",
-            "--input-sequence",
             "test.vtk",
             "--particle-radius=0.05",
             "--smoothing-length=3.0",
