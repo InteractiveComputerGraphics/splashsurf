@@ -80,57 +80,43 @@ fn parse_particles_from_ply<R: Real>(
 /// property float nz
 /// property float s
 /// property float t
-/// element face 12
+/// element face *
 /// property list uchar uint vertex_indices
 /// ```
 fn parse_mesh_from_ply<R: Real>(
     ply_file: &Ply<DefaultElement>,
 ) -> Result<MeshWithData<R, TriMesh3d<R>>, anyhow::Error> {
+    // TODO: Support other attributes
+    // TODO: Support other data types
+
     let vertices_normals = ply_file
         .payload
         .get("vertex")
         .ok_or(anyhow!("PLY file is missing a 'vertex' element"))?;
 
     let mut vertices = Vec::with_capacity(vertices_normals.len());
-    let mut normals = Vec::with_capacity(vertices_normals.len());
+
+    let load_vec3_property = |vertex: (&Property, &Property, &Property)| match vertex {
+        (Property::Float(x), Property::Float(y), Property::Float(z)) => Ok(Vector3::new(
+            R::from_f32(*x).unwrap(),
+            R::from_f32(*y).unwrap(),
+            R::from_f32(*z).unwrap(),
+        )),
+        _ => Err(anyhow!(
+            "Vertex properties have wrong PLY data type (expected float)"
+        )),
+    };
 
     for e in vertices_normals {
         let vertex = (
             e.get("x").unwrap(),
             e.get("y").unwrap(),
             e.get("z").unwrap(),
-            e.get("nx").unwrap(),
-            e.get("ny").unwrap(),
-            e.get("nz").unwrap(),
         );
 
-        let (vertex, normal) = match vertex {
-            (
-                Property::Float(x),
-                Property::Float(y),
-                Property::Float(z),
-                Property::Float(nx),
-                Property::Float(ny),
-                Property::Float(nz),
-            ) => Ok((
-                Vector3::new(
-                    R::from_f32(*x).unwrap(),
-                    R::from_f32(*y).unwrap(),
-                    R::from_f32(*z).unwrap(),
-                ),
-                Vector3::new(
-                    R::from_f32(*nx).unwrap(),
-                    R::from_f32(*ny).unwrap(),
-                    R::from_f32(*nz).unwrap(),
-                ),
-            )),
-            _ => Err(anyhow!(
-                "Vertex properties have wrong PLY data type (expected float)"
-            )),
-        }?;
+        let vertex = load_vec3_property(vertex)?;
 
         vertices.push(vertex);
-        normals.push(normal);
     }
 
     let faces = ply_file
@@ -161,12 +147,39 @@ fn parse_mesh_from_ply<R: Real>(
         })
         .try_collect_with_capacity(faces.len())?;
 
-    let normals = MeshAttribute::new("normals".to_string(), AttributeData::Vector3Real(normals));
-    Ok(MeshWithData::new(TriMesh3d {
+    let mut mesh = MeshWithData::new(TriMesh3d {
         vertices,
         triangles,
-    })
-    .with_point_data(normals))
+    });
+
+    {
+        let vertex_properties = &ply_file.header.elements.get("vertex").unwrap().properties;
+        let contains_normals = vertex_properties.contains_key("nx")
+            && vertex_properties.contains_key("ny")
+            && vertex_properties.contains_key("nz");
+
+        if contains_normals {
+            let mut normals = Vec::with_capacity(vertices_normals.len());
+
+            for e in vertices_normals {
+                let vertex = (
+                    e.get("nx").unwrap(),
+                    e.get("ny").unwrap(),
+                    e.get("nz").unwrap(),
+                );
+
+                let normal = load_vec3_property(vertex)?;
+
+                normals.push(normal);
+            }
+
+            let normals =
+                MeshAttribute::new("normals".to_string(), AttributeData::Vector3Real(normals));
+            mesh.point_attributes.push(normals);
+        }
+    }
+
+    Ok(mesh)
 }
 
 #[cfg(test)]
@@ -174,8 +187,8 @@ pub mod test {
     use super::*;
 
     #[test]
-    fn test_ply_read_cube() -> Result<(), anyhow::Error> {
-        let input_file = Path::new("../data/cube.ply");
+    fn test_ply_read_cube_with_normals() -> Result<(), anyhow::Error> {
+        let input_file = Path::new("../data/cube_normals.ply");
 
         let mesh: MeshWithData<f32, _> = surface_mesh_from_ply(input_file).with_context(|| {
             format!(
@@ -192,6 +205,23 @@ pub mod test {
                 assert_eq!(normals.len(), 24)
             }
         }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_ply_read_cube() -> Result<(), anyhow::Error> {
+        let input_file = Path::new("../data/cube.ply");
+
+        let mesh: MeshWithData<f32, _> = surface_mesh_from_ply(input_file).with_context(|| {
+            format!(
+                "Failed to load surface mesh from file \"{}\"",
+                input_file.display()
+            )
+        })?;
+
+        assert_eq!(mesh.mesh.vertices.len(), 24);
+        assert_eq!(mesh.mesh.triangles.len(), 12);
 
         Ok(())
     }
