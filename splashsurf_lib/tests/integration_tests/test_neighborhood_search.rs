@@ -121,6 +121,32 @@ fn test_neighborhood_search_spatial_hashing_simple() {
     }
 }
 
+#[test]
+fn test_neighborhood_search_spatial_hashing_parallel_simple() {
+    let search_radius: f32 = 0.3;
+
+    for (particles, mut solution) in generate_simple_test_cases(search_radius) {
+        let mut nl = Vec::new();
+        let mut domain = Aabb3d::from_points(particles.as_slice());
+        domain.grow_uniformly(search_radius);
+        neighborhood_search_spatial_hashing_parallel::<i32, f32>(
+            &domain,
+            particles.as_slice(),
+            search_radius,
+            &mut nl,
+        );
+
+        sort_neighborhood_lists(&mut nl);
+        sort_neighborhood_lists(&mut solution);
+
+        assert_eq!(
+            nl, solution,
+            "neighborhood_search_spatial_hashing failed. Search radius: {}, input: {:?}",
+            search_radius, particles
+        );
+    }
+}
+
 #[cfg(feature = "io")]
 mod tests_from_files {
     use super::*;

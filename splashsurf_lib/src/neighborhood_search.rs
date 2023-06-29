@@ -232,10 +232,13 @@ pub fn neighborhood_search_spatial_hashing_parallel<I: Index, R: Real>(
     // Map for spatially hashed storage of all particles (map from cell -> enclosed particles)
     let particles_per_cell_map =
         parallel_generate_cell_to_particle_map::<I, R>(&grid, particle_positions).into_read_only();
-    let particles_per_cell_vec: Vec<(I, Vec<usize>)> = particles_per_cell_map
-        .iter()
-        .map(|(&i, v)| (i, v.clone()))
-        .collect::<Vec<_>>();
+    let particles_per_cell_vec: Vec<(I, Vec<usize>)> = {
+        profile!("cell_map_to_vec");
+        particles_per_cell_map
+            .iter()
+            .map(|(&i, v)| (i, v.clone()))
+            .collect::<Vec<_>>()
+    };
 
     // Extract, per cell, the particle lists of all adjacent cells
     let adjacent_cell_particle_vecs = {
@@ -259,7 +262,10 @@ pub fn neighborhood_search_spatial_hashing_parallel<I: Index, R: Real>(
     };
 
     // TODO: Compute the default capacity of neighborhood lists from rest volume of particles
-    par_init_neighborhood_list(neighborhood_list, particle_positions.len());
+    {
+        profile!("init_neighbor_list_storage");
+        par_init_neighborhood_list(neighborhood_list, particle_positions.len());
+    }
 
     // We have to share the pointer to the neighborhood list storage between threads to avoid unnecessary copies and expensive merging.
     // SAFETY: In principle this can be done soundly because
@@ -276,53 +282,65 @@ pub fn neighborhood_search_spatial_hashing_parallel<I: Index, R: Real>(
                 // The particle lists of all cells adjacent to the current cell
                 let cell_k_adjacent_particle_vecs = &adjacent_cell_particle_vecs[cell_k];
 
+                let mut local_buffer = Vec::with_capacity(50);
+
+                let neighborhood_test =
+                    |pos_i: Vector3<R>, particle_j: usize, local_buffer: &mut Vec<usize>| {
+                        let pos_j = unsafe { particle_positions.get_unchecked(particle_j).clone() };
+
+                        // TODO: We might not be able to guarantee that this is symmetric.
+                        //  Therefore, it might be possible that only one side of some neighborhood relationships gets detected.
+                        if (pos_j - pos_i).norm_squared() < search_radius_squared {
+                            // A neighbor was found
+                            //particle_i_neighbors.push(particle_j);
+                            local_buffer.push(particle_j);
+                        }
+                    };
+
                 // Iterate over all particles of the current cell
-                for (i, &particle_i) in cell_k_particles.iter().enumerate() {
-                    let pos_i = &particle_positions[particle_i];
-                    // Get mutable reference to the neighborhood list of `particle_i`
-                    // SAFETY: This is sound because
-                    //  1. Here, we only write to neighborhood lists of particles in the current cell `cell_k`.
-                    //  2. The particles of the current cell `cell_k` are only handled by this closure invocation in sequence.
-                    //  3. The spatial hashing guarantees that a particle is stored only once and in a single cell.
-                    // => We only dereference and write to strictly disjoint regions in memory
-                    let particle_i_neighbors =
-                        unsafe { neighborhood_list_mut_ptr.get_mut_unchecked(particle_i) };
+                for (i, particle_i) in cell_k_particles.iter().copied().enumerate() {
+                    let pos_i = unsafe { particle_positions.get_unchecked(particle_i).clone() };
 
                     // Check for neighborhood with particles of all adjacent cells
                     // Transitive neighborhood relationship is not handled explicitly.
                     // Instead, it will be handled when the cell of `particle_j` is processed.
-                    for &adjacent_cell_particles in cell_k_adjacent_particle_vecs.iter() {
-                        for &particle_j in adjacent_cell_particles.iter() {
-                            let pos_j = &particle_positions[particle_j];
-                            // TODO: We might not be able to guarantee that this is symmetric.
-                            //  Therefore, it might be possible that only one side of some neighborhood relationships gets detected.
-                            if (pos_j - pos_i).norm_squared() < search_radius_squared {
-                                // A neighbor was found
-                                particle_i_neighbors.push(particle_j);
-                            }
-                        }
-                    }
+                    cell_k_adjacent_particle_vecs
+                        .iter()
+                        .copied()
+                        .flatten()
+                        .copied()
+                        .for_each(|particle_j| {
+                            neighborhood_test(pos_i, particle_j, &mut local_buffer)
+                        });
 
-                    // Check for neighborhood with all remaining particles of the same cell
-                    for &particle_j in cell_k_particles.iter().skip(i + 1) {
-                        let pos_j = &particle_positions[particle_j];
-                        if (pos_j - pos_i).norm_squared() < search_radius_squared {
-                            // A neighbor was found
-                            particle_i_neighbors.push(particle_j);
+                    // Check particles of own cell until particle itself
+                    cell_k_particles[..i]
+                        .iter()
+                        .copied()
+                        .for_each(|particle_j| {
+                            neighborhood_test(pos_i, particle_j, &mut local_buffer)
+                        });
 
-                            // Get mutable reference to neighborhood list of `particle_j`
-                            // SAFETY: This is sound because
-                            //  1. The same reasons why we can get a mutable reference to the neighborhood list of `particle_i` (see above).
-                            //  2. We only access neighborhood lists of particles with j > i, so we have no aliasing with i.
-                            // => We only dereference and write to strictly disjoint regions in memory
-                            {
-                                let particle_j_neighbors = unsafe {
-                                    neighborhood_list_mut_ptr.get_mut_unchecked(particle_j)
-                                };
-                                // Add neighborhood relationship transitively
-                                particle_j_neighbors.push(particle_i);
-                            }
-                        }
+                    // Check particles of own cell after particle itself
+                    cell_k_particles[i + 1..]
+                        .iter()
+                        .copied()
+                        .for_each(|particle_j| {
+                            neighborhood_test(pos_i, particle_j, &mut local_buffer)
+                        });
+
+                    if !local_buffer.is_empty() {
+                        // Get mutable reference to the neighborhood list of `particle_i`
+                        // SAFETY: This is sound because
+                        //  1. Here, we only write to neighborhood lists of particles in the current cell `cell_k`.
+                        //  2. The particles of the current cell `cell_k` are only handled by this closure invocation in sequence.
+                        //  3. The spatial hashing guarantees that a particle is stored only once and in a single cell.
+                        // => We only dereference and write to strictly disjoint regions in memory
+                        let particle_i_neighbors =
+                            unsafe { neighborhood_list_mut_ptr.get_mut_unchecked(particle_i) };
+
+                        particle_i_neighbors.extend(local_buffer.iter());
+                        local_buffer.clear();
                     }
                 }
             },
