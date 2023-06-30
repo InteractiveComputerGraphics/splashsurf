@@ -27,7 +27,7 @@ static HELP_TEMPLATE: &str = "{before-help}{name} (v{version}) - {author-with-ne
 #[command(
     name = "splashsurf",
     author = "Fabian Löschner <loeschner@cs.rwth-aachen.de>",
-    about = "Surface reconstruction for particle data from SPH simulations (https://github.com/w1th0utnam3/splashsurf)",
+    about = "Surface reconstruction for particle data from SPH simulations (https://github.com/InteractiveComputerGraphics/splashsurf)",
     version,
     propagate_version = true,
     help_template = HELP_TEMPLATE,
