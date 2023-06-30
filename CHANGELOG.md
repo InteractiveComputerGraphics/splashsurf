@@ -42,7 +42,7 @@ The following changes are present in the `main` branch of the repository and are
 - Lib: Add module `sph_interpolation` for the interpolation of normals, scalar fields and vector fields to arbitrary points using SPH based interpolation
 - CLI: The `--output-normals=on/off` argument was renamed to `--normals=on/off`
 - CLI: Add command line switch `--sph-normals=on/off` (enabled by default) to toggle whether to use SPH interpolation (instead of area weighted triangle normals) to compute normals when `--normals` is on
-- CLI: Support for writing surfaces meshes (including normals) to OBJ files directly from the `reconstruct` subcommand (previously this was only supported for the `convert` subcommand) (See https://github.com/w1th0utnam3/splashsurf/pull/29)
+- CLI: Support for writing surfaces meshes (including normals) to OBJ files directly from the `reconstruct` subcommand (previously this was only supported for the `convert` subcommand) (See https://github.com/InteractiveComputerGraphics/splashsurf/pull/29)
 - CLI: Support for specifying names of point attribute fields via the argument `--interpolate-attributes=...` that should be interpolated to the reconstructed surface. Currently it is only possible to load these fields from VTK files and the interpolated values can also only be written if the output file format is VTK.
 - CLI: All `on/off` arguments now require using an equal sign to set them. Primarily, this was done to prevent the CLI from accepting empty values which would be replaced by the respective default arguments. E.g. previously `--normals` was equivalent to the default `--normals=off` which is quite confusing. Now the default is only applied when the argument is not provided at all while `--normals` results in an error and `--normals=on` can be used to override the default.
 
@@ -124,7 +124,7 @@ At the moment, this domain decomposition approach is only available when allowin
 ## Version 0.4.0
 
  - CLI: Add support for reading BGEO files
- - Lib: Allow passing in an existing `SurfaceReconstruction` to reuse allocated memory (currently only memory for the resulting surface mesh is reused) (https://github.com/w1th0utnam3/splashsurf/pull/7)
+ - Lib: Allow passing in an existing `SurfaceReconstruction` to reuse allocated memory (currently only memory for the resulting surface mesh is reused) (https://github.com/InteractiveComputerGraphics/splashsurf/pull/7)
  - Lib: Add `Default` trait bound to `Index` and `Real` types
  - Updated dependencies
 
@@ -139,7 +139,7 @@ At the moment, this domain decomposition approach is only available when allowin
 
 ## Version 0.2.0
 
- - CLI: Add support for reading PLY files (https://github.com/w1th0utnam3/splashsurf/pull/1)
+ - CLI: Add support for reading PLY files (https://github.com/InteractiveComputerGraphics/splashsurf/pull/1)
  - Update dependencies
  - Re-export `nalgebra` from lib, use this from CLI
 
