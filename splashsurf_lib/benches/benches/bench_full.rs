@@ -1,6 +1,6 @@
 use criterion::{criterion_group, Criterion};
 use nalgebra::Vector3;
-use splashsurf_lib::io::vtk_format::particles_from_vtk;
+use splashsurf_lib::io::particles_from_file;
 #[allow(dead_code)]
 use splashsurf_lib::io::vtk_format::write_vtk;
 use splashsurf_lib::{
@@ -89,7 +89,7 @@ pub fn surface_reconstruction_canyon(c: &mut Criterion) {
 
 pub fn surface_reconstruction_dam_break(c: &mut Criterion) {
     let particle_positions: &Vec<Vector3<f32>> =
-        &particles_from_vtk("../data/dam_break_frame_23_24389_particles.vtk").unwrap();
+        &particles_from_file("../data/dam_break_frame_23_24389_particles.bgeo").unwrap();
 
     let particle_radius = 0.025;
     let compact_support_radius = 4.0 * particle_radius;
@@ -180,7 +180,7 @@ pub fn surface_reconstruction_dam_break(c: &mut Criterion) {
 
 pub fn surface_reconstruction_double_dam_break(c: &mut Criterion) {
     let particle_positions: &Vec<Vector3<f32>> =
-        &particles_from_vtk("../data/double_dam_break_frame_26_4732_particles.vtk").unwrap();
+        &particles_from_file("../data/double_dam_break_frame_26_4732_particles.vtk").unwrap();
 
     let particle_radius = 0.025;
     let compact_support_radius = 4.0 * particle_radius;
@@ -271,7 +271,7 @@ pub fn surface_reconstruction_double_dam_break(c: &mut Criterion) {
 
 pub fn surface_reconstruction_double_dam_break_inplace(c: &mut Criterion) {
     let particle_positions: &Vec<Vector3<f32>> =
-        &particles_from_vtk("../data/double_dam_break_frame_26_4732_particles.vtk").unwrap();
+        &particles_from_file("../data/double_dam_break_frame_26_4732_particles.vtk").unwrap();
 
     let particle_radius = 0.025;
     let compact_support_radius = 4.0 * particle_radius;

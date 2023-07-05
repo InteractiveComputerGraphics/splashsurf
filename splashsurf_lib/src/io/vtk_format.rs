@@ -465,11 +465,6 @@ pub mod test {
     }
 
     #[test]
-    fn test_hilbert_46843_particles_from_vtk() -> Result<(), anyhow::Error> {
-        test_load_num_particles("../data/hilbert_46843_particles.vtk", 46843)
-    }
-
-    #[test]
     fn test_fluid_250_particles_from_vtu_encoded() -> Result<(), anyhow::Error> {
         test_load_num_particles("../data/fluid_encoded_250_particles.vtu", 250)
     }

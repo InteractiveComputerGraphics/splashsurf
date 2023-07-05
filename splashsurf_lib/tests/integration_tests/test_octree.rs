@@ -302,7 +302,7 @@ fn build_octree_par_consistency<I: Index, R: Real, P: AsRef<Path>>(
     file: P,
     parameters: TestParameters<R>,
 ) {
-    let particles = io::vtk_format::particles_from_vtk::<R, _>(file).unwrap();
+    let particles = io::particles_from_file::<R, _>(file).unwrap();
 
     let grid = parameters.build_grid::<I>(particles.as_slice());
 
@@ -369,7 +369,7 @@ fn build_octree_double_dam_break() {
 #[cfg_attr(debug_assertions, ignore)]
 fn build_octree_dam_break() {
     build_octree_par_consistency::<i64, f64, _>(
-        "../data/dam_break_frame_23_24389_particles.vtk",
+        "../data/dam_break_frame_23_24389_particles.bgeo",
         TestParameters::default()
             .with_margin(Some(1.0))
             .with_max_particles_per_cell(Some(1000)),
@@ -390,7 +390,7 @@ fn build_octree_bunny() {
 #[cfg_attr(debug_assertions, ignore)]
 fn build_octree_hilbert() {
     build_octree_par_consistency::<i64, f64, _>(
-        "../data/hilbert_46843_particles.vtk",
+        "../data/hilbert_46843_particles.bgeo",
         TestParameters::default()
             .with_margin(Some(1.0))
             .with_max_particles_per_cell(Some(1000)),

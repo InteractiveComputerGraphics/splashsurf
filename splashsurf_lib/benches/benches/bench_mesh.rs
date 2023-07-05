@@ -1,5 +1,5 @@
 use criterion::{criterion_group, Criterion};
-use splashsurf_lib::io::vtk_format::particles_from_vtk;
+use splashsurf_lib::io::particles_from_file;
 use splashsurf_lib::nalgebra::Vector3;
 use splashsurf_lib::{
     reconstruct_surface, Parameters, ParticleDensityComputationStrategy,
@@ -9,7 +9,7 @@ use std::path::Path;
 use std::time::Duration;
 
 fn reconstruct_particles<P: AsRef<Path>>(particle_file: P) -> SurfaceReconstruction<i64, f32> {
-    let particle_positions: &Vec<Vector3<f32>> = &particles_from_vtk(particle_file).unwrap();
+    let particle_positions: &Vec<Vector3<f32>> = &particles_from_file(particle_file).unwrap();
 
     let particle_radius = 0.011;
     let compact_support_radius = 4.0 * particle_radius;
@@ -37,7 +37,7 @@ fn reconstruct_particles<P: AsRef<Path>>(particle_file: P) -> SurfaceReconstruct
 
 pub fn mesh_vertex_normals(c: &mut Criterion) {
     //let reconstruction = reconstruct_particles("../../canyon_13353401_particles.vtk");
-    let reconstruction = reconstruct_particles("../data/hilbert_46843_particles.vtk");
+    let reconstruction = reconstruct_particles("../data/hilbert_46843_particles.bgeo");
     let mesh = reconstruction.mesh();
 
     let mut group = c.benchmark_group("mesh");
@@ -57,7 +57,7 @@ pub fn mesh_vertex_normals(c: &mut Criterion) {
 
 pub fn mesh_vertex_normals_parallel(c: &mut Criterion) {
     //let reconstruction = reconstruct_particles("../../canyon_13353401_particles.vtk");
-    let reconstruction = reconstruct_particles("../data/hilbert_46843_particles.vtk");
+    let reconstruction = reconstruct_particles("../data/hilbert_46843_particles.bgeo");
     let mesh = reconstruction.mesh();
 
     let mut group = c.benchmark_group("mesh");

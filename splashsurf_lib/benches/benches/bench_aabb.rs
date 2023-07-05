@@ -1,12 +1,12 @@
 use criterion::{criterion_group, Criterion};
 use nalgebra::Vector3;
-use splashsurf_lib::io::vtk_format::particles_from_vtk;
+use splashsurf_lib::io::particles_from_file;
 use splashsurf_lib::Aabb3d;
 use std::time::Duration;
 
 pub fn aabb_from_points(c: &mut Criterion) {
     let particle_positions: &Vec<Vector3<f32>> =
-        &particles_from_vtk("../data/hilbert_46843_particles.vtk").unwrap();
+        &particles_from_file("../data/hilbert_46843_particles.bgeo").unwrap();
 
     let mut group = c.benchmark_group("aabb");
     group.sample_size(200);
@@ -22,7 +22,7 @@ pub fn aabb_from_points(c: &mut Criterion) {
 
 pub fn aabb_from_points_par(c: &mut Criterion) {
     let particle_positions: &Vec<Vector3<f32>> =
-        &particles_from_vtk("../data/hilbert_46843_particles.vtk").unwrap();
+        &particles_from_file("../data/hilbert_46843_particles.bgeo").unwrap();
 
     let mut group = c.benchmark_group("aabb");
     group.sample_size(500);
