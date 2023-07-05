@@ -175,6 +175,7 @@ impl<R: Real> Default for TestParameters<R> {
     }
 }
 
+#[allow(unused)]
 impl<R: Real> TestParameters<R> {
     fn new(particle_radius: f64, compact_support_factor: f64, cube_size_factor: f64) -> Self {
         let params = Self::default();

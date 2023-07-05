@@ -18,11 +18,12 @@ fn reconstruct_particles<P: AsRef<Path>>(particle_file: P) -> SurfaceReconstruct
     let parameters = Parameters {
         particle_radius,
         rest_density: 1000.0,
-        compact_support_radius: compact_support_radius,
+        compact_support_radius,
         cube_size,
         iso_surface_threshold: 0.6,
         domain_aabb: None,
         enable_multi_threading: true,
+        subdomain_num_cubes_per_dim: None,
         spatial_decomposition: Some(SpatialDecompositionParameters {
             subdivision_criterion: SubdivisionCriterion::MaxParticleCountAuto,
             ghost_particle_safety_factor: None,

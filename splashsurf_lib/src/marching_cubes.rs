@@ -200,6 +200,7 @@ pub fn check_mesh_consistency<I: Index, R: Real>(
     grid: &UniformGrid<I, R>,
     mesh: &TriMesh3d<R>,
 ) -> Result<(), String> {
+    profile!("check_mesh_consistency");
     let boundary_edges = mesh.find_boundary_edges();
 
     if boundary_edges.is_empty() {
