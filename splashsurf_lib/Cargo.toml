@@ -9,7 +9,7 @@ categories = ["graphics", "science", "simulation", "visualization", "rendering"]
 readme = "README.md"
 edition = "2021"
 
-homepage = "http://splashsurf.physics-simulation.org"
+homepage = "https://splashsurf.physics-simulation.org"
 repository = "https://github.com/InteractiveComputerGraphics/splashsurf"
 documentation = "https://docs.rs/splashsurf_lib"
 
