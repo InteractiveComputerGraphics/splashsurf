@@ -25,6 +25,7 @@ use crate::{Index, Real};
 
 type GlobalIndex = u64;
 
+/// Converts any literal or expression to the Index type I (panics if value does not fit)
 macro_rules! to_index {
     ($value:literal) => {
         <I as NumCast>::from($value).expect("literal has to fit in index type")
@@ -34,6 +35,7 @@ macro_rules! to_index {
     };
 }
 
+/// Converts any literal or expression to the Real type R (panics if value does not fit)
 macro_rules! to_real {
     ($value:literal) => {
         <R as NumCast>::from($value).expect("literal has to fit in real type")
@@ -478,236 +480,6 @@ pub(crate) fn decomposition<
     })
 }
 
-/// Prints statistics of the given list of subdomains
-#[allow(unused)]
-pub(crate) fn subdomain_stats<I: Index, R: Real>(
-    parameters: &ParametersSubdomainGrid<I, R>,
-    particles: &[Vector3<R>],
-    subdomains: &Subdomains<I>,
-) {
-    profile!("subdomain stats");
-    info!("Statistics");
-
-    let per_subdomain_particle_count = subdomains
-        .per_subdomain_particles
-        .iter()
-        .map(|p| p.len())
-        .collect::<Vec<_>>();
-
-    info!(
-        "Occupied subdomains: {}",
-        per_subdomain_particle_count.len()
-    );
-
-    /*
-    info!("Printing subdomain particle counts:");
-    for subdomain in subdomains.per_subdomain_particles {
-        info!("{}", subdomain.lock().len());
-    }
-    */
-
-    info!("Smallest Subdomains:");
-    for i in 0..11 {
-        let c = per_subdomain_particle_count
-            .iter()
-            .copied()
-            .filter(|c| *c == i)
-            .count();
-
-        info!(
-            "Number of subdomains with {} particles: {} ({:.2}% of number of subdomains)",
-            i,
-            c,
-            (c as f64 / per_subdomain_particle_count.len() as f64) * 100.0
-        );
-    }
-
-    info!("Other stats:");
-    for n in [10, 50, 100, 500, 1000, 2000, 10000] {
-        let c = per_subdomain_particle_count
-            .iter()
-            .copied()
-            .filter(|c| *c <= n)
-            .count();
-
-        info!(
-            "Number of subdomains with {} or fewer particles: {} ({:.2}% of number of subdomains)",
-            n,
-            c,
-            (c as f64 / per_subdomain_particle_count.len() as f64) * 100.0
-        );
-    }
-
-    {
-        let mut per_subdomain_particle_count = per_subdomain_particle_count.clone();
-        per_subdomain_particle_count.sort();
-
-        {
-            let largest_subdomain_particle_count =
-                per_subdomain_particle_count[per_subdomain_particle_count.len() - 1];
-            info!("Largest subdomain has {largest_subdomain_particle_count} particles");
-
-            for f in [0.95, 0.9, 0.8, 0.75, 0.5, 0.1] {
-                let c = per_subdomain_particle_count
-                    .iter()
-                    .copied()
-                    .filter(|c| *c >= (f * largest_subdomain_particle_count as f64) as usize)
-                    .count();
-
-                let n = per_subdomain_particle_count
-                    .iter()
-                    .copied()
-                    .filter(|c| *c >= (f * largest_subdomain_particle_count as f64) as usize)
-                    .sum::<usize>();
-
-                info!(
-                    "Number of subdomains with {} or more particles ({}% of largest subdomain): {} ({:.2}% of number of subdomains), in sum {} particles ({:.2}% of all particles)",
-                    (f * largest_subdomain_particle_count as f64) as usize,
-                    f * 100.0,
-                    c,
-                    (c as f64 / per_subdomain_particle_count.len() as f64) * 100.0,
-                    n,
-                    100.0 * (n as f64 / particles.len() as f64)
-                );
-            }
-        }
-
-        info!("Largest subdomains:");
-        for i in 0..10 {
-            if let Some(&count) =
-                per_subdomain_particle_count.get(per_subdomain_particle_count.len() - 1 - i)
-            {
-                info!(
-                    "{} particles ({:.2}% of all particles)",
-                    count,
-                    100.0 * (count as f64 / particles.len() as f64)
-                );
-            }
-        }
-    }
-
-    {
-        let mut hexmesh = HexMesh3d::default();
-        let subdomain_grid = &parameters.subdomain_grid;
-
-        // Loop over all non-empty subdomains
-        for &flat_subdomain_idx in &subdomains.flat_subdomain_indices {
-            let subdomain_ijk = subdomain_grid
-                .try_unflatten_cell_index(flat_subdomain_idx as I)
-                .unwrap();
-            let [i, j, k] = subdomain_ijk.index().clone();
-
-            let vertex_offset = hexmesh.vertices.len();
-
-            {
-                let mut push_vertex = |a: i32, b: i32, c: i32| {
-                    hexmesh.vertices.push(
-                        subdomain_grid.point_coordinates(
-                            &subdomain_grid
-                                .get_point([i + to_index!(a), j + to_index!(b), k + to_index!(c)])
-                                .unwrap(),
-                        ),
-                    );
-                };
-
-                push_vertex(0, 0, 0);
-                push_vertex(1, 0, 0);
-                push_vertex(1, 1, 0);
-                push_vertex(0, 1, 0);
-                push_vertex(0, 0, 1);
-                push_vertex(1, 0, 1);
-                push_vertex(1, 1, 1);
-                push_vertex(0, 1, 1);
-            }
-
-            hexmesh.cells.push([
-                vertex_offset + 0,
-                vertex_offset + 1,
-                vertex_offset + 2,
-                vertex_offset + 3,
-                vertex_offset + 4,
-                vertex_offset + 5,
-                vertex_offset + 6,
-                vertex_offset + 7,
-            ]);
-        }
-
-        crate::io::vtk_format::write_vtk(&hexmesh, "out/new_grid.vtk", "grid").unwrap();
-    }
-}
-
-/// Counts subdomains with only ghost particles and no particles in interior
-#[allow(unused)]
-pub(crate) fn count_no_owned_particles_subdomains<I: Index, R: Real>(
-    parameters: &ParametersSubdomainGrid<I, R>,
-    particles: &[Vector3<R>],
-    subdomains: &Subdomains<I>,
-) -> usize {
-    profile!(parent, "count_no_owned_particles_subdomains");
-
-    let no_owned_particles_counter = AtomicUsize::new(0);
-
-    subdomains
-        .flat_subdomain_indices
-        .par_iter()
-        .copied()
-        .zip(subdomains.per_subdomain_particles.par_iter())
-        .for_each(|(flat_subdomain_idx, subdomain_particle_indices)| {
-            profile!("inner subdomain_tasks", parent = parent);
-
-            let flat_subdomain_idx: I = flat_subdomain_idx;
-            let subdomain_particle_indices: &[usize] = subdomain_particle_indices.as_slice();
-
-            // Collect all particle positions of this subdomain
-            let subdomain_particles = subdomain_particle_indices
-                .iter()
-                .copied()
-                .map(|idx| particles[idx])
-                .collect::<Vec<_>>();
-
-            // Get the cell index and AABB of the subdomain
-            let subdomain_idx = parameters
-                .subdomain_grid
-                .try_unflatten_cell_index(flat_subdomain_idx)
-                .expect("Subdomain cell does not exist");
-            let subdomain_aabb = parameters.subdomain_grid.cell_aabb(&subdomain_idx);
-
-            // Count the number of owned (non-ghost particles) of this domain
-            let non_ghost_particle_count = subdomain_particles
-                .iter()
-                .filter(|p| subdomain_aabb.contains_point(*p))
-                .count();
-            if non_ghost_particle_count == 0 {
-                no_owned_particles_counter.fetch_add(1, Ordering::AcqRel);
-            }
-        });
-
-    let no_owned_particles_counter = no_owned_particles_counter.into_inner();
-    no_owned_particles_counter
-}
-
-/// Ensures that at least the specified total capacity is reserved for the given vector
-fn reserve_total<T>(vec: &mut Vec<T>, total_capacity: usize) {
-    if total_capacity > vec.capacity() {
-        vec.reserve(total_capacity - vec.capacity());
-    }
-}
-
-fn collect_subdomain_data<T: Copy>(
-    global_data: &[T],
-    subdomain_particle_indices: &[usize],
-    subdomain_data: &mut Vec<T>,
-) {
-    subdomain_data.clear();
-    reserve_total(subdomain_data, subdomain_particle_indices.len());
-    subdomain_data.extend(
-        subdomain_particle_indices
-            .iter()
-            .copied()
-            .map(|idx| global_data[idx]),
-    );
-}
-
 pub(crate) fn compute_global_density_vector<I: Index, R: Real>(
     parameters: &ParametersSubdomainGrid<I, R>,
     global_particles: &[Vector3<R>],
@@ -753,7 +525,7 @@ pub(crate) fn compute_global_density_vector<I: Index, R: Real>(
             // Collect all particle positions of this subdomain
             {
                 profile!("collect subdomain data");
-                collect_subdomain_data(
+                gather_subdomain_data(
                     global_particles,
                     subdomain_particle_indices,
                     subdomain_particles,
@@ -965,12 +737,12 @@ pub(crate) fn reconstruction<I: Index, R: Real>(
         // Collect all particle positions and densities of this subdomain
         {
             //profile!("collect subdomain data");
-            collect_subdomain_data(
+            gather_subdomain_data(
                 global_particles,
                 subdomain_particle_indices,
                 subdomain_particles,
             );
-            collect_subdomain_data(
+            gather_subdomain_data(
                 global_particle_densities,
                 subdomain_particle_indices,
                 subdomain_particle_densities,
@@ -1526,7 +1298,246 @@ pub(crate) mod subdomain_classification {
     }
 }
 
+pub(crate) mod debug {
+    use super::*;
+
+    /// Prints statistics of the given list of subdomains
+    #[allow(unused)]
+    pub(crate) fn subdomain_stats<I: Index, R: Real>(
+        parameters: &ParametersSubdomainGrid<I, R>,
+        particles: &[Vector3<R>],
+        subdomains: &Subdomains<I>,
+    ) {
+        profile!("subdomain stats");
+        info!("Statistics");
+
+        let per_subdomain_particle_count = subdomains
+            .per_subdomain_particles
+            .iter()
+            .map(|p| p.len())
+            .collect::<Vec<_>>();
+
+        info!(
+            "Occupied subdomains: {}",
+            per_subdomain_particle_count.len()
+        );
+
+        /*
+        info!("Printing subdomain particle counts:");
+        for subdomain in subdomains.per_subdomain_particles {
+            info!("{}", subdomain.lock().len());
+        }
+        */
+
+        info!("Smallest Subdomains:");
+        for i in 0..11 {
+            let c = per_subdomain_particle_count
+                .iter()
+                .copied()
+                .filter(|c| *c == i)
+                .count();
+
+            info!(
+                "Number of subdomains with {} particles: {} ({:.2}% of number of subdomains)",
+                i,
+                c,
+                (c as f64 / per_subdomain_particle_count.len() as f64) * 100.0
+            );
+        }
+
+        info!("Other stats:");
+        for n in [10, 50, 100, 500, 1000, 2000, 10000] {
+            let c = per_subdomain_particle_count
+                .iter()
+                .copied()
+                .filter(|c| *c <= n)
+                .count();
+
+            info!(
+            "Number of subdomains with {} or fewer particles: {} ({:.2}% of number of subdomains)",
+            n,
+            c,
+            (c as f64 / per_subdomain_particle_count.len() as f64) * 100.0
+        );
+        }
+
+        {
+            let mut per_subdomain_particle_count = per_subdomain_particle_count.clone();
+            per_subdomain_particle_count.sort();
+
+            {
+                let largest_subdomain_particle_count =
+                    per_subdomain_particle_count[per_subdomain_particle_count.len() - 1];
+                info!("Largest subdomain has {largest_subdomain_particle_count} particles");
+
+                for f in [0.95, 0.9, 0.8, 0.75, 0.5, 0.1] {
+                    let c = per_subdomain_particle_count
+                        .iter()
+                        .copied()
+                        .filter(|c| *c >= (f * largest_subdomain_particle_count as f64) as usize)
+                        .count();
+
+                    let n = per_subdomain_particle_count
+                        .iter()
+                        .copied()
+                        .filter(|c| *c >= (f * largest_subdomain_particle_count as f64) as usize)
+                        .sum::<usize>();
+
+                    info!(
+                    "Number of subdomains with {} or more particles ({}% of largest subdomain): {} ({:.2}% of number of subdomains), in sum {} particles ({:.2}% of all particles)",
+                    (f * largest_subdomain_particle_count as f64) as usize,
+                    f * 100.0,
+                    c,
+                    (c as f64 / per_subdomain_particle_count.len() as f64) * 100.0,
+                    n,
+                    100.0 * (n as f64 / particles.len() as f64)
+                );
+                }
+            }
+
+            info!("Largest subdomains:");
+            for i in 0..10 {
+                if let Some(&count) =
+                    per_subdomain_particle_count.get(per_subdomain_particle_count.len() - 1 - i)
+                {
+                    info!(
+                        "{} particles ({:.2}% of all particles)",
+                        count,
+                        100.0 * (count as f64 / particles.len() as f64)
+                    );
+                }
+            }
+        }
+    }
+
+    #[allow(unused)]
+    pub(crate) fn subdomains_to_hexmesh<I: Index, R: Real>(
+        parameters: &ParametersSubdomainGrid<I, R>,
+        subdomains: &Subdomains<I>,
+    ) -> HexMesh3d<R> {
+        let mut hexmesh = HexMesh3d::default();
+        let subdomain_grid = &parameters.subdomain_grid;
+
+        // Loop over all non-empty subdomains
+        for &flat_subdomain_idx in &subdomains.flat_subdomain_indices {
+            let subdomain_ijk = subdomain_grid
+                .try_unflatten_cell_index(flat_subdomain_idx as I)
+                .unwrap();
+            let [i, j, k] = subdomain_ijk.index().clone();
+
+            let vertex_offset = hexmesh.vertices.len();
+
+            {
+                let mut push_vertex = |a: i32, b: i32, c: i32| {
+                    hexmesh.vertices.push(
+                        subdomain_grid.point_coordinates(
+                            &subdomain_grid
+                                .get_point([i + to_index!(a), j + to_index!(b), k + to_index!(c)])
+                                .unwrap(),
+                        ),
+                    );
+                };
+
+                push_vertex(0, 0, 0);
+                push_vertex(1, 0, 0);
+                push_vertex(1, 1, 0);
+                push_vertex(0, 1, 0);
+                push_vertex(0, 0, 1);
+                push_vertex(1, 0, 1);
+                push_vertex(1, 1, 1);
+                push_vertex(0, 1, 1);
+            }
+
+            hexmesh.cells.push([
+                vertex_offset + 0,
+                vertex_offset + 1,
+                vertex_offset + 2,
+                vertex_offset + 3,
+                vertex_offset + 4,
+                vertex_offset + 5,
+                vertex_offset + 6,
+                vertex_offset + 7,
+            ]);
+        }
+
+        hexmesh
+    }
+
+    /// Counts subdomains with only ghost particles and no particles in interior
+    #[allow(unused)]
+    pub(crate) fn count_no_owned_particles_subdomains<I: Index, R: Real>(
+        parameters: &ParametersSubdomainGrid<I, R>,
+        particles: &[Vector3<R>],
+        subdomains: &Subdomains<I>,
+    ) -> usize {
+        profile!(parent, "count_no_owned_particles_subdomains");
+
+        let no_owned_particles_counter = AtomicUsize::new(0);
+
+        subdomains
+            .flat_subdomain_indices
+            .par_iter()
+            .copied()
+            .zip(subdomains.per_subdomain_particles.par_iter())
+            .for_each(|(flat_subdomain_idx, subdomain_particle_indices)| {
+                profile!("inner subdomain_tasks", parent = parent);
+
+                let flat_subdomain_idx: I = flat_subdomain_idx;
+                let subdomain_particle_indices: &[usize] = subdomain_particle_indices.as_slice();
+
+                // Collect all particle positions of this subdomain
+                let subdomain_particles = subdomain_particle_indices
+                    .iter()
+                    .copied()
+                    .map(|idx| particles[idx])
+                    .collect::<Vec<_>>();
+
+                // Get the cell index and AABB of the subdomain
+                let subdomain_idx = parameters
+                    .subdomain_grid
+                    .try_unflatten_cell_index(flat_subdomain_idx)
+                    .expect("Subdomain cell does not exist");
+                let subdomain_aabb = parameters.subdomain_grid.cell_aabb(&subdomain_idx);
+
+                // Count the number of owned (non-ghost particles) of this domain
+                let non_ghost_particle_count = subdomain_particles
+                    .iter()
+                    .filter(|p| subdomain_aabb.contains_point(*p))
+                    .count();
+                if non_ghost_particle_count == 0 {
+                    no_owned_particles_counter.fetch_add(1, Ordering::AcqRel);
+                }
+            });
+
+        let no_owned_particles_counter = no_owned_particles_counter.into_inner();
+        no_owned_particles_counter
+    }
+}
+
 /// Performs integer division and rounds the result up if there is a remainder
 fn int_ceil_div<T: Integer + Copy>(numerator: T, denominator: T) -> T {
     numerator / denominator + (numerator % denominator).min(T::one())
+}
+
+/// Ensures that at least the specified total capacity is reserved for the given vector
+fn reserve_total<T>(vec: &mut Vec<T>, total_capacity: usize) {
+    if total_capacity > vec.capacity() {
+        vec.reserve(total_capacity - vec.capacity());
+    }
+}
+
+/// Gathers particle related data from global storage to subdomain storage
+fn gather_subdomain_data<T: Copy>(
+    global_data: &[T],
+    subdomain_particle_indices: &[usize],
+    subdomain_data: &mut Vec<T>,
+) {
+    subdomain_data.clear();
+    reserve_total(subdomain_data, subdomain_particle_indices.len());
+    subdomain_data.extend(
+        subdomain_particle_indices
+            .iter()
+            .copied()
+            .map(|idx| global_data[idx]),
+    );
 }
