@@ -62,7 +62,7 @@ pub mod marching_cubes;
 pub mod mesh;
 pub mod neighborhood_search;
 pub mod octree;
-mod reconstruction;
+mod reconstruction_octree;
 pub mod sph_interpolation;
 pub mod topology;
 mod traits;
@@ -357,13 +357,17 @@ pub fn reconstruct_surface_inplace<'a, I: Index, R: Real>(
     output_surface.grid.log_grid_info();
 
     if parameters.spatial_decomposition.is_some() {
-        reconstruction::reconstruct_surface_domain_decomposition(
+        reconstruction_octree::reconstruct_surface_domain_decomposition(
             particle_positions,
             parameters,
             output_surface,
         )?;
     } else {
-        reconstruction::reconstruct_surface_global(particle_positions, parameters, output_surface)?;
+        reconstruction_octree::reconstruct_surface_global(
+            particle_positions,
+            parameters,
+            output_surface,
+        )?;
     }
 
     Ok(())
