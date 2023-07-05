@@ -3,8 +3,8 @@ use anyhow::{anyhow, Context};
 use log::{info, warn};
 use splashsurf_lib::mesh::MeshAttribute;
 use splashsurf_lib::nalgebra::Vector3;
-use splashsurf_lib::profile;
 use splashsurf_lib::Real;
+use splashsurf_lib::{io, profile};
 use splashsurf_lib::{
     mesh::{Mesh3d, MeshWithData, TriMesh3d},
     vtkio::model::DataSet,
@@ -59,30 +59,10 @@ pub fn read_particle_positions<R: Real, P: AsRef<Path>>(
         input_file.display()
     );
 
-    let particle_positions = if let Some(extension) = input_file.extension() {
+    let particle_positions = {
         profile!("loading particle positions");
-
-        let extension = extension
-            .to_str()
-            .ok_or(anyhow!("Invalid extension of input file"))?;
-
-        match extension.to_lowercase().as_str() {
-            "vtk" => vtk_format::particles_from_vtk(&input_file),
-            "vtu" => vtk_format::particles_from_vtk(&input_file),
-            "xyz" => xyz_format::particles_from_xyz(&input_file),
-            "ply" => ply_format::particles_from_ply(&input_file),
-            "bgeo" => bgeo_format::particles_from_bgeo(&input_file),
-            "json" => json_format::particles_from_json(&input_file),
-            _ => Err(anyhow!(
-                "Unsupported file format extension \"{}\" for reading particles",
-                extension
-            )),
-        }
-    } else {
-        Err(anyhow!(
-            "Unable to detect file format of particle input file (file name has to end with supported extension)",
-        ))
-    }?;
+        io::particles_from_file(input_file)?
+    };
 
     info!(
         "Successfully read dataset with {} particle positions.",
