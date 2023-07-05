@@ -22,7 +22,7 @@ pub fn surface_reconstruction_canyon(c: &mut Criterion) {
     let parameters = Parameters {
         particle_radius,
         rest_density: 1000.0,
-        compact_support_radius: compact_support_radius,
+        compact_support_radius,
         cube_size,
         iso_surface_threshold: 0.6,
         domain_aabb: None,
@@ -98,11 +98,12 @@ pub fn surface_reconstruction_dam_break(c: &mut Criterion) {
     let parameters = Parameters {
         particle_radius,
         rest_density: 1000.0,
-        compact_support_radius: compact_support_radius,
+        compact_support_radius,
         cube_size,
         iso_surface_threshold: 0.6,
         domain_aabb: None,
         enable_multi_threading: true,
+        subdomain_num_cubes_per_dim: None,
         spatial_decomposition: None,
     };
 
@@ -156,6 +157,15 @@ pub fn surface_reconstruction_dam_break(c: &mut Criterion) {
         },
     );
 
+    group.bench_function("surface_reconstruction_dam_break_par_grid_64", |b| {
+        b.iter(|| {
+            let mut parameters = parameters.clone();
+            parameters.subdomain_num_cubes_per_dim = Some(64);
+            reconstruction =
+                reconstruct_surface::<i64, _>(particle_positions.as_slice(), &parameters).unwrap()
+        })
+    });
+
     group.finish();
 
     /*
@@ -179,11 +189,12 @@ pub fn surface_reconstruction_double_dam_break(c: &mut Criterion) {
     let parameters = Parameters {
         particle_radius,
         rest_density: 1000.0,
-        compact_support_radius: compact_support_radius,
+        compact_support_radius,
         cube_size,
         iso_surface_threshold: 0.6,
         domain_aabb: None,
         enable_multi_threading: true,
+        subdomain_num_cubes_per_dim: None,
         spatial_decomposition: None,
     };
 
@@ -237,6 +248,15 @@ pub fn surface_reconstruction_double_dam_break(c: &mut Criterion) {
         },
     );
 
+    group.bench_function("surface_reconstruction_double_dam_break_par_grid_64", |b| {
+        b.iter(|| {
+            let mut parameters = parameters.clone();
+            parameters.subdomain_num_cubes_per_dim = Some(64);
+            reconstruction =
+                reconstruct_surface::<i64, _>(particle_positions.as_slice(), &parameters).unwrap()
+        })
+    });
+
     group.finish();
 
     /*
@@ -260,11 +280,12 @@ pub fn surface_reconstruction_double_dam_break_inplace(c: &mut Criterion) {
     let parameters = Parameters {
         particle_radius,
         rest_density: 1000.0,
-        compact_support_radius: compact_support_radius,
+        compact_support_radius,
         cube_size,
         iso_surface_threshold: 0.6,
         domain_aabb: None,
         enable_multi_threading: true,
+        subdomain_num_cubes_per_dim: None,
         spatial_decomposition: None,
     };
 
@@ -325,6 +346,22 @@ pub fn surface_reconstruction_double_dam_break_inplace(c: &mut Criterion) {
                         ParticleDensityComputationStrategy::SynchronizeSubdomains,
                 });
 
+                reconstruct_surface_inplace::<i64, _>(
+                    particle_positions.as_slice(),
+                    &parameters,
+                    &mut reconstruction,
+                )
+                .unwrap()
+            })
+        },
+    );
+
+    group.bench_function(
+        "surface_reconstruction_double_dam_break_inplace_par_grid_64",
+        |b| {
+            b.iter(|| {
+                let mut parameters = parameters.clone();
+                parameters.subdomain_num_cubes_per_dim = Some(64);
                 reconstruct_surface_inplace::<i64, _>(
                     particle_positions.as_slice(),
                     &parameters,

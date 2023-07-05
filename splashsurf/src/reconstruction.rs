@@ -118,6 +118,20 @@ pub struct ReconstructSubcommandArgs {
     #[arg(help_heading = ARGS_ADV, long, short = 'n')]
     pub num_threads: Option<usize>,
 
+    /// Whether to enable spatial decomposition using a regular grid-based approach
+    #[arg(
+        help_heading = ARGS_OCTREE,
+        long,
+        default_value = "off",
+        value_name = "off|on",
+        ignore_case = true,
+        require_equals = true
+    )]
+    pub subdomain_grid: Switch,
+    /// Each subdomain will be a cube consisting of this number of MC cube cells along each coordinate axis
+    #[arg(help_heading = ARGS_OCTREE, long, default_value="64")]
+    pub subdomain_cubes: u32,
+
     /// Whether to enable spatial decomposition using an octree (faster) instead of a global approach
     #[arg(
         help_heading = ARGS_OCTREE,
@@ -229,6 +243,8 @@ impl Switch {
 
 /// Executes the `reconstruct` subcommand
 pub fn reconstruct_subcommand(cmd_args: &ReconstructSubcommandArgs) -> Result<(), anyhow::Error> {
+    profile!("reconstruct CLI");
+
     let paths = ReconstructionRunnerPathCollection::try_from(cmd_args)
         .context("Failed parsing input file path(s) from command line")?
         .collect();
@@ -388,6 +404,10 @@ mod arguments {
                 cube_size,
                 iso_surface_threshold: args.surface_threshold,
                 domain_aabb,
+                subdomain_num_cubes_per_dim: args
+                    .subdomain_grid
+                    .into_bool()
+                    .then_some(args.subdomain_cubes),
                 enable_multi_threading: args.parallelize_over_particles.into_bool(),
                 spatial_decomposition,
             };

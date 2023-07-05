@@ -382,6 +382,19 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
         }
     }
 
+    pub fn get_edge(&self, origin_ijk: [I; 3], axis: Axis) -> Option<EdgeIndex<I>> {
+        let mut target_ijk = origin_ijk.clone();
+        target_ijk[axis.dim()] += I::one();
+        if self.point_exists(&origin_ijk) && self.point_exists(&target_ijk) {
+            Some(EdgeIndex {
+                origin: PointIndex::from_ijk(origin_ijk),
+                axis,
+            })
+        } else {
+            None
+        }
+    }
+
     /// Returns whether a point exists in the grid
     #[inline(always)]
     pub fn point_exists(&self, point_ijk: &[I; 3]) -> bool {
@@ -410,6 +423,15 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
             || (cell_index.index[0] + I::one() == self.n_cells_per_dim[0]
                 || cell_index.index[1] + I::one() == self.n_cells_per_dim[1]
                 || cell_index.index[2] + I::one() == self.n_cells_per_dim[2])
+    }
+
+    /// Returns whether the edge is between two points on the boundary of the grid
+    pub fn is_boundary_edge(&self, edge_index: &EdgeIndex<I>) -> bool {
+        let origin_index = edge_index.origin().index();
+        edge_index.axis.orthogonal_axes().iter().any(|orth_ax| {
+            origin_index[orth_ax.dim()] == I::zero()
+                || origin_index[orth_ax.dim()] + I::one() == self.n_points_per_dim[orth_ax.dim()]
+        })
     }
 
     /// Flattens the grid point index triplet to a single index
@@ -769,7 +791,7 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
 
 impl<I: Index, R: Real> OwningSubdomainGrid<I, R> {
     /// Creates a new subdomain grid
-    pub(crate) fn new(
+    pub fn new(
         global_grid: UniformGrid<I, R>,
         subdomain_grid: UniformGrid<I, R>,
         subdomain_offset: [I; 3],
@@ -963,6 +985,11 @@ impl<I: Index> EdgeIndex<I> {
             .apply_single_step(self.origin.index())
             .expect("Index type overflow");
         PointIndex::from_ijk(new_index)
+    }
+
+    /// The axis this edge is parallel to
+    pub fn axis(&self) -> Axis {
+        self.axis
     }
 }
 

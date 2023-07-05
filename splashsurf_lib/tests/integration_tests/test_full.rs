@@ -14,6 +14,7 @@ enum Strategy {
     Global,
     Octree,
     OctreeStitching,
+    SubdomainGrid,
 }
 
 fn params_with_aabb<R: Real>(
@@ -35,6 +36,7 @@ fn params_with_aabb<R: Real>(
         iso_surface_threshold,
         domain_aabb,
         enable_multi_threading: false,
+        subdomain_num_cubes_per_dim: None,
         spatial_decomposition: None,
     };
 
@@ -57,6 +59,9 @@ fn params_with_aabb<R: Real>(
                 particle_density_computation:
                     ParticleDensityComputationStrategy::SynchronizeSubdomains,
             });
+        }
+        Strategy::SubdomainGrid => {
+            parameters.subdomain_num_cubes_per_dim = Some(64);
         }
     }
 
@@ -156,15 +161,22 @@ macro_rules! generate_test {
 generate_test!(f32, surface_reconstruction_bunny_global, "bunny_frame_14_7705_particles.vtk" => "reconstruct_surface_bunny_par_global.vtk", default_params(), 60000, 80000, cfg_attr(debug_assertions, ignore));
 generate_test!(f32, surface_reconstruction_bunny_no_stitching, "bunny_frame_14_7705_particles.vtk" => "reconstruct_surface_bunny_par_no_stitching.vtk", default_params_with(Strategy::Octree), 60000, 80000);
 generate_test!(f32, surface_reconstruction_bunny_stitching, "bunny_frame_14_7705_particles.vtk" => "reconstruct_surface_bunny_par_stitching.vtk", default_params_with(Strategy::OctreeStitching), 60000, 80000, cfg_attr(debug_assertions, ignore));
+generate_test!(f32, surface_reconstruction_bunny_grid, "bunny_frame_14_7705_particles.vtk" => "reconstruct_surface_bunny_par_grid.vtk", default_params_with(Strategy::SubdomainGrid), 60000, 80000, cfg_attr(debug_assertions, ignore));
 
 generate_test!(f32, surface_reconstruction_hexecontahedron_stitching, "pentagonal_hexecontahedron_32286_particles.vtk" => "reconstruct_surface_pentagonal_hexecontahedron_par_stitching.vtk", default_params_with(Strategy::OctreeStitching), 550000, 650000, cfg_attr(debug_assertions, ignore));
+generate_test!(f32, surface_reconstruction_hexecontahedron_grid, "pentagonal_hexecontahedron_32286_particles.vtk" => "reconstruct_surface_pentagonal_hexecontahedron_par_grid.vtk", default_params_with(Strategy::SubdomainGrid), 550000, 650000, cfg_attr(debug_assertions, ignore));
 
 generate_test!(f32, surface_reconstruction_hilbert_stitching, "hilbert_46843_particles.vtk" => "reconstruct_surface_hilbert_par_stitching.vtk", default_params_with(Strategy::OctreeStitching), 360000, 400000, cfg_attr(debug_assertions, ignore));
 generate_test!(f32, surface_reconstruction_hilbert2_stitching, "hilbert2_7954_particles.vtk" => "reconstruct_surface_hilbert2_par_stitching.vtk", params(0.025, 4.0, 1.1, 0.6, Strategy::OctreeStitching), 90000, 100000);
 generate_test!(f32, surface_reconstruction_octocat_stitching, "octocat_32614_particles.vtk" => "reconstruct_surface_octocat_par_stitching.vtk", params(0.025, 4.0, 0.75, 0.6, Strategy::OctreeStitching), 140000, 180000, cfg_attr(debug_assertions, ignore));
 
+generate_test!(f32, surface_reconstruction_hilbert_grid, "hilbert_46843_particles.vtk" => "reconstruct_surface_hilbert_par_grid.vtk", default_params_with(Strategy::SubdomainGrid), 360000, 400000, cfg_attr(debug_assertions, ignore));
+generate_test!(f32, surface_reconstruction_hilbert2_grid, "hilbert2_7954_particles.vtk" => "reconstruct_surface_hilbert2_par_grid.vtk", params(0.025, 4.0, 1.1, 0.6, Strategy::SubdomainGrid), 90000, 100000);
+generate_test!(f32, surface_reconstruction_octocat_grid, "octocat_32614_particles.vtk" => "reconstruct_surface_octocat_par_grid.vtk", params(0.025, 4.0, 0.75, 0.6, Strategy::SubdomainGrid), 140000, 180000, cfg_attr(debug_assertions, ignore));
+
 generate_test!(f32, surface_reconstruction_knot_global, "sailors_knot_19539_particles.vtk" => "reconstruct_surface_knot_par_global.vtk", params(0.025, 4.0, 1.1, 0.6, Strategy::Global), 40000, 70000, cfg_attr(debug_assertions, ignore));
 generate_test!(f32, surface_reconstruction_knot_stitching, "sailors_knot_19539_particles.vtk" => "reconstruct_surface_knot_par_stitching.vtk", params(0.025, 4.0, 1.1, 0.6, Strategy::OctreeStitching), 40000, 70000);
+generate_test!(f32, surface_reconstruction_knot_grid, "sailors_knot_19539_particles.vtk" => "reconstruct_surface_knot_par_grid.vtk", params(0.025, 4.0, 1.1, 0.6, Strategy::SubdomainGrid), 40000, 70000);
 
 generate_test!(f32, surface_reconstruction_free_particles_01, "free_particles_1000_particles.vtk" => "reconstruct_surface_free_particles_01_global.vtk", params(0.5, 4.0, 1.5, 0.45, Strategy::Global), 21000, 25000);
 generate_test!(f32, surface_reconstruction_free_particles_02, "free_particles_125_particles.vtk" => "reconstruct_surface_free_particles_02_global.vtk", params_with_aabb(0.5, 4.0, 1.5, 0.45, Some(Aabb3d::new(Vector3::new(-10.0, -10.0, -10.0), Vector3::new(210.0, 210.0, 210.0))), Strategy::Global), 1500, 1600);

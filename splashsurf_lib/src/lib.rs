@@ -27,6 +27,7 @@ use log::info;
 /// Re-export the version of `nalgebra` used by this crate
 pub use nalgebra;
 use nalgebra::Vector3;
+use std::hash::Hash;
 use thiserror::Error as ThisError;
 /// Re-export the version of `vtkio` used by this crate, if vtk support is enabled
 #[cfg(feature = "vtk_extras")]
@@ -52,6 +53,7 @@ pub mod profiling;
 pub mod profiling_macro;
 
 mod aabb;
+pub(crate) mod dense_subdomains;
 pub mod density_map;
 pub mod generic_tree;
 #[cfg(feature = "io")]
@@ -62,7 +64,8 @@ pub mod marching_cubes;
 pub mod mesh;
 pub mod neighborhood_search;
 pub mod octree;
-mod reconstruction;
+pub mod reconstruction;
+mod reconstruction_octree;
 pub mod sph_interpolation;
 pub mod topology;
 mod traits;
@@ -107,6 +110,9 @@ pub(crate) fn new_map<K, V>() -> MapType<K, V> {
 */
 
 pub(crate) type ParallelMapType<K, V> = dashmap::DashMap<K, V, HashState>;
+fn new_parallel_map<K: Eq + Hash, V>() -> ParallelMapType<K, V> {
+    ParallelMapType::with_hasher(HashState::default())
+}
 
 /// Parameters for the spatial decomposition
 #[derive(Clone, Debug)]
@@ -196,6 +202,8 @@ pub struct Parameters<R: Real> {
     pub domain_aabb: Option<Aabb3d<R>>,
     /// Whether to allow multi threading within the surface reconstruction procedure
     pub enable_multi_threading: bool,
+    /// Each subdomain will be a cube consisting of this number of MC cube cells along each coordinate axis
+    pub subdomain_num_cubes_per_dim: Option<u32>,
     /// Parameters for the spatial decomposition (octree subdivision) of the particles.
     /// If not provided, no octree is generated and a global approach is used instead.
     pub spatial_decomposition: Option<SpatialDecompositionParameters<R>>,
@@ -212,6 +220,7 @@ impl<R: Real> Parameters<R> {
             iso_surface_threshold: self.iso_surface_threshold.try_convert()?,
             domain_aabb: map_option!(&self.domain_aabb, aabb => aabb.try_convert()?),
             enable_multi_threading: self.enable_multi_threading,
+            subdomain_num_cubes_per_dim: self.subdomain_num_cubes_per_dim,
             spatial_decomposition: map_option!(&self.spatial_decomposition, sd => sd.try_convert()?),
         })
     }
@@ -356,14 +365,24 @@ pub fn reconstruct_surface_inplace<'a, I: Index, R: Real>(
 
     output_surface.grid.log_grid_info();
 
-    if parameters.spatial_decomposition.is_some() {
-        reconstruction::reconstruct_surface_domain_decomposition(
+    if parameters.subdomain_num_cubes_per_dim.is_some() {
+        reconstruction::reconstruct_surface_subdomain_grid::<I, R>(
+            particle_positions,
+            parameters,
+            output_surface,
+        )?;
+    } else if parameters.spatial_decomposition.is_some() {
+        reconstruction_octree::reconstruct_surface_domain_decomposition(
             particle_positions,
             parameters,
             output_surface,
         )?;
     } else {
-        reconstruction::reconstruct_surface_global(particle_positions, parameters, output_surface)?;
+        reconstruction_octree::reconstruct_surface_global(
+            particle_positions,
+            parameters,
+            output_surface,
+        )?;
     }
 
     Ok(())
