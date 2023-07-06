@@ -84,7 +84,7 @@ pub(crate) fn initialize_logging(
         // Second option: use verbosity level
         verbosity.into_filter().unwrap_or_else(|| {
             // Third option: use log level from env
-            if let Some(log_level) = std::env::var_os("RUST_LOG") {
+            if let Some(log_level) = env::var_os("RUST_LOG") {
                 let log_level = log_level.to_string_lossy().to_ascii_lowercase();
                 match log_level.as_str() {
                     "off" => log::LevelFilter::Off,
@@ -105,8 +105,17 @@ pub(crate) fn initialize_logging(
         })
     };
 
-    fern::Dispatch::new()
-        .format(|out, message, record| {
+    if matches!(verbosity, VerbosityLevel::None) {
+        build_logger(log_filter_level, |out, message, record| {
+            out.finish(format_args!(
+                "[{}][{}] {}",
+                chrono::Local::now().format("%T%.3f"),
+                record.level(),
+                message
+            ))
+        })?;
+    } else {
+        build_logger(log_filter_level, |out, message, record| {
             out.finish(format_args!(
                 "[{}][{}][{}] {}",
                 chrono::Local::now().to_rfc3339_opts(chrono::SecondsFormat::Micros, false),
@@ -114,11 +123,8 @@ pub(crate) fn initialize_logging(
                 record.level(),
                 message
             ))
-        })
-        .level(log_filter_level)
-        .chain(ProgressHandler::new(std::io::stdout()).into_output())
-        .apply()
-        .map_err(|e| anyhow!("Unable to apply logger configuration ({:?})", e))?;
+        })?;
+    }
 
     if let Some(filter_level) = unknown_log_filter_level {
         error!(
@@ -128,6 +134,18 @@ pub(crate) fn initialize_logging(
     }
 
     Ok(())
+}
+
+fn build_logger<F>(log_filter_level: log::LevelFilter, formatter: F) -> Result<(), anyhow::Error>
+where
+    F: Fn(fern::FormatCallback, &std::fmt::Arguments, &log::Record) + Sync + Send + 'static,
+{
+    fern::Dispatch::new()
+        .format(formatter)
+        .level(log_filter_level)
+        .chain(ProgressHandler::new(std::io::stdout()).into_output())
+        .apply()
+        .map_err(|e| anyhow!("Unable to apply logger configuration ({:?})", e))
 }
 
 /// Prints program name, version etc. and command line arguments to log

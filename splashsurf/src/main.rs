@@ -112,6 +112,7 @@ enum VerbosityLevel {
     None,
     Verbose,
     VeryVerbose,
+    VeryVeryVerbose,
 }
 
 impl From<u8> for VerbosityLevel {
@@ -120,7 +121,8 @@ impl From<u8> for VerbosityLevel {
             0 => VerbosityLevel::None,
             1 => VerbosityLevel::Verbose,
             2 => VerbosityLevel::VeryVerbose,
-            _ => VerbosityLevel::VeryVerbose,
+            3 => VerbosityLevel::VeryVeryVerbose,
+            _ => VerbosityLevel::VeryVeryVerbose,
         }
     }
 }
@@ -130,8 +132,9 @@ impl VerbosityLevel {
     fn into_filter(self) -> Option<log::LevelFilter> {
         match self {
             VerbosityLevel::None => None,
-            VerbosityLevel::Verbose => Some(log::LevelFilter::Debug),
-            VerbosityLevel::VeryVerbose => Some(log::LevelFilter::Trace),
+            VerbosityLevel::Verbose => Some(log::LevelFilter::Info),
+            VerbosityLevel::VeryVerbose => Some(log::LevelFilter::Debug),
+            VerbosityLevel::VeryVeryVerbose => Some(log::LevelFilter::Trace),
         }
     }
 }
