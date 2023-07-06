@@ -34,10 +34,10 @@ static HELP_TEMPLATE: &str = "{before-help}{name} (v{version}) - {author-with-ne
 )]
 struct CommandlineArgs {
     /// Enable quiet mode (no output except for severe panic messages), overrides verbosity level
-    #[arg(long, short = 'q')]
+    #[arg(long, short = 'q', global = true)]
     quiet: bool,
     /// Print more verbose output, use multiple "v"s for even more verbose output (-v, -vv)
-    #[arg(short, action = clap::ArgAction::Count)]
+    #[arg(short, action = clap::ArgAction::Count, global = true)]
     verbosity: u8,
     /// Subcommands
     #[command(subcommand)]
