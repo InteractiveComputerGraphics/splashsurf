@@ -1,12 +1,17 @@
 //! Helper functions for the PLY file format
 
-use crate::mesh::{AttributeData, MeshAttribute, MeshWithData, TriMesh3d};
+use crate::mesh::{
+    AttributeData, CellConnectivity, Mesh3d, MeshAttribute, MeshWithData, TriMesh3d,
+};
 use crate::utils::IteratorExt;
 use crate::Real;
 use anyhow::{anyhow, Context};
 use nalgebra::Vector3;
+use num_traits::ToPrimitive;
 use ply_rs::parser::Parser as PlyParser;
 use ply_rs::ply::{DefaultElement, Ply, Property};
+use std::fs;
+use std::io::{BufWriter, Write};
 use std::path::Path;
 
 /// Tries to load the file at the given path as a PLY file and read particle positions from it
@@ -14,7 +19,7 @@ pub fn particles_from_ply<R: Real, P: AsRef<Path>>(
     ply_path: P,
 ) -> Result<Vec<Vector3<R>>, anyhow::Error> {
     let ply = PlyParser::new()
-        .read_ply(&mut std::fs::File::open(ply_path).context("Failed to open file for reading")?)
+        .read_ply(&mut fs::File::open(ply_path).context("Failed to open file for reading")?)
         .context("Failed to parse PLY file")?;
     parse_particles_from_ply(&ply)
 }
@@ -24,7 +29,7 @@ pub fn surface_mesh_from_ply<R: Real, P: AsRef<Path>>(
     ply_path: P,
 ) -> Result<MeshWithData<R, TriMesh3d<R>>, anyhow::Error> {
     let ply = PlyParser::new()
-        .read_ply(&mut std::fs::File::open(ply_path).context("Failed to open file for reading")?)
+        .read_ply(&mut fs::File::open(ply_path).context("Failed to open file for reading")?)
         .context("Failed to parse PLY file")?;
     parse_mesh_from_ply(&ply)
 }
@@ -180,6 +185,87 @@ fn parse_mesh_from_ply<R: Real>(
     }
 
     Ok(mesh)
+}
+
+/// Tries to write a mesh with attributes into a little endian PLY file
+#[rustfmt::skip]
+pub fn mesh_to_ply<R: Real, M: Mesh3d<R>, P: AsRef<Path>>(
+    mesh: &MeshWithData<R, M>,
+    filename: P,
+) -> Result<(), anyhow::Error> {
+    // TODO: Support attributes
+
+    let file = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open(filename)
+        .context("Failed to open file handle for writing PLY file")?;
+    let mut writer = BufWriter::with_capacity(100000, file);
+
+    write!(&mut writer, "ply\n")?;
+    write!(&mut writer, "format binary_little_endian 1.0\n")?;
+    write!(&mut writer, "element vertex {}\n", mesh.vertices().len())?;
+    write!(&mut writer, "property float x\n")?;
+    write!(&mut writer, "property float y\n")?;
+    write!(&mut writer, "property float z\n")?;
+    for p_attr in &mesh.point_attributes {
+        if p_attr.name == "normals" {
+            write!(&mut writer, "property float nx\n")?;
+            write!(&mut writer, "property float ny\n")?;
+            write!(&mut writer, "property float nz\n")?;
+        } else {
+            match p_attr.data {
+                AttributeData::ScalarU64(_) => write!(&mut writer, "property uint {}\n", p_attr.name)?,
+                AttributeData::ScalarReal(_) => write!(&mut writer, "property float {}\n", p_attr.name)?,
+                AttributeData::Vector3Real(_) => {
+                    write!(&mut writer, "property float {}_x\n", p_attr.name)?;
+                    write!(&mut writer, "property float {}_y\n", p_attr.name)?;
+                    write!(&mut writer, "property float {}_z\n", p_attr.name)?;
+                },
+            }
+        }
+    }
+    write!(&mut writer, "element face {}\n", mesh.cells().len())?;
+    write!(&mut writer, "property list uchar uint vertex_indices\n")?;
+    write!(&mut writer, "end_header\n")?;
+
+    for (i, v) in mesh.vertices().iter().enumerate() {
+        writer.write_all(&v.x.to_f32().expect("failed to convert coordinate to f32").to_le_bytes())?;
+        writer.write_all(&v.y.to_f32().expect("failed to convert coordinate to f32").to_le_bytes())?;
+        writer.write_all(&v.z.to_f32().expect("failed to convert coordinate to f32").to_le_bytes())?;
+
+        for p_attr in &mesh.point_attributes {
+            match &p_attr.data {
+                AttributeData::ScalarU64(data) => {
+                    let val = data[i].to_u32().expect("failed to convert attribute to u32");
+                    writer.write_all(&val.to_le_bytes())?;
+                },
+                AttributeData::ScalarReal(data) => {
+                    let val = data[i].to_f32().expect("failed to convert attribute to f32");
+                    writer.write_all(&val.to_le_bytes())?;
+                },
+                AttributeData::Vector3Real(data) => {
+                    let val = &data[i];
+                    writer.write_all(&val.x.to_f32().expect("failed to convert attribute to f32").to_le_bytes())?;
+                    writer.write_all(&val.y.to_f32().expect("failed to convert attribute to f32").to_le_bytes())?;
+                    writer.write_all(&val.z.to_f32().expect("failed to convert attribute to f32").to_le_bytes())?;
+                },
+            }
+        }
+    }
+
+    for c in mesh.cells() {
+        let num_verts = M::Cell::num_vertices().to_u8().expect("failed to convert cell vertex count to u8");
+        writer.write_all(&num_verts.to_le_bytes())?;
+        c.try_for_each_vertex(|v| {
+            let idx = v.to_u32().expect("failed to convert vertex index to u32");
+            writer.write_all(&idx.to_le_bytes())
+        })?;
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]

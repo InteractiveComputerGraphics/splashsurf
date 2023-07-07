@@ -264,6 +264,7 @@ where
 
         match extension.to_lowercase().as_str() {
             "vtk" => vtk_format::write_vtk(mesh, &output_file, "mesh"),
+            "ply" => ply_format::mesh_to_ply(mesh, &output_file),
             "obj" => obj_format::mesh_to_obj(mesh, &output_file),
             _ => Err(anyhow!(
                 "Unsupported file format extension \"{}\"",
