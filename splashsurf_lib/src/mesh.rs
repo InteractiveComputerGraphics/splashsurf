@@ -485,6 +485,16 @@ pub struct MeshWithData<R: Real, MeshT: Mesh3d<R>> {
     pub cell_attributes: Vec<MeshAttribute<R>>,
 }
 
+impl<R: Real, MeshT: Mesh3d<R>> Mesh3d<R> for MeshWithData<R, MeshT> {
+    type Cell = MeshT::Cell;
+    fn vertices(&self) -> &[Vector3<R>] {
+        self.mesh.vertices()
+    }
+    fn cells(&self) -> &[MeshT::Cell] {
+        self.mesh.cells()
+    }
+}
+
 /// Returns an mesh data wrapper with a default mesh and without attached attributes
 impl<R: Real, MeshT: Mesh3d<R> + Default> Default for MeshWithData<R, MeshT> {
     fn default() -> Self {
