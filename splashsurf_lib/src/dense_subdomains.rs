@@ -499,6 +499,7 @@ pub(crate) fn compute_global_density_vector<I: Index, R: Real>(
         neighborhood_lists: Vec<Vec<usize>>,
         // Per particle density values of this subdomain
         particle_densities: Vec<R>,
+        // Per particle flag whether the particle is in the interior of this subdomain (non-ghost particle)
         is_inside: Vec<bool>,
     }
 
@@ -549,16 +550,16 @@ pub(crate) fn compute_global_density_vector<I: Index, R: Real>(
                 margin_aabb
             };
 
-            is_inside.clear();
-            reserve_total(is_inside, subdomain_particle_indices.len());
-            is_inside.extend(
-                subdomain_particle_indices
-                    .iter()
-                    .copied()
-                    .map(|particle_idx| {
-                        subdomain_aabb.contains_point(&global_particles[particle_idx])
-                    }),
-            );
+            {
+                profile!("initialize particle filter");
+                is_inside.clear();
+                reserve_total(is_inside, subdomain_particle_indices.len());
+                is_inside.extend(
+                    subdomain_particles
+                        .iter()
+                        .map(|p| subdomain_aabb.contains_point(p)),
+                );
+            }
 
             neighborhood_search_spatial_hashing_filtered::<I, R>(
                 &margin_aabb,
@@ -582,15 +583,18 @@ pub(crate) fn compute_global_density_vector<I: Index, R: Real>(
                 profile!("update global density values");
                 // Lock global vector while this subdomain writes into it
                 let mut global_particle_densities = global_particle_densities.lock();
-                subdomain_particle_indices
+                is_inside
                     .iter()
                     .copied()
-                    .zip(particle_densities.iter().copied())
+                    .zip(
+                        subdomain_particle_indices
+                            .iter()
+                            .copied()
+                            .zip(particle_densities.iter().copied()),
+                    )
                     // Update density values only for particles inside of the subdomain (ghost particles have wrong values)
-                    .filter(|(particle_idx, _)| {
-                        subdomain_aabb.contains_point(&global_particles[*particle_idx])
-                    })
-                    .for_each(|(particle_idx, density)| {
+                    .filter(|(is_inside, _)| *is_inside)
+                    .for_each(|(_, (particle_idx, density))| {
                         global_particle_densities[particle_idx] = density;
                     });
             }
