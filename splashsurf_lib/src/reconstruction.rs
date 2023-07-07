@@ -28,11 +28,14 @@ pub(crate) fn reconstruct_surface_subdomain_grid<'a, I: Index, R: Real>(
             decomposition::<I, R, GhostMarginClassifier<I>>(&parameters, &particle_positions)?;
 
         /*
-        subdomain_stats(&parameters, &particle_positions, &subdomains);
-        info!(
-            "Number of subdomains with only ghost particles: {}",
-            count_no_owned_particles_subdomains(&parameters, &particle_positions, &subdomains)
-        );
+        {
+            use super::dense_subdomains::debug::*;
+            subdomain_stats(&parameters, &particle_positions, &subdomains);
+            info!(
+                "Number of subdomains with only ghost particles: {}",
+                count_no_owned_particles_subdomains(&parameters, &particle_positions, &subdomains)
+            );
+        }
          */
 
         let particle_densities =

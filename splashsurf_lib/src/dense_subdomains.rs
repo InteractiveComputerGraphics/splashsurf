@@ -635,7 +635,6 @@ pub(crate) fn reconstruction<I: Index, R: Real>(
     subdomains: &Subdomains<I>,
 ) -> Vec<SurfacePatch<I, R>> {
     profile!(parent, "reconstruction");
-    info!("Starting reconstruction (level-set evaluation and local triangulation).");
 
     let squared_support = parameters.compact_support_radius * parameters.compact_support_radius;
     // Add 1% so that we don't exclude grid points that are just on the kernel boundary
@@ -673,6 +672,8 @@ pub(crate) fn reconstruction<I: Index, R: Real>(
         "Subdomains with {} or less particles will be considered sparse.",
         sparse_limit
     );
+
+    info!("Starting reconstruction (level-set evaluation and local triangulation).");
 
     // Returns a unique identifier for any edge index of a subdomain that can be later used for stitching
     let globalize_local_edge = |mc_grid: &UniformCartesianCubeGrid3d<I, R>,
