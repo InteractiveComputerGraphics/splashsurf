@@ -148,6 +148,38 @@ pub fn sequential_compute_particle_densities<I: Index, R: Real>(
     }
 }
 
+#[inline(never)]
+pub fn sequential_compute_particle_densities_filtered<I: Index, R: Real>(
+    particle_positions: &[Vector3<R>],
+    particle_neighbor_lists: &[Vec<usize>],
+    compact_support_radius: R,
+    particle_rest_mass: R,
+    particle_densities: &mut Vec<R>,
+    filter: &[bool],
+) {
+    profile!("sequential_compute_particle_densities_filtered");
+
+    init_density_storage(particle_densities, particle_positions.len());
+
+    // Pre-compute the kernel which can be queried using squared distances
+    let kernel = DiscreteSquaredDistanceCubicKernel::new::<f64>(1000, compact_support_radius);
+
+    for (i, (particle_i_position, particle_i_neighbors)) in particle_positions
+        .iter()
+        .zip(particle_neighbor_lists.iter())
+        .enumerate()
+        .filter(|(i, _)| filter[*i])
+    {
+        let mut particle_i_density = kernel.evaluate(R::zero());
+        for particle_j_position in particle_i_neighbors.iter().map(|&j| &particle_positions[j]) {
+            let r_squared = (particle_j_position - particle_i_position).norm_squared();
+            particle_i_density += kernel.evaluate(r_squared);
+        }
+        particle_i_density *= particle_rest_mass;
+        particle_densities[i] = particle_i_density;
+    }
+}
+
 /// Computes the individual densities of particles using a standard SPH sum, multi-threaded implementation
 #[inline(never)]
 pub fn parallel_compute_particle_densities<I: Index, R: Real>(

@@ -11,12 +11,12 @@ use std::cell::RefCell;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use thread_local::ThreadLocal;
 
-use crate::density_map::sequential_compute_particle_densities;
+use crate::density_map::sequential_compute_particle_densities_filtered;
 use crate::kernel::{CubicSplineKernel, SymmetricKernel3d};
 use crate::marching_cubes::marching_cubes_lut::marching_cubes_triangulation_iter;
 use crate::mesh::{HexMesh3d, TriMesh3d};
 use crate::neighborhood_search::{
-    neighborhood_search_spatial_hashing, neighborhood_search_spatial_hashing_parallel,
+    neighborhood_search_spatial_hashing_filtered, neighborhood_search_spatial_hashing_parallel,
 };
 use crate::uniform_grid::{EdgeIndex, UniformCartesianCubeGrid3d};
 use crate::{
@@ -499,6 +499,7 @@ pub(crate) fn compute_global_density_vector<I: Index, R: Real>(
         neighborhood_lists: Vec<Vec<usize>>,
         // Per particle density values of this subdomain
         particle_densities: Vec<R>,
+        is_inside: Vec<bool>,
     }
 
     let workspace_tls = ThreadLocal::<RefCell<SubdomainWorkspace<R>>>::new();
@@ -518,6 +519,7 @@ pub(crate) fn compute_global_density_vector<I: Index, R: Real>(
                 subdomain_particles,
                 neighborhood_lists,
                 particle_densities,
+                is_inside,
             } = &mut *workspace;
 
             let flat_subdomain_idx: I = flat_subdomain_idx;
@@ -547,19 +549,32 @@ pub(crate) fn compute_global_density_vector<I: Index, R: Real>(
                 margin_aabb
             };
 
-            neighborhood_search_spatial_hashing::<I, R>(
+            is_inside.clear();
+            reserve_total(is_inside, subdomain_particle_indices.len());
+            is_inside.extend(
+                subdomain_particle_indices
+                    .iter()
+                    .copied()
+                    .map(|particle_idx| {
+                        subdomain_aabb.contains_point(&global_particles[particle_idx])
+                    }),
+            );
+
+            neighborhood_search_spatial_hashing_filtered::<I, R>(
                 &margin_aabb,
                 &subdomain_particles,
                 parameters.compact_support_radius,
                 neighborhood_lists,
+                is_inside,
             );
 
-            sequential_compute_particle_densities::<I, R>(
+            sequential_compute_particle_densities_filtered::<I, R>(
                 &subdomain_particles,
                 neighborhood_lists,
                 parameters.compact_support_radius,
                 parameters.particle_rest_mass,
                 particle_densities,
+                is_inside,
             );
 
             // Write particle densities into global storage
