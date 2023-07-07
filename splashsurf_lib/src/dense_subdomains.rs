@@ -16,7 +16,8 @@ use crate::kernel::{CubicSplineKernel, SymmetricKernel3d};
 use crate::marching_cubes::marching_cubes_lut::marching_cubes_triangulation_iter;
 use crate::mesh::{HexMesh3d, TriMesh3d};
 use crate::neighborhood_search::{
-    neighborhood_search_spatial_hashing_filtered, neighborhood_search_spatial_hashing_parallel,
+    neighborhood_search_spatial_hashing_flat_filtered,
+    neighborhood_search_spatial_hashing_parallel, FlatNeighborhoodList,
 };
 use crate::uniform_grid::{EdgeIndex, UniformCartesianCubeGrid3d};
 use crate::{
@@ -496,7 +497,7 @@ pub(crate) fn compute_global_density_vector<I: Index, R: Real>(
         // Particle positions of this subdomain
         subdomain_particles: Vec<Vector3<R>>,
         // Per particle neighborhood lists
-        neighborhood_lists: Vec<Vec<usize>>,
+        neighborhood_lists: FlatNeighborhoodList,
         // Per particle density values of this subdomain
         particle_densities: Vec<R>,
         // Per particle flag whether the particle is in the interior of this subdomain (non-ghost particle)
@@ -511,7 +512,7 @@ pub(crate) fn compute_global_density_vector<I: Index, R: Real>(
         .copied()
         .zip(subdomains.per_subdomain_particles.par_iter())
         .for_each(|(flat_subdomain_idx, subdomain_particle_indices)| {
-            profile!("inner subdomain_tasks", parent = parent);
+            profile!("subdomain density computation", parent = parent);
 
             // Obtain thread local workspace and clear it
             let mut workspace = workspace_tls.get_or_default().borrow_mut();
@@ -561,7 +562,7 @@ pub(crate) fn compute_global_density_vector<I: Index, R: Real>(
                 );
             }
 
-            neighborhood_search_spatial_hashing_filtered::<I, R>(
+            neighborhood_search_spatial_hashing_flat_filtered::<I, R>(
                 &margin_aabb,
                 &subdomain_particles,
                 parameters.compact_support_radius,
@@ -569,7 +570,7 @@ pub(crate) fn compute_global_density_vector<I: Index, R: Real>(
                 is_inside,
             );
 
-            sequential_compute_particle_densities_filtered::<I, R>(
+            sequential_compute_particle_densities_filtered::<I, R, _>(
                 &subdomain_particles,
                 neighborhood_lists,
                 parameters.compact_support_radius,
@@ -760,8 +761,6 @@ pub(crate) fn reconstruction<I: Index, R: Real>(
     let workspace_tls = ThreadLocal::<RefCell<SubdomainWorkspace<I, R>>>::new();
 
     let reconstruct_dense = |flat_subdomain_idx: I, subdomain_particle_indices: &Vec<usize>| {
-        //profile!("inner subdomain_tasks (dense)", parent = parent);
-
         // Obtain thread local workspace and clear it
         let mut workspace = workspace_tls.get_or_default().borrow_mut();
 
@@ -1013,8 +1012,6 @@ pub(crate) fn reconstruction<I: Index, R: Real>(
     };
 
     let reconstruct_sparse = |flat_subdomain_idx: I, subdomain_particle_indices: &Vec<usize>| {
-        //profile!("inner subdomain_tasks (dense)", parent = parent);
-
         // Obtain thread local workspace and clear it
         let mut workspace = workspace_tls.get_or_default().borrow_mut();
 

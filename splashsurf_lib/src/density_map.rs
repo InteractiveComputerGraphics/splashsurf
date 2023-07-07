@@ -31,6 +31,7 @@ use rayon::prelude::*;
 use std::cell::RefCell;
 use thiserror::Error as ThisError;
 use thread_local::ThreadLocal;
+use crate::neighborhood_search::NeighborhoodList;
 
 // TODO: Document formulas for the computation of the values
 // TODO: Document that we actually evaluate the SPH interpolation of the constant function f(x) = 1
@@ -149,9 +150,9 @@ pub fn sequential_compute_particle_densities<I: Index, R: Real>(
 }
 
 #[inline(never)]
-pub fn sequential_compute_particle_densities_filtered<I: Index, R: Real>(
+pub fn sequential_compute_particle_densities_filtered<I: Index, R: Real, Nl: NeighborhoodList>(
     particle_positions: &[Vector3<R>],
-    particle_neighbor_lists: &[Vec<usize>],
+    particle_neighbor_lists: &Nl,
     compact_support_radius: R,
     particle_rest_mass: R,
     particle_densities: &mut Vec<R>,
@@ -164,14 +165,13 @@ pub fn sequential_compute_particle_densities_filtered<I: Index, R: Real>(
     // Pre-compute the kernel which can be queried using squared distances
     let kernel = DiscreteSquaredDistanceCubicKernel::new::<f64>(1000, compact_support_radius);
 
-    for (i, (particle_i_position, particle_i_neighbors)) in particle_positions
+    for (i, particle_i_position) in particle_positions
         .iter()
-        .zip(particle_neighbor_lists.iter())
         .enumerate()
         .filter(|(i, _)| filter[*i])
     {
         let mut particle_i_density = kernel.evaluate(R::zero());
-        for particle_j_position in particle_i_neighbors.iter().map(|&j| &particle_positions[j]) {
+        for particle_j_position in particle_neighbor_lists.neighbors(i).iter().map(|&j| &particle_positions[j]) {
             let r_squared = (particle_j_position - particle_i_position).norm_squared();
             particle_i_density += kernel.evaluate(r_squared);
         }
