@@ -183,8 +183,9 @@ fn write_recursively<W: io::Write>(
     out: &mut W,
     sorted_scopes: &[(ScopeId, Scope)],
     current: &(ScopeId, Scope),
-    total_duration: Option<Duration>,
+    parent_duration: Option<Duration>,
     depth: usize,
+    is_parallel: bool,
 ) -> io::Result<()> {
     let (id, scope) = current;
 
@@ -193,19 +194,38 @@ fn write_recursively<W: io::Write>(
     }
 
     let duration_sum_secs = scope.duration_sum.as_secs_f64();
-    let total_duration_secs = total_duration.map_or(duration_sum_secs, |t| t.as_secs_f64());
-    let percent = duration_sum_secs / total_duration_secs * 100.0;
+    let parent_duration_secs = parent_duration.map_or(duration_sum_secs, |t| t.as_secs_f64());
+    let percent = duration_sum_secs / parent_duration_secs * 100.0;
 
     writeln!(
         out,
-        "{}: {:3.2}%, {:>4.2}ms avg @ {:.2}Hz ({} {})",
+        "{}: {}{:3.2}%, {:>4.2}ms avg, {} {} (total: {:.3}s)",
         scope.name,
+        if is_parallel { "≈" } else { "" },
         percent,
         duration_sum_secs * 1000.0 / (scope.num_calls as f64),
-        scope.num_calls as f64 / total_duration_secs,
         scope.num_calls,
-        if scope.num_calls > 1 { "calls" } else { "call" }
+        if scope.num_calls > 1 { "calls" } else { "call" },
+        duration_sum_secs
     )?;
+
+    // Compute sum of runtimes of children
+    let mut children_runtime = Duration::default();
+    let current_hash = ScopeId::get_hash(Some(id));
+    for s in sorted_scopes {
+        let (child_id, child_scope) = s;
+        if child_id.parent_hash == current_hash {
+            children_runtime += child_scope.duration_sum;
+        }
+    }
+
+    // If children were run in parallel, their total runtime can be larger than that of the current scope
+    let children_parallel = children_runtime > scope.duration_sum;
+    let own_runtime = if children_parallel {
+        children_runtime
+    } else {
+        scope.duration_sum
+    };
 
     // Process children in sorted order
     let current_hash = ScopeId::get_hash(Some(id));
@@ -214,7 +234,14 @@ fn write_recursively<W: io::Write>(
         if child_id.parent_hash == current_hash {
             // TODO: Prevent infinite recursion for recursive functions, maybe remove current scope from map?
             //  Maybe we don't have this problem, instead it will be a huge chain which is as long as the recursion depth...
-            write_recursively(out, sorted_scopes, s, Some(scope.duration_sum), depth + 1)?;
+            write_recursively(
+                out,
+                sorted_scopes,
+                s,
+                Some(own_runtime),
+                depth + 1,
+                children_parallel,
+            )?;
         }
     }
 
@@ -263,7 +290,7 @@ pub fn write<W: io::Write>(out: &mut W) -> io::Result<()> {
 
     // Print the stats
     for root in &sorted_roots {
-        write_recursively(out, sorted_scopes.as_slice(), root, None, 0)?;
+        write_recursively(out, sorted_scopes.as_slice(), root, None, 0, false)?;
     }
 
     Ok(())
