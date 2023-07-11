@@ -21,6 +21,7 @@
 use crate::aabb::Aabb3d;
 use crate::kernel::DiscreteSquaredDistanceCubicKernel;
 use crate::mesh::{HexMesh3d, MeshAttribute, MeshWithData};
+use crate::neighborhood_search::NeighborhoodList;
 use crate::uniform_grid::{OwningSubdomainGrid, Subdomain, UniformGrid};
 use crate::utils::{ChunkSize, ParallelPolicy};
 use crate::{new_map, profile, HashState, Index, MapType, ParallelMapType, Real};
@@ -140,6 +141,41 @@ pub fn sequential_compute_particle_densities<I: Index, R: Real>(
     {
         let mut particle_i_density = kernel.evaluate(R::zero());
         for particle_j_position in particle_i_neighbors.iter().map(|&j| &particle_positions[j]) {
+            let r_squared = (particle_j_position - particle_i_position).norm_squared();
+            particle_i_density += kernel.evaluate(r_squared);
+        }
+        particle_i_density *= particle_rest_mass;
+        particle_densities[i] = particle_i_density;
+    }
+}
+
+#[inline(never)]
+pub fn sequential_compute_particle_densities_filtered<I: Index, R: Real, Nl: NeighborhoodList>(
+    particle_positions: &[Vector3<R>],
+    particle_neighbor_lists: &Nl,
+    compact_support_radius: R,
+    particle_rest_mass: R,
+    particle_densities: &mut Vec<R>,
+    filter: &[bool],
+) {
+    profile!("sequential_compute_particle_densities_filtered");
+
+    init_density_storage(particle_densities, particle_positions.len());
+
+    // Pre-compute the kernel which can be queried using squared distances
+    let kernel = DiscreteSquaredDistanceCubicKernel::new::<f64>(1000, compact_support_radius);
+
+    for (i, particle_i_position) in particle_positions
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| filter[*i])
+    {
+        let mut particle_i_density = kernel.evaluate(R::zero());
+        for particle_j_position in particle_neighbor_lists
+            .neighbors(i)
+            .iter()
+            .map(|&j| &particle_positions[j])
+        {
             let r_squared = (particle_j_position - particle_i_position).norm_squared();
             particle_i_density += kernel.evaluate(r_squared);
         }

@@ -243,7 +243,7 @@ impl Switch {
 
 /// Executes the `reconstruct` subcommand
 pub fn reconstruct_subcommand(cmd_args: &ReconstructSubcommandArgs) -> Result<(), anyhow::Error> {
-    profile!("reconstruct CLI");
+    profile!("reconstruct subcommand");
 
     let paths = ReconstructionRunnerPathCollection::try_from(cmd_args)
         .context("Failed parsing input file path(s) from command line")?
@@ -816,7 +816,7 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
     io_params: &io::FormatParameters,
     check_mesh: bool,
 ) -> Result<(), anyhow::Error> {
-    profile!("surface reconstruction cli");
+    profile!("surface reconstruction");
 
     // Load particle positions and attributes to interpolate
     let (particle_positions, attributes) = io::read_particle_positions_with_attributes(

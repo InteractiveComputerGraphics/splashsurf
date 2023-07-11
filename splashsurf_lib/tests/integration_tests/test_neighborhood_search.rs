@@ -122,6 +122,33 @@ fn test_neighborhood_search_spatial_hashing_simple() {
 }
 
 #[test]
+fn test_neighborhood_search_spatial_hashing_flat_simple() {
+    let search_radius: f32 = 0.3;
+
+    for (particles, mut solution) in generate_simple_test_cases(search_radius) {
+        let mut nl = FlatNeighborhoodList::default();
+        let mut domain = Aabb3d::from_points(particles.as_slice());
+        domain.grow_uniformly(search_radius);
+        neighborhood_search_spatial_hashing_flat::<i32, f32>(
+            &domain,
+            particles.as_slice(),
+            search_radius,
+            &mut nl,
+        );
+        let mut nl = nl.to_vec_vec();
+
+        sort_neighborhood_lists(&mut nl);
+        sort_neighborhood_lists(&mut solution);
+
+        assert_eq!(
+            nl, solution,
+            "neighborhood_search_spatial_hashing failed. Search radius: {}, input: {:?}",
+            search_radius, particles
+        );
+    }
+}
+
+#[test]
 fn test_neighborhood_search_spatial_hashing_parallel_simple() {
     let search_radius: f32 = 0.3;
 
@@ -166,6 +193,7 @@ mod tests_from_files {
         let mut nl_naive = Vec::new();
         let mut nl_hashed = Vec::new();
         let mut nl_hashed_par = Vec::new();
+        let mut nl_hashed_flat = FlatNeighborhoodList::default();
 
         neighborhood_search_naive(particles.as_slice(), search_radius, &mut nl_naive);
         neighborhood_search_spatial_hashing::<i64, f32>(
@@ -180,13 +208,22 @@ mod tests_from_files {
             search_radius,
             &mut nl_hashed_par,
         );
+        neighborhood_search_spatial_hashing_flat::<i64, f32>(
+            &domain,
+            particles.as_slice(),
+            search_radius,
+            &mut nl_hashed_flat,
+        );
 
         sort_neighborhood_lists(&mut nl_naive);
         sort_neighborhood_lists(&mut nl_hashed);
         sort_neighborhood_lists(&mut nl_hashed_par);
+        let mut nl_hashed_flat = nl_hashed_flat.to_vec_vec();
+        sort_neighborhood_lists(&mut nl_hashed_flat);
 
         assert_eq!(nl_hashed, nl_naive, "result of neighborhood_search_spatial_hashing does not match neighborhood_search_naive, file: {:?}", file);
         assert_eq!(nl_hashed_par, nl_naive, "result of neighborhood_search_spatial_hashing_parallel does not match neighborhood_search_naive, file: {:?}", file);
+        assert_eq!(nl_hashed_flat, nl_naive, "result of neighborhood_search_spatial_hashing_flat does not match neighborhood_search_naive, file: {:?}", file);
     }
 
     #[test]
@@ -203,6 +240,7 @@ mod tests_from_files {
         let mut nl_naive = Vec::new();
         let mut nl_hashed = Vec::new();
         let mut nl_hashed_par = Vec::new();
+        let mut nl_hashed_flat = FlatNeighborhoodList::default();
 
         neighborhood_search_naive(particles.as_slice(), search_radius, &mut nl_naive);
         neighborhood_search_spatial_hashing::<i64, f32>(
@@ -217,13 +255,22 @@ mod tests_from_files {
             search_radius,
             &mut nl_hashed_par,
         );
+        neighborhood_search_spatial_hashing_flat::<i64, f32>(
+            &domain,
+            particles.as_slice(),
+            search_radius,
+            &mut nl_hashed_flat,
+        );
 
         sort_neighborhood_lists(&mut nl_naive);
         sort_neighborhood_lists(&mut nl_hashed);
         sort_neighborhood_lists(&mut nl_hashed_par);
+        let mut nl_hashed_flat = nl_hashed_flat.to_vec_vec();
+        sort_neighborhood_lists(&mut nl_hashed_flat);
 
         assert_eq!(nl_hashed, nl_naive, "result of neighborhood_search_spatial_hashing does not match neighborhood_search_naive, file: {:?}", file);
         assert_eq!(nl_hashed_par, nl_naive, "result of neighborhood_search_spatial_hashing_parallel does not match neighborhood_search_naive, file: {:?}", file);
+        assert_eq!(nl_hashed_flat, nl_naive, "result of neighborhood_search_spatial_hashing_flat does not match neighborhood_search_naive, file: {:?}", file);
     }
 
     #[test]
@@ -240,6 +287,7 @@ mod tests_from_files {
         let mut nl_naive = Vec::new();
         let mut nl_hashed = Vec::new();
         let mut nl_hashed_par = Vec::new();
+        let mut nl_hashed_flat = FlatNeighborhoodList::default();
 
         neighborhood_search_naive(particles.as_slice(), search_radius, &mut nl_naive);
         neighborhood_search_spatial_hashing::<i64, f32>(
@@ -254,12 +302,21 @@ mod tests_from_files {
             search_radius,
             &mut nl_hashed_par,
         );
+        neighborhood_search_spatial_hashing_flat::<i64, f32>(
+            &domain,
+            particles.as_slice(),
+            search_radius,
+            &mut nl_hashed_flat,
+        );
 
         sort_neighborhood_lists(&mut nl_naive);
         sort_neighborhood_lists(&mut nl_hashed);
         sort_neighborhood_lists(&mut nl_hashed_par);
+        let mut nl_hashed_flat = nl_hashed_flat.to_vec_vec();
+        sort_neighborhood_lists(&mut nl_hashed_flat);
 
         assert_eq!(nl_hashed, nl_naive, "result of neighborhood_search_spatial_hashing does not match neighborhood_search_naive, file: {:?}", file);
         assert_eq!(nl_hashed_par, nl_naive, "result of neighborhood_search_spatial_hashing_parallel does not match neighborhood_search_naive, file: {:?}", file);
+        assert_eq!(nl_hashed_flat, nl_naive, "result of neighborhood_search_spatial_hashing_flat does not match neighborhood_search_naive, file: {:?}", file);
     }
 }
