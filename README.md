@@ -139,7 +139,7 @@ With these parameters, a scene with 13353401 particles is reconstructed in less 
 [23:45:01.188][INFO]   surface reconstruction: 100.00%, 2756.54ms avg, 1 call (total: 2.757s)
 [23:45:01.188][INFO]     loading particle positions: 3.00%, 82.68ms avg, 1 call (total: 0.083s)
 [23:45:01.188][INFO]     compute minimum enclosing aabb: 0.21%, 5.91ms avg, 1 call (total: 0.006s)
-[23:45:01.188][INFO]     surface reconstruction prototype: 88.17%, 2430.35ms avg, 1 call (total: 2.430s)
+[23:45:01.188][INFO]     surface reconstruction subdomain-grid: 88.17%, 2430.35ms avg, 1 call (total: 2.430s)
 [23:45:01.188][INFO]       decomposition: 3.29%, 80.06ms avg, 1 call (total: 0.080s)
 [23:45:01.188][INFO]         classifying particles: 21.22%, 16.99ms avg, 1 call (total: 0.017s)
 [23:45:01.188][INFO]         merging TL per cell particle counters: 0.18%, 0.14ms avg, 1 call (total: 0.000s)

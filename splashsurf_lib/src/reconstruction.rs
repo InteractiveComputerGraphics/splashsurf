@@ -14,7 +14,7 @@ pub(crate) fn reconstruct_surface_subdomain_grid<'a, I: Index, R: Real>(
     output_surface: &'a mut SurfaceReconstruction<I, R>,
 ) -> Result<(), anyhow::Error> {
     let mesh = {
-        profile!("surface reconstruction prototype");
+        profile!("surface reconstruction subdomain-grid");
 
         let parameters = initialize_parameters(parameters, &particle_positions, output_surface)?;
 
