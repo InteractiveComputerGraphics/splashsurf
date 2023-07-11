@@ -26,6 +26,7 @@ The result might look something like this (please excuse the lack of 3D renderin
 </p>
 
 **Contents**
+- [](#)
 - [The `splashsurf` CLI](#the-splashsurf-cli)
   - [Introduction](#introduction)
   - [Notes](#notes)
@@ -100,56 +101,66 @@ Good settings for the surface reconstruction depend on the original simulation a
 ### Benchmark example
 For example:
 ```
-splashsurf reconstruct data/canyon_13353401_particles.xyz --output-dir=out --particle-radius=0.011 --smoothing-length=2.0 --cube-size=1.5 --surface-threshold=0.6
+splashsurf reconstruct canyon_13353401_particles.xyz -r=0.011 -c=1.5 -l=2.0 -t=0.6 --subdomain-grid=on
 ```
-With these parameters, a scene with 13353401 particles is reconstructed in less than 3 seconds on a Ryzen 9 5950X. The output is a mesh with 6023244 triangles.
+With these parameters, a scene with 13353401 particles is reconstructed in less than 3 seconds on a Ryzen 9 5950X. The output is a mesh with 6069576 triangles.
 ```
-[2021-02-09T00:16:11.677571+01:00][splashsurf][INFO] splashsurf v0.6.0 (splashsurf)
-[2021-02-09T00:16:11.677595+01:00][splashsurf][INFO] Called with command line: target/release/splashsurf reconstruct -i /home/fabian/programming/canyon_13353401_particles.xyz --output-dir=out --particle-radius=0.011 --smoothing-length=2.0 --cube-size=1.5 --surface-threshold=0.6
-[2021-02-09T00:16:11.677609+01:00][splashsurf::reconstruction][INFO] Using single precision (f32) for surface reconstruction.
-[2021-02-09T00:16:11.677618+01:00][splashsurf::io][INFO] Reading particle dataset from "/home/fabian/programming/canyon_13353401_particles.xyz"...
-[2021-02-09T00:16:11.796790+01:00][splashsurf::io][INFO] Successfully read dataset with 13353401 particle positions.
-[2021-02-09T00:16:11.804396+01:00][splashsurf_lib][INFO] Minimal enclosing bounding box of particles was computed as: AxisAlignedBoundingBox { min: [-25.0060978, -5.0146289, -40.0634613], max: [24.4994926, 18.3062096, 39.7757950] }
-[2021-02-09T00:16:11.826742+01:00][splashsurf_lib::utils][INFO] Splitting 13353401 particles into 257 chunks (with 52161 particles each) for octree generation
-[2021-02-09T00:16:11.826749+01:00][splashsurf_lib::octree::split_criterion][INFO] Building octree with at most 52161 particles per leaf
-[2021-02-09T00:16:12.011061+01:00][splashsurf_lib::reconstruction][INFO] Starting computation of particle densities.
-[2021-02-09T00:16:12.891286+01:00][splashsurf_lib::reconstruction][INFO] Starting triangulation of surface patches.
-[2021-02-09T00:16:14.337897+01:00][splashsurf_lib::reconstruction][INFO] Generation of surface patches is done.
-[2021-02-09T00:16:14.337922+01:00][splashsurf_lib::reconstruction][INFO] Global mesh has 6023244 triangles and 3015096 vertices.
-[2021-02-09T00:16:14.337929+01:00][splashsurf::reconstruction][INFO] Writing surface mesh to "out/canyon_13353401_particles_surface.vtk"...
-[2021-02-09T00:16:14.604527+01:00][splashsurf::reconstruction][INFO] Done.
-[2021-02-09T00:16:14.613392+01:00][splashsurf::reconstruction][INFO] Successfully finished processing all inputs.
-[2021-02-09T00:16:14.613399+01:00][splashsurf][INFO] Timings:
-[2021-02-09T00:16:14.613479+01:00][splashsurf][INFO] surface reconstruction cli: 100.00%, 2935.77ms avg @ 0.34Hz (1 call)
-[2021-02-09T00:16:14.613481+01:00][splashsurf][INFO]   loading particle positions: 4.06%, 119.17ms avg @ 0.34Hz (1 call)
-[2021-02-09T00:16:14.613483+01:00][splashsurf][INFO]   compute minimum enclosing aabb: 0.26%, 7.61ms avg @ 0.34Hz (1 call)
-[2021-02-09T00:16:14.613484+01:00][splashsurf][INFO]   reconstruct_surface_domain_decomposition: 86.30%, 2533.51ms avg @ 0.34Hz (1 call)
-[2021-02-09T00:16:14.613485+01:00][splashsurf][INFO]     octree subdivide_recursively_margin_par: 7.28%, 184.32ms avg @ 0.39Hz (1 call)
-[2021-02-09T00:16:14.613486+01:00][splashsurf][INFO]     parallel subdomain particle density computation: 33.43%, 847.00ms avg @ 0.39Hz (1 call)
-[2021-02-09T00:16:14.613487+01:00][splashsurf][INFO]       visit octree node for density computation: 3116.00%, 23.88ms avg @ 1304.61Hz (1105 calls)
-[2021-02-09T00:16:14.613488+01:00][splashsurf][INFO]         compute_particle_densities_and_neighbors: 96.55%, 26.35ms avg @ 36.64Hz (967 calls)
-[2021-02-09T00:16:14.613489+01:00][splashsurf][INFO]           neighborhood_search: 88.00%, 23.19ms avg @ 37.95Hz (967 calls)
-[2021-02-09T00:16:14.613490+01:00][splashsurf][INFO]             sequential_generate_cell_to_particle_map: 5.92%, 1.37ms avg @ 43.12Hz (967 calls)
-[2021-02-09T00:16:14.613491+01:00][splashsurf][INFO]             calculate_particle_neighbors_seq: 78.63%, 18.23ms avg @ 43.12Hz (967 calls)
-[2021-02-09T00:16:14.613492+01:00][splashsurf][INFO]           sequential_compute_particle_densities: 11.99%, 3.16ms avg @ 37.95Hz (967 calls)
-[2021-02-09T00:16:14.613493+01:00][splashsurf][INFO]         update global density values: 1.38%, 0.38ms avg @ 36.64Hz (967 calls)
-[2021-02-09T00:16:14.613494+01:00][splashsurf][INFO]     parallel domain decomposed surf. rec. with stitching: 57.10%, 1446.64ms avg @ 0.39Hz (1 call)
-[2021-02-09T00:16:14.613495+01:00][splashsurf][INFO]       visit octree node (reconstruct or stitch): 2812.08%, 36.81ms avg @ 763.84Hz (1105 calls)
-[2021-02-09T00:16:14.613496+01:00][splashsurf][INFO]         reconstruct_surface_patch: 96.80%, 50.36ms avg @ 19.22Hz (782 calls)
-[2021-02-09T00:16:14.613497+01:00][splashsurf][INFO]           sequential_generate_sparse_density_map_subdomain: 89.21%, 44.92ms avg @ 19.86Hz (782 calls)
-[2021-02-09T00:16:14.613498+01:00][splashsurf][INFO]           triangulate_density_map_append: 10.78%, 5.43ms avg @ 19.86Hz (782 calls)
-[2021-02-09T00:16:14.613499+01:00][splashsurf][INFO]             interpolate_points_to_cell_data_skip_boundary: 83.44%, 4.53ms avg @ 184.17Hz (782 calls)
-[2021-02-09T00:16:14.613500+01:00][splashsurf][INFO]               generate_iso_surface_vertices: 99.97%, 4.53ms avg @ 220.72Hz (782 calls)
-[2021-02-09T00:16:14.613501+01:00][splashsurf][INFO]             relative_to_threshold_postprocessing: 7.18%, 0.39ms avg @ 184.17Hz (782 calls)
-[2021-02-09T00:16:14.613502+01:00][splashsurf][INFO]             triangulate_with_criterion: 6.73%, 0.37ms avg @ 184.17Hz (782 calls)
-[2021-02-09T00:16:14.613503+01:00][splashsurf][INFO]         stitch_surface_patches: 2.85%, 8.39ms avg @ 3.39Hz (138 calls)
-[2021-02-09T00:16:14.613504+01:00][splashsurf][INFO]           stitch_children_orthogonal_to: 99.87%, 2.79ms avg @ 357.60Hz (414 calls)
-[2021-02-09T00:16:14.613505+01:00][splashsurf][INFO]             stitch_surface_patches: 99.92%, 1.20ms avg @ 835.51Hz (966 calls)
-[2021-02-09T00:16:14.613506+01:00][splashsurf][INFO]               interpolate_points_to_cell_data_skip_boundary: 17.32%, 0.21ms avg @ 836.16Hz (966 calls)
-[2021-02-09T00:16:14.613507+01:00][splashsurf][INFO]                 generate_iso_surface_vertices: 99.82%, 0.21ms avg @ 4827.46Hz (966 calls)
-[2021-02-09T00:16:14.613508+01:00][splashsurf][INFO]               relative_to_threshold_postprocessing: 2.45%, 0.03ms avg @ 836.16Hz (966 calls)
-[2021-02-09T00:16:14.613509+01:00][splashsurf][INFO]               triangulate_with_criterion: 2.44%, 0.03ms avg @ 836.16Hz (966 calls)
-[2021-02-09T00:16:14.613511+01:00][splashsurf][INFO]   write surface mesh to file: 9.08%, 266.61ms avg @ 0.34Hz (1 call)
+[23:44:58.432][INFO] splashsurf v0.10.0 (splashsurf)
+[23:44:58.432][INFO] Called with command line: splashsurf reconstruct canyon_13353401_particles.xyz -r=0.011 -c=1.5 -l=2.0 -t=0.6 --subdomain-grid=on
+[23:44:58.432][INFO] Using single precision (f32) for surface reconstruction.
+[23:44:58.432][INFO] Reading particle dataset from "canyon_13353401_particles.xyz"...
+[23:44:58.515][INFO] Successfully read dataset with 13353401 particle positions.
+[23:44:58.520][INFO] Minimal enclosing bounding box of particles was computed as: AxisAlignedBoundingBox { min: [-25.0060978, -5.0146289, -40.0634613], max: [24.4994926, 18.3062096, 39.7757950] }
+[23:44:58.520][INFO] The ghost margin volume is 42.38% of the subdomain volume
+[23:44:58.520][INFO] The ghost margin is 3.03 MC cells or 0.05 subdomains thick
+[23:44:58.520][INFO] Number of subdomains: 82156 (47x23x76)
+[23:44:58.520][INFO] Number of MC cells per subdomain: 262144 (64x64x64)
+[23:44:58.520][INFO] Number of MC cells globally: 21536702464 (3008x1472x4864)
+[23:44:58.520][INFO] Starting classification of particles into subdomains.
+[23:44:58.601][INFO] Starting computation of global density vector.
+[23:44:59.548][INFO] Largest subdomain has 167861 particles.
+[23:44:59.548][INFO] Subdomains with 3358 or less particles will be considered sparse.
+[23:44:59.548][INFO] Starting reconstruction (level-set evaluation and local triangulation).
+[23:45:00.876][INFO] Starting stitching of subdomains to global mesh.
+[23:45:00.946][INFO] Global mesh has 3038116 vertices and 6069576 triangles.
+[23:45:00.996][INFO] Writing surface mesh to "canyon_surface.vtk"...
+[23:45:00.996][INFO] Writing mesh with 3038116 vertices and 6069576 cells to "canyon_surface.vtk"...
+[23:45:01.175][INFO] Successfully wrote mesh to file.
+[23:45:01.175][INFO] Done.
+[23:45:01.188][INFO] Successfully finished processing all inputs.
+[23:45:01.188][INFO] Timings:
+[23:45:01.188][INFO] reconstruct subcommand: 100.00%, 2756.58ms avg, 1 call (total: 2.757s)
+[23:45:01.188][INFO]   surface reconstruction: 100.00%, 2756.54ms avg, 1 call (total: 2.757s)
+[23:45:01.188][INFO]     loading particle positions: 3.00%, 82.68ms avg, 1 call (total: 0.083s)
+[23:45:01.188][INFO]     compute minimum enclosing aabb: 0.21%, 5.91ms avg, 1 call (total: 0.006s)
+[23:45:01.188][INFO]     surface reconstruction prototype: 88.17%, 2430.35ms avg, 1 call (total: 2.430s)
+[23:45:01.188][INFO]       decomposition: 3.29%, 80.06ms avg, 1 call (total: 0.080s)
+[23:45:01.188][INFO]         classifying particles: 21.22%, 16.99ms avg, 1 call (total: 0.017s)
+[23:45:01.188][INFO]         merging TL per cell particle counters: 0.18%, 0.14ms avg, 1 call (total: 0.000s)
+[23:45:01.188][INFO]         initializing flat subdomain data and index mapping: 0.08%, 0.06ms avg, 1 call (total: 0.000s)
+[23:45:01.188][INFO]         copying particles to subdomains: 64.65%, 51.76ms avg, 1 call (total: 0.052s)
+[23:45:01.188][INFO]         sort subdomain particles: 13.74%, 11.00ms avg, 1 call (total: 0.011s)
+[23:45:01.188][INFO]       compute_global_density_vector: 39.00%, 947.82ms avg, 1 call (total: 0.948s)
+[23:45:01.188][INFO]         subdomain density computation: ≈100.00%, 20.58ms avg, 1275 calls (total: 26.235s)
+[23:45:01.188][INFO]           collect subdomain data: 0.67%, 0.14ms avg, 1275 calls (total: 0.175s)
+[23:45:01.188][INFO]           initialize particle filter: 0.27%, 0.06ms avg, 1275 calls (total: 0.072s)
+[23:45:01.188][INFO]           neighborhood_search_spatial_hashing_flat_filtered: 88.48%, 18.21ms avg, 1275 calls (total: 23.214s)
+[23:45:01.188][INFO]             sequential_generate_cell_to_particle_map: 4.07%, 0.74ms avg, 1275 calls (total: 0.946s)
+[23:45:01.188][INFO]             write particle neighbors: 95.09%, 17.31ms avg, 1275 calls (total: 22.074s)
+[23:45:01.188][INFO]           sequential_compute_particle_densities_filtered: 10.30%, 2.12ms avg, 1275 calls (total: 2.702s)
+[23:45:01.188][INFO]           update global density values: 0.26%, 0.05ms avg, 1275 calls (total: 0.068s)
+[23:45:01.188][INFO]       reconstruction: 54.63%, 1327.61ms avg, 1 call (total: 1.328s)
+[23:45:01.188][INFO]         subdomain reconstruction (sparse): ≈1.95%, 0.85ms avg, 899 calls (total: 0.768s)
+[23:45:01.188][INFO]           density grid loop: 65.87%, 0.56ms avg, 899 calls (total: 0.506s)
+[23:45:01.188][INFO]           mc triangulation loop: 25.02%, 0.21ms avg, 899 calls (total: 0.192s)
+[23:45:01.188][INFO]         subdomain reconstruction (dense): ≈98.05%, 102.70ms avg, 376 calls (total: 38.617s)
+[23:45:01.188][INFO]           density grid loop: 94.47%, 97.03ms avg, 376 calls (total: 36.482s)
+[23:45:01.188][INFO]           mc triangulation loop: 5.19%, 5.33ms avg, 376 calls (total: 2.005s)
+[23:45:01.188][INFO]       stitching: 2.84%, 69.04ms avg, 1 call (total: 0.069s)
+[23:45:01.188][INFO]         surface patch offset scan: 0.01%, 0.01ms avg, 1 call (total: 0.000s)
+[23:45:01.188][INFO]         copy interior verts/tris and deduplicate exterior verts: 83.51%, 57.65ms avg, 1 call (total: 0.058s)
+[23:45:01.188][INFO]     write surface mesh to file: 6.50%, 179.17ms avg, 1 call (total: 0.179s)
+[23:45:01.188][INFO]       writing mesh: 99.98%, 179.14ms avg, 1 call (total: 0.179s)
 ```
 
 ### Sequences of files
