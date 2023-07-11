@@ -21,6 +21,7 @@
 use crate::aabb::Aabb3d;
 use crate::kernel::DiscreteSquaredDistanceCubicKernel;
 use crate::mesh::{HexMesh3d, MeshAttribute, MeshWithData};
+use crate::neighborhood_search::NeighborhoodList;
 use crate::uniform_grid::{OwningSubdomainGrid, Subdomain, UniformGrid};
 use crate::utils::{ChunkSize, ParallelPolicy};
 use crate::{new_map, profile, HashState, Index, MapType, ParallelMapType, Real};
@@ -31,7 +32,6 @@ use rayon::prelude::*;
 use std::cell::RefCell;
 use thiserror::Error as ThisError;
 use thread_local::ThreadLocal;
-use crate::neighborhood_search::NeighborhoodList;
 
 // TODO: Document formulas for the computation of the values
 // TODO: Document that we actually evaluate the SPH interpolation of the constant function f(x) = 1
@@ -171,7 +171,11 @@ pub fn sequential_compute_particle_densities_filtered<I: Index, R: Real, Nl: Nei
         .filter(|(i, _)| filter[*i])
     {
         let mut particle_i_density = kernel.evaluate(R::zero());
-        for particle_j_position in particle_neighbor_lists.neighbors(i).iter().map(|&j| &particle_positions[j]) {
+        for particle_j_position in particle_neighbor_lists
+            .neighbors(i)
+            .iter()
+            .map(|&j| &particle_positions[j])
+        {
             let r_squared = (particle_j_position - particle_i_position).norm_squared();
             particle_i_density += kernel.evaluate(r_squared);
         }
