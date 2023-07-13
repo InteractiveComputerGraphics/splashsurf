@@ -4,7 +4,7 @@
 [![Commits since last release](https://img.shields.io/github/commits-since/InteractiveComputerGraphics/splashsurf/latest)](https://github.com/InteractiveComputerGraphics/splashsurf)
 [![License: MIT](https://img.shields.io/crates/l/splashsurf)](https://github.com/InteractiveComputerGraphics/splashsurf/blob/main/LICENSE)
 [![Dependency status](https://deps.rs/repo/github/InteractiveComputerGraphics/splashsurf/status.svg)](https://deps.rs/repo/github/InteractiveComputerGraphics/splashsurf)
-![Build and test GitHub Actions workflow](https://github.com/InteractiveComputerGraphics/splashsurf/workflows/Build%20and%20test/badge.svg)
+[![Build and test GitHub Actions workflow](https://github.com/InteractiveComputerGraphics/splashsurf/workflows/Build%20and%20test/badge.svg)](https://github.com/InteractiveComputerGraphics/splashsurf/actions/workflows/build.yml)
 
 Surface reconstruction library and CLI for particle data from SPH simulations, written in Rust.
 
