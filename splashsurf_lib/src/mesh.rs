@@ -1,16 +1,17 @@
 //! Basic mesh types used by the library and implementation of VTK export
 //!
-//! This modules provides three basic types of meshes embedded in three dimensional spaces used
+//! This modules provides four basic types of meshes embedded in three dimensional spaces used
 //! by the library:
-//!  - [`TriMesh3d`]
-//!  - [`HexMesh3d`]
-//!  - [`PointCloud3d`]
+//!  - [`TriMesh3d`]: triangle surface mesh in 3D space
+//!  - [`MixedTriQuadMesh3d`]: surface mesh in 3D space with triangle and/or quadrilateral cells
+//!  - [`PointCloud3d`]: points without connectivity in 3D space
+//!  - [`HexMesh3d`]: mesh with volumetric hexahedral cells
 //!
-//! Furthermore, it provides the [`MeshWithData`] type that is used when additional attributes are
-//! attached to the vertices (e.g. normals) or cells (e.g. some identifiers) of the mesh.
+//! Furthermore, it provides the [`MeshWithData`] type that can be used to attach additional
+//! attributes to vertices (e.g. normals) or cells (e.g. areas/aspect ratios) of the mesh.
 //!
-//! If the `vtk_extras` feature is enabled, this module also provides features for conversion of these
-//! meshes to [`vtkio`] data structures. For example:
+//! If the `vtk_extras` feature is enabled, this module also provides traits to convert these
+//! meshes to [`vtkio`] data types for serialization to `VTK` files. For example:
 //!  - [`IntoVtkUnstructuredGridPiece`] to convert basic meshes and meshes with attached attributes to the
 //!  - [`IntoVtkDataSet`] for all meshes implementing [`IntoVtkUnstructuredGridPiece`] to directly save a mesh as a VTK file
 
@@ -53,6 +54,42 @@ pub struct TriMesh3d<R: Real> {
     pub vertices: Vec<Vector3<R>>,
     /// The triangles of the mesh identified by their vertex indices
     pub triangles: Vec<[usize; 3]>,
+}
+
+/// Cell type for [`MixedTriQuadMesh3d`]
+#[derive(Clone, Debug)]
+pub enum TriangleOrQuadCell {
+    /// Vertex indices representing a triangle
+    Tri([usize; 3]),
+    /// Vertex indices representing a quadrilateral
+    Quad([usize; 4]),
+}
+
+impl TriangleOrQuadCell {
+    /// Returns the number of actual number of vertices of this cell (3 if triangle, 4 if quad)
+    fn num_vertices(&self) -> usize {
+        match self {
+            TriangleOrQuadCell::Tri(_) => 3,
+            TriangleOrQuadCell::Quad(_) => 4,
+        }
+    }
+
+    /// Returns the slice of vertex indices of this cell
+    fn vertices(&self) -> &[usize] {
+        match self {
+            TriangleOrQuadCell::Tri(v) => v,
+            TriangleOrQuadCell::Quad(v) => v,
+        }
+    }
+}
+
+/// A surface mesh in 3D containing cells representing either triangles or quadrilaterals
+#[derive(Clone, Debug, Default)]
+pub struct MixedTriQuadMesh3d<R: Real> {
+    /// Coordinates of all vertices of the mesh
+    pub vertices: Vec<Vector3<R>>,
+    /// All triangle cells of the mesh
+    pub cells: Vec<TriangleOrQuadCell>,
 }
 
 /// A hexahedral (volumetric) mesh in 3D
@@ -130,15 +167,15 @@ pub trait CellConnectivity {
     }
 }
 
-/// Cell type for the [`TriMesh3d`]
+/// Cell type for [`TriMesh3d`]
 #[derive(Copy, Clone, Pod, Zeroable)]
 #[repr(transparent)]
 pub struct TriangleCell(pub [usize; 3]);
-/// Cell type for the [`HexMesh3d`]
+/// Cell type for [`HexMesh3d`]
 #[derive(Copy, Clone, Pod, Zeroable)]
 #[repr(transparent)]
 pub struct HexCell(pub [usize; 8]);
-/// Cell type for the [`PointCloud3d`]
+/// Cell type for [`PointCloud3d`]
 #[derive(Copy, Clone, Pod, Zeroable)]
 #[repr(transparent)]
 pub struct PointCell(pub usize);
@@ -150,6 +187,20 @@ impl CellConnectivity for TriangleCell {
 
     fn try_for_each_vertex<E, F: FnMut(usize) -> Result<(), E>>(&self, f: F) -> Result<(), E> {
         self.0.iter().copied().try_for_each(f)
+    }
+}
+
+impl CellConnectivity for TriangleOrQuadCell {
+    fn expected_num_vertices() -> usize {
+        4
+    }
+
+    fn num_vertices(&self) -> usize {
+        return self.num_vertices();
+    }
+
+    fn try_for_each_vertex<E, F: FnMut(usize) -> Result<(), E>>(&self, f: F) -> Result<(), E> {
+        self.vertices().iter().copied().try_for_each(f)
     }
 }
 
@@ -182,6 +233,18 @@ impl<R: Real> Mesh3d<R> for TriMesh3d<R> {
 
     fn cells(&self) -> &[TriangleCell] {
         self.triangle_cells()
+    }
+}
+
+impl<R: Real> Mesh3d<R> for MixedTriQuadMesh3d<R> {
+    type Cell = TriangleOrQuadCell;
+
+    fn vertices(&self) -> &[Vector3<R>] {
+        self.vertices.as_slice()
+    }
+
+    fn cells(&self) -> &[TriangleOrQuadCell] {
+        &self.cells
     }
 }
 
@@ -850,6 +913,7 @@ macro_rules! impl_into_vtk {
 }
 
 impl_into_vtk!(TriMesh3d);
+impl_into_vtk!(MixedTriQuadMesh3d);
 impl_into_vtk!(HexMesh3d);
 impl_into_vtk!(PointCloud3d);
 
@@ -862,7 +926,9 @@ pub mod vtk_helper {
     };
     use vtkio::IOBuffer;
 
-    use super::{CellConnectivity, HexCell, Mesh3d, PointCell, Real, TriangleCell};
+    use super::{
+        CellConnectivity, HexCell, Mesh3d, PointCell, Real, TriangleCell, TriangleOrQuadCell,
+    };
 
     /// Trait that can be implemented by mesh cells to return the corresponding [`vtkio::model::CellType`]
     #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
@@ -875,6 +941,16 @@ pub mod vtk_helper {
     impl HasVtkCellType for TriangleCell {
         fn vtk_cell_type(&self) -> CellType {
             CellType::Triangle
+        }
+    }
+
+    #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
+    impl HasVtkCellType for TriangleOrQuadCell {
+        fn vtk_cell_type(&self) -> CellType {
+            match self {
+                TriangleOrQuadCell::Tri(_) => CellType::Triangle,
+                TriangleOrQuadCell::Quad(_) => CellType::Quad,
+            }
         }
     }
 
