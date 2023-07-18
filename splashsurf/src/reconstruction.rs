@@ -1,17 +1,14 @@
 use crate::{io, logging};
 use anyhow::{anyhow, Context};
-use arguments::{
-    ReconstructionRunnerArgs, ReconstructionRunnerPathCollection, ReconstructionRunnerPaths,
-};
 use clap::value_parser;
 use indicatif::{ProgressBar, ProgressStyle};
 use log::info;
 use rayon::prelude::*;
 use splashsurf_lib::mesh::{AttributeData, Mesh3d, MeshAttribute, MeshWithData, PointCloud3d};
 use splashsurf_lib::nalgebra::{Unit, Vector3};
-use splashsurf_lib::profile;
 use splashsurf_lib::sph_interpolation::SphInterpolator;
-use splashsurf_lib::{density_map, Index, Real};
+use splashsurf_lib::{density_map, profile, Index, Real};
+use std::borrow::Cow;
 use std::convert::TryFrom;
 use std::path::PathBuf;
 
@@ -198,7 +195,7 @@ pub struct ReconstructSubcommandArgs {
     #[arg(
         help_heading = ARGS_INTERP,
         long,
-        default_value = "on",
+        default_value = "off",
         value_name = "off|on",
         ignore_case = true,
         require_equals = true
@@ -207,6 +204,35 @@ pub struct ReconstructSubcommandArgs {
     /// List of point attribute field names from the input file that should be interpolated to the reconstructed surface. Currently this is only supported for VTK and VTU input files.
     #[arg(help_heading = ARGS_INTERP, long)]
     pub interpolate_attributes: Vec<String>,
+    /// Whether to write out the raw reconstructed mesh before applying any post-processing steps
+    #[arg(
+        help_heading = ARGS_INTERP,
+        long,
+        default_value = "off",
+        value_name = "off|on",
+        ignore_case = true,
+        require_equals = true
+    )]
+    pub output_raw_mesh: Switch,
+    /// Whether to try to convert triangles to quads if they meet quality criteria
+    #[arg(
+        help_heading = ARGS_INTERP,
+        long,
+        default_value = "off",
+        value_name = "off|on",
+        ignore_case = true,
+        require_equals = true
+    )]
+    pub generate_quads: Switch,
+    /// Maximum allowed ratio of quad edge lengths to its diagonals to merge two triangles to a quad (inverse is used for minimum)
+    #[arg(help_heading = ARGS_INTERP, long, default_value = "1.75")]
+    pub quad_max_edge_diag_ratio: f64,
+    /// Maximum allowed angle (in degrees) between triangle normals to merge them to a quad
+    #[arg(help_heading = ARGS_INTERP, long, default_value = "10")]
+    pub quad_max_normal_angle: f64,
+    /// Maximum allowed vertex interior angle (in degrees) inside of a quad to merge two triangles to a quad
+    #[arg(help_heading = ARGS_INTERP, long, default_value = "135")]
+    pub quad_max_interior_angle: f64,
 
     /// Lower corner of the bounding-box for the surface mesh, mesh outside gets cut away (requires mesh-max to be specified)
     #[arg(
@@ -346,11 +372,17 @@ mod arguments {
         pub compute_normals: bool,
         pub sph_normals: bool,
         pub interpolate_attributes: Vec<String>,
+        pub generate_quads: bool,
+        pub quad_max_edge_diag_ratio: f64,
+        pub quad_max_normal_angle: f64,
+        pub quad_max_interior_angle: f64,
+        pub output_raw_mesh: bool,
         pub mesh_aabb: Option<Aabb3d<f64>>,
     }
 
     /// All arguments that can be supplied to the surface reconstruction tool converted to useful types
     pub struct ReconstructionRunnerArgs {
+        /// Parameters passed directly to the surface reconstruction
         pub params: splashsurf_lib::Parameters<f64>,
         pub use_double_precision: bool,
         pub io_params: io::FormatParameters,
@@ -480,6 +512,11 @@ mod arguments {
                 compute_normals: args.normals.into_bool(),
                 sph_normals: args.sph_normals.into_bool(),
                 interpolate_attributes: args.interpolate_attributes.clone(),
+                generate_quads: args.generate_quads.into_bool(),
+                quad_max_edge_diag_ratio: args.quad_max_edge_diag_ratio,
+                quad_max_normal_angle: args.quad_max_normal_angle,
+                quad_max_interior_angle: args.quad_max_interior_angle,
+                output_raw_mesh: args.output_raw_mesh.into_bool(),
                 mesh_aabb,
             };
 
@@ -866,68 +903,94 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
         splashsurf_lib::reconstruct_surface::<I, R>(particle_positions.as_slice(), &params)?;
 
     let grid = reconstruction.grid();
-    let mesh = reconstruction.mesh();
+    let mut mesh_with_data = MeshWithData::new(Cow::Borrowed(reconstruction.mesh()));
 
-    let mesh = if let Some(aabb) = &postprocessing.mesh_aabb {
-        profile!("clamp mesh to aabb");
-        info!("Post-processing: Clamping mesh to AABB...");
+    if postprocessing.output_raw_mesh {
+        profile!("write surface mesh to file");
 
-        let mut mesh = mesh.clone();
-        mesh.clamp_with_aabb(
-            &aabb
-                .try_convert()
-                .ok_or_else(|| anyhow!("Failed to convert mesh AABB"))?,
+        let output_path = paths
+            .output_file
+            .parent()
+            // Add a trailing separator if the parent is non-empty
+            .map(|p| p.join(""))
+            .unwrap_or_else(PathBuf::new);
+        let output_filename = format!(
+            "raw_{}",
+            paths.output_file.file_name().unwrap().to_string_lossy()
         );
-        mesh
-    } else {
-        mesh.clone()
-    };
-
-    // Add normals to mesh if requested
-    let mesh = if postprocessing.compute_normals || !attributes.is_empty() {
-        profile!("compute normals");
+        let raw_output_file = output_path.join(output_filename);
 
         info!(
-            "Constructing global acceleration structure for SPH interpolation to {} vertices...",
-            mesh.vertices.len()
+            "Writing unprocessed surface mesh to \"{}\"...",
+            raw_output_file.display()
         );
 
-        let particle_rest_density = params.rest_density;
-        let particle_rest_volume = R::from_f64((4.0 / 3.0) * std::f64::consts::PI).unwrap()
-            * params.particle_radius.powi(3);
-        let particle_rest_mass = particle_rest_volume * particle_rest_density;
+        io::write_mesh(&mesh_with_data, raw_output_file, &io_params.output).with_context(|| {
+            anyhow!(
+                "Failed to write raw output mesh to file \"{}\"",
+                paths.output_file.display()
+            )
+        })?;
+    }
 
-        let particle_densities = reconstruction
-            .particle_densities()
-            .ok_or_else(|| anyhow::anyhow!("Particle densities were not returned by surface reconstruction but are required for SPH normal computation"))?
-            .as_slice();
-        assert_eq!(
-            particle_positions.len(),
-            particle_densities.len(),
-            "There has to be one density value per particle"
-        );
+    // Perform post-processing
+    {
+        profile!("postprocessing");
 
-        let interpolator = SphInterpolator::new(
-            &particle_positions,
-            particle_densities,
-            particle_rest_mass,
-            params.compact_support_radius,
-        );
+        // Initialize SPH interpolator if required later
+        let interpolator_required = postprocessing.sph_normals || !attributes.is_empty();
+        let interpolator = if interpolator_required {
+            profile!("initialize interpolator");
+            info!("Post-processing: Initializing interpolator...");
 
-        let mut mesh_with_data = MeshWithData::new(mesh);
-        let mesh = &mesh_with_data.mesh;
+            info!(
+                "Constructing global acceleration structure for SPH interpolation to {} vertices...",
+                mesh_with_data.vertices().len()
+            );
 
-        // Compute normals if requested
+            let particle_rest_density = params.rest_density;
+            let particle_rest_volume = R::from_f64((4.0 / 3.0) * std::f64::consts::PI).unwrap()
+                * params.particle_radius.powi(3);
+            let particle_rest_mass = particle_rest_volume * particle_rest_density;
+
+            let particle_densities = reconstruction
+                .particle_densities()
+                .ok_or_else(|| anyhow::anyhow!("Particle densities were not returned by surface reconstruction but are required for SPH normal computation"))?
+                .as_slice();
+            assert_eq!(
+                particle_positions.len(),
+                particle_densities.len(),
+                "There has to be one density value per particle"
+            );
+
+            Some(SphInterpolator::new(
+                &particle_positions,
+                particle_densities,
+                particle_rest_mass,
+                params.compact_support_radius,
+            ))
+        } else {
+            None
+        };
+
+        // Add normals to mesh if requested
         if postprocessing.compute_normals {
+            profile!("compute normals");
+            info!("Post-processing: Computing surface normals...");
+
+            // Compute normals
             let normals = if postprocessing.sph_normals {
                 info!("Using SPH interpolation to compute surface normals");
 
-                let sph_normals = interpolator.interpolate_normals(mesh.vertices());
+                let sph_normals = interpolator
+                    .as_ref()
+                    .expect("interpolator is required")
+                    .interpolate_normals(mesh_with_data.vertices());
                 bytemuck::allocation::cast_vec::<Unit<Vector3<R>>, Vector3<R>>(sph_normals)
             } else {
                 info!("Using area weighted triangle normals for surface normals");
                 profile!("mesh.par_vertex_normals");
-                let tri_normals = mesh.par_vertex_normals();
+                let tri_normals = mesh_with_data.mesh.par_vertex_normals();
 
                 // Convert unit vectors to plain vectors
                 bytemuck::allocation::cast_vec::<Unit<Vector3<R>>, Vector3<R>>(tri_normals)
@@ -941,6 +1004,10 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
 
         // Interpolate attributes if requested
         if !attributes.is_empty() {
+            profile!("interpolate attributes");
+            info!("Post-processing: Interpolating attributes...");
+            let interpolator = interpolator.as_ref().expect("interpolator is required");
+
             for attribute in attributes.into_iter() {
                 info!("Interpolating attribute \"{}\"...", attribute.name);
 
@@ -948,7 +1015,7 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
                     AttributeData::ScalarReal(values) => {
                         let interpolated_values = interpolator.interpolate_scalar_quantity(
                             values.as_slice(),
-                            mesh.vertices(),
+                            mesh_with_data.vertices(),
                             true,
                         );
                         mesh_with_data.point_attributes.push(MeshAttribute::new(
@@ -959,7 +1026,7 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
                     AttributeData::Vector3Real(values) => {
                         let interpolated_values = interpolator.interpolate_vector_quantity(
                             values.as_slice(),
-                            mesh.vertices(),
+                            mesh_with_data.vertices(),
                             true,
                         );
                         mesh_with_data.point_attributes.push(MeshAttribute::new(
@@ -971,10 +1038,27 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
                 }
             }
         }
+    }
 
-        mesh_with_data
+    // Convert triangles to quads
+    let (tri_mesh, tri_quad_mesh) = if postprocessing.generate_quads {
+        info!("Post-processing: Convert triangles to quads...");
+        let non_squareness_limit = R::from_f64(postprocessing.quad_max_edge_diag_ratio).unwrap();
+        let normal_angle_limit_rad =
+            R::from_f64(postprocessing.quad_max_normal_angle.to_radians()).unwrap();
+        let max_interior_angle =
+            R::from_f64(postprocessing.quad_max_interior_angle.to_radians()).unwrap();
+
+        let tri_quad_mesh = splashsurf_lib::postprocessing::convert_tris_to_quads(
+            &mesh_with_data.mesh,
+            non_squareness_limit,
+            normal_angle_limit_rad,
+            max_interior_angle,
+        );
+
+        (None, Some(mesh_with_data.with_mesh(tri_quad_mesh)))
     } else {
-        MeshWithData::new(mesh)
+        (Some(mesh_with_data), None)
     };
 
     // Store the surface mesh
@@ -985,7 +1069,17 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
             paths.output_file.display()
         );
 
-        io::write_mesh(&mesh, paths.output_file.clone(), &io_params.output).with_context(|| {
+        match (&tri_mesh, &tri_quad_mesh) {
+            (Some(mesh), None) => {
+                io::write_mesh(mesh, paths.output_file.clone(), &io_params.output)
+            }
+            (None, Some(mesh)) => {
+                io::write_mesh(mesh, paths.output_file.clone(), &io_params.output)
+            }
+
+            _ => unreachable!(),
+        }
+        .with_context(|| {
             anyhow!(
                 "Failed to write output mesh to file \"{}\"",
                 paths.output_file.display()
@@ -1063,7 +1157,16 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
     }
 
     if postprocessing.check_mesh {
-        if let Err(err) = splashsurf_lib::marching_cubes::check_mesh_consistency(grid, &mesh.mesh) {
+        if let Err(err) = match (&tri_mesh, &tri_quad_mesh) {
+            (Some(mesh), None) => {
+                splashsurf_lib::marching_cubes::check_mesh_consistency(grid, &mesh.mesh)
+            }
+            (None, Some(_mesh)) => {
+                info!("Checking for mesh consistency not implemented for quad mesh at the moment.");
+                return Ok(());
+            }
+            _ => unreachable!(),
+        } {
             return Err(anyhow!("{}", err));
         } else {
             info!("Checked mesh for problems (holes, etc.), no problems were found.");

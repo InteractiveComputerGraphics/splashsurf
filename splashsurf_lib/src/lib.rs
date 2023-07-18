@@ -65,6 +65,7 @@ pub mod marching_cubes;
 pub mod mesh;
 pub mod neighborhood_search;
 pub mod octree;
+pub mod postprocessing;
 pub(crate) mod reconstruction;
 mod reconstruction_octree;
 pub mod sph_interpolation;
@@ -88,8 +89,10 @@ pub(crate) mod workspace;
 
 pub(crate) type HashState = fxhash::FxBuildHasher;
 pub(crate) type MapType<K, V> = std::collections::HashMap<K, V, HashState>;
+pub(crate) type SetType<K> = std::collections::HashSet<K, HashState>;
 pub(crate) fn new_map<K, V>() -> MapType<K, V> {
-    MapType::with_hasher(HashState::default())
+    // TODO: Remove this function
+    Default::default()
 }
 
 /*
