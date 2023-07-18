@@ -32,7 +32,6 @@ The result might look something like this (please excuse the lack of 3D renderin
 </p>
 
 **Contents**
-- [](#)
 - [The `splashsurf` CLI](#the-splashsurf-cli)
   - [Introduction](#introduction)
   - [Notes](#notes)
