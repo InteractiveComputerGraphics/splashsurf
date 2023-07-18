@@ -663,11 +663,11 @@ pub(crate) fn reconstruction<I: Index, R: Real>(
     info!("Largest subdomain has {} particles.", max_particles);
 
     // Maximum number of particles such that a subdomain will be considered "sparse"
-    let sparse_limit = (to_real!(max_particles) * to_real!(0.02))
+    let sparse_limit = (to_real!(max_particles) * to_real!(0.05))
         .ceil()
         .to_usize()
         .unwrap()
-        .max(10);
+        .max(100);
     info!(
         "Subdomains with {} or less particles will be considered sparse.",
         sparse_limit

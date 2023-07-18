@@ -29,10 +29,10 @@ pub fn grid_canyon(c: &mut Criterion) {
     let parameters = parameters_canyon();
 
     let mut group = c.benchmark_group("grid_canyon");
-    group.sample_size(10);
+    group.sample_size(12);
     group.sampling_mode(SamplingMode::Flat);
     group.warm_up_time(Duration::from_secs(10));
-    group.measurement_time(Duration::from_secs(120));
+    group.measurement_time(Duration::from_secs(180));
 
     let mut reconstruction = SurfaceReconstruction::default();
 
@@ -104,10 +104,10 @@ pub fn grid_optimal_num_cubes_canyon(c: &mut Criterion) {
         group.finish();
     };
 
-    with_cube_factor(1.5, &[18, 24, 28, 32, 40, 48, 56, 64, 68, 72]); // Ideal: 32
-    with_cube_factor(1.0, &[24, 28, 32, 40, 48, 56, 64, 68, 72]); // Ideal: 48
-    with_cube_factor(0.75, &[32, 40, 48, 56, 64, 68, 72]); // Ideal: 64
-    with_cube_factor(0.5, &[40, 48, 56, 64, 68, 72, 78, 82, 96]); // Ideal: 82
+    with_cube_factor(1.5, &[18, 24, 28, 32, 40, 48, 56, 64]); // Ideal: 32
+    with_cube_factor(1.0, &[28, 32, 40, 48, 56, 64, 68, 72]); // Ideal: 48
+    with_cube_factor(0.75, &[40, 48, 56, 64, 68, 72, 80]); // Ideal: 64
+    with_cube_factor(0.5, &[48, 56, 64, 68, 72, 78, 82, 96, 104, 112]); // Ideal: 82
 }
 
 criterion_group!(
