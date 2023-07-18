@@ -1,7 +1,7 @@
 //! Functions for post-processing of surface meshes (decimation, smoothing, etc.)
 
 use crate::mesh::{Mesh3d, MixedTriQuadMesh3d, TriMesh3d, TriangleOrQuadCell};
-use crate::{SetType, profile, MapType, Real};
+use crate::{profile, MapType, Real, SetType};
 use log::info;
 use nalgebra::Vector3;
 use rayon::prelude::*;

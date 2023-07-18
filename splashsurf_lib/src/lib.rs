@@ -57,6 +57,7 @@ mod aabb;
 pub(crate) mod dense_subdomains;
 pub mod density_map;
 pub mod generic_tree;
+pub mod halfedge_mesh;
 #[cfg(feature = "io")]
 #[cfg_attr(doc_cfg, doc(cfg(feature = "io")))]
 pub mod io;

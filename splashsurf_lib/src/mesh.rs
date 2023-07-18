@@ -28,6 +28,131 @@ use vtkio::model::{Attribute, UnstructuredGridPiece};
 #[cfg(feature = "vtk_extras")]
 pub use crate::mesh::vtk_helper::{IntoVtkDataSet, IntoVtkUnstructuredGridPiece};
 
+/// Computes the unsigned area of the given triangle
+pub fn tri_area<RIn: Real, RComp: Real>(
+    a: &Vector3<RIn>,
+    b: &Vector3<RIn>,
+    c: &Vector3<RIn>,
+) -> RComp {
+    let a = a.convert::<RComp>();
+    let b = b.convert::<RComp>();
+    let c = c.convert::<RComp>();
+    ((b - a).cross(&(c - a)))
+        .norm()
+        .unscale(RComp::one() + RComp::one())
+}
+
+/// Computes the face normal of the given triangle
+pub fn tri_normal<RIn: Real, RComp: Real>(
+    a: &Vector3<RIn>,
+    b: &Vector3<RIn>,
+    c: &Vector3<RIn>,
+) -> Vector3<RComp> {
+    let a = a.convert::<RComp>();
+    let b = b.convert::<RComp>();
+    let c = c.convert::<RComp>();
+    ((b - a).cross(&(c - a))).normalize()
+}
+
+/// Computes the angle at vertex `b` of the given triangle
+pub fn angle_between<RIn: Real, RComp: Real>(
+    a: &Vector3<RIn>,
+    b: &Vector3<RIn>,
+    c: &Vector3<RIn>,
+) -> RComp {
+    let a = a.convert::<RComp>();
+    let b = b.convert::<RComp>();
+    let c = c.convert::<RComp>();
+    ((a - b).dot(&(c - b)) / ((a - b).norm() * (c - b).norm())).acos()
+}
+
+/// Computes the minimum and maximum angle in the given triangle
+pub fn tri_min_max_angles<RIn: Real, RComp: Real>(
+    a: &Vector3<RIn>,
+    b: &Vector3<RIn>,
+    c: &Vector3<RIn>,
+) -> (RComp, RComp) {
+    let a = a.convert::<RComp>();
+    let b = b.convert::<RComp>();
+    let c = c.convert::<RComp>();
+    let alpha1: RComp = angle_between(&a, &b, &c);
+    let alpha2: RComp = angle_between(&b, &c, &a);
+    let alpha3 = RComp::pi() - alpha1 - alpha2;
+
+    (
+        alpha1.min(alpha2.min(alpha3)),
+        alpha1.max(alpha2.max(alpha3)),
+    )
+}
+
+/// Computes the aspect ratio of the given triangle
+///
+/// The aspect ratio is computed as the inverse of the "stretch ratio" `S` given by
+/// ```txt
+/// S = sqrt(12) * (r_in / l_max)
+/// ```
+/// where `r_in` is the radius of the in-circle and `l_max` is the longest edge of the triangle.
+/// See e.g.: <https://www.engmorph.com/2d-element-aspect-ratio-diff-simula>.
+pub fn tri_aspect_ratio<RIn: Real, RComp: Real>(
+    a: &Vector3<RIn>,
+    b: &Vector3<RIn>,
+    c: &Vector3<RIn>,
+) -> RComp {
+    let two = RComp::from_i32(2).unwrap();
+    let sqrt_twelve = RComp::from_i32(12).unwrap().sqrt();
+
+    let a = a.convert::<RComp>();
+    let b = b.convert::<RComp>();
+    let c = c.convert::<RComp>();
+
+    let l0 = (a - b).norm();
+    let l1 = (b - c).norm();
+    let l2 = (c - a).norm();
+    let s = (l0 + l1 + l2) / two;
+
+    let area: RComp = tri_area(&a, &b, &c);
+    let r_in = area / s;
+    let l_max = l0.max(l1.max(l2));
+
+    l_max / (sqrt_twelve * r_in)
+}
+
+/// Utility functions for triangles meshes
+pub trait TriMesh3dExt<R: Real> {
+    /// Returns the slice of all triangle vertices of the mesh
+    fn tri_vertices(&self) -> &[Vector3<R>];
+
+    /// Computes the area of the triangle with the given vertices
+    fn tri_area_ijk<RComp: Real>(&self, ijk: &[usize; 3]) -> RComp {
+        let v = self.tri_vertices();
+        tri_area(&v[ijk[0]], &v[ijk[1]], &v[ijk[2]])
+    }
+
+    /// Computes the face normal of the triangle with the given vertices
+    fn tri_normal_ijk<RComp: Real>(&self, ijk: &[usize; 3]) -> Vector3<RComp> {
+        let v = self.tri_vertices();
+        tri_normal(&v[ijk[0]], &v[ijk[1]], &v[ijk[2]])
+    }
+
+    /// Computes the minimum and maximum angle in the triangle with the given vertices
+    fn tri_min_max_angles_ijk<RComp: Real>(&self, ijk: &[usize; 3]) -> (RComp, RComp) {
+        let v = self.tri_vertices();
+        tri_min_max_angles(&v[ijk[0]], &v[ijk[1]], &v[ijk[2]])
+    }
+
+    /// Computes the aspect ratio of the triangle with the given vertices
+    fn tri_aspect_ratio<RComp: Real>(&self, ijk: &[usize; 3]) -> RComp {
+        let v = self.tri_vertices();
+        tri_aspect_ratio(&v[ijk[0]], &v[ijk[1]], &v[ijk[2]])
+    }
+}
+
+impl<R: Real> TriMesh3dExt<R> for TriMesh3d<R> {
+    fn tri_vertices(&self) -> &[Vector3<R>] {
+        &self.vertices
+    }
+}
+
 /// A named attribute with data that can be attached to the vertices or cells of a mesh
 #[derive(Clone, Debug)]
 pub struct MeshAttribute<R: Real> {
