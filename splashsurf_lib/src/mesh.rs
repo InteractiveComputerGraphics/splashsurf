@@ -10,13 +10,11 @@
 //! attached to the vertices (e.g. normals) or cells (e.g. some identifiers) of the mesh.
 //!
 //! If the `vtk_extras` feature is enabled, this module also provides features for conversion of these
-//! meshes to [`vtkio`](https://docs.rs/vtkio/0.6.*/vtkio/index.html) data structures. For example:
-//!  - [`MeshWithData::to_unstructured_grid`] to convert a mesh together with all attached attributes
-//!  - [`vtk_helper::mesh_to_unstructured_grid`] to convert a basic mesh without additional data
-//!  - `From<T> for UnstructuredGridPiece` implementations for the basic mesh types
-//!  - `Into<DataSet>` implementations for the basic mesh types
+//! meshes to [`vtkio`] data structures. For example:
+//!  - [`IntoVtkUnstructuredGridPiece`] to convert basic meshes and meshes with attached attributes to the
+//!  - [`IntoVtkDataSet`] for all meshes implementing [`IntoVtkUnstructuredGridPiece`] to directly save a mesh as a VTK file
 
-use crate::{new_map, Aabb3d, MapType, Real};
+use crate::{new_map, profile, Aabb3d, MapType, Real, RealConvert};
 use bytemuck_derive::{Pod, Zeroable};
 use nalgebra::{Unit, Vector3};
 use rayon::prelude::*;
@@ -24,9 +22,10 @@ use std::cell::RefCell;
 use std::fmt::Debug;
 use thread_local::ThreadLocal;
 #[cfg(feature = "vtk_extras")]
-use vtkio::model::{Attribute, DataSet, UnstructuredGridPiece};
+use vtkio::model::{Attribute, UnstructuredGridPiece};
 
-// TODO: Rename/restructure VTK helper implementations
+#[cfg(feature = "vtk_extras")]
+pub use crate::mesh::vtk_helper::{IntoVtkDataSet, IntoVtkUnstructuredGridPiece};
 
 /// A named attribute with data that can be attached to the vertices or cells of a mesh
 #[derive(Clone, Debug)]
@@ -94,12 +93,31 @@ pub trait Mesh3d<R: Real> {
     fn vertices(&self) -> &[Vector3<R>];
     /// Returns a slice of all cells of the mesh
     fn cells(&self) -> &[Self::Cell];
+
+    /// Returns a mapping of all mesh vertices to the set of the cells they belong to
+    fn vertex_cell_connectivity(&self) -> Vec<Vec<usize>> {
+        profile!("vertex_cell_connectivity");
+        let mut connectivity_map: Vec<Vec<usize>> = vec![Vec::new(); self.vertices().len()];
+        for (cell_idx, cell) in self.cells().iter().enumerate() {
+            cell.for_each_vertex(|v_i| {
+                if !connectivity_map[v_i].contains(&cell_idx) {
+                    connectivity_map[v_i].push(cell_idx);
+                }
+            })
+        }
+
+        connectivity_map
+    }
 }
 
 /// Basic interface for mesh cells consisting of a collection of vertex indices
 pub trait CellConnectivity {
     /// Returns the number of vertices per cell
-    fn num_vertices() -> usize;
+    fn num_vertices(&self) -> usize {
+        Self::expected_num_vertices()
+    }
+    /// Returns the expected number of vertices per cell (helpful for connectivities with a constant number of vertices to reserve storage)
+    fn expected_num_vertices() -> usize;
     /// Calls the given closure with each vertex index that is part of this cell, stopping at the first error and returning that error
     fn try_for_each_vertex<E, F: FnMut(usize) -> Result<(), E>>(&self, f: F) -> Result<(), E>;
     /// Calls the given closure with each vertex index that is part of this cell
@@ -126,7 +144,7 @@ pub struct HexCell(pub [usize; 8]);
 pub struct PointCell(pub usize);
 
 impl CellConnectivity for TriangleCell {
-    fn num_vertices() -> usize {
+    fn expected_num_vertices() -> usize {
         3
     }
 
@@ -136,7 +154,7 @@ impl CellConnectivity for TriangleCell {
 }
 
 impl CellConnectivity for HexCell {
-    fn num_vertices() -> usize {
+    fn expected_num_vertices() -> usize {
         8
     }
 
@@ -146,7 +164,7 @@ impl CellConnectivity for HexCell {
 }
 
 impl CellConnectivity for PointCell {
-    fn num_vertices() -> usize {
+    fn expected_num_vertices() -> usize {
         1
     }
 
@@ -163,7 +181,7 @@ impl<R: Real> Mesh3d<R> for TriMesh3d<R> {
     }
 
     fn cells(&self) -> &[TriangleCell] {
-        bytemuck::cast_slice::<[usize; 3], TriangleCell>(self.triangles.as_slice())
+        self.triangle_cells()
     }
 }
 
@@ -191,7 +209,39 @@ impl<R: Real> Mesh3d<R> for PointCloud3d<R> {
     }
 }
 
+impl<R: Real, MeshT: Mesh3d<R>> Mesh3d<R> for &MeshT {
+    type Cell = MeshT::Cell;
+    fn vertices(&self) -> &[Vector3<R>] {
+        (*self).vertices()
+    }
+    fn cells(&self) -> &[MeshT::Cell] {
+        (*self).cells()
+    }
+}
+
+impl<'a, R: Real, MeshT: Mesh3d<R> + ToOwned> Mesh3d<R> for std::borrow::Cow<'a, MeshT> {
+    type Cell = MeshT::Cell;
+    fn vertices(&self) -> &[Vector3<R>] {
+        (*self.as_ref()).vertices()
+    }
+    fn cells(&self) -> &[MeshT::Cell] {
+        (*self.as_ref()).cells()
+    }
+}
+
+impl TriangleCell {
+    /// Returns an iterator over all edges of this triangle
+    pub fn edges<'a>(&'a self) -> impl Iterator<Item = (usize, usize)> + 'a {
+        (0..3).map(|i| (self.0[i], self.0[(i + 1) % 3]))
+    }
+}
+
 impl<R: Real> TriMesh3d<R> {
+    /// Returns a slice of all triangles of the mesh as `TriangleCell`s
+    pub fn triangle_cells(&self) -> &[TriangleCell] {
+        bytemuck::cast_slice::<[usize; 3], TriangleCell>(self.triangles.as_slice())
+    }
+
     /// Clears the vertex and triangle storage, preserves allocated memory
     pub fn clear(&mut self) {
         self.vertices.clear();
@@ -304,6 +354,25 @@ impl<R: Real> TriMesh3d<R> {
             v.y = v.y.clamp(min.y, max.y);
             v.z = v.z.clamp(min.z, max.z);
         })
+    }
+
+    /// Returns a mapping of all mesh vertices to the set of their connected neighbor vertices
+    pub fn vertex_vertex_connectivity(&self) -> Vec<Vec<usize>> {
+        profile!("vertex_vertex_connectivity");
+
+        let mut connectivity_map: Vec<Vec<usize>> =
+            vec![Vec::with_capacity(4); self.vertices().len()];
+        for tri in &self.triangles {
+            for &i in tri {
+                for &j in tri {
+                    if i != j && !connectivity_map[i].contains(&j) {
+                        connectivity_map[i].push(j);
+                    }
+                }
+            }
+        }
+
+        connectivity_map
     }
 
     /// Same as [`Self::vertex_normal_directions_inplace`] but assumes that the output is already zeroed
@@ -595,6 +664,29 @@ impl<R: Real, MeshT: Mesh3d<R>> MeshWithData<R, MeshT> {
         }
     }
 
+    /// Replaces the mesh but keeps the data
+    pub fn with_mesh<NewMeshT: Mesh3d<R>>(self, new_mesh: NewMeshT) -> MeshWithData<R, NewMeshT> {
+        if !self.point_attributes.is_empty() {
+            assert_eq!(
+                self.mesh.vertices().len(),
+                new_mesh.vertices().len(),
+                "number of vertices should match if there are point attributes"
+            );
+        }
+        if !self.cell_attributes.is_empty() {
+            assert_eq!(
+                self.mesh.cells().len(),
+                new_mesh.cells().len(),
+                "number of cells should match if there are cell attributes"
+            )
+        }
+        MeshWithData {
+            mesh: new_mesh,
+            point_attributes: self.point_attributes,
+            cell_attributes: self.cell_attributes,
+        }
+    }
+
     /// Attaches an attribute to the points of the mesh, panics if the length of the data does not match the mesh's number of points
     pub fn with_point_data(mut self, point_attribute: impl Into<MeshAttribute<R>>) -> Self {
         let point_attribute = point_attribute.into();
@@ -637,7 +729,7 @@ impl<R: Real> MeshAttribute<R> {
         }
     }
 
-    /// Converts the mesh attribute to a [`vtkio::model::Attribute`](https://docs.rs/vtkio/0.6.*/vtkio/model/enum.Attribute.html)
+    /// Converts the mesh attribute to a [`vtkio::model::Attribute`])
     #[cfg(feature = "vtk_extras")]
     #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
     fn to_vtk_attribute(&self) -> Attribute {
@@ -676,12 +768,12 @@ impl<R, MeshT> MeshWithData<R, MeshT>
 where
     R: Real,
     MeshT: Mesh3d<R>,
-    for<'a> &'a MeshT: Into<UnstructuredGridPiece>,
+    for<'a> &'a MeshT: IntoVtkUnstructuredGridPiece,
 {
-    /// Creates a [`vtkio::model::UnstructuredGridPiece`](https://docs.rs/vtkio/0.6.*/vtkio/model/struct.UnstructuredGridPiece.html) representing this mesh including its attached [`MeshAttribute`]s
+    /// Creates a [`vtkio::model::UnstructuredGridPiece`] representing this mesh including its attached [`MeshAttribute`]s
     #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
-    pub fn to_unstructured_grid(&self) -> UnstructuredGridPiece {
-        let mut grid_piece: UnstructuredGridPiece = (&self.mesh).into();
+    fn unstructured_grid(&self) -> UnstructuredGridPiece {
+        let mut grid_piece: UnstructuredGridPiece = (&self.mesh).into_unstructured_grid();
         for point_attribute in &self.point_attributes {
             grid_piece
                 .data
@@ -695,21 +787,73 @@ where
     }
 }
 
-/// Creates a [`vtkio::model::UnstructuredGridPiece`](https://docs.rs/vtkio/0.6.*/vtkio/model/struct.UnstructuredGridPiece.html) representing this mesh with all its attributes and wraps it into a [`vtkio::model::DataSet`](https://docs.rs/vtkio/0.6.*/vtkio/model/enum.DataSet.html)
-#[cfg(feature = "vtk_extras")]
-#[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
-impl<R, MeshT> Into<DataSet> for &MeshWithData<R, MeshT>
-where
-    R: Real,
-    MeshT: Mesh3d<R>,
-    for<'a> &'a MeshT: Into<UnstructuredGridPiece>,
-{
-    fn into(self) -> DataSet {
-        DataSet::inline(self.to_unstructured_grid())
-    }
+macro_rules! impl_into_vtk {
+    ($name:tt) => {
+        #[cfg(feature = "vtk_extras")]
+        #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
+        impl<R: Real> IntoVtkUnstructuredGridPiece for $name<R> {
+            fn into_unstructured_grid(self) -> UnstructuredGridPiece {
+                vtk_helper::mesh_to_unstructured_grid(&self)
+            }
+        }
+
+        #[cfg(feature = "vtk_extras")]
+        #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
+        impl<R: Real> IntoVtkUnstructuredGridPiece for &$name<R> {
+            fn into_unstructured_grid(self) -> UnstructuredGridPiece {
+                vtk_helper::mesh_to_unstructured_grid(self)
+            }
+        }
+
+        #[cfg(feature = "vtk_extras")]
+        #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
+        impl<'a, R: Real> IntoVtkUnstructuredGridPiece for std::borrow::Cow<'a, $name<R>> {
+            fn into_unstructured_grid(self) -> UnstructuredGridPiece {
+                vtk_helper::mesh_to_unstructured_grid(&self)
+            }
+        }
+
+        #[cfg(feature = "vtk_extras")]
+        #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
+        impl<'a, R: Real> IntoVtkUnstructuredGridPiece for &std::borrow::Cow<'a, $name<R>> {
+            fn into_unstructured_grid(self) -> UnstructuredGridPiece {
+                vtk_helper::mesh_to_unstructured_grid(&self)
+            }
+        }
+
+        #[cfg(feature = "vtk_extras")]
+        #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
+        impl<R: Real> IntoVtkUnstructuredGridPiece for &MeshWithData<R, $name<R>> {
+            fn into_unstructured_grid(self) -> UnstructuredGridPiece {
+                self.unstructured_grid()
+            }
+        }
+
+        #[cfg(feature = "vtk_extras")]
+        #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
+        impl<R: Real> IntoVtkUnstructuredGridPiece for MeshWithData<R, $name<R>> {
+            fn into_unstructured_grid(self) -> UnstructuredGridPiece {
+                self.unstructured_grid()
+            }
+        }
+
+        #[cfg(feature = "vtk_extras")]
+        #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
+        impl<'a, R: Real> IntoVtkUnstructuredGridPiece
+            for &MeshWithData<R, std::borrow::Cow<'a, $name<R>>>
+        {
+            fn into_unstructured_grid(self) -> UnstructuredGridPiece {
+                self.unstructured_grid()
+            }
+        }
+    };
 }
 
-/// Trait implementations to convert meshes into types supported by [`vtkio`](https://github.com/elrnv/vtkio)
+impl_into_vtk!(TriMesh3d);
+impl_into_vtk!(HexMesh3d);
+impl_into_vtk!(PointCloud3d);
+
+/// Trait implementations to convert meshes into types supported by [`vtkio`]
 #[cfg(feature = "vtk_extras")]
 #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
 pub mod vtk_helper {
@@ -718,40 +862,67 @@ pub mod vtk_helper {
     };
     use vtkio::IOBuffer;
 
-    use super::{
-        CellConnectivity, HexCell, HexMesh3d, Mesh3d, PointCell, PointCloud3d, Real, TriMesh3d,
-        TriangleCell,
-    };
+    use super::{CellConnectivity, HexCell, Mesh3d, PointCell, Real, TriangleCell};
 
-    /// Trait that can be implemented by mesh cells to return the corresponding [`vtkio::model::CellType`](https://docs.rs/vtkio/0.6.*/vtkio/model/enum.CellType.html)
+    /// Trait that can be implemented by mesh cells to return the corresponding [`vtkio::model::CellType`]
     #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
     pub trait HasVtkCellType {
-        /// Returns the corresponding [`vtkio::model::CellType`](https://docs.rs/vtkio/0.6.*/vtkio/model/enum.CellType.html) of the cell
-        fn vtk_cell_type() -> CellType;
+        /// Returns the corresponding [`vtkio::model::CellType`] of the cell
+        fn vtk_cell_type(&self) -> CellType;
     }
 
     #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
     impl HasVtkCellType for TriangleCell {
-        fn vtk_cell_type() -> CellType {
+        fn vtk_cell_type(&self) -> CellType {
             CellType::Triangle
         }
     }
 
     #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
     impl HasVtkCellType for HexCell {
-        fn vtk_cell_type() -> CellType {
+        fn vtk_cell_type(&self) -> CellType {
             CellType::Hexahedron
         }
     }
 
     #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
     impl HasVtkCellType for PointCell {
-        fn vtk_cell_type() -> CellType {
+        fn vtk_cell_type(&self) -> CellType {
             CellType::Vertex
         }
     }
 
-    /// Converts any supported mesh to a [`vtkio::model::UnstructuredGridPiece`](https://docs.rs/vtkio/0.6.*/vtkio/model/struct.UnstructuredGridPiece.html)
+    /// Conversion of meshes into a [`vtkio::model::UnstructuredGridPiece`]
+    #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
+    pub trait IntoVtkUnstructuredGridPiece {
+        fn into_unstructured_grid(self) -> UnstructuredGridPiece;
+    }
+
+    /// Direct conversion of meshes into a full [`vtkio::model::DataSet`]
+    #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
+    pub trait IntoVtkDataSet {
+        fn into_dataset(self) -> DataSet;
+    }
+
+    impl IntoVtkUnstructuredGridPiece for UnstructuredGridPiece {
+        fn into_unstructured_grid(self) -> UnstructuredGridPiece {
+            self
+        }
+    }
+
+    impl<T: IntoVtkUnstructuredGridPiece> IntoVtkDataSet for T {
+        fn into_dataset(self) -> DataSet {
+            DataSet::inline(self.into_unstructured_grid())
+        }
+    }
+
+    impl IntoVtkDataSet for DataSet {
+        fn into_dataset(self) -> DataSet {
+            self
+        }
+    }
+
+    /// Converts any supported mesh to a [`vtkio::model::UnstructuredGridPiece`]
     #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
     pub fn mesh_to_unstructured_grid<'a, R, MeshT>(mesh: &'a MeshT) -> UnstructuredGridPiece
     where
@@ -765,76 +936,20 @@ pub mod vtk_helper {
             points
         };
 
-        let vertices_per_cell = MeshT::Cell::num_vertices();
         let vertices = {
-            let mut vertices = Vec::with_capacity(mesh.cells().len() * (vertices_per_cell + 1));
+            let mut vertices =
+                Vec::with_capacity(mesh.cells().len() * (MeshT::Cell::expected_num_vertices() + 1));
             for cell in mesh.cells().iter() {
-                vertices.push(vertices_per_cell as u32);
+                vertices.push(cell.num_vertices() as u32);
                 cell.for_each_vertex(|v| vertices.push(v as u32));
             }
             vertices
         };
 
-        let cell_types = vec![<MeshT::Cell as HasVtkCellType>::vtk_cell_type(); mesh.cells().len()];
+        let mut cell_types = Vec::with_capacity(mesh.cells().len());
+        cell_types.extend(mesh.cells().iter().map(|c| c.vtk_cell_type()));
 
         new_unstructured_grid_piece(points, vertices, cell_types)
-    }
-
-    /// Creates a [`vtkio::model::UnstructuredGridPiece`](https://docs.rs/vtkio/0.6.*/vtkio/model/struct.UnstructuredGridPiece.html) representing this mesh
-    #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
-    impl<R> From<&TriMesh3d<R>> for UnstructuredGridPiece
-    where
-        R: Real,
-    {
-        fn from(mesh: &TriMesh3d<R>) -> Self {
-            mesh_to_unstructured_grid(mesh)
-        }
-    }
-
-    /// Creates a [`vtkio::model::UnstructuredGridPiece`](https://docs.rs/vtkio/0.6.*/vtkio/model/struct.UnstructuredGridPiece.html) representing this mesh
-    #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
-    impl<'a, R> From<&'a HexMesh3d<R>> for UnstructuredGridPiece
-    where
-        R: Real,
-    {
-        fn from(mesh: &'a HexMesh3d<R>) -> Self {
-            mesh_to_unstructured_grid(mesh)
-        }
-    }
-
-    /// Creates a [`vtkio::model::UnstructuredGridPiece`](https://docs.rs/vtkio/0.6.*/vtkio/model/struct.UnstructuredGridPiece.html) representing this point cloud
-    #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
-    impl<'a, R> From<&'a PointCloud3d<R>> for UnstructuredGridPiece
-    where
-        R: Real,
-    {
-        fn from(mesh: &'a PointCloud3d<R>) -> Self {
-            mesh_to_unstructured_grid(mesh)
-        }
-    }
-
-    /// Creates a [`vtkio::model::UnstructuredGridPiece`](https://docs.rs/vtkio/0.6.*/vtkio/model/struct.UnstructuredGridPiece.html) representing this mesh and wraps it into a [`vtkio::model::DataSet`](https://docs.rs/vtkio/0.6.*/vtkio/model/enum.DataSet.html)
-    #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
-    impl<R: Real> Into<DataSet> for &TriMesh3d<R> {
-        fn into(self) -> DataSet {
-            DataSet::inline(UnstructuredGridPiece::from(self))
-        }
-    }
-
-    /// Creates a [`vtkio::model::UnstructuredGridPiece`](https://docs.rs/vtkio/0.6.*/vtkio/model/struct.UnstructuredGridPiece.html) representing this mesh and wraps it into a [`vtkio::model::DataSet`](https://docs.rs/vtkio/0.6.*/vtkio/model/enum.DataSet.html)
-    #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
-    impl<R: Real> Into<DataSet> for &HexMesh3d<R> {
-        fn into(self) -> DataSet {
-            DataSet::inline(UnstructuredGridPiece::from(self))
-        }
-    }
-
-    /// Creates a [`vtkio::model::UnstructuredGridPiece`](https://docs.rs/vtkio/0.6.*/vtkio/model/struct.UnstructuredGridPiece.html) representing this point cloud and wraps it into a [`vtkio::model::DataSet`](https://docs.rs/vtkio/0.6.*/vtkio/model/enum.DataSet.html)
-    #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
-    impl<R: Real> Into<DataSet> for &PointCloud3d<R> {
-        fn into(self) -> DataSet {
-            DataSet::inline(UnstructuredGridPiece::from(self))
-        }
     }
 
     fn new_unstructured_grid_piece<B: Into<IOBuffer>>(

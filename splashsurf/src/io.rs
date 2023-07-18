@@ -1,14 +1,12 @@
 use crate::io::vtk_format::VtkFile;
 use anyhow::{anyhow, Context};
 use log::{info, warn};
-use splashsurf_lib::mesh::MeshAttribute;
+use splashsurf_lib::mesh::{
+    IntoVtkUnstructuredGridPiece, Mesh3d, MeshAttribute, MeshWithData, TriMesh3d,
+};
 use splashsurf_lib::nalgebra::Vector3;
 use splashsurf_lib::Real;
 use splashsurf_lib::{io, profile};
-use splashsurf_lib::{
-    mesh::{Mesh3d, MeshWithData, TriMesh3d},
-    vtkio::model::DataSet,
-};
 use std::collections::HashSet;
 use std::fs::File;
 use std::io::{BufWriter, Write};
@@ -245,7 +243,7 @@ pub fn write_mesh<'a, R: Real, MeshT: Mesh3d<R>, P: AsRef<Path>>(
     _format_params: &OutputFormatParameters,
 ) -> Result<(), anyhow::Error>
 where
-    &'a MeshWithData<R, MeshT>: Into<DataSet>,
+    for<'b> &'b MeshWithData<R, MeshT>: IntoVtkUnstructuredGridPiece,
 {
     let output_file = output_file.as_ref();
     info!(

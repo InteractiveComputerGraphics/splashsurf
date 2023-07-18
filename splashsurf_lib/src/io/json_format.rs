@@ -1,7 +1,7 @@
 //! Helper functions for the JSON file format
 
 use crate::utils::IteratorExt;
-use crate::Real;
+use crate::{Real, RealConvert};
 use anyhow::{anyhow, Context};
 use nalgebra::Vector3;
 use std::fs::{File, OpenOptions};

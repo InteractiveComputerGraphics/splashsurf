@@ -998,11 +998,7 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
     if let Some(output_octree_file) = &paths.output_octree_file {
         info!("Writing octree to \"{}\"...", output_octree_file.display());
         io::vtk_format::write_vtk(
-            reconstruction
-                .octree()
-                .unwrap()
-                .hexmesh(grid, true)
-                .to_unstructured_grid(),
+            reconstruction.octree().unwrap().hexmesh(grid, true),
             output_octree_file,
             "mesh",
         )
@@ -1061,11 +1057,7 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
             output_density_map_grid_file.display()
         );
 
-        io::vtk_format::write_vtk(
-            density_mesh.to_unstructured_grid(),
-            output_density_map_grid_file,
-            "density_map",
-        )?;
+        io::vtk_format::write_vtk(density_mesh, output_density_map_grid_file, "density_map")?;
 
         info!("Done.");
     }

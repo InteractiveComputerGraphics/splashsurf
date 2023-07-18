@@ -6,7 +6,7 @@ use std::fmt::Debug;
 use nalgebra::SVector;
 use rayon::prelude::*;
 
-use crate::{Real, ThreadSafe};
+use crate::{Real, RealConvert, ThreadSafe};
 
 /// Type representing an axis aligned bounding box in arbitrary dimensions
 #[derive(Clone, Eq, PartialEq)]
@@ -119,8 +119,8 @@ where
         T: Real,
     {
         Some(AxisAlignedBoundingBox::new(
-            T::try_convert_vec_from(&self.min)?,
-            T::try_convert_vec_from(&self.max)?,
+            self.min.try_convert()?,
+            self.max.try_convert()?,
         ))
     }
 

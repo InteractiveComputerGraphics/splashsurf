@@ -37,7 +37,7 @@ pub use vtkio;
 pub use crate::aabb::{Aabb2d, Aabb3d, AxisAlignedBoundingBox};
 pub use crate::density_map::DensityMap;
 pub use crate::octree::SubdivisionCriterion;
-pub use crate::traits::{Index, Real, ThreadSafe};
+pub use crate::traits::{Index, Real, RealConvert, ThreadSafe};
 pub use crate::uniform_grid::UniformGrid;
 
 use crate::density_map::DensityMapError;

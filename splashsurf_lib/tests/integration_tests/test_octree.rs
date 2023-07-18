@@ -25,7 +25,7 @@ fn octree_to_file<P: AsRef<Path>, I: Index, R: Real>(
     path: P,
 ) {
     let mesh = octree.hexmesh(&grid, false);
-    io::vtk_format::write_vtk(mesh.to_unstructured_grid(), path.as_ref(), "octree").unwrap();
+    io::vtk_format::write_vtk(mesh, path.as_ref(), "octree").unwrap();
 }
 
 #[test]
