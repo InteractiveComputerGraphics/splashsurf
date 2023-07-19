@@ -1,0 +1,80 @@
+---
+---
+
+$bg-color: #353535;
+$fg-color: #bbbbbb;
+
+$header-text-color: darken($bg-color, 5%);
+
+// Headers
+$header-heading-color: $header-text-color;
+$header-bg-color: #97f7e1;
+$header-bg-color-secondary: #4dadd0;
+
+// Text
+$section-headings-color: $fg-color;
+$body-text-color: $fg-color;
+$body-link-color: lighten($header-bg-color-secondary, 10%);
+
+// Code
+$code-bg-color: darken($bg-color, 5%);
+$code-text-color: $fg-color;
+
+// Borders
+$hr-border-color: darken($fg-color, 10%);
+
+@import "{{ site.theme }}";
+
+body {
+  background-color: $bg-color;
+}
+
+.logo {
+  width: 100%;
+  max-width: 64rem;
+}
+
+.page-header {
+  @include large {
+    padding: 2rem 6rem;
+  }
+
+  @include medium {
+    padding: 1.5rem 4rem;
+  }
+
+  @include small {
+    padding: 1.5rem 1rem;
+  }
+}
+
+.project-tagline {
+  @include large {
+    font-size: 1.5rem;
+  }
+}
+
+.btn {
+  color: rgba($header-text-color, 0.7);
+  background-color: rgba($header-text-color, 0.08);
+  border-color: rgba($header-text-color, 0.2);
+
+  &:hover {
+    text-decoration: none;
+    color: rgba($header-text-color, 0.8);
+    background-color: rgba($header-text-color, 0.2);
+    border-color: rgba($header-text-color, 0.3);
+  }
+}
+
+.main-content {
+  text-align: justify;
+  
+  @include large {
+    padding: 4rem 6rem;
+  }
+
+  @include medium {
+    padding: 3rem 4rem;
+  }
+}
