@@ -120,7 +120,9 @@ fn par_init_neighborhood_list(neighborhood_list: &mut Vec<Vec<usize>>, new_len: 
     neighborhood_list.resize_with(new_len, || Vec::with_capacity(15));
 }
 
-/// Performs a neighborhood search, returning the indices of all neighboring particles in the given search radius per particle, sequential implementation
+/// Performs a neighborhood search (sequential implementation)
+///
+/// Returns the indices of all neighboring particles in the given search radius per particle as a `Vec<Vec<usize>>`.
 #[inline(never)]
 pub fn neighborhood_search_spatial_hashing<I: Index, R: Real>(
     domain: &Aabb3d<R>,
@@ -128,350 +130,28 @@ pub fn neighborhood_search_spatial_hashing<I: Index, R: Real>(
     search_radius: R,
     neighborhood_list: &mut Vec<Vec<usize>>,
 ) {
-    // TODO: Use ArrayStorage from femproto instead of Vec of Vecs?
-    // FIXME: Replace unwraps?
-    profile!("neighborhood_search_spatial_hashing");
-
-    assert!(
-        search_radius > R::zero(),
-        "Search radius for neighborhood search has to be positive!"
-    );
-    assert!(
-        domain.is_consistent(),
-        "Domain for neighborhood search has to be consistent!"
-    );
-    assert!(
-        !domain.is_degenerate(),
-        "Domain for neighborhood search cannot be degenerate!"
-    );
-
-    let search_radius_squared = search_radius * search_radius;
-
-    // Create a new grid for neighborhood search
-    let grid = UniformGrid::from_aabb(&domain, search_radius)
-        .expect("Failed to construct grid for neighborhood search!");
-    // Map for spatially hashed storage of all particles (map from cell -> enclosed particles)
-    let particles_per_cell =
-        sequential_generate_cell_to_particle_map::<I, R>(&grid, particle_positions);
-
-    // Build neighborhood lists cell by cell
-    init_neighborhood_list(neighborhood_list, particle_positions.len());
-    {
-        profile!("calculate_particle_neighbors_seq");
-        let mut potential_neighbor_particle_vecs = Vec::new();
-        for (&flat_cell_index, particles) in &particles_per_cell {
-            let current_cell = grid.try_unflatten_cell_index(flat_cell_index).unwrap();
-
-            // Collect references to the particle lists of all existing adjacent cells and the cell itself
-            potential_neighbor_particle_vecs.clear();
-            potential_neighbor_particle_vecs.extend(
-                grid.cells_adjacent_to_cell(&current_cell)
-                    .chain(std::iter::once(current_cell))
-                    .filter_map(|c| {
-                        let flat_cell_index = grid.flatten_cell_index(&c);
-                        particles_per_cell.get(&flat_cell_index)
-                    }),
-            );
-
-            // Returns an iterator over all particles of all adjacent cells and the cell itself
-            let potential_neighbor_particle_iter = || {
-                potential_neighbor_particle_vecs
-                    .iter()
-                    .flat_map(|v| v.iter())
-            };
-
-            // Iterate over all particles of the current cell
-            for &particle_i in particles {
-                let pos_i = &particle_positions[particle_i];
-                let particle_i_neighbors = &mut neighborhood_list[particle_i];
-
-                // Check for neighborhood with all neighboring cells
-                for &particle_j in potential_neighbor_particle_iter() {
-                    if particle_i == particle_j {
-                        continue;
-                    }
-
-                    let pos_j = &particle_positions[particle_j];
-                    if (pos_j - pos_i).norm_squared() < search_radius_squared {
-                        // A neighbor was found
-                        particle_i_neighbors.push(particle_j);
-                    }
-                }
-            }
-        }
-    }
+    neighborhood_search_spatial_hashing_filtered::<I, R>(
+        domain,
+        particle_positions,
+        search_radius,
+        neighborhood_list,
+        |_| true,
+    )
 }
 
-pub struct FlatNeighborhoodList {
-    /// Offsets to the start of the neighborhood list of the given particle (very last entry contains total number of neighbor particles)
-    pub neighbor_ptr: Vec<usize>,
-    /// Flat particle neighborhood list storage
-    pub neighbors: Vec<usize>,
-}
-
-impl Default for FlatNeighborhoodList {
-    fn default() -> Self {
-        Self {
-            neighbor_ptr: vec![0],
-            neighbors: vec![],
-        }
-    }
-}
-
-impl FlatNeighborhoodList {
-    /// Returns the total number of particles this list has neighborhood information about
-    pub fn len(&self) -> usize {
-        self.neighbor_ptr.len() - 1
-    }
-
-    pub fn get_neighbors(&self, particle_i: usize) -> Option<&[usize]> {
-        let range = self
-            .neighbor_ptr
-            .get(particle_i)
-            .copied()
-            .zip(self.neighbor_ptr.get(particle_i + 1).copied());
-        range.and_then(|(start, end)| self.neighbors.get(start..end))
-    }
-
-    pub fn get_neighbors_mut(&mut self, particle_i: usize) -> Option<&mut [usize]> {
-        let range = self
-            .neighbor_ptr
-            .get(particle_i)
-            .copied()
-            .zip(self.neighbor_ptr.get(particle_i + 1).copied());
-        range.and_then(|(start, end)| self.neighbors.get_mut(start..end))
-    }
-
-    /// Converts this flat neighbor list to its nested `Vec` representation
-    pub fn to_vec_vec(self) -> Vec<Vec<usize>> {
-        let num_particles = self.len();
-        let mut neighbor_list = vec![Vec::new(); num_particles];
-        neighbor_list
-            .iter_mut()
-            .enumerate()
-            .for_each(|(i, nl)| nl.extend(self.get_neighbors(i).unwrap().iter().copied()));
-        neighbor_list
-    }
-}
-
-/// Trait unifying different particle neighborhood list storage formats
-pub trait NeighborhoodList {
-    /// Returns the total number of particles this list has neighborhood information about
-    fn len(&self) -> usize;
-    /// Returns the neighborhood list of the given particle
-    fn neighbors(&self, particle_i: usize) -> &[usize];
-}
-
-impl NeighborhoodList for FlatNeighborhoodList {
-    fn len(&self) -> usize {
-        self.len()
-    }
-
-    fn neighbors(&self, particle_i: usize) -> &[usize] {
-        self.get_neighbors(particle_i).unwrap()
-    }
-}
-
-impl NeighborhoodList for Vec<Vec<usize>> {
-    fn len(&self) -> usize {
-        self.len()
-    }
-
-    fn neighbors(&self, particle_i: usize) -> &[usize] {
-        &self[particle_i]
-    }
-}
-
-pub fn neighborhood_search_spatial_hashing_flat<I: Index, R: Real>(
-    domain: &Aabb3d<R>,
-    particle_positions: &[Vector3<R>],
-    search_radius: R,
-    neighborhood_list: &mut FlatNeighborhoodList,
-) {
-    profile!("neighborhood_search_spatial_hashing_flat");
-
-    assert!(
-        search_radius > R::zero(),
-        "Search radius for neighborhood search has to be positive!"
-    );
-    assert!(
-        domain.is_consistent(),
-        "Domain for neighborhood search has to be consistent!"
-    );
-    assert!(
-        !domain.is_degenerate(),
-        "Domain for neighborhood search cannot be degenerate!"
-    );
-
-    let search_radius_squared = search_radius * search_radius;
-
-    // Create a new grid for neighborhood search
-    let grid = UniformGrid::from_aabb(&domain, search_radius)
-        .expect("Failed to construct grid for neighborhood search!");
-    // Map for spatially hashed storage of all particles (map from cell -> enclosed particles)
-    let particles_per_cell =
-        sequential_generate_cell_to_particle_map::<I, R>(&grid, particle_positions);
-
-    {
-        neighborhood_list.neighbor_ptr.clear();
-        neighborhood_list
-            .neighbor_ptr
-            .resize(particle_positions.len() + 1, 0);
-        neighborhood_list.neighbors.clear();
-    }
-
-    {
-        profile!("write particle neighbors");
-        let mut counter = 0;
-        for (particle_i, pos_i) in particle_positions.iter().enumerate() {
-            // Store start of current particle neighbor list
-            neighborhood_list.neighbor_ptr[particle_i] = counter;
-
-            // Cell of the current particle
-            let current_cell = grid.get_cell(grid.enclosing_cell(pos_i)).unwrap();
-
-            let mut neighbor_test = |particle_j| {
-                let pos_j: &Vector3<R> = &particle_positions[particle_j];
-                if (pos_j - pos_i).norm_squared() < search_radius_squared {
-                    // A neighbor was found
-                    neighborhood_list.neighbors.push(particle_j);
-                    counter += 1;
-                }
-            };
-
-            // Loop over adjacent cells
-            grid.cells_adjacent_to_cell(&current_cell)
-                .filter_map(|c| {
-                    let flat_cell_index = grid.flatten_cell_index(&c);
-                    particles_per_cell.get(&flat_cell_index)
-                })
-                .flatten()
-                .copied()
-                .for_each(|particle_j| neighbor_test(particle_j));
-
-            // Loop over current cell
-            std::iter::once(current_cell)
-                .filter_map(|c| {
-                    let flat_cell_index = grid.flatten_cell_index(&c);
-                    particles_per_cell.get(&flat_cell_index)
-                })
-                .flatten()
-                .copied()
-                .for_each(|particle_j| {
-                    if particle_i != particle_j {
-                        neighbor_test(particle_j);
-                    }
-                });
-        }
-        // Store end of the last neighbor list
-        *neighborhood_list.neighbor_ptr.last_mut().unwrap() = counter;
-    }
-}
-
-pub fn neighborhood_search_spatial_hashing_flat_filtered<I: Index, R: Real>(
-    domain: &Aabb3d<R>,
-    particle_positions: &[Vector3<R>],
-    search_radius: R,
-    neighborhood_list: &mut FlatNeighborhoodList,
-    filter: &[bool],
-) {
-    profile!("neighborhood_search_spatial_hashing_flat_filtered");
-
-    assert!(
-        search_radius > R::zero(),
-        "Search radius for neighborhood search has to be positive!"
-    );
-    assert!(
-        domain.is_consistent(),
-        "Domain for neighborhood search has to be consistent!"
-    );
-    assert!(
-        !domain.is_degenerate(),
-        "Domain for neighborhood search cannot be degenerate!"
-    );
-
-    let search_radius_squared = search_radius * search_radius;
-
-    // Create a new grid for neighborhood search
-    let grid = UniformGrid::from_aabb(&domain, search_radius)
-        .expect("Failed to construct grid for neighborhood search!");
-    // Map for spatially hashed storage of all particles (map from cell -> enclosed particles)
-    let particles_per_cell =
-        sequential_generate_cell_to_particle_map::<I, R>(&grid, particle_positions);
-
-    {
-        neighborhood_list.neighbor_ptr.clear();
-        neighborhood_list
-            .neighbor_ptr
-            .resize(particle_positions.len() + 1, 0);
-        neighborhood_list.neighbors.clear();
-    }
-
-    {
-        profile!("write particle neighbors");
-        let mut counter = 0;
-        for (particle_i, (pos_i, filter)) in particle_positions
-            .iter()
-            .zip(filter.iter().copied())
-            .enumerate()
-        {
-            // Store start of current particle neighbor list
-            neighborhood_list.neighbor_ptr[particle_i] = counter;
-
-            if !filter {
-                continue;
-            }
-
-            // Cell of the current particle
-            let current_cell = grid.get_cell(grid.enclosing_cell(pos_i)).unwrap();
-
-            let mut neighbor_test = |particle_j| {
-                let pos_j: &Vector3<R> = &particle_positions[particle_j];
-                if (pos_j - pos_i).norm_squared() < search_radius_squared {
-                    // A neighbor was found
-                    neighborhood_list.neighbors.push(particle_j);
-                    counter += 1;
-                }
-            };
-
-            // Loop over adjacent cells
-            grid.cells_adjacent_to_cell(&current_cell)
-                .filter_map(|c| {
-                    let flat_cell_index = grid.flatten_cell_index(&c);
-                    particles_per_cell.get(&flat_cell_index)
-                })
-                .flatten()
-                .copied()
-                .for_each(|particle_j| neighbor_test(particle_j));
-
-            // Loop over current cell
-            std::iter::once(current_cell)
-                .filter_map(|c| {
-                    let flat_cell_index = grid.flatten_cell_index(&c);
-                    particles_per_cell.get(&flat_cell_index)
-                })
-                .flatten()
-                .copied()
-                .for_each(|particle_j| {
-                    if particle_i != particle_j {
-                        neighbor_test(particle_j);
-                    }
-                });
-        }
-        // Store end of the last neighbor list
-        *neighborhood_list.neighbor_ptr.last_mut().unwrap() = counter;
-    }
-}
-
+/// Performs a neighborhood search (sequential implementation, with filter)
+///
+/// Returns the indices of all neighboring particles in the given search radius per particle as a `Vec<Vec<usize>>`.
+/// The filter specifies which particles the neighbor lists should be computed for (`true`: compute neighbors).
+/// Note that the particles that were filtered out will still appear in the neighbor lists of the particles that were not filtered out.
 #[inline(never)]
 pub fn neighborhood_search_spatial_hashing_filtered<I: Index, R: Real>(
     domain: &Aabb3d<R>,
     particle_positions: &[Vector3<R>],
     search_radius: R,
     neighborhood_list: &mut Vec<Vec<usize>>,
-    filter: &[bool],
+    filter: impl Fn(usize) -> bool,
 ) {
-    // TODO: Use ArrayStorage from femproto instead of Vec of Vecs?
     // FIXME: Replace unwraps?
     profile!("neighborhood_search_spatial_hashing_filtered");
 
@@ -525,7 +205,7 @@ pub fn neighborhood_search_spatial_hashing_filtered<I: Index, R: Real>(
 
             // Iterate over all particles of the current cell
             for &particle_i in particles {
-                if !filter[particle_i] {
+                if !filter(particle_i) {
                     continue;
                 }
 
@@ -549,7 +229,209 @@ pub fn neighborhood_search_spatial_hashing_filtered<I: Index, R: Real>(
     }
 }
 
-/// Performs a neighborhood search, returning the indices of all neighboring particles in the given search radius per particle, multi-threaded implementation
+/// Stores particle neighborhood lists contiguously in memory using a second offset array
+pub struct FlatNeighborhoodList {
+    /// Offsets to the start of the neighborhood list of the given particle (very last entry contains total number of neighbor particles)
+    pub neighbor_ptr: Vec<usize>,
+    /// Flat particle neighborhood list storage
+    pub neighbors: Vec<usize>,
+}
+
+impl Default for FlatNeighborhoodList {
+    fn default() -> Self {
+        Self {
+            neighbor_ptr: vec![0],
+            neighbors: vec![],
+        }
+    }
+}
+
+impl FlatNeighborhoodList {
+    /// Returns the total number of particles this list has neighborhood information about
+    pub fn len(&self) -> usize {
+        self.neighbor_ptr.len() - 1
+    }
+
+    /// Returns a slice containing the neighborhood list of the given particle
+    pub fn get_neighbors(&self, particle_i: usize) -> Option<&[usize]> {
+        let range = self
+            .neighbor_ptr
+            .get(particle_i)
+            .copied()
+            .zip(self.neighbor_ptr.get(particle_i + 1).copied());
+        range.and_then(|(start, end)| self.neighbors.get(start..end))
+    }
+
+    /// Returns a mutable slice containing the neighborhood list of the given particle
+    pub fn get_neighbors_mut(&mut self, particle_i: usize) -> Option<&mut [usize]> {
+        let range = self
+            .neighbor_ptr
+            .get(particle_i)
+            .copied()
+            .zip(self.neighbor_ptr.get(particle_i + 1).copied());
+        range.and_then(|(start, end)| self.neighbors.get_mut(start..end))
+    }
+
+    /// Converts this flat neighbor list to its nested `Vec` representation
+    pub fn to_vec_vec(self) -> Vec<Vec<usize>> {
+        let num_particles = self.len();
+        let mut neighbor_list = vec![Vec::new(); num_particles];
+        neighbor_list
+            .iter_mut()
+            .enumerate()
+            .for_each(|(i, nl)| nl.extend(self.get_neighbors(i).unwrap().iter().copied()));
+        neighbor_list
+    }
+}
+
+/// Trait unifying different particle neighborhood list storage formats
+pub trait NeighborhoodList {
+    /// Returns the total number of particles this list has neighborhood information about
+    fn len(&self) -> usize;
+    /// Returns the neighborhood list of the given particle
+    fn neighbors(&self, particle_i: usize) -> &[usize];
+}
+
+impl NeighborhoodList for FlatNeighborhoodList {
+    fn len(&self) -> usize {
+        self.len()
+    }
+
+    fn neighbors(&self, particle_i: usize) -> &[usize] {
+        self.get_neighbors(particle_i).unwrap()
+    }
+}
+
+/// Implementation for `Vec<Vec<usize>>` and `[Vec<usize>]`
+impl<T: AsRef<[Vec<usize>]> + ?Sized> NeighborhoodList for T {
+    fn len(&self) -> usize {
+        self.as_ref().len()
+    }
+
+    fn neighbors(&self, particle_i: usize) -> &[usize] {
+        &self.as_ref()[particle_i]
+    }
+}
+
+/// Performs a neighborhood search (sequential implementation, returning a [`FlatNeighborhoodList`])
+///
+/// Returns the indices of all neighboring particles in the given search radius per particle as a [`FlatNeighborhoodList`].
+pub fn neighborhood_search_spatial_hashing_flat<I: Index, R: Real>(
+    domain: &Aabb3d<R>,
+    particle_positions: &[Vector3<R>],
+    search_radius: R,
+    neighborhood_list: &mut FlatNeighborhoodList,
+) {
+    profile!("neighborhood_search_spatial_hashing_flat");
+
+    neighborhood_search_spatial_hashing_flat_filtered::<I, R>(
+        domain,
+        particle_positions,
+        search_radius,
+        neighborhood_list,
+        |_| true,
+    )
+}
+
+/// Performs a neighborhood search (sequential implementation, with filter, returning a [`FlatNeighborhoodList`])
+///
+/// Returns the indices of all neighboring particles in the given search radius per particle as a [`FlatNeighborhoodList`].
+/// The filter specifies which particles the neighbor lists should be computed for (`true`: compute neighbors).
+/// Note that the particles that were filtered out will still appear in the neighbor lists of the particles that were not filtered out.
+pub fn neighborhood_search_spatial_hashing_flat_filtered<I: Index, R: Real>(
+    domain: &Aabb3d<R>,
+    particle_positions: &[Vector3<R>],
+    search_radius: R,
+    neighborhood_list: &mut FlatNeighborhoodList,
+    filter: impl Fn(usize) -> bool,
+) {
+    profile!("neighborhood_search_spatial_hashing_flat_filtered");
+
+    assert!(
+        search_radius > R::zero(),
+        "Search radius for neighborhood search has to be positive!"
+    );
+    assert!(
+        domain.is_consistent(),
+        "Domain for neighborhood search has to be consistent!"
+    );
+    assert!(
+        !domain.is_degenerate(),
+        "Domain for neighborhood search cannot be degenerate!"
+    );
+
+    let search_radius_squared = search_radius * search_radius;
+
+    // Create a new grid for neighborhood search
+    let grid = UniformGrid::from_aabb(&domain, search_radius)
+        .expect("Failed to construct grid for neighborhood search!");
+    // Map for spatially hashed storage of all particles (map from cell -> enclosed particles)
+    let particles_per_cell =
+        sequential_generate_cell_to_particle_map::<I, R>(&grid, particle_positions);
+
+    {
+        neighborhood_list.neighbor_ptr.clear();
+        neighborhood_list
+            .neighbor_ptr
+            .resize(particle_positions.len() + 1, 0);
+        neighborhood_list.neighbors.clear();
+    }
+
+    {
+        profile!("write particle neighbors");
+        let mut counter = 0;
+        for (particle_i, pos_i) in particle_positions.iter().enumerate() {
+            // Store start of current particle neighbor list
+            neighborhood_list.neighbor_ptr[particle_i] = counter;
+
+            if !filter(particle_i) {
+                continue;
+            }
+
+            // Cell of the current particle
+            let current_cell = grid.get_cell(grid.enclosing_cell(pos_i)).unwrap();
+
+            let mut neighbor_test = |particle_j| {
+                let pos_j: &Vector3<R> = &particle_positions[particle_j];
+                if (pos_j - pos_i).norm_squared() < search_radius_squared {
+                    // A neighbor was found
+                    neighborhood_list.neighbors.push(particle_j);
+                    counter += 1;
+                }
+            };
+
+            // Loop over adjacent cells
+            grid.cells_adjacent_to_cell(&current_cell)
+                .filter_map(|c| {
+                    let flat_cell_index = grid.flatten_cell_index(&c);
+                    particles_per_cell.get(&flat_cell_index)
+                })
+                .flatten()
+                .copied()
+                .for_each(|particle_j| neighbor_test(particle_j));
+
+            // Loop over current cell
+            std::iter::once(current_cell)
+                .filter_map(|c| {
+                    let flat_cell_index = grid.flatten_cell_index(&c);
+                    particles_per_cell.get(&flat_cell_index)
+                })
+                .flatten()
+                .copied()
+                .for_each(|particle_j| {
+                    if particle_i != particle_j {
+                        neighbor_test(particle_j);
+                    }
+                });
+        }
+        // Store end of the last neighbor list
+        *neighborhood_list.neighbor_ptr.last_mut().unwrap() = counter;
+    }
+}
+
+/// Performs a neighborhood search (multi-threaded implementation)
+///
+/// Returns the indices of all neighboring particles in the given search radius per particle as a `Vec<Vec<usize>>`.
 #[inline(never)]
 pub fn neighborhood_search_spatial_hashing_parallel<I: Index, R: Real>(
     domain: &Aabb3d<R>,

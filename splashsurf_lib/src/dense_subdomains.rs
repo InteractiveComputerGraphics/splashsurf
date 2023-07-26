@@ -567,7 +567,7 @@ pub(crate) fn compute_global_density_vector<I: Index, R: Real>(
                 &subdomain_particles,
                 parameters.compact_support_radius,
                 neighborhood_lists,
-                is_inside,
+                |i| is_inside[i],
             );
 
             sequential_compute_particle_densities_filtered::<I, R, _>(
@@ -576,7 +576,7 @@ pub(crate) fn compute_global_density_vector<I: Index, R: Real>(
                 parameters.compact_support_radius,
                 parameters.particle_rest_mass,
                 particle_densities,
-                is_inside,
+                |i| is_inside[i],
             );
 
             // Write particle densities into global storage

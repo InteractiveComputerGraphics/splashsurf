@@ -72,7 +72,7 @@ pub fn compute_particle_densities<I: Index, R: Real>(
             &mut densities,
         )
     } else {
-        sequential_compute_particle_densities::<I, R>(
+        sequential_compute_particle_densities::<I, R, _>(
             particle_positions,
             particle_neighbor_lists,
             compact_support_radius,
@@ -102,7 +102,7 @@ pub fn compute_particle_densities_inplace<I: Index, R: Real>(
             densities,
         )
     } else {
-        sequential_compute_particle_densities::<I, R>(
+        sequential_compute_particle_densities::<I, R, _>(
             particle_positions,
             particle_neighbor_lists,
             compact_support_radius,
@@ -120,43 +120,37 @@ fn init_density_storage<R: Real>(densities: &mut Vec<R>, new_len: usize) {
 
 /// Computes the individual densities of particles using a standard SPH sum, sequential implementation
 #[inline(never)]
-pub fn sequential_compute_particle_densities<I: Index, R: Real>(
+pub fn sequential_compute_particle_densities<I: Index, R: Real, Nl: NeighborhoodList + ?Sized>(
     particle_positions: &[Vector3<R>],
-    particle_neighbor_lists: &[Vec<usize>],
+    particle_neighbor_lists: &Nl,
     compact_support_radius: R,
     particle_rest_mass: R,
     particle_densities: &mut Vec<R>,
 ) {
     profile!("sequential_compute_particle_densities");
 
-    init_density_storage(particle_densities, particle_positions.len());
-
-    // Pre-compute the kernel which can be queried using squared distances
-    let kernel = DiscreteSquaredDistanceCubicKernel::new::<f64>(1000, compact_support_radius);
-
-    for (i, (particle_i_position, particle_i_neighbors)) in particle_positions
-        .iter()
-        .zip(particle_neighbor_lists.iter())
-        .enumerate()
-    {
-        let mut particle_i_density = kernel.evaluate(R::zero());
-        for particle_j_position in particle_i_neighbors.iter().map(|&j| &particle_positions[j]) {
-            let r_squared = (particle_j_position - particle_i_position).norm_squared();
-            particle_i_density += kernel.evaluate(r_squared);
-        }
-        particle_i_density *= particle_rest_mass;
-        particle_densities[i] = particle_i_density;
-    }
+    sequential_compute_particle_densities_filtered::<I, R, Nl>(
+        particle_positions,
+        particle_neighbor_lists,
+        compact_support_radius,
+        particle_rest_mass,
+        particle_densities,
+        |_| true,
+    )
 }
 
 #[inline(never)]
-pub fn sequential_compute_particle_densities_filtered<I: Index, R: Real, Nl: NeighborhoodList>(
+pub fn sequential_compute_particle_densities_filtered<
+    I: Index,
+    R: Real,
+    Nl: NeighborhoodList + ?Sized,
+>(
     particle_positions: &[Vector3<R>],
     particle_neighbor_lists: &Nl,
     compact_support_radius: R,
     particle_rest_mass: R,
     particle_densities: &mut Vec<R>,
-    filter: &[bool],
+    filter: impl Fn(usize) -> bool,
 ) {
     profile!("sequential_compute_particle_densities_filtered");
 
@@ -168,7 +162,7 @@ pub fn sequential_compute_particle_densities_filtered<I: Index, R: Real, Nl: Nei
     for (i, particle_i_position) in particle_positions
         .iter()
         .enumerate()
-        .filter(|(i, _)| filter[*i])
+        .filter(|(i, _)| filter(*i))
     {
         let mut particle_i_density = kernel.evaluate(R::zero());
         for particle_j_position in particle_neighbor_lists

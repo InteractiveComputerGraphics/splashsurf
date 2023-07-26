@@ -1,3 +1,8 @@
+//! The `splashsurf` surface reconstruction CLI.
+//!
+//! For documentation of the CLI see the [README](https://github.com/InteractiveComputerGraphics/splashsurf) in the project repository.
+//! The reconstruction procedure and other internals of the CLI are provided by the [`splashsurf_lib`] crate.
+
 mod convert;
 mod io;
 mod reconstruction;

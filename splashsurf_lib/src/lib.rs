@@ -17,7 +17,7 @@
 //!  It is disabled by default because a pure "online" surface reconstruction might not need any file IO.
 //!  The feature adds several dependencies to support the file formats.
 //! - **`profiling`**: Enables profiling of internal functions. The resulting data can be displayed using the functions
-//!  from the [`profiling`] module. Furthermore, it exposes the [`profile`] macro that can be used e.g.
+//!  from the [`profiling`] module of this crate. Furthermore, it exposes the [`profile`] macro that can be used e.g.
 //!  by binary crates calling into this library to add their own profiling scopes to the measurements.
 //!  If this features is not enabled, the macro will just expend to a no-op and remove the (small)
 //!  performance overhead of the profiling.
@@ -64,7 +64,7 @@ pub mod marching_cubes;
 pub mod mesh;
 pub mod neighborhood_search;
 pub mod octree;
-pub mod reconstruction;
+pub(crate) mod reconstruction;
 mod reconstruction_octree;
 pub mod sph_interpolation;
 pub mod topology;
