@@ -264,7 +264,7 @@ fn interpolate_points_to_cell_data_generic<
                     let global_cell = subdomain.inv_map_cell(cell).unwrap();
                     let flat_cell_index = grid.flatten_cell_index(&global_cell);
 
-                    let mut cell_data_entry = cell_data
+                    let cell_data_entry = cell_data
                         .entry(flat_cell_index)
                         .or_insert_with(CellData::default);
 
