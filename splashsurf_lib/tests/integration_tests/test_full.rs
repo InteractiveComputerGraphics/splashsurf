@@ -3,8 +3,9 @@ use splashsurf_lib::io::particles_from_file;
 use splashsurf_lib::io::vtk_format::write_vtk;
 use splashsurf_lib::marching_cubes::check_mesh_consistency;
 use splashsurf_lib::{
-    reconstruct_surface, Aabb3d, Parameters, ParticleDensityComputationStrategy, Real,
-    SpatialDecompositionParameters, SubdivisionCriterion,
+    reconstruct_surface, Aabb3d, GridDecompositionParameters, OctreeDecompositionParameters,
+    Parameters, ParticleDensityComputationStrategy, Real, SpatialDecomposition,
+    SubdivisionCriterion,
 };
 use std::path::Path;
 
@@ -37,32 +38,39 @@ fn params_with_aabb<R: Real>(
         iso_surface_threshold,
         domain_aabb,
         enable_multi_threading: false,
-        subdomain_num_cubes_per_dim: None,
         spatial_decomposition: None,
     };
 
     match strategy {
         Strategy::Global => {}
         Strategy::Octree => {
-            parameters.spatial_decomposition = Some(SpatialDecompositionParameters {
-                subdivision_criterion: SubdivisionCriterion::MaxParticleCountAuto,
-                ghost_particle_safety_factor: Some(R::one()),
-                enable_stitching: false,
-                particle_density_computation:
-                    ParticleDensityComputationStrategy::SynchronizeSubdomains,
-            });
+            parameters.spatial_decomposition = Some(SpatialDecomposition::Octree(
+                OctreeDecompositionParameters {
+                    subdivision_criterion: SubdivisionCriterion::MaxParticleCountAuto,
+                    ghost_particle_safety_factor: Some(R::one()),
+                    enable_stitching: false,
+                    particle_density_computation:
+                        ParticleDensityComputationStrategy::SynchronizeSubdomains,
+                },
+            ));
         }
         Strategy::OctreeStitching => {
-            parameters.spatial_decomposition = Some(SpatialDecompositionParameters {
-                subdivision_criterion: SubdivisionCriterion::MaxParticleCountAuto,
-                ghost_particle_safety_factor: Some(R::one() + R::one()),
-                enable_stitching: true,
-                particle_density_computation:
-                    ParticleDensityComputationStrategy::SynchronizeSubdomains,
-            });
+            parameters.spatial_decomposition = Some(SpatialDecomposition::Octree(
+                OctreeDecompositionParameters {
+                    subdivision_criterion: SubdivisionCriterion::MaxParticleCountAuto,
+                    ghost_particle_safety_factor: Some(R::one() + R::one()),
+                    enable_stitching: true,
+                    particle_density_computation:
+                        ParticleDensityComputationStrategy::SynchronizeSubdomains,
+                },
+            ));
         }
         Strategy::SubdomainGrid => {
-            parameters.subdomain_num_cubes_per_dim = Some(64);
+            parameters.spatial_decomposition = Some(SpatialDecomposition::UniformGrid(
+                GridDecompositionParameters {
+                    subdomain_num_cubes_per_dim: 64,
+                },
+            ))
         }
     }
 
@@ -101,11 +109,11 @@ fn default_params<R: Real>() -> Parameters<R> {
 }
 
 fn test_for_boundary<R: Real>(params: &Parameters<R>) -> bool {
-    params
-        .spatial_decomposition
-        .as_ref()
-        .map(|s| s.enable_stitching)
-        .unwrap_or(true)
+    match &params.spatial_decomposition {
+        Some(SpatialDecomposition::Octree(p)) => p.enable_stitching,
+        Some(SpatialDecomposition::UniformGrid(_)) => true,
+        None => true,
+    }
 }
 
 macro_rules! generate_test {

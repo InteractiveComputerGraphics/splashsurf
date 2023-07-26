@@ -114,9 +114,53 @@ fn new_parallel_map<K: Eq + Hash, V>() -> ParallelMapType<K, V> {
     ParallelMapType::with_hasher(HashState::default())
 }
 
-/// Parameters for the spatial decomposition
+/// Approach used for spatial decomposition of the surface reconstruction and its parameters
 #[derive(Clone, Debug)]
-pub struct SpatialDecompositionParameters<R: Real> {
+pub enum SpatialDecomposition<R: Real> {
+    /// Use a uniform grid of subdomains with contiguous (dense) marching cubes grids per subdomain
+    ///
+    /// Only subdomains containing at least one particle will be processed.
+    /// The small contiguous grid per subdomain make this approach very cache efficient.
+    UniformGrid(GridDecompositionParameters),
+    /// Use an octree for decomposition with hashing based (sparse) marching cubes grids per subdomain
+    Octree(OctreeDecompositionParameters<R>),
+}
+
+/// Default parameters for the spatial decomposition use the uniform grid based decomposition approach
+impl<R: Real> Default for SpatialDecomposition<R> {
+    fn default() -> Self {
+        Self::UniformGrid(GridDecompositionParameters::default())
+    }
+}
+
+impl<R: Real> SpatialDecomposition<R> {
+    /// Tries to convert the parameters from one [`Real`] type to another [`Real`] type, returns `None` if conversion fails
+    pub fn try_convert<T: Real>(&self) -> Option<SpatialDecomposition<T>> {
+        match &self {
+            Self::UniformGrid(g) => Some(SpatialDecomposition::UniformGrid(g.clone())),
+            Self::Octree(o) => o.try_convert().map(|o| SpatialDecomposition::Octree(o)),
+        }
+    }
+}
+
+/// Parameters for the uniform grid-based spatial decomposition
+#[derive(Clone, Debug)]
+pub struct GridDecompositionParameters {
+    /// Each uniform subdomain will be a cube consisting of this number of MC cube cells along each coordinate axis
+    pub subdomain_num_cubes_per_dim: u32,
+}
+
+impl Default for GridDecompositionParameters {
+    fn default() -> Self {
+        Self {
+            subdomain_num_cubes_per_dim: 64,
+        }
+    }
+}
+
+/// Parameters for the octree-based spatial decomposition
+#[derive(Clone, Debug)]
+pub struct OctreeDecompositionParameters<R: Real> {
     /// Criterion used for subdivision of the octree cells
     pub subdivision_criterion: SubdivisionCriterion,
     /// Safety factor applied to the kernel radius when it's used as a margin to collect ghost particles in the leaf nodes
@@ -169,10 +213,21 @@ pub enum ParticleDensityComputationStrategy {
     IndependentSubdomains,
 }
 
-impl<R: Real> SpatialDecompositionParameters<R> {
+impl<R: Real> Default for OctreeDecompositionParameters<R> {
+    fn default() -> Self {
+        Self {
+            subdivision_criterion: SubdivisionCriterion::MaxParticleCountAuto,
+            ghost_particle_safety_factor: None,
+            enable_stitching: true,
+            particle_density_computation: ParticleDensityComputationStrategy::SynchronizeSubdomains,
+        }
+    }
+}
+
+impl<R: Real> OctreeDecompositionParameters<R> {
     /// Tries to convert the parameters from one [`Real`] type to another [`Real`] type, returns `None` if conversion fails
-    pub fn try_convert<T: Real>(&self) -> Option<SpatialDecompositionParameters<T>> {
-        Some(SpatialDecompositionParameters {
+    pub fn try_convert<T: Real>(&self) -> Option<OctreeDecompositionParameters<T>> {
+        Some(OctreeDecompositionParameters {
             subdivision_criterion: self.subdivision_criterion.clone(),
             ghost_particle_safety_factor: map_option!(
                 &self.ghost_particle_safety_factor,
@@ -197,16 +252,18 @@ pub struct Parameters<R: Real> {
     pub cube_size: R,
     /// Density threshold value to distinguish between the inside (above threshold) and outside (below threshold) of the fluid
     pub iso_surface_threshold: R,
-    /// Manually restrict the domain to the surface reconstruction.
+    /// Bounding box of particles to reconstruct
+    ///
+    /// All particles outside of this domain will be filtered out before the reconstruction.
+    /// The surface reconstruction always results in a closed mesh around the particles.
+    /// The final mesh can extend beyond this AABB due to the smoothing of the kernel.
     /// If not provided, the smallest AABB enclosing all particles is computed instead.
     pub domain_aabb: Option<Aabb3d<R>>,
     /// Whether to allow multi threading within the surface reconstruction procedure
     pub enable_multi_threading: bool,
-    /// Each subdomain will be a cube consisting of this number of MC cube cells along each coordinate axis
-    pub subdomain_num_cubes_per_dim: Option<u32>,
-    /// Parameters for the spatial decomposition (octree subdivision) of the particles.
-    /// If not provided, no octree is generated and a global approach is used instead.
-    pub spatial_decomposition: Option<SpatialDecompositionParameters<R>>,
+    /// Parameters for the spatial decomposition of the surface reconstruction
+    /// If not provided, no spatial decomposition is performed and a global approach is used instead.
+    pub spatial_decomposition: Option<SpatialDecomposition<R>>,
 }
 
 impl<R: Real> Parameters<R> {
@@ -220,7 +277,6 @@ impl<R: Real> Parameters<R> {
             iso_surface_threshold: self.iso_surface_threshold.try_convert()?,
             domain_aabb: map_option!(&self.domain_aabb, aabb => aabb.try_convert()?),
             enable_multi_threading: self.enable_multi_threading,
-            subdomain_num_cubes_per_dim: self.subdomain_num_cubes_per_dim,
             spatial_decomposition: map_option!(&self.spatial_decomposition, sd => sd.try_convert()?),
         })
     }
@@ -365,28 +421,36 @@ pub fn reconstruct_surface_inplace<'a, I: Index, R: Real>(
 
     output_surface.grid.log_grid_info();
 
-    if parameters.subdomain_num_cubes_per_dim.is_some() {
-        reconstruction::reconstruct_surface_subdomain_grid::<I, R>(
+    match &parameters.spatial_decomposition {
+        Some(SpatialDecomposition::UniformGrid(_)) => {
+            reconstruction::reconstruct_surface_subdomain_grid::<I, R>(
+                particle_positions,
+                parameters,
+                output_surface,
+            )?
+        }
+        Some(SpatialDecomposition::Octree(_)) => {
+            reconstruction_octree::reconstruct_surface_domain_decomposition(
+                particle_positions,
+                parameters,
+                output_surface,
+            )?
+        }
+        None => reconstruction_octree::reconstruct_surface_global(
             particle_positions,
             parameters,
             output_surface,
-        )?;
-    } else if parameters.spatial_decomposition.is_some() {
-        reconstruction_octree::reconstruct_surface_domain_decomposition(
-            particle_positions,
-            parameters,
-            output_surface,
-        )?;
-    } else {
-        reconstruction_octree::reconstruct_surface_global(
-            particle_positions,
-            parameters,
-            output_surface,
-        )?;
+        )?,
     }
 
     Ok(())
 }
+
+/*
+fn filter_particles<I: Index, R: Real>(particle_positions: &[Vector3<R>], particle_aabb: &Aabb3d<R>, enable_multi_threading: bool) -> Vec<Vector3<R>> {
+    use rayon::prelude::*;
+    let is_inside = particle_positions.par_iter().map(|p| particle_aabb.contains_point(p)).collect::<Vec<_>>();
+}*/
 
 /// Constructs the background grid for marching cubes based on the parameters supplied to the surface reconstruction
 pub fn grid_for_reconstruction<I: Index, R: Real>(

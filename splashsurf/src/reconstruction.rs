@@ -363,9 +363,13 @@ mod arguments {
             let compact_support_radius = args.particle_radius * 2.0 * args.smoothing_length;
             let cube_size = args.particle_radius * args.cube_size;
 
-            let spatial_decomposition = if !args.octree_decomposition.into_bool() {
-                None
-            } else {
+            let spatial_decomposition = if args.subdomain_grid.into_bool() {
+                Some(splashsurf_lib::SpatialDecomposition::UniformGrid(
+                    splashsurf_lib::GridDecompositionParameters {
+                        subdomain_num_cubes_per_dim: args.subdomain_cubes,
+                    },
+                ))
+            } else if args.octree_decomposition.into_bool() {
                 let subdivision_criterion = if let Some(max_particles) = args.octree_max_particles {
                     splashsurf_lib::SubdivisionCriterion::MaxParticleCount(max_particles)
                 } else {
@@ -388,12 +392,16 @@ mod arguments {
                     }
                 };
 
-                Some(splashsurf_lib::SpatialDecompositionParameters {
-                    subdivision_criterion,
-                    ghost_particle_safety_factor,
-                    enable_stitching,
-                    particle_density_computation,
-                })
+                Some(splashsurf_lib::SpatialDecomposition::Octree(
+                    splashsurf_lib::OctreeDecompositionParameters {
+                        subdivision_criterion,
+                        ghost_particle_safety_factor,
+                        enable_stitching,
+                        particle_density_computation,
+                    },
+                ))
+            } else {
+                None
             };
 
             // Assemble all parameters for the surface reconstruction
@@ -404,10 +412,6 @@ mod arguments {
                 cube_size,
                 iso_surface_threshold: args.surface_threshold,
                 domain_aabb,
-                subdomain_num_cubes_per_dim: args
-                    .subdomain_grid
-                    .into_bool()
-                    .then_some(args.subdomain_cubes),
                 enable_multi_threading: args.parallelize_over_particles.into_bool(),
                 spatial_decomposition,
             };

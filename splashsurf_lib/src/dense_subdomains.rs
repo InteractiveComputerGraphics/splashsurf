@@ -1,4 +1,4 @@
-use anyhow::Context;
+use anyhow::{anyhow, Context};
 use arrayvec::ArrayVec;
 use itertools::Itertools;
 use log::{info, trace};
@@ -21,9 +21,12 @@ use crate::neighborhood_search::{
 };
 use crate::uniform_grid::{EdgeIndex, UniformCartesianCubeGrid3d};
 use crate::{
-    new_map, new_parallel_map, profile, Aabb3d, MapType, Parameters, SurfaceReconstruction,
+    new_map, new_parallel_map, profile, Aabb3d, MapType, Parameters, SpatialDecomposition,
+    SurfaceReconstruction,
 };
 use crate::{Index, Real};
+
+// TODO: Implement single-threaded processing
 
 type GlobalIndex = u64;
 
@@ -86,8 +89,12 @@ pub(crate) fn initialize_parameters<'a, I: Index, R: Real>(
 ) -> Result<ParametersSubdomainGrid<I, R>, anyhow::Error> {
     let chunk_size = 500;
 
+    let Some(SpatialDecomposition::UniformGrid(grid_parameters)) = &parameters.spatial_decomposition else {
+        return Err(anyhow!("spatial decomposition parameters for uniform grid are missing"))
+    };
+
     // A subdomain will be a cube consisting of this number of MC cubes along each coordinate axis
-    let subdomain_cubes_in = parameters.subdomain_num_cubes_per_dim.unwrap_or(64);
+    let subdomain_cubes_in = grid_parameters.subdomain_num_cubes_per_dim;
     let subdomain_cubes = I::from_u32(subdomain_cubes_in)
         .expect("number of subdomain cubes has to fit in index type");
     let subdomain_cubes_global = GlobalIndex::from_u32(subdomain_cubes_in)

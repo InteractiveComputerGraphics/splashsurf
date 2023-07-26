@@ -2,8 +2,9 @@ use criterion::{criterion_group, Criterion};
 use splashsurf_lib::io::particles_from_file;
 use splashsurf_lib::nalgebra::Vector3;
 use splashsurf_lib::{
-    reconstruct_surface, Parameters, ParticleDensityComputationStrategy,
-    SpatialDecompositionParameters, SubdivisionCriterion, SurfaceReconstruction,
+    reconstruct_surface, OctreeDecompositionParameters, Parameters,
+    ParticleDensityComputationStrategy, SpatialDecomposition, SubdivisionCriterion,
+    SurfaceReconstruction,
 };
 use std::path::Path;
 use std::time::Duration;
@@ -23,13 +24,15 @@ fn reconstruct_particles<P: AsRef<Path>>(particle_file: P) -> SurfaceReconstruct
         iso_surface_threshold: 0.6,
         domain_aabb: None,
         enable_multi_threading: true,
-        subdomain_num_cubes_per_dim: None,
-        spatial_decomposition: Some(SpatialDecompositionParameters {
-            subdivision_criterion: SubdivisionCriterion::MaxParticleCountAuto,
-            ghost_particle_safety_factor: None,
-            enable_stitching: true,
-            particle_density_computation: ParticleDensityComputationStrategy::SynchronizeSubdomains,
-        }),
+        spatial_decomposition: Some(SpatialDecomposition::Octree(
+            OctreeDecompositionParameters {
+                subdivision_criterion: SubdivisionCriterion::MaxParticleCountAuto,
+                ghost_particle_safety_factor: None,
+                enable_stitching: true,
+                particle_density_computation:
+                    ParticleDensityComputationStrategy::SynchronizeSubdomains,
+            },
+        )),
     };
 
     reconstruct_surface::<i64, _>(particle_positions.as_slice(), &parameters).unwrap()

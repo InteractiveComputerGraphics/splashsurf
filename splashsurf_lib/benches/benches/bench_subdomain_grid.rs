@@ -1,7 +1,10 @@
 use criterion::{criterion_group, Criterion, SamplingMode};
 use nalgebra::Vector3;
 use splashsurf_lib::io::particles_from_file;
-use splashsurf_lib::{reconstruct_surface, Parameters, SurfaceReconstruction};
+use splashsurf_lib::{
+    reconstruct_surface, GridDecompositionParameters, Parameters, SpatialDecomposition,
+    SurfaceReconstruction,
+};
 use std::time::Duration;
 
 fn parameters_canyon() -> Parameters<f32> {
@@ -17,8 +20,11 @@ fn parameters_canyon() -> Parameters<f32> {
         iso_surface_threshold: 0.6,
         domain_aabb: None,
         enable_multi_threading: true,
-        subdomain_num_cubes_per_dim: Some(32),
-        spatial_decomposition: None,
+        spatial_decomposition: Some(SpatialDecomposition::UniformGrid(
+            GridDecompositionParameters {
+                subdomain_num_cubes_per_dim: 32,
+            },
+        )),
     };
 
     parameters
@@ -40,7 +46,11 @@ pub fn grid_canyon(c: &mut Criterion) {
         b.iter(|| {
             let mut parameters = parameters.clone();
             parameters.cube_size = 1.5 * parameters.particle_radius;
-            parameters.subdomain_num_cubes_per_dim = Some(32);
+            parameters.spatial_decomposition = Some(SpatialDecomposition::UniformGrid(
+                GridDecompositionParameters {
+                    subdomain_num_cubes_per_dim: 32,
+                },
+            ));
             reconstruction =
                 reconstruct_surface::<i64, _>(particle_positions.as_slice(), &parameters).unwrap()
         })
@@ -50,7 +60,11 @@ pub fn grid_canyon(c: &mut Criterion) {
         b.iter(|| {
             let mut parameters = parameters.clone();
             parameters.cube_size = 1.0 * parameters.particle_radius;
-            parameters.subdomain_num_cubes_per_dim = Some(48);
+            parameters.spatial_decomposition = Some(SpatialDecomposition::UniformGrid(
+                GridDecompositionParameters {
+                    subdomain_num_cubes_per_dim: 48,
+                },
+            ));
             reconstruction =
                 reconstruct_surface::<i64, _>(particle_positions.as_slice(), &parameters).unwrap()
         })
@@ -60,7 +74,11 @@ pub fn grid_canyon(c: &mut Criterion) {
         b.iter(|| {
             let mut parameters = parameters.clone();
             parameters.cube_size = 0.75 * parameters.particle_radius;
-            parameters.subdomain_num_cubes_per_dim = Some(48);
+            parameters.spatial_decomposition = Some(SpatialDecomposition::UniformGrid(
+                GridDecompositionParameters {
+                    subdomain_num_cubes_per_dim: 64,
+                },
+            ));
             reconstruction =
                 reconstruct_surface::<i64, _>(particle_positions.as_slice(), &parameters).unwrap()
         })
@@ -89,7 +107,11 @@ pub fn grid_optimal_num_cubes_canyon(c: &mut Criterion) {
             group.bench_function(format!("subdomain_num_cubes_{}", num_cubes), |b| {
                 b.iter(|| {
                     let mut parameters = parameters.clone();
-                    parameters.subdomain_num_cubes_per_dim = Some(num_cubes);
+                    parameters.spatial_decomposition = Some(SpatialDecomposition::UniformGrid(
+                        GridDecompositionParameters {
+                            subdomain_num_cubes_per_dim: num_cubes,
+                        },
+                    ));
                     reconstruction =
                         reconstruct_surface::<i64, _>(particle_positions.as_slice(), &parameters)
                             .unwrap()
