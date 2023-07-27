@@ -27,6 +27,7 @@ use log::info;
 /// Re-export the version of `nalgebra` used by this crate
 pub use nalgebra;
 use nalgebra::Vector3;
+use std::borrow::Cow;
 use std::hash::Hash;
 use thiserror::Error as ThisError;
 /// Re-export the version of `vtkio` used by this crate, if vtk support is enabled
@@ -258,7 +259,7 @@ pub struct Parameters<R: Real> {
     /// The surface reconstruction always results in a closed mesh around the particles.
     /// The final mesh can extend beyond this AABB due to the smoothing of the kernel.
     /// If not provided, the smallest AABB enclosing all particles is computed instead.
-    pub domain_aabb: Option<Aabb3d<R>>,
+    pub particle_aabb: Option<Aabb3d<R>>,
     /// Whether to allow multi threading within the surface reconstruction procedure
     pub enable_multi_threading: bool,
     /// Parameters for the spatial decomposition of the surface reconstruction
@@ -275,7 +276,7 @@ impl<R: Real> Parameters<R> {
             compact_support_radius: self.compact_support_radius.try_convert()?,
             cube_size: self.cube_size.try_convert()?,
             iso_surface_threshold: self.iso_surface_threshold.try_convert()?,
-            domain_aabb: map_option!(&self.domain_aabb, aabb => aabb.try_convert()?),
+            particle_aabb: map_option!(&self.particle_aabb, aabb => aabb.try_convert()?),
             enable_multi_threading: self.enable_multi_threading,
             spatial_decomposition: map_option!(&self.spatial_decomposition, sd => sd.try_convert()?),
         })
@@ -287,12 +288,14 @@ impl<R: Real> Parameters<R> {
 pub struct SurfaceReconstruction<I: Index, R: Real> {
     /// Background grid that was used as a basis for generating the density map for marching cubes
     grid: UniformGrid<I, R>,
-    /// Octree constructed for domain decomposition
+    /// Octree constructed for domain decomposition (if octree-based spatial decomposition was enabled)
     octree: Option<Octree<I, R>>,
     /// Point-based density map generated from the particles that was used as input to marching cubes
     density_map: Option<DensityMap<I, R>>,
-    /// Per particle densities
+    /// Per particle densities (contains only data of particles inside the domain)
     particle_densities: Option<Vec<R>>,
+    /// If an AABB was specified to restrict the reconstruction, this stores per input particle whether they were inside
+    particle_inside_aabb: Option<Vec<bool>>,
     /// Surface mesh that is the result of the surface reconstruction
     mesh: TriMesh3d<R>,
     /// Workspace with allocated memory for subsequent surface reconstructions
@@ -307,6 +310,7 @@ impl<I: Index, R: Real> Default for SurfaceReconstruction<I, R> {
             octree: None,
             density_map: None,
             particle_densities: None,
+            particle_inside_aabb: None,
             mesh: TriMesh3d::default(),
             workspace: ReconstructionWorkspace::default(),
         }
@@ -409,13 +413,52 @@ pub fn reconstruct_surface_inplace<'a, I: Index, R: Real>(
     // Clear the existing mesh
     output_surface.mesh.clear();
 
+    // Filter out particles
+    let filtered_particle_positions = if let Some(particle_aabb) = &parameters.particle_aabb {
+        profile!("filtering particles");
+
+        use rayon::prelude::*;
+        let mut particle_inside = output_surface
+            .particle_inside_aabb
+            .take()
+            .unwrap_or_default();
+        utils::reserve_total(&mut particle_inside, particle_positions.len());
+        particle_positions
+            .par_iter()
+            .map(|p| particle_aabb.contains_point(p))
+            .collect_into_vec(&mut particle_inside);
+        let particle_inside_count = particle_inside.par_iter().copied().filter(|i| *i).count();
+
+        // Take temporary storage for filtered particles from workspace
+        let mut filtered_particles =
+            std::mem::take(output_surface.workspace.filtered_particles_mut());
+        filtered_particles.clear();
+        utils::reserve_total(&mut filtered_particles, particle_inside_count);
+
+        // Collect filtered particles
+        filtered_particles.extend(
+            particle_positions
+                .iter()
+                .zip(particle_inside.iter().copied())
+                .filter(|(_, is_inside)| *is_inside)
+                .map(|(p, _)| p)
+                .cloned(),
+        );
+
+        output_surface.particle_inside_aabb = Some(particle_inside);
+        Cow::Owned(filtered_particles)
+    } else {
+        Cow::Borrowed(particle_positions)
+    };
+    let particle_positions = filtered_particle_positions.as_ref();
+
     // Initialize grid for the reconstruction
     output_surface.grid = grid_for_reconstruction(
         particle_positions,
         parameters.particle_radius,
         parameters.compact_support_radius,
         parameters.cube_size,
-        parameters.domain_aabb.as_ref(),
+        parameters.particle_aabb.as_ref(),
         parameters.enable_multi_threading,
     )?;
 
@@ -443,6 +486,12 @@ pub fn reconstruct_surface_inplace<'a, I: Index, R: Real>(
         )?,
     }
 
+    // Put back temporary storage for filtered particles for next reconstruction
+    if let Cow::Owned(mut filtered_particles) = filtered_particle_positions {
+        filtered_particles.clear();
+        *output_surface.workspace.filtered_particles_mut() = filtered_particles;
+    }
+
     Ok(())
 }
 
@@ -458,39 +507,38 @@ pub fn grid_for_reconstruction<I: Index, R: Real>(
     particle_radius: R,
     compact_support_radius: R,
     cube_size: R,
-    domain_aabb: Option<&Aabb3d<R>>,
+    particle_aabb: Option<&Aabb3d<R>>,
     enable_multi_threading: bool,
 ) -> Result<UniformGrid<I, R>, ReconstructionError<I, R>> {
-    let domain_aabb = if let Some(domain_aabb) = domain_aabb {
-        domain_aabb.clone()
+    let mut particle_aabb = if let Some(particle_aabb) = particle_aabb {
+        particle_aabb.clone()
     } else {
         profile!("compute minimum enclosing aabb");
 
-        let mut domain_aabb = {
+        let particle_aabb = {
             let mut aabb = if enable_multi_threading {
                 Aabb3d::par_from_points(particle_positions)
             } else {
                 Aabb3d::from_points(particle_positions)
             };
+            // TODO: Is this really necessary?
             aabb.grow_uniformly(particle_radius);
             aabb
         };
 
         info!(
             "Minimal enclosing bounding box of particles was computed as: {:?}",
-            domain_aabb
+            particle_aabb
         );
 
-        // Ensure that we have enough margin around the particles such that the every particle's kernel support is completely in the domain
-        let kernel_margin = density_map::compute_kernel_evaluation_radius::<I, R>(
-            compact_support_radius,
-            cube_size,
-        )
-        .kernel_evaluation_radius;
-        domain_aabb.grow_uniformly(kernel_margin);
-
-        domain_aabb
+        particle_aabb
     };
 
-    Ok(UniformGrid::from_aabb(&domain_aabb, cube_size)?)
+    // Ensure that we have enough margin around the particles such that the every particle's kernel support is completely in the domain
+    let kernel_margin =
+        density_map::compute_kernel_evaluation_radius::<I, R>(compact_support_radius, cube_size)
+            .kernel_evaluation_radius;
+    particle_aabb.grow_uniformly(kernel_margin);
+
+    Ok(UniformGrid::from_aabb(&particle_aabb, cube_size)?)
 }

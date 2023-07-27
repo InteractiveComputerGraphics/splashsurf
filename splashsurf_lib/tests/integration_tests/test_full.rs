@@ -36,7 +36,7 @@ fn params_with_aabb<R: Real>(
         compact_support_radius,
         cube_size,
         iso_surface_threshold,
-        domain_aabb,
+        particle_aabb: domain_aabb,
         enable_multi_threading: false,
         spatial_decomposition: None,
     };

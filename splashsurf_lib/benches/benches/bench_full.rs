@@ -101,7 +101,7 @@ pub fn surface_reconstruction_dam_break(c: &mut Criterion) {
         compact_support_radius,
         cube_size,
         iso_surface_threshold: 0.6,
-        domain_aabb: None,
+        particle_aabb: None,
         enable_multi_threading: true,
         spatial_decomposition: None,
     };
@@ -199,7 +199,7 @@ pub fn surface_reconstruction_double_dam_break(c: &mut Criterion) {
         compact_support_radius,
         cube_size,
         iso_surface_threshold: 0.6,
-        domain_aabb: None,
+        particle_aabb: None,
         enable_multi_threading: true,
         spatial_decomposition: None,
     };
@@ -297,7 +297,7 @@ pub fn surface_reconstruction_double_dam_break_inplace(c: &mut Criterion) {
         compact_support_radius,
         cube_size,
         iso_surface_threshold: 0.6,
-        domain_aabb: None,
+        particle_aabb: None,
         enable_multi_threading: true,
         spatial_decomposition: None,
     };

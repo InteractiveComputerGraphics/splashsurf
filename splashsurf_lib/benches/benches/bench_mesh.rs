@@ -22,7 +22,7 @@ fn reconstruct_particles<P: AsRef<Path>>(particle_file: P) -> SurfaceReconstruct
         compact_support_radius,
         cube_size,
         iso_surface_threshold: 0.6,
-        domain_aabb: None,
+        particle_aabb: None,
         enable_multi_threading: true,
         spatial_decomposition: Some(SpatialDecomposition::Octree(
             OctreeDecompositionParameters {

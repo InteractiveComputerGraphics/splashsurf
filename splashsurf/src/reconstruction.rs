@@ -411,7 +411,7 @@ mod arguments {
                 compact_support_radius,
                 cube_size,
                 iso_surface_threshold: args.surface_threshold,
-                domain_aabb,
+                particle_aabb: domain_aabb,
                 enable_multi_threading: args.parallelize_over_particles.into_bool(),
                 spatial_decomposition,
             };

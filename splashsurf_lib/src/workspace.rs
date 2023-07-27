@@ -12,6 +12,8 @@ use thread_local::ThreadLocal;
 #[derive(Default)]
 pub struct ReconstructionWorkspace<I: Index, R: Real> {
     global_densities: Vec<R>,
+    /// Temporary storage for storing a filtered set of the user provided particles
+    filtered_particles: Vec<Vector3<R>>,
     local_workspaces: ThreadLocal<RefCell<LocalReconstructionWorkspace<I, R>>>,
 }
 
@@ -24,6 +26,11 @@ impl<I: Index, R: Real> ReconstructionWorkspace<I, R> {
     /// Returns a mutable reference to the global particle density vector
     pub(crate) fn densities_mut(&mut self) -> &mut Vec<R> {
         &mut self.global_densities
+    }
+
+    /// Returns a mutable reference to the global filtered particles vector
+    pub(crate) fn filtered_particles_mut(&mut self) -> &mut Vec<Vector3<R>> {
+        &mut self.filtered_particles
     }
 
     /// Returns a reference to a thread local workspace
