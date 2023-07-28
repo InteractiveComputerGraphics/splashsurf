@@ -567,6 +567,7 @@ mod arguments {
                 particle_aabb,
                 enable_multi_threading: args.parallelize_over_particles.into_bool(),
                 spatial_decomposition,
+                global_neighborhood_list: args.mesh_smoothing_weights.into_bool(),
             };
 
             // Optionally initialize thread pool
@@ -975,7 +976,7 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
 
     // Perform the surface reconstruction
     let reconstruction =
-        splashsurf_lib::reconstruct_surface::<I, R>(particle_positions.as_slice(), &params)?;
+        splashsurf_lib::reconstruct_surface::<I, R>(particle_positions.as_slice(), params)?;
 
     let grid = reconstruction.grid();
     let mut mesh_with_data = MeshWithData::new(Cow::Borrowed(reconstruction.mesh()));
@@ -1077,25 +1078,27 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
             // TODO: Re-use data from reconstruction?
 
             // Global neighborhood search
-            let nl = {
-                let search_radius = params.compact_support_radius;
+            let nl = reconstruction
+                .particle_neighbors()
+                .map(|nl| Cow::Borrowed(nl))
+                .unwrap_or_else(||
+                    {
+                        let search_radius = params.compact_support_radius;
 
-                let mut domain = Aabb3d::from_points(particle_positions.as_slice());
-                domain.grow_uniformly(search_radius);
+                        let mut domain = Aabb3d::from_points(particle_positions.as_slice());
+                        domain.grow_uniformly(search_radius);
 
-                let mut nl = Vec::new();
-                splashsurf_lib::neighborhood_search::neighborhood_search_spatial_hashing_parallel::<
-                    I,
-                    R,
-                >(
-                    &domain,
-                    particle_positions.as_slice(),
-                    search_radius,
-                    &mut nl,
+                        let mut nl = Vec::new();
+                        splashsurf_lib::neighborhood_search::neighborhood_search_spatial_hashing_parallel::<I, R>(
+                            &domain,
+                            particle_positions.as_slice(),
+                            search_radius,
+                            &mut nl,
+                        );
+                        assert_eq!(nl.len(), particle_positions.len());
+                        Cow::Owned(nl)
+                    }
                 );
-                assert_eq!(nl.len(), particle_positions.len());
-                nl
-            };
 
             // Compute weighted neighbor count
             let squared_r = params.compact_support_radius * params.compact_support_radius;

@@ -104,6 +104,7 @@ pub fn surface_reconstruction_dam_break(c: &mut Criterion) {
         particle_aabb: None,
         enable_multi_threading: true,
         spatial_decomposition: None,
+        global_neighborhood_list: false,
     };
 
     let mut group = c.benchmark_group("full surface reconstruction");
@@ -202,6 +203,7 @@ pub fn surface_reconstruction_double_dam_break(c: &mut Criterion) {
         particle_aabb: None,
         enable_multi_threading: true,
         spatial_decomposition: None,
+        global_neighborhood_list: false,
     };
 
     let mut group = c.benchmark_group("full surface reconstruction");
@@ -300,6 +302,7 @@ pub fn surface_reconstruction_double_dam_break_inplace(c: &mut Criterion) {
         particle_aabb: None,
         enable_multi_threading: true,
         spatial_decomposition: None,
+        global_neighborhood_list: false,
     };
 
     let mut group = c.benchmark_group("full surface reconstruction");

@@ -269,6 +269,10 @@ pub struct Parameters<R: Real> {
     /// Parameters for the spatial decomposition of the surface reconstruction
     /// If not provided, no spatial decomposition is performed and a global approach is used instead.
     pub spatial_decomposition: Option<SpatialDecomposition<R>>,
+    /// Whether to return the global particle neighborhood list from the reconstruction.
+    /// Depending on the settings of the reconstruction, neighborhood lists are only computed locally
+    /// in subdomains. Enabling this flag joins this data over all particles which can add a small overhead.
+    pub global_neighborhood_list: bool,
 }
 
 impl<R: Real> Parameters<R> {
@@ -283,6 +287,7 @@ impl<R: Real> Parameters<R> {
             particle_aabb: map_option!(&self.particle_aabb, aabb => aabb.try_convert()?),
             enable_multi_threading: self.enable_multi_threading,
             spatial_decomposition: map_option!(&self.spatial_decomposition, sd => sd.try_convert()?),
+            global_neighborhood_list: self.global_neighborhood_list,
         })
     }
 }
@@ -300,6 +305,8 @@ pub struct SurfaceReconstruction<I: Index, R: Real> {
     particle_densities: Option<Vec<R>>,
     /// If an AABB was specified to restrict the reconstruction, this stores per input particle whether they were inside
     particle_inside_aabb: Option<Vec<bool>>,
+    /// Per particles neighbor lists
+    particle_neighbors: Option<Vec<Vec<usize>>>,
     /// Surface mesh that is the result of the surface reconstruction
     mesh: TriMesh3d<R>,
     /// Workspace with allocated memory for subsequent surface reconstructions
@@ -314,6 +321,7 @@ impl<I: Index, R: Real> Default for SurfaceReconstruction<I, R> {
             octree: None,
             density_map: None,
             particle_densities: None,
+            particle_neighbors: None,
             particle_inside_aabb: None,
             mesh: TriMesh3d::default(),
             workspace: ReconstructionWorkspace::default(),
@@ -340,6 +348,11 @@ impl<I: Index, R: Real> SurfaceReconstruction<I, R> {
     /// Returns a reference to the global particle density vector if it was computed during the reconstruction (always `None` when using independent subdomains with domain decomposition)
     pub fn particle_densities(&self) -> Option<&Vec<R>> {
         self.particle_densities.as_ref()
+    }
+
+    /// Returns a reference to the global particle density vector if it was computed during the reconstruction (always `None` when using octree based domain decomposition)
+    pub fn particle_neighbors(&self) -> Option<&Vec<Vec<usize>>> {
+        self.particle_neighbors.as_ref()
     }
 
     /// Returns a reference to the virtual background grid that was used as a basis for discretization of the density map for marching cubes, can be used to convert the density map to a hex mesh (using [`density_map::sparse_density_map_to_hex_mesh`])

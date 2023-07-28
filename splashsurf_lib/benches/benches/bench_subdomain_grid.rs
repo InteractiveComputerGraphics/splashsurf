@@ -25,6 +25,7 @@ fn parameters_canyon() -> Parameters<f32> {
                 subdomain_num_cubes_per_dim: 32,
             },
         )),
+        global_neighborhood_list: false,
     };
 
     parameters

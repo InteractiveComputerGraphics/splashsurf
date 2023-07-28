@@ -2,8 +2,8 @@ use log::info;
 use nalgebra::Vector3;
 
 use crate::dense_subdomains::{
-    compute_global_density_vector, decomposition, initialize_parameters, reconstruction, stitching,
-    subdomain_classification::GhostMarginClassifier,
+    compute_global_densities_and_neighbors, decomposition, initialize_parameters, reconstruction,
+    stitching, subdomain_classification::GhostMarginClassifier,
 };
 use crate::{profile, Index, Parameters, Real, SurfaceReconstruction};
 
@@ -15,7 +15,8 @@ pub(crate) fn reconstruct_surface_subdomain_grid<'a, I: Index, R: Real>(
 ) -> Result<(), anyhow::Error> {
     profile!("surface reconstruction subdomain-grid");
 
-    let parameters = initialize_parameters(parameters, &particle_positions, output_surface)?;
+    let internal_parameters =
+        initialize_parameters(parameters, &particle_positions, output_surface)?;
 
     // Filter "narrow band"
     /*
@@ -24,7 +25,7 @@ pub(crate) fn reconstruct_surface_subdomain_grid<'a, I: Index, R: Real>(
      */
 
     let subdomains =
-        decomposition::<I, R, GhostMarginClassifier<I>>(&parameters, &particle_positions)?;
+        decomposition::<I, R, GhostMarginClassifier<I>>(&internal_parameters, &particle_positions)?;
 
     /*
     {
@@ -37,11 +38,14 @@ pub(crate) fn reconstruct_surface_subdomain_grid<'a, I: Index, R: Real>(
     }
      */
 
-    let particle_densities =
-        compute_global_density_vector(&parameters, &particle_positions, &subdomains);
+    let (particle_densities, particle_neighbors) = compute_global_densities_and_neighbors(
+        &internal_parameters,
+        &particle_positions,
+        &subdomains,
+    );
 
     let surface_patches = reconstruction(
-        &parameters,
+        &internal_parameters,
         &particle_positions,
         &particle_densities,
         &subdomains,
@@ -56,5 +60,8 @@ pub(crate) fn reconstruct_surface_subdomain_grid<'a, I: Index, R: Real>(
 
     output_surface.mesh = global_mesh;
     output_surface.particle_densities = Some(particle_densities);
+    if parameters.global_neighborhood_list {
+        output_surface.particle_neighbors = Some(particle_neighbors);
+    }
     Ok(())
 }
