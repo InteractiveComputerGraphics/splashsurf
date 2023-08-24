@@ -109,6 +109,11 @@ fn run_splashsurf() -> Result<(), anyhow::Error> {
         );
     }
 
+    info!(
+        "Finished at {}.",
+        chrono::Local::now().to_rfc3339_opts(chrono::SecondsFormat::Micros, false)
+    );
+
     Ok(())
 }
 
