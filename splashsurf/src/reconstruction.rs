@@ -22,7 +22,7 @@ use arguments::*;
 static ARGS_IO: &str = "Input/output";
 static ARGS_BASIC: &str = "Numerical reconstruction parameters";
 static ARGS_ADV: &str = "Advanced parameters";
-static ARGS_OCTREE: &str = "Octree (domain decomposition) parameters";
+static ARGS_OCTREE: &str = "Domain decomposition (octree or grid) parameters";
 static ARGS_DEBUG: &str = "Debug options";
 static ARGS_INTERP: &str = "Interpolation";
 static ARGS_POSTPROC: &str = "Postprocessing";
