@@ -15,6 +15,8 @@ use splashsurf_lib::{density_map, Index, Real};
 use std::convert::TryFrom;
 use std::path::PathBuf;
 
+use arguments::*;
+
 // TODO: Detect smallest index type (i.e. check if ok to use i32 as index)
 
 static ARGS_IO: &str = "Input/output";
@@ -317,12 +319,48 @@ mod arguments {
     use std::str::FromStr;
     use walkdir::WalkDir;
 
+    pub struct ReconstructionRunnerPostprocessingArgs {
+        pub check_mesh: bool,
+        pub compute_normals: bool,
+        pub sph_normals: bool,
+        pub interpolate_attributes: Vec<String>,
+    }
+
     /// All arguments that can be supplied to the surface reconstruction tool converted to useful types
     pub struct ReconstructionRunnerArgs {
         pub params: splashsurf_lib::Parameters<f64>,
         pub use_double_precision: bool,
-        pub check_mesh: bool,
         pub io_params: io::FormatParameters,
+        pub postprocessing: ReconstructionRunnerPostprocessingArgs,
+    }
+
+    fn try_aabb_from_min_max(
+        min: &Vec<f64>,
+        max: &Vec<f64>,
+        error_str: &'static str,
+    ) -> Result<Aabb3d<f64>, anyhow::Error> {
+        // This should already be ensured by StructOpt parsing
+        assert_eq!(min.len(), 3);
+        assert_eq!(max.len(), 3);
+
+        let aabb = Aabb3d::new(
+            Vector3::from_iterator(min.clone()),
+            Vector3::from_iterator(max.clone()),
+        );
+
+        if !aabb.is_consistent() {
+            return Err(anyhow!("The user specified {error_str} min/max values are inconsistent! min: {:?} max: {:?}", aabb.min().as_slice(), aabb.max().as_slice()));
+        }
+
+        if aabb.is_degenerate() {
+            return Err(anyhow!(
+                "The user specified {error_str} is degenerate! min: {:?} max: {:?}",
+                aabb.min().as_slice(),
+                aabb.max().as_slice()
+            ));
+        }
+
+        Ok(aabb)
     }
 
     // Convert raw command line arguments to more useful types
@@ -330,33 +368,17 @@ mod arguments {
         type Error = anyhow::Error;
 
         fn try_from(args: &ReconstructSubcommandArgs) -> Result<Self, Self::Error> {
-            // Convert domain args to aabb
-            let domain_aabb = match (&args.domain_min, &args.domain_max) {
-                (Some(domain_min), Some(domain_max)) => {
-                    // This should already be ensured by StructOpt parsing
-                    assert_eq!(domain_min.len(), 3);
-                    assert_eq!(domain_max.len(), 3);
-
-                    let aabb = Aabb3d::new(
-                        Vector3::from_iterator(domain_min.clone()),
-                        Vector3::from_iterator(domain_max.clone()),
-                    );
-
-                    if !aabb.is_consistent() {
-                        return Err(anyhow!("The user specified domain min/max values are inconsistent! min: {:?} max: {:?}", aabb.min().as_slice(), aabb.max().as_slice()));
-                    }
-
-                    if aabb.is_degenerate() {
-                        return Err(anyhow!(
-                            "The user specified domain is degenerate! min: {:?} max: {:?}",
-                            aabb.min().as_slice(),
-                            aabb.max().as_slice()
-                        ));
-                    }
-
-                    Some(aabb)
-                }
-                _ => None,
+            // Convert particle domain args to aabb
+            let domain_aabb = if let (Some(domain_min), Some(domain_max)) =
+                (&args.domain_min, &args.domain_max)
+            {
+                Some(try_aabb_from_min_max(
+                    domain_min,
+                    domain_max,
+                    "particle AABB",
+                )?)
+            } else {
+                None
             };
 
             // Scale kernel radius and cube size by particle radius
@@ -421,11 +443,18 @@ mod arguments {
                 splashsurf_lib::initialize_thread_pool(num_threads)?;
             }
 
+            let postprocessing = ReconstructionRunnerPostprocessingArgs {
+                check_mesh: args.check_mesh.into_bool(),
+                compute_normals: args.normals.into_bool(),
+                sph_normals: args.sph_normals.into_bool(),
+                interpolate_attributes: args.interpolate_attributes.clone(),
+            };
+
             Ok(ReconstructionRunnerArgs {
                 params,
                 use_double_precision: args.double_precision.into_bool(),
-                check_mesh: args.check_mesh.into_bool(),
                 io_params: io::FormatParameters::default(),
+                postprocessing,
             })
         }
     }
@@ -439,12 +468,6 @@ mod arguments {
         output_density_map_grid_file: Option<PathBuf>,
         output_octree_file: Option<PathBuf>,
         sequence_range: (Option<usize>, Option<usize>),
-        /// Whether to enable normal computation for all files
-        compute_normals: bool,
-        /// Whether to use SPH interpolation to compute the normals for all files
-        sph_normals: bool,
-        /// Additional attributes to load and interpolate to surface
-        attributes: Vec<String>,
     }
 
     impl ReconstructionRunnerPathCollection {
@@ -457,9 +480,6 @@ mod arguments {
             output_density_map_grid_file: Option<P>,
             output_octree_file: Option<P>,
             sequence_range: (Option<usize>, Option<usize>),
-            compute_normals: bool,
-            sph_normals: bool,
-            attributes: Vec<String>,
         ) -> Result<Self, anyhow::Error> {
             let input_file = input_file.into();
             let output_base_path = output_base_path.map(|p| p.into());
@@ -504,9 +524,6 @@ mod arguments {
                         .map(|f| output_base_path.join(f)),
                     output_octree_file: output_octree_file.map(|f| output_base_path.join(f)),
                     sequence_range,
-                    compute_normals,
-                    sph_normals,
-                    attributes,
                 })
             } else {
                 Ok(Self {
@@ -517,9 +534,6 @@ mod arguments {
                     output_density_map_grid_file,
                     output_octree_file,
                     sequence_range,
-                    compute_normals,
-                    sph_normals,
-                    attributes,
                 })
             }
         }
@@ -605,9 +619,6 @@ mod arguments {
                             None,
                             None,
                             None,
-                            self.compute_normals,
-                            self.sph_normals,
-                            self.attributes.clone(),
                         ));
                     }
                 }
@@ -634,9 +645,6 @@ mod arguments {
                         self.output_density_map_points_file.clone(),
                         self.output_density_map_grid_file.clone(),
                         self.output_octree_file.clone(),
-                        self.compute_normals,
-                        self.sph_normals,
-                        self.attributes.clone(),
                     );
                     1
                 ]
@@ -737,9 +745,6 @@ mod arguments {
                 args.output_dm_grid.clone(),
                 args.output_octree.clone(),
                 (args.start_index, args.end_index),
-                args.normals.into_bool(),
-                args.sph_normals.into_bool(),
-                args.interpolate_attributes.clone(),
             )
         }
     }
@@ -752,12 +757,6 @@ mod arguments {
         pub output_density_map_points_file: Option<PathBuf>,
         pub output_density_map_grid_file: Option<PathBuf>,
         pub output_octree_file: Option<PathBuf>,
-        /// Whether to enable normal computation
-        pub compute_normals: bool,
-        /// Whether to use SPH interpolation to compute the normals
-        pub sph_normals: bool,
-        /// Additional attributes to load and interpolate to surface
-        pub attributes: Vec<String>,
     }
 
     impl ReconstructionRunnerPaths {
@@ -767,9 +766,6 @@ mod arguments {
             output_density_map_points_file: Option<PathBuf>,
             output_density_map_grid_file: Option<PathBuf>,
             output_octree_file: Option<PathBuf>,
-            compute_normals: bool,
-            sph_normals: bool,
-            attributes: Vec<String>,
         ) -> Self {
             ReconstructionRunnerPaths {
                 input_file,
@@ -777,9 +773,6 @@ mod arguments {
                 output_density_map_points_file,
                 output_density_map_grid_file,
                 output_octree_file,
-                compute_normals,
-                sph_normals,
-                attributes,
             }
         }
     }
@@ -796,7 +789,7 @@ pub(crate) fn reconstruction_pipeline(
             paths,
             &args.params,
             &args.io_params,
-            args.check_mesh,
+            &args.postprocessing,
         )?;
     } else {
         info!("Using single precision (f32) for surface reconstruction.");
@@ -806,7 +799,7 @@ pub(crate) fn reconstruction_pipeline(
                 "Unable to convert surface reconstruction parameters from f64 to f32."
             ))?,
             &args.io_params,
-            args.check_mesh,
+            &args.postprocessing,
         )?;
     }
 
@@ -818,14 +811,14 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
     paths: &ReconstructionRunnerPaths,
     params: &splashsurf_lib::Parameters<R>,
     io_params: &io::FormatParameters,
-    check_mesh: bool,
+    postprocessing: &ReconstructionRunnerPostprocessingArgs,
 ) -> Result<(), anyhow::Error> {
     profile!("surface reconstruction");
 
     // Load particle positions and attributes to interpolate
     let (particle_positions, attributes) = io::read_particle_positions_with_attributes(
         &paths.input_file,
-        &paths.attributes,
+        &postprocessing.interpolate_attributes,
         &io_params.input,
     )
     .with_context(|| {
@@ -843,7 +836,7 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
     let mesh = reconstruction.mesh();
 
     // Add normals to mesh if requested
-    let mesh = if paths.compute_normals || !attributes.is_empty() {
+    let mesh = if postprocessing.compute_normals || !attributes.is_empty() {
         profile!("compute normals");
 
         info!(
@@ -876,8 +869,8 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
         let mut mesh_with_data = MeshWithData::new(mesh.clone());
 
         // Compute normals if requested
-        if paths.compute_normals {
-            let normals = if paths.sph_normals {
+        if postprocessing.compute_normals {
+            let normals = if postprocessing.sph_normals {
                 info!("Using SPH interpolation to compute surface normals");
 
                 let sph_normals = interpolator.interpolate_normals(mesh.vertices());
@@ -1028,7 +1021,7 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
         info!("Done.");
     }
 
-    if check_mesh {
+    if postprocessing.check_mesh {
         if let Err(err) = splashsurf_lib::marching_cubes::check_mesh_consistency(grid, &mesh.mesh) {
             return Err(anyhow!("{}", err));
         } else {
