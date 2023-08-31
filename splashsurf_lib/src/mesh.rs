@@ -16,7 +16,7 @@
 //!  - `From<T> for UnstructuredGridPiece` implementations for the basic mesh types
 //!  - `Into<DataSet>` implementations for the basic mesh types
 
-use crate::{new_map, Real};
+use crate::{new_map, Aabb3d, MapType, Real};
 use bytemuck_derive::{Pod, Zeroable};
 use nalgebra::{Unit, Vector3};
 use rayon::prelude::*;
@@ -221,6 +221,89 @@ impl<R: Real> TriMesh3d<R> {
             tri[1] += vertex_offset;
             tri[2] += vertex_offset;
         }
+    }
+
+    /// Returns a new triangle mesh containing only the specified triangles and removes all unreferenced vertices
+    pub fn keep_tris(&self, cell_indices: &[usize]) -> Self {
+        // Each entry is true if this vertex should be kept, false otherwise
+        let vertex_keep_table = {
+            let mut table = vec![false; self.vertices.len()];
+            for &cell_index in cell_indices {
+                let cell_connectivity = &self.triangles[cell_index];
+
+                for &vertex_index in cell_connectivity {
+                    table[vertex_index] = true;
+                }
+            }
+            table
+        };
+
+        let old_to_new_label_map = {
+            let mut label_map = MapType::default();
+            let mut next_label = 0;
+            for (i, keep) in vertex_keep_table.iter().enumerate() {
+                if *keep {
+                    label_map.insert(i, next_label);
+                    next_label += 1;
+                }
+            }
+            label_map
+        };
+
+        let relabeled_cells: Vec<_> = cell_indices
+            .iter()
+            .map(|&i| self.triangles[i].clone())
+            .map(|mut cell| {
+                for index in &mut cell {
+                    *index = *old_to_new_label_map
+                        .get(index)
+                        .expect("Index must be in map");
+                }
+                cell
+            })
+            .collect();
+
+        let relabeled_vertices: Vec<_> = vertex_keep_table
+            .iter()
+            .enumerate()
+            .filter_map(|(i, should_keep)| if *should_keep { Some(i) } else { None })
+            .map(|index| self.vertices[index].clone())
+            .collect();
+
+        Self {
+            vertices: relabeled_vertices,
+            triangles: relabeled_cells,
+        }
+    }
+
+    /// Removes all triangles from the mesh that are completely outside of the given AABB and clamps the remaining triangles to the boundary
+    pub fn clamp_with_aabb(&mut self, aabb: &Aabb3d<R>) {
+        // Find all triangles with at least one vertex inside of AABB
+        let triangles_to_keep = self
+            .triangles
+            .par_iter()
+            .enumerate()
+            .filter(|(_, tri)| tri.iter().any(|&v| aabb.contains_point(&self.vertices[v])))
+            .map(|(i, _)| i)
+            .collect::<Vec<_>>();
+        // Remove all other triangles from mesh
+        let new_mesh = self.keep_tris(&triangles_to_keep);
+        // Replace current mesh
+        let TriMesh3d {
+            vertices,
+            triangles,
+        } = new_mesh;
+        self.vertices = vertices;
+        self.triangles = triangles;
+
+        // Clamp remaining vertices to AABB
+        self.vertices.par_iter_mut().for_each(|v| {
+            let min = aabb.min();
+            let max = aabb.max();
+            v.x = v.x.clamp(min.x, max.x);
+            v.y = v.y.clamp(min.y, max.y);
+            v.z = v.z.clamp(min.z, max.z);
+        })
     }
 
     /// Same as [`Self::vertex_normal_directions_inplace`] but assumes that the output is already zeroed
