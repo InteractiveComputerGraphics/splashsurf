@@ -102,11 +102,11 @@ fn test_main_cli() {
         "--particle-radius=0.05",
         "--smoothing-length=3.0",
         "--cube-size=0.75",
-        "--domain-min",
+        "--particle-aabb-min",
         "-1.0",
         "1.0",
         "-1.0",
-        "--domain-max",
+        "--particle-aabb-max",
         "-2.0",
         "2.0",
         "-2.0",
@@ -114,8 +114,8 @@ fn test_main_cli() {
     .expect("this command is supposed to work")
     .subcommand
     {
-        assert_eq!(rec_args.domain_min, Some(vec![-1.0, 1.0, -1.0]));
-        assert_eq!(rec_args.domain_max, Some(vec![-2.0, 2.0, -2.0]));
+        assert_eq!(rec_args.particle_aabb_min, Some(vec![-1.0, 1.0, -1.0]));
+        assert_eq!(rec_args.particle_aabb_max, Some(vec![-2.0, 2.0, -2.0]));
     };
 
     // Test domain min/max: too many values
@@ -127,12 +127,12 @@ fn test_main_cli() {
             "--particle-radius=0.05",
             "--smoothing-length=3.0",
             "--cube-size=0.75",
-            "--domain-min",
+            "--particle-aabb-min",
             "-1.0",
             "1.0",
             "-1.0",
             "2.0",
-            "--domain-max",
+            "--particle-aabb-max",
             "-2.0",
             "2.0",
             "-2.0",

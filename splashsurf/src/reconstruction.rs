@@ -83,9 +83,9 @@ pub struct ReconstructSubcommandArgs {
         number_of_values = 3,
         value_names = ["X_MIN", "Y_MIN", "Z_MIN"],
         allow_negative_numbers = true,
-        requires = "domain_max",
+        requires = "particle_aabb_max",
     )]
-    pub domain_min: Option<Vec<f64>>,
+    pub particle_aabb_min: Option<Vec<f64>>,
     /// Upper corner of the domain where surface reconstruction should be performed (requires domain-min to be specified)
     #[arg(
         help_heading = ARGS_BASIC,
@@ -93,9 +93,9 @@ pub struct ReconstructSubcommandArgs {
         number_of_values = 3,
         value_names = ["X_MIN", "Y_MIN", "Z_MIN"],
         allow_negative_numbers = true,
-        requires = "domain_min",
+        requires = "particle_aabb_min",
     )]
-    pub domain_max: Option<Vec<f64>>,
+    pub particle_aabb_max: Option<Vec<f64>>,
 
     /// Flag to enable multi-threading to process multiple input files in parallel
     #[arg(
@@ -392,8 +392,8 @@ mod arguments {
 
         fn try_from(args: &ReconstructSubcommandArgs) -> Result<Self, Self::Error> {
             // Convert particle domain args to aabb
-            let domain_aabb = if let (Some(domain_min), Some(domain_max)) =
-                (&args.domain_min, &args.domain_max)
+            let particle_aabb = if let (Some(domain_min), Some(domain_max)) =
+                (&args.particle_aabb_min, &args.particle_aabb_max)
             {
                 Some(try_aabb_from_min_max(
                     domain_min,
@@ -465,7 +465,7 @@ mod arguments {
                 compact_support_radius,
                 cube_size,
                 iso_surface_threshold: args.surface_threshold,
-                particle_aabb: domain_aabb,
+                particle_aabb,
                 enable_multi_threading: args.parallelize_over_particles.into_bool(),
                 spatial_decomposition,
             };
