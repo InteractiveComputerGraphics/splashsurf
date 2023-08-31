@@ -25,6 +25,7 @@ static ARGS_ADV: &str = "Advanced parameters";
 static ARGS_OCTREE: &str = "Octree (domain decomposition) parameters";
 static ARGS_DEBUG: &str = "Debug options";
 static ARGS_INTERP: &str = "Interpolation";
+static ARGS_POSTPROC: &str = "Postprocessing";
 static ARGS_OTHER: &str = "Remaining options";
 
 /// Command line arguments for the `reconstruct` subcommand
@@ -207,6 +208,27 @@ pub struct ReconstructSubcommandArgs {
     #[arg(help_heading = ARGS_INTERP, long)]
     pub interpolate_attributes: Vec<String>,
 
+    /// Lower corner of the bounding-box for the surface mesh, mesh outside gets cut away (requires mesh-max to be specified)
+    #[arg(
+        help_heading = ARGS_POSTPROC,
+        long,
+        number_of_values = 3,
+        value_names = ["X_MIN", "Y_MIN", "Z_MIN"],
+        allow_negative_numbers = true,
+        requires = "mesh_aabb_max",
+    )]
+    pub mesh_aabb_min: Option<Vec<f64>>,
+    /// Upper corner of the bounding-box for the surface mesh, mesh outside gets cut away (requires mesh-min to be specified)
+    #[arg(
+        help_heading = ARGS_POSTPROC,
+        long,
+        number_of_values = 3,
+        value_names = ["X_MIN", "Y_MIN", "Z_MIN"],
+        allow_negative_numbers = true,
+        requires = "mesh_aabb_min",
+    )]
+    pub mesh_aabb_max: Option<Vec<f64>>,
+
     /// Optional filename for writing the point cloud representation of the intermediate density map to disk
     #[arg(help_heading = ARGS_DEBUG, long, value_parser = value_parser!(PathBuf))]
     pub output_dm_points: Option<PathBuf>,
@@ -324,6 +346,7 @@ mod arguments {
         pub compute_normals: bool,
         pub sph_normals: bool,
         pub interpolate_attributes: Vec<String>,
+        pub mesh_aabb: Option<Aabb3d<f64>>,
     }
 
     /// All arguments that can be supplied to the surface reconstruction tool converted to useful types
@@ -377,6 +400,15 @@ mod arguments {
                     domain_max,
                     "particle AABB",
                 )?)
+            } else {
+                None
+            };
+
+            // Convert mesh domain args to aabb
+            let mesh_aabb = if let (Some(mesh_min), Some(mesh_max)) =
+                (&args.mesh_aabb_min, &args.mesh_aabb_max)
+            {
+                Some(try_aabb_from_min_max(mesh_min, mesh_max, "mesh AABB")?)
             } else {
                 None
             };
@@ -448,6 +480,7 @@ mod arguments {
                 compute_normals: args.normals.into_bool(),
                 sph_normals: args.sph_normals.into_bool(),
                 interpolate_attributes: args.interpolate_attributes.clone(),
+                mesh_aabb,
             };
 
             Ok(ReconstructionRunnerArgs {
@@ -835,6 +868,21 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
     let grid = reconstruction.grid();
     let mesh = reconstruction.mesh();
 
+    let mesh = if let Some(aabb) = &postprocessing.mesh_aabb {
+        profile!("clamp mesh to aabb");
+        info!("Post-processing: Clamping mesh to AABB...");
+
+        let mut mesh = mesh.clone();
+        mesh.clamp_with_aabb(
+            &aabb
+                .try_convert()
+                .ok_or_else(|| anyhow!("Failed to convert mesh AABB"))?,
+        );
+        mesh
+    } else {
+        mesh.clone()
+    };
+
     // Add normals to mesh if requested
     let mesh = if postprocessing.compute_normals || !attributes.is_empty() {
         profile!("compute normals");
@@ -866,7 +914,8 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
             params.compact_support_radius,
         );
 
-        let mut mesh_with_data = MeshWithData::new(mesh.clone());
+        let mut mesh_with_data = MeshWithData::new(mesh);
+        let mesh = &mesh_with_data.mesh;
 
         // Compute normals if requested
         if postprocessing.compute_normals {
@@ -925,7 +974,7 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
 
         mesh_with_data
     } else {
-        MeshWithData::new(mesh.clone())
+        MeshWithData::new(mesh)
     };
 
     // Store the surface mesh
