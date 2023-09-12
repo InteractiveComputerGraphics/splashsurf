@@ -199,8 +199,16 @@ impl TriangleOrQuadCell {
         }
     }
 
-    /// Returns the slice of vertex indices of this cell
+    /// Returns a reference to the vertex indices of this cell
     fn vertices(&self) -> &[usize] {
+        match self {
+            TriangleOrQuadCell::Tri(v) => v,
+            TriangleOrQuadCell::Quad(v) => v,
+        }
+    }
+
+    /// Returns a mutable reference to the vertex indices of this cell
+    fn vertices_mut(&mut self) -> &mut [usize] {
         match self {
             TriangleOrQuadCell::Tri(v) => v,
             TriangleOrQuadCell::Quad(v) => v,
@@ -247,14 +255,25 @@ impl<R: Real> PointCloud3d<R> {
 ///
 /// Meshes consist of vertices and cells. Cells identify their associated vertices using indices
 /// into the mesh's slice of vertices.
-pub trait Mesh3d<R: Real> {
+pub trait Mesh3d<R: Real>
+where
+    Self: Sized,
+{
     /// The cell connectivity type of the mesh
-    type Cell: CellConnectivity;
+    type Cell: CellConnectivity + Clone;
 
     /// Returns a slice of all vertices of the mesh
     fn vertices(&self) -> &[Vector3<R>];
+    /// Returns a mutable slice of all vertices of the mesh
+    fn vertices_mut(&mut self) -> &mut [Vector3<R>];
     /// Returns a slice of all cells of the mesh
     fn cells(&self) -> &[Self::Cell];
+
+    /// Constructs a mesh from the given vertices and connectivity (does not check inputs for validity)
+    fn from_vertices_and_connectivity(
+        vertices: Vec<Vector3<R>>,
+        connectivity: Vec<Self::Cell>,
+    ) -> Self;
 
     /// Returns a mapping of all mesh vertices to the set of their connected neighbor vertices
     fn vertex_vertex_connectivity(&self) -> Vec<Vec<usize>> {
@@ -289,6 +308,91 @@ pub trait Mesh3d<R: Real> {
 
         connectivity_map
     }
+
+    /// Returns a new mesh containing only the specified cells and removes all unreferenced vertices
+    fn keep_cells(&self, cell_indices: &[usize]) -> Self {
+        let vertices = self.vertices();
+        let cells = self.cells();
+
+        // Each entry is true if this vertex should be kept, false otherwise
+        let vertex_keep_table = {
+            let mut table = vec![false; vertices.len()];
+            for cell in cell_indices.iter().copied().map(|c_i| &cells[c_i]) {
+                for &vertex_index in cell.vertices() {
+                    table[vertex_index] = true;
+                }
+            }
+            table
+        };
+
+        let old_to_new_label_map = {
+            let mut label_map = MapType::default();
+            let mut next_label = 0;
+            for (i, keep) in vertex_keep_table.iter().enumerate() {
+                if *keep {
+                    label_map.insert(i, next_label);
+                    next_label += 1;
+                }
+            }
+            label_map
+        };
+
+        let relabeled_cells: Vec<_> = cell_indices
+            .iter()
+            .map(|&i| &cells[i])
+            .cloned()
+            .map(|mut cell| {
+                for index in cell.vertices_mut() {
+                    *index = *old_to_new_label_map
+                        .get(index)
+                        .expect("Index must be in map");
+                }
+                cell
+            })
+            .collect();
+
+        let relabeled_vertices: Vec<_> = vertex_keep_table
+            .iter()
+            .enumerate()
+            .filter_map(|(i, should_keep)| if *should_keep { Some(i) } else { None })
+            .map(|index| vertices[index].clone())
+            .collect();
+
+        Self::from_vertices_and_connectivity(relabeled_vertices, relabeled_cells)
+    }
+
+    /// Removes all cells from the mesh that are completely outside of the given AABB and clamps the remaining cells to the boundary
+    fn par_clamp_with_aabb(&self, aabb: &Aabb3d<R>) -> Self
+    where
+        Self::Cell: Sync,
+    {
+        // Find all triangles with at least one vertex inside of AABB
+        let vertices = self.vertices();
+        let cells_to_keep = self
+            .cells()
+            .par_iter()
+            .enumerate()
+            .filter(|(_, cell)| {
+                cell.vertices()
+                    .iter()
+                    .copied()
+                    .any(|v| aabb.contains_point(&vertices[v]))
+            })
+            .map(|(i, _)| i)
+            .collect::<Vec<_>>();
+        // Remove all other cells from mesh
+        let mut new_mesh = self.keep_cells(&cells_to_keep);
+        // Clamp remaining vertices to AABB
+        new_mesh.vertices_mut().par_iter_mut().for_each(|v| {
+            let min = aabb.min();
+            let max = aabb.max();
+            v.x = v.x.clamp(min.x, max.x);
+            v.y = v.y.clamp(min.y, max.y);
+            v.z = v.z.clamp(min.z, max.z);
+        });
+
+        new_mesh
+    }
 }
 
 /// Basic interface for mesh cells consisting of a collection of vertex indices
@@ -301,6 +405,8 @@ pub trait CellConnectivity {
     fn expected_num_vertices() -> usize;
     /// Returns a reference to the vertex indices connected by this cell
     fn vertices(&self) -> &[usize];
+    /// Returns a reference to the vertex indices connected by this cell
+    fn vertices_mut(&mut self) -> &mut [usize];
 }
 
 /// Cell type for [`TriMesh3d`]
@@ -324,6 +430,24 @@ impl CellConnectivity for TriangleCell {
     fn vertices(&self) -> &[usize] {
         &self.0[..]
     }
+
+    fn vertices_mut(&mut self) -> &mut [usize] {
+        &mut self.0[..]
+    }
+}
+
+impl CellConnectivity for HexCell {
+    fn expected_num_vertices() -> usize {
+        8
+    }
+
+    fn vertices(&self) -> &[usize] {
+        &self.0[..]
+    }
+
+    fn vertices_mut(&mut self) -> &mut [usize] {
+        &mut self.0[..]
+    }
 }
 
 impl CellConnectivity for TriangleOrQuadCell {
@@ -336,17 +460,11 @@ impl CellConnectivity for TriangleOrQuadCell {
     }
 
     fn vertices(&self) -> &[usize] {
-        self.vertices()
-    }
-}
-
-impl CellConnectivity for HexCell {
-    fn expected_num_vertices() -> usize {
-        8
+        TriangleOrQuadCell::vertices(self)
     }
 
-    fn vertices(&self) -> &[usize] {
-        &self.0[..]
+    fn vertices_mut(&mut self) -> &mut [usize] {
+        TriangleOrQuadCell::vertices_mut(self)
     }
 }
 
@@ -358,6 +476,10 @@ impl CellConnectivity for PointCell {
     fn vertices(&self) -> &[usize] {
         std::slice::from_ref(&self.0)
     }
+
+    fn vertices_mut(&mut self) -> &mut [usize] {
+        std::slice::from_mut(&mut self.0)
+    }
 }
 
 impl<R: Real> Mesh3d<R> for TriMesh3d<R> {
@@ -367,20 +489,22 @@ impl<R: Real> Mesh3d<R> for TriMesh3d<R> {
         self.vertices.as_slice()
     }
 
+    fn vertices_mut(&mut self) -> &mut [Vector3<R>] {
+        self.vertices.as_mut_slice()
+    }
+
     fn cells(&self) -> &[TriangleCell] {
         self.triangle_cells()
     }
-}
 
-impl<R: Real> Mesh3d<R> for MixedTriQuadMesh3d<R> {
-    type Cell = TriangleOrQuadCell;
-
-    fn vertices(&self) -> &[Vector3<R>] {
-        self.vertices.as_slice()
-    }
-
-    fn cells(&self) -> &[TriangleOrQuadCell] {
-        &self.cells
+    fn from_vertices_and_connectivity(
+        vertices: Vec<Vector3<R>>,
+        triangles: Vec<Self::Cell>,
+    ) -> Self {
+        Self {
+            vertices,
+            triangles: bytemuck::cast_vec::<TriangleCell, [usize; 3]>(triangles),
+        }
     }
 }
 
@@ -391,8 +515,42 @@ impl<R: Real> Mesh3d<R> for HexMesh3d<R> {
         self.vertices.as_slice()
     }
 
+    fn vertices_mut(&mut self) -> &mut [Vector3<R>] {
+        self.vertices.as_mut_slice()
+    }
+
     fn cells(&self) -> &[HexCell] {
         bytemuck::cast_slice::<[usize; 8], HexCell>(self.cells.as_slice())
+    }
+
+    fn from_vertices_and_connectivity(vertices: Vec<Vector3<R>>, cells: Vec<HexCell>) -> Self {
+        Self {
+            vertices,
+            cells: bytemuck::cast_vec::<HexCell, [usize; 8]>(cells),
+        }
+    }
+}
+
+impl<R: Real> Mesh3d<R> for MixedTriQuadMesh3d<R> {
+    type Cell = TriangleOrQuadCell;
+
+    fn vertices(&self) -> &[Vector3<R>] {
+        self.vertices.as_slice()
+    }
+
+    fn vertices_mut(&mut self) -> &mut [Vector3<R>] {
+        self.vertices.as_mut_slice()
+    }
+
+    fn cells(&self) -> &[TriangleOrQuadCell] {
+        &self.cells
+    }
+
+    fn from_vertices_and_connectivity(
+        vertices: Vec<Vector3<R>>,
+        cells: Vec<TriangleOrQuadCell>,
+    ) -> Self {
+        Self { vertices, cells }
     }
 }
 
@@ -403,28 +561,39 @@ impl<R: Real> Mesh3d<R> for PointCloud3d<R> {
         self.points.as_slice()
     }
 
+    fn vertices_mut(&mut self) -> &mut [Vector3<R>] {
+        self.points.as_mut_slice()
+    }
+
     fn cells(&self) -> &[PointCell] {
         bytemuck::cast_slice::<usize, PointCell>(self.indices.as_slice())
     }
-}
 
-impl<R: Real, MeshT: Mesh3d<R>> Mesh3d<R> for &MeshT {
-    type Cell = MeshT::Cell;
-    fn vertices(&self) -> &[Vector3<R>] {
-        (*self).vertices()
-    }
-    fn cells(&self) -> &[MeshT::Cell] {
-        (*self).cells()
+    fn from_vertices_and_connectivity(points: Vec<Vector3<R>>, cells: Vec<PointCell>) -> Self {
+        Self {
+            points,
+            indices: bytemuck::cast_vec::<PointCell, usize>(cells),
+        }
     }
 }
 
-impl<'a, R: Real, MeshT: Mesh3d<R> + ToOwned> Mesh3d<R> for std::borrow::Cow<'a, MeshT> {
+impl<'a, R: Real, MeshT: Mesh3d<R> + Clone> Mesh3d<R> for std::borrow::Cow<'a, MeshT> {
     type Cell = MeshT::Cell;
+
     fn vertices(&self) -> &[Vector3<R>] {
         (*self.as_ref()).vertices()
     }
+
+    fn vertices_mut(&mut self) -> &mut [Vector3<R>] {
+        (self.to_mut()).vertices_mut()
+    }
+
     fn cells(&self) -> &[MeshT::Cell] {
         (*self.as_ref()).cells()
+    }
+
+    fn from_vertices_and_connectivity(vertices: Vec<Vector3<R>>, cells: Vec<Self::Cell>) -> Self {
+        std::borrow::Cow::Owned(MeshT::from_vertices_and_connectivity(vertices, cells).to_owned())
     }
 }
 
@@ -470,89 +639,6 @@ impl<R: Real> TriMesh3d<R> {
             tri[1] += vertex_offset;
             tri[2] += vertex_offset;
         }
-    }
-
-    /// Returns a new triangle mesh containing only the specified triangles and removes all unreferenced vertices
-    pub fn keep_tris(&self, cell_indices: &[usize]) -> Self {
-        // Each entry is true if this vertex should be kept, false otherwise
-        let vertex_keep_table = {
-            let mut table = vec![false; self.vertices.len()];
-            for &cell_index in cell_indices {
-                let cell_connectivity = &self.triangles[cell_index];
-
-                for &vertex_index in cell_connectivity {
-                    table[vertex_index] = true;
-                }
-            }
-            table
-        };
-
-        let old_to_new_label_map = {
-            let mut label_map = MapType::default();
-            let mut next_label = 0;
-            for (i, keep) in vertex_keep_table.iter().enumerate() {
-                if *keep {
-                    label_map.insert(i, next_label);
-                    next_label += 1;
-                }
-            }
-            label_map
-        };
-
-        let relabeled_cells: Vec<_> = cell_indices
-            .iter()
-            .map(|&i| self.triangles[i].clone())
-            .map(|mut cell| {
-                for index in &mut cell {
-                    *index = *old_to_new_label_map
-                        .get(index)
-                        .expect("Index must be in map");
-                }
-                cell
-            })
-            .collect();
-
-        let relabeled_vertices: Vec<_> = vertex_keep_table
-            .iter()
-            .enumerate()
-            .filter_map(|(i, should_keep)| if *should_keep { Some(i) } else { None })
-            .map(|index| self.vertices[index].clone())
-            .collect();
-
-        Self {
-            vertices: relabeled_vertices,
-            triangles: relabeled_cells,
-        }
-    }
-
-    /// Removes all triangles from the mesh that are completely outside of the given AABB and clamps the remaining triangles to the boundary
-    pub fn clamp_with_aabb(&mut self, aabb: &Aabb3d<R>) {
-        // Find all triangles with at least one vertex inside of AABB
-        let triangles_to_keep = self
-            .triangles
-            .par_iter()
-            .enumerate()
-            .filter(|(_, tri)| tri.iter().any(|&v| aabb.contains_point(&self.vertices[v])))
-            .map(|(i, _)| i)
-            .collect::<Vec<_>>();
-        // Remove all other triangles from mesh
-        let new_mesh = self.keep_tris(&triangles_to_keep);
-        // Replace current mesh
-        let TriMesh3d {
-            vertices,
-            triangles,
-        } = new_mesh;
-        self.vertices = vertices;
-        self.triangles = triangles;
-
-        // Clamp remaining vertices to AABB
-        self.vertices.par_iter_mut().for_each(|v| {
-            let min = aabb.min();
-            let max = aabb.max();
-            v.x = v.x.clamp(min.x, max.x);
-            v.y = v.y.clamp(min.y, max.y);
-            v.z = v.z.clamp(min.z, max.z);
-        })
     }
 
     /// Same as [`Self::vertex_normal_directions_inplace`] but assumes that the output is already zeroed
@@ -819,11 +905,27 @@ pub struct MeshWithData<R: Real, MeshT: Mesh3d<R>> {
 
 impl<R: Real, MeshT: Mesh3d<R>> Mesh3d<R> for MeshWithData<R, MeshT> {
     type Cell = MeshT::Cell;
+
     fn vertices(&self) -> &[Vector3<R>] {
         self.mesh.vertices()
     }
+
+    fn vertices_mut(&mut self) -> &mut [Vector3<R>] {
+        self.mesh.vertices_mut()
+    }
+
     fn cells(&self) -> &[MeshT::Cell] {
         self.mesh.cells()
+    }
+
+    fn from_vertices_and_connectivity(
+        vertices: Vec<Vector3<R>>,
+        connectivity: Vec<Self::Cell>,
+    ) -> Self {
+        MeshWithData::new(MeshT::from_vertices_and_connectivity(
+            vertices,
+            connectivity,
+        ))
     }
 }
 
@@ -997,7 +1099,7 @@ macro_rules! impl_into_vtk {
         #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
         impl<'a, R: Real> IntoVtkUnstructuredGridPiece for &std::borrow::Cow<'a, $name<R>> {
             fn into_unstructured_grid(self) -> UnstructuredGridPiece {
-                vtk_helper::mesh_to_unstructured_grid(&self)
+                vtk_helper::mesh_to_unstructured_grid(self)
             }
         }
 
