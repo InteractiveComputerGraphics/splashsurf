@@ -1,6 +1,6 @@
 use splashsurf_lib::halfedge_mesh::HalfEdgeTriMesh;
 use splashsurf_lib::io;
-use splashsurf_lib::mesh::MeshWithData;
+use splashsurf_lib::mesh::{Mesh3d, MeshWithData};
 
 #[test]
 fn test_halfedge_ico() -> Result<(), anyhow::Error> {

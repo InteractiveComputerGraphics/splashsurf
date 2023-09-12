@@ -259,7 +259,7 @@ pub fn mesh_to_ply<R: Real, M: Mesh3d<R>, P: AsRef<Path>>(
     for c in mesh.cells() {
         let num_verts = c.num_vertices().to_u8().expect("failed to convert cell vertex count to u8");
         writer.write_all(&num_verts.to_le_bytes())?;
-        c.try_for_each_vertex(|v| {
+        c.vertices().iter().copied().try_for_each(|v| {
             let idx = v.to_u32().expect("failed to convert vertex index to u32");
             writer.write_all(&idx.to_le_bytes())
         })?;

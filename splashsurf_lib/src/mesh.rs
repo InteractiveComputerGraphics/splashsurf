@@ -256,16 +256,35 @@ pub trait Mesh3d<R: Real> {
     /// Returns a slice of all cells of the mesh
     fn cells(&self) -> &[Self::Cell];
 
+    /// Returns a mapping of all mesh vertices to the set of their connected neighbor vertices
+    fn vertex_vertex_connectivity(&self) -> Vec<Vec<usize>> {
+        profile!("vertex_vertex_connectivity");
+
+        let mut connectivity_map: Vec<Vec<usize>> =
+            vec![Vec::with_capacity(4); self.vertices().len()];
+        for cell in self.cells() {
+            for &i in cell.vertices() {
+                for &j in cell.vertices() {
+                    if i != j && !connectivity_map[i].contains(&j) {
+                        connectivity_map[i].push(j);
+                    }
+                }
+            }
+        }
+
+        connectivity_map
+    }
+
     /// Returns a mapping of all mesh vertices to the set of the cells they belong to
     fn vertex_cell_connectivity(&self) -> Vec<Vec<usize>> {
         profile!("vertex_cell_connectivity");
         let mut connectivity_map: Vec<Vec<usize>> = vec![Vec::new(); self.vertices().len()];
         for (cell_idx, cell) in self.cells().iter().enumerate() {
-            cell.for_each_vertex(|v_i| {
+            for &v_i in cell.vertices() {
                 if !connectivity_map[v_i].contains(&cell_idx) {
                     connectivity_map[v_i].push(cell_idx);
                 }
-            })
+            }
         }
 
         connectivity_map
@@ -274,22 +293,14 @@ pub trait Mesh3d<R: Real> {
 
 /// Basic interface for mesh cells consisting of a collection of vertex indices
 pub trait CellConnectivity {
-    /// Returns the number of vertices per cell
+    /// Returns the number of vertices per cell (may vary between cells)
     fn num_vertices(&self) -> usize {
         Self::expected_num_vertices()
     }
-    /// Returns the expected number of vertices per cell (helpful for connectivities with a constant number of vertices to reserve storage)
+    /// Returns the expected number of vertices per cell (helpful for connectivities with a constant or upper bound on the number of vertices to reserve storage)
     fn expected_num_vertices() -> usize;
-    /// Calls the given closure with each vertex index that is part of this cell, stopping at the first error and returning that error
-    fn try_for_each_vertex<E, F: FnMut(usize) -> Result<(), E>>(&self, f: F) -> Result<(), E>;
-    /// Calls the given closure with each vertex index that is part of this cell
-    fn for_each_vertex<F: FnMut(usize)>(&self, mut f: F) {
-        self.try_for_each_vertex::<(), _>(move |i| {
-            f(i);
-            Ok(())
-        })
-        .unwrap();
-    }
+    /// Returns a reference to the vertex indices connected by this cell
+    fn vertices(&self) -> &[usize];
 }
 
 /// Cell type for [`TriMesh3d`]
@@ -310,8 +321,8 @@ impl CellConnectivity for TriangleCell {
         3
     }
 
-    fn try_for_each_vertex<E, F: FnMut(usize) -> Result<(), E>>(&self, f: F) -> Result<(), E> {
-        self.0.iter().copied().try_for_each(f)
+    fn vertices(&self) -> &[usize] {
+        &self.0[..]
     }
 }
 
@@ -324,8 +335,8 @@ impl CellConnectivity for TriangleOrQuadCell {
         return self.num_vertices();
     }
 
-    fn try_for_each_vertex<E, F: FnMut(usize) -> Result<(), E>>(&self, f: F) -> Result<(), E> {
-        self.vertices().iter().copied().try_for_each(f)
+    fn vertices(&self) -> &[usize] {
+        self.vertices()
     }
 }
 
@@ -334,8 +345,8 @@ impl CellConnectivity for HexCell {
         8
     }
 
-    fn try_for_each_vertex<E, F: FnMut(usize) -> Result<(), E>>(&self, f: F) -> Result<(), E> {
-        self.0.iter().copied().try_for_each(f)
+    fn vertices(&self) -> &[usize] {
+        &self.0[..]
     }
 }
 
@@ -344,8 +355,8 @@ impl CellConnectivity for PointCell {
         1
     }
 
-    fn try_for_each_vertex<E, F: FnMut(usize) -> Result<(), E>>(&self, mut f: F) -> Result<(), E> {
-        f(self.0)
+    fn vertices(&self) -> &[usize] {
+        std::slice::from_ref(&self.0)
     }
 }
 
@@ -542,25 +553,6 @@ impl<R: Real> TriMesh3d<R> {
             v.y = v.y.clamp(min.y, max.y);
             v.z = v.z.clamp(min.z, max.z);
         })
-    }
-
-    /// Returns a mapping of all mesh vertices to the set of their connected neighbor vertices
-    pub fn vertex_vertex_connectivity(&self) -> Vec<Vec<usize>> {
-        profile!("vertex_vertex_connectivity");
-
-        let mut connectivity_map: Vec<Vec<usize>> =
-            vec![Vec::with_capacity(4); self.vertices().len()];
-        for tri in &self.triangles {
-            for &i in tri {
-                for &j in tri {
-                    if i != j && !connectivity_map[i].contains(&j) {
-                        connectivity_map[i].push(j);
-                    }
-                }
-            }
-        }
-
-        connectivity_map
     }
 
     /// Same as [`Self::vertex_normal_directions_inplace`] but assumes that the output is already zeroed
@@ -1142,7 +1134,10 @@ pub mod vtk_helper {
                 Vec::with_capacity(mesh.cells().len() * (MeshT::Cell::expected_num_vertices() + 1));
             for cell in mesh.cells().iter() {
                 vertices.push(cell.num_vertices() as u32);
-                cell.for_each_vertex(|v| vertices.push(v as u32));
+                cell.vertices()
+                    .iter()
+                    .copied()
+                    .for_each(|v| vertices.push(v as u32));
             }
             vertices
         };
