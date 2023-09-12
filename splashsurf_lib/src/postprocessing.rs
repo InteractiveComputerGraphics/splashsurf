@@ -4,7 +4,7 @@ use crate::halfedge_mesh::{HalfEdgeTriMesh, IllegalHalfEdgeCollapse};
 use crate::mesh::{Mesh3d, MixedTriQuadMesh3d, TriMesh3d, TriMesh3dExt, TriangleOrQuadCell};
 use crate::topology::{Axis, DirectedAxis, Direction};
 use crate::uniform_grid::UniformCartesianCubeGrid3d;
-use crate::{profile, Index, MapType, Real, SetType};
+use crate::{new_map, profile, Index, MapType, Real, SetType};
 use log::{info, warn};
 use nalgebra::Vector3;
 use rayon::prelude::*;
@@ -78,6 +78,126 @@ pub fn par_laplacian_smoothing_normals_inplace<R: Real>(
                 normal_i.normalize_mut();
             });
     }
+}
+
+/// Mesh simplification designed for marching cubes surfaces meshes inspired by the "Compact Contouring"/"Mesh displacement" approach by Doug Moore and Joe Warren
+///
+/// See ["Mesh Displacement: An Improved Contouring Method for Trivariate Data"](https://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.49.5214&rep=rep1&type=pdf).
+pub fn marching_cubes_cleanup<I: Index, R: Real>(
+    mesh: &mut TriMesh3d<R>,
+    grid: &UniformCartesianCubeGrid3d<I, R>,
+    max_iter: usize,
+    keep_vertices: bool,
+) -> Vec<Vec<usize>> {
+    profile!("marching_cubes_cleanup");
+
+    let half_dx = grid.cell_size() / (R::one() + R::one());
+
+    let nearest_grid_point = {
+        profile!("determine nearest grid points");
+        mesh.vertices
+            .par_iter()
+            .enumerate()
+            .map(|(_, v)| {
+                // TODO: Move this to uniform grid
+                let cell_ijk = grid.enclosing_cell(v);
+                let min_point = grid.get_point(cell_ijk).unwrap();
+                let min_coord = grid.point_coordinates(&min_point);
+
+                let mut nearest_point = min_point;
+                if (v.x - min_coord.x) > half_dx {
+                    nearest_point = grid
+                        .get_point_neighbor(
+                            &nearest_point,
+                            DirectedAxis::new(Axis::X, Direction::Positive),
+                        )
+                        .unwrap()
+                }
+                if (v.y - min_coord.y) > half_dx {
+                    nearest_point = grid
+                        .get_point_neighbor(
+                            &nearest_point,
+                            DirectedAxis::new(Axis::Y, Direction::Positive),
+                        )
+                        .unwrap()
+                }
+                if (v.z - min_coord.z) > half_dx {
+                    nearest_point = grid
+                        .get_point_neighbor(
+                            &nearest_point,
+                            DirectedAxis::new(Axis::Z, Direction::Positive),
+                        )
+                        .unwrap()
+                }
+
+                grid.flatten_point_index(&nearest_point)
+            })
+            .collect::<Vec<_>>()
+    };
+
+    let (tri_mesh, vertex_map) = {
+        profile!("mesh displacement");
+        let mut mesh = HalfEdgeTriMesh::from(std::mem::take(mesh));
+
+        // Tracks per vertex how many collapsed vertices contributed to its position
+        let mut vertex_sum_count = vec![1_usize; mesh.vertices.len()];
+        // Buffer for vertices that should get collapsed
+        let mut vertex_buffer = Vec::new();
+
+        for _ in 0..max_iter {
+            profile!("mesh displacement iteration");
+
+            let mut collapse_count = 0;
+            for v0 in 0..mesh.vertices.len() {
+                if !mesh.is_valid_vertex(v0) {
+                    continue;
+                }
+
+                for he in mesh.outgoing_half_edges(v0) {
+                    let v1 = he.to;
+                    if nearest_grid_point[v0] == nearest_grid_point[v1] {
+                        vertex_buffer.push(v1);
+                    }
+                }
+
+                for &v1 in vertex_buffer.iter() {
+                    if mesh.is_valid_vertex(v1) {
+                        if let Some(he) = mesh.half_edge(v1, v0) {
+                            if let Ok(_) = mesh.try_half_edge_collapse(he) {
+                                collapse_count += 1;
+
+                                // Move to averaged position
+                                let pos_v0 = mesh.vertices[v0];
+                                let pos_v1 = mesh.vertices[v1];
+
+                                let n0 = vertex_sum_count[v0];
+                                let n1 = vertex_sum_count[v1];
+
+                                let n_new = n0 + n1;
+                                let pos_new = (pos_v0.scale(R::from_usize(n0).unwrap())
+                                    + pos_v1.scale(R::from_usize(n1).unwrap()))
+                                .unscale(R::from_usize(n_new).unwrap());
+
+                                vertex_sum_count[v0] = n_new;
+                                mesh.vertices[v0] = pos_new;
+                            }
+                        }
+                    }
+                }
+
+                vertex_buffer.clear();
+            }
+
+            if collapse_count == 0 {
+                break;
+            }
+        }
+
+        mesh.into_parts(keep_vertices)
+    };
+
+    *mesh = tri_mesh;
+    vertex_map
 }
 
 pub fn decimation<R: Real>(mesh: &mut TriMesh3d<R>, keep_vertices: bool) -> Vec<Vec<usize>> {

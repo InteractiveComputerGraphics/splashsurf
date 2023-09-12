@@ -19,7 +19,7 @@ use crate::neighborhood_search::{
     neighborhood_search_spatial_hashing_flat_filtered,
     neighborhood_search_spatial_hashing_parallel, FlatNeighborhoodList,
 };
-use crate::uniform_grid::{EdgeIndex, UniformCartesianCubeGrid3d};
+use crate::uniform_grid::{EdgeIndex, GridConstructionError, UniformCartesianCubeGrid3d};
 use crate::{
     new_map, new_parallel_map, profile, Aabb3d, MapType, Parameters, SpatialDecomposition,
     SurfaceReconstruction,
@@ -74,6 +74,23 @@ pub(crate) struct ParametersSubdomainGrid<I: Index, R: Real> {
     chunk_size: usize,
     /// Whether to return the global particle neighborhood list instead of only using per-domain lists internally
     global_neighborhood_list: bool,
+}
+
+impl<I: Index, R: Real> ParametersSubdomainGrid<I, R> {
+    pub(crate) fn global_marching_cubes_grid(
+        &self,
+    ) -> Result<UniformCartesianCubeGrid3d<I, R>, GridConstructionError<I, R>> {
+        let n_cells = self.global_marching_cubes_grid.cells_per_dim();
+        UniformCartesianCubeGrid3d::new(
+            self.global_marching_cubes_grid.aabb().min(),
+            &[
+                I::from(n_cells[0]).ok_or(GridConstructionError::IndexTypeTooSmallCellsPerDim)?,
+                I::from(n_cells[1]).ok_or(GridConstructionError::IndexTypeTooSmallCellsPerDim)?,
+                I::from(n_cells[2]).ok_or(GridConstructionError::IndexTypeTooSmallCellsPerDim)?,
+            ],
+            self.global_marching_cubes_grid.cell_size(),
+        )
+    }
 }
 
 /// Result of the subdomain decomposition procedure

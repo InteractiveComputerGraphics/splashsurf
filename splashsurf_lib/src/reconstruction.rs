@@ -1,3 +1,4 @@
+use anyhow::Context;
 use log::info;
 use nalgebra::Vector3;
 
@@ -17,6 +18,9 @@ pub(crate) fn reconstruct_surface_subdomain_grid<'a, I: Index, R: Real>(
 
     let internal_parameters =
         initialize_parameters(parameters, &particle_positions, output_surface)?;
+    output_surface.grid = internal_parameters
+        .global_marching_cubes_grid()
+        .context("failed to convert global marching cubes grid")?;
 
     // Filter "narrow band"
     /*
