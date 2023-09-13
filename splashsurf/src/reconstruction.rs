@@ -210,7 +210,7 @@ pub struct ReconstructSubcommandArgs {
         ignore_case = true,
         require_equals = true
     )]
-    pub keep_vertices: Switch,
+    pub keep_verts: Switch,
     /// Whether to compute surface normals at the mesh vertices and write them to the output file
     #[arg(
         help_heading = ARGS_INTERP,
@@ -283,6 +283,7 @@ pub struct ReconstructSubcommandArgs {
         require_equals = true
     )]
     pub output_raw_mesh: Switch,
+
     /// Whether to try to convert triangles to quads if they meet quality criteria
     #[arg(
         help_heading = ARGS_INTERP,
@@ -303,7 +304,7 @@ pub struct ReconstructSubcommandArgs {
     #[arg(help_heading = ARGS_INTERP, long, default_value = "135")]
     pub quad_max_interior_angle: f64,
 
-    /// Lower corner of the bounding-box for the surface mesh, mesh outside gets cut away (requires mesh-max to be specified)
+    /// Lower corner of the bounding-box for the surface mesh, triangles completely outside are removed (requires mesh-aabb-max to be specified)
     #[arg(
         help_heading = ARGS_POSTPROC,
         long,
@@ -313,7 +314,7 @@ pub struct ReconstructSubcommandArgs {
         requires = "mesh_aabb_max",
     )]
     pub mesh_aabb_min: Option<Vec<f64>>,
-    /// Upper corner of the bounding-box for the surface mesh, mesh outside gets cut away (requires mesh-min to be specified)
+    /// Upper corner of the bounding-box for the surface mesh, triangles completely outside are removed (requires mesh-aabb-min to be specified)
     #[arg(
         help_heading = ARGS_POSTPROC,
         long,
@@ -323,6 +324,16 @@ pub struct ReconstructSubcommandArgs {
         requires = "mesh_aabb_min",
     )]
     pub mesh_aabb_max: Option<Vec<f64>>,
+    /// Whether to clamp vertices outside of the specified mesh AABB to the AABB (only has an effect if mesh-aabb-min/max are specified)
+    #[arg(
+        help_heading = ARGS_POSTPROC,
+        long,
+        default_value = "off",
+        value_name = "off|on",
+        ignore_case = true,
+        require_equals = true
+    )]
+    pub mesh_aabb_clamp_verts: Switch,
 
     /// Optional filename for writing the point cloud representation of the intermediate density map to disk
     #[arg(help_heading = ARGS_DEBUG, long, value_parser = value_parser!(PathBuf))]
@@ -456,6 +467,7 @@ mod arguments {
         pub output_raw_normals: bool,
         pub output_raw_mesh: bool,
         pub mesh_aabb: Option<Aabb3d<f64>>,
+        pub mesh_aabb_clamp_vertices: bool,
     }
 
     /// All arguments that can be supplied to the surface reconstruction tool converted to useful types
@@ -590,7 +602,7 @@ mod arguments {
                 check_mesh: args.check_mesh.into_bool(),
                 mesh_cleanup: args.mesh_cleanup.into_bool(),
                 decimate_barnacles: args.decimate_barnacles.into_bool(),
-                keep_vertices: args.keep_vertices.into_bool(),
+                keep_vertices: args.keep_verts.into_bool(),
                 compute_normals: args.normals.into_bool(),
                 sph_normals: args.sph_normals.into_bool(),
                 normals_smoothing_iters: args.normals_smoothing_iters,
@@ -606,6 +618,7 @@ mod arguments {
                 output_raw_normals: args.output_raw_normals.into_bool(),
                 output_raw_mesh: args.output_raw_mesh.into_bool(),
                 mesh_aabb,
+                mesh_aabb_clamp_vertices: args.mesh_aabb_clamp_verts.into_bool(),
             };
 
             Ok(ReconstructionRunnerArgs {
@@ -1307,6 +1320,22 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
             }
         }
     }
+
+    // Remove and clamp cells outside of AABB
+    let mesh_with_data = if let Some(mesh_aabb) = &postprocessing.mesh_aabb {
+        profile!("clamp mesh to aabb");
+        info!("Post-processing: Clamping mesh to AABB...");
+
+        mesh_with_data.par_clamp_with_aabb(
+            &mesh_aabb
+                .try_convert()
+                .ok_or_else(|| anyhow!("Failed to convert mesh AABB"))?,
+            postprocessing.mesh_aabb_clamp_vertices,
+            postprocessing.keep_vertices,
+        )
+    } else {
+        mesh_with_data
+    };
 
     // Convert triangles to quads
     let (tri_mesh, tri_quad_mesh) = if postprocessing.generate_quads {

@@ -310,20 +310,91 @@ where
     }
 
     /// Returns a new mesh containing only the specified cells and removes all unreferenced vertices
-    fn keep_cells(&self, cell_indices: &[usize]) -> Self {
-        let vertices = self.vertices();
-        let cells = self.cells();
+    fn keep_cells(&self, cell_indices: &[usize], keep_vertices: bool) -> Self {
+        if keep_vertices {
+            keep_cells_impl(self, cell_indices, &[])
+        } else {
+            let vertex_keep_table = vertex_keep_table(self, cell_indices);
+            keep_cells_impl(self, cell_indices, &vertex_keep_table)
+        }
+    }
 
-        // Each entry is true if this vertex should be kept, false otherwise
-        let vertex_keep_table = {
-            let mut table = vec![false; vertices.len()];
-            for cell in cell_indices.iter().copied().map(|c_i| &cells[c_i]) {
-                for &vertex_index in cell.vertices() {
-                    table[vertex_index] = true;
-                }
+    /// Removes all cells from the mesh that are completely outside of the given AABB and clamps the remaining cells to the boundary
+    fn par_clamp_with_aabb(
+        &self,
+        aabb: &Aabb3d<R>,
+        clamp_vertices: bool,
+        keep_vertices: bool,
+    ) -> Self
+    where
+        Self::Cell: Sync,
+    {
+        // Find all triangles with at least one vertex inside of AABB
+        let vertices = self.vertices();
+        let cells_to_keep = self
+            .cells()
+            .par_iter()
+            .enumerate()
+            .filter(|(_, cell)| {
+                cell.vertices()
+                    .iter()
+                    .copied()
+                    .any(|v| aabb.contains_point(&vertices[v]))
+            })
+            .map(|(i, _)| i)
+            .collect::<Vec<_>>();
+        // Remove all other cells from mesh
+        let mut new_mesh = self.keep_cells(&cells_to_keep, keep_vertices);
+        // Clamp remaining vertices to AABB
+        if clamp_vertices {
+            new_mesh.vertices_mut().par_iter_mut().for_each(|v| {
+                let min = aabb.min();
+                let max = aabb.max();
+                v.x = v.x.clamp(min.x, max.x);
+                v.y = v.y.clamp(min.y, max.y);
+                v.z = v.z.clamp(min.z, max.z);
+            });
+        }
+
+        new_mesh
+    }
+}
+
+/// Returns the list of vertices that should remain in the given mesh after keeping only the given cells
+fn vertex_keep_table<R: Real, MeshT: Mesh3d<R>>(mesh: &MeshT, cell_indices: &[usize]) -> Vec<bool> {
+    let vertices = mesh.vertices();
+    let cells = mesh.cells();
+
+    // Each entry is true if this vertex should be kept, false otherwise
+    let vertex_keep_table = {
+        let mut table = vec![false; vertices.len()];
+        for cell in cell_indices.iter().copied().map(|c_i| &cells[c_i]) {
+            for &vertex_index in cell.vertices() {
+                table[vertex_index] = true;
             }
-            table
-        };
+        }
+        table
+    };
+
+    vertex_keep_table
+}
+
+/// Returns a new mesh keeping only the given cells and vertices in the mesh
+fn keep_cells_impl<R: Real, MeshT: Mesh3d<R>>(
+    mesh: &MeshT,
+    cell_indices: &[usize],
+    vertex_keep_table: &[bool],
+) -> MeshT {
+    let vertices = mesh.vertices();
+    let cells = mesh.cells();
+
+    if vertex_keep_table.is_empty() {
+        MeshT::from_vertices_and_connectivity(
+            mesh.vertices().to_vec(),
+            cell_indices.iter().map(|&i| &cells[i]).cloned().collect(),
+        )
+    } else {
+        assert_eq!(mesh.vertices().len(), vertex_keep_table.len());
 
         let old_to_new_label_map = {
             let mut label_map = MapType::default();
@@ -353,45 +424,13 @@ where
 
         let relabeled_vertices: Vec<_> = vertex_keep_table
             .iter()
+            .copied()
             .enumerate()
-            .filter_map(|(i, should_keep)| if *should_keep { Some(i) } else { None })
+            .filter_map(|(i, should_keep)| if should_keep { Some(i) } else { None })
             .map(|index| vertices[index].clone())
             .collect();
 
-        Self::from_vertices_and_connectivity(relabeled_vertices, relabeled_cells)
-    }
-
-    /// Removes all cells from the mesh that are completely outside of the given AABB and clamps the remaining cells to the boundary
-    fn par_clamp_with_aabb(&self, aabb: &Aabb3d<R>) -> Self
-    where
-        Self::Cell: Sync,
-    {
-        // Find all triangles with at least one vertex inside of AABB
-        let vertices = self.vertices();
-        let cells_to_keep = self
-            .cells()
-            .par_iter()
-            .enumerate()
-            .filter(|(_, cell)| {
-                cell.vertices()
-                    .iter()
-                    .copied()
-                    .any(|v| aabb.contains_point(&vertices[v]))
-            })
-            .map(|(i, _)| i)
-            .collect::<Vec<_>>();
-        // Remove all other cells from mesh
-        let mut new_mesh = self.keep_cells(&cells_to_keep);
-        // Clamp remaining vertices to AABB
-        new_mesh.vertices_mut().par_iter_mut().for_each(|v| {
-            let min = aabb.min();
-            let max = aabb.max();
-            v.x = v.x.clamp(min.x, max.x);
-            v.y = v.y.clamp(min.y, max.y);
-            v.z = v.z.clamp(min.z, max.z);
-        });
-
-        new_mesh
+        MeshT::from_vertices_and_connectivity(relabeled_vertices, relabeled_cells)
     }
 }
 
@@ -927,6 +966,45 @@ impl<R: Real, MeshT: Mesh3d<R>> Mesh3d<R> for MeshWithData<R, MeshT> {
             connectivity,
         ))
     }
+
+    /// Returns a new mesh containing only the specified cells and removes all unreferenced vertices and attributes
+    fn keep_cells(&self, cell_indices: &[usize], keep_all_vertices: bool) -> Self {
+        // Filter internal mesh
+        let mut new_mesh = if keep_all_vertices {
+            let mut new_mesh = keep_cells_impl(self, cell_indices, &[]);
+            new_mesh.point_attributes = self.point_attributes.clone();
+            new_mesh
+        } else {
+            let vertex_keep_table = vertex_keep_table(self, cell_indices);
+            let mut new_mesh = keep_cells_impl(self, cell_indices, &vertex_keep_table);
+
+            let vertex_indices = vertex_keep_table
+                .iter()
+                .copied()
+                .enumerate()
+                .filter_map(|(i, should_keep)| if should_keep { Some(i) } else { None })
+                .collect::<Vec<_>>();
+
+            // Filter the point attributes
+            new_mesh.point_attributes = self
+                .point_attributes
+                .iter()
+                .map(|attr| attr.keep_indices(&vertex_indices))
+                .collect();
+
+            new_mesh
+        };
+
+        // Filter the cell attributes
+        let cell_attributes = self
+            .cell_attributes
+            .iter()
+            .map(|attr| attr.keep_indices(&cell_indices))
+            .collect();
+        new_mesh.cell_attributes = cell_attributes;
+
+        new_mesh
+    }
 }
 
 /// Returns an mesh data wrapper with a default mesh and without attached attributes
@@ -1024,6 +1102,26 @@ impl<R: Real> MeshAttribute<R> {
             }
             AttributeData::Vector3Real(vec3r_vec) => Attribute::scalars(&self.name, 3)
                 .with_data(vec3r_vec.iter().flatten().copied().collect::<Vec<R>>()),
+        }
+    }
+
+    /// Returns a new attribute keeping only the entries with the given index
+    fn keep_indices(&self, indices: &[usize]) -> Self {
+        let data = match &self.data {
+            AttributeData::ScalarU64(d) => {
+                AttributeData::ScalarU64(indices.iter().copied().map(|i| d[i].clone()).collect())
+            }
+            AttributeData::ScalarReal(d) => {
+                AttributeData::ScalarReal(indices.iter().copied().map(|i| d[i].clone()).collect())
+            }
+            AttributeData::Vector3Real(d) => {
+                AttributeData::Vector3Real(indices.iter().copied().map(|i| d[i].clone()).collect())
+            }
+        };
+
+        Self {
+            name: self.name.clone(),
+            data,
         }
     }
 }
