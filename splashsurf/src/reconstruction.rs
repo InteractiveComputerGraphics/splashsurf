@@ -346,7 +346,7 @@ pub struct ReconstructSubcommandArgs {
     /// Optional filename for writing the octree used to partition the particles to disk
     #[arg(help_heading = ARGS_DEBUG, long, value_parser = value_parser!(PathBuf))]
     pub output_octree: Option<PathBuf>,
-    /// Enable checking the final mesh for topological problems such as holes (note that when stitching is disabled this will lead to a lot of reported problems)
+    /// Enable checking the final mesh for holes and non-manifold edges and vertices
     #[arg(
         help_heading = ARGS_DEBUG,
         long,
@@ -356,6 +356,36 @@ pub struct ReconstructSubcommandArgs {
         require_equals = true
     )]
     pub check_mesh: Switch,
+    /// Enable checking the final mesh for holes
+    #[arg(
+        help_heading = ARGS_DEBUG,
+        long,
+        default_value = "off",
+        value_name = "off|on",
+        ignore_case = true,
+        require_equals = true
+    )]
+    pub check_mesh_closed: Switch,
+    /// Enable checking the final mesh for non-manifold edges and vertices
+    #[arg(
+        help_heading = ARGS_DEBUG,
+        long,
+        default_value = "off",
+        value_name = "off|on",
+        ignore_case = true,
+        require_equals = true
+    )]
+    pub check_mesh_manifold: Switch,
+    /// Enable debug output for the check-mesh operations (has no effect if no other check-mesh option is enabled)
+    #[arg(
+        help_heading = ARGS_DEBUG,
+        long,
+        default_value = "off",
+        value_name = "off|on",
+        ignore_case = true,
+        require_equals = true
+    )]
+    pub check_mesh_debug: Switch,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, clap::ValueEnum)]
@@ -450,7 +480,9 @@ mod arguments {
     use walkdir::WalkDir;
 
     pub struct ReconstructionRunnerPostprocessingArgs {
-        pub check_mesh: bool,
+        pub check_mesh_closed: bool,
+        pub check_mesh_manifold: bool,
+        pub check_mesh_debug: bool,
         pub mesh_cleanup: bool,
         pub decimate_barnacles: bool,
         pub keep_vertices: bool,
@@ -601,7 +633,11 @@ mod arguments {
             }
 
             let postprocessing = ReconstructionRunnerPostprocessingArgs {
-                check_mesh: args.check_mesh.into_bool(),
+                check_mesh_closed: args.check_mesh.into_bool()
+                    || args.check_mesh_closed.into_bool(),
+                check_mesh_manifold: args.check_mesh.into_bool()
+                    || args.check_mesh_manifold.into_bool(),
+                check_mesh_debug: args.check_mesh_debug.into_bool(),
                 mesh_cleanup: args.mesh_cleanup.into_bool(),
                 decimate_barnacles: args.decimate_barnacles.into_bool(),
                 keep_vertices: args.keep_verts.into_bool(),
@@ -1455,11 +1491,18 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
         info!("Done.");
     }
 
-    if postprocessing.check_mesh {
+    if postprocessing.check_mesh_closed
+        || postprocessing.check_mesh_manifold
+        || postprocessing.check_mesh_debug
+    {
         if let Err(err) = match (&tri_mesh, &tri_quad_mesh) {
-            (Some(mesh), None) => {
-                splashsurf_lib::marching_cubes::check_mesh_consistency(grid, &mesh.mesh)
-            }
+            (Some(mesh), None) => splashsurf_lib::marching_cubes::check_mesh_consistency(
+                grid,
+                &mesh.mesh,
+                postprocessing.check_mesh_closed,
+                postprocessing.check_mesh_manifold,
+                postprocessing.check_mesh_debug,
+            ),
             (None, Some(_mesh)) => {
                 info!("Checking for mesh consistency not implemented for quad mesh at the moment.");
                 return Ok(());
@@ -1468,7 +1511,7 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
         } {
             return Err(anyhow!("{}", err));
         } else {
-            info!("Checked mesh for problems (holes, etc.), no problems were found.");
+            info!("Checked mesh for problems (holes: {}, non-manifold edges/vertices: {}), no problems were found.", postprocessing.check_mesh_closed, postprocessing.check_mesh_manifold);
         }
     }
 

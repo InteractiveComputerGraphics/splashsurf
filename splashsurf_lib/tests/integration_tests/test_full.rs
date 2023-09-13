@@ -133,10 +133,11 @@ macro_rules! generate_test {
             let reconstruction =
                 reconstruct_surface::<i64, _>(particle_positions.as_slice(), &parameters).unwrap();
 
-            write_vtk(reconstruction.mesh(), output_file, "mesh").unwrap();
+            write_vtk(reconstruction.mesh(), &output_file, "mesh").unwrap();
 
             println!(
-                "Reconstructed mesh from particle file '{}' with {} particles has {} triangles.",
+                "Reconstructed mesh '{}' from particle file '{}' with {} particles has {} triangles.",
+                output_file.display(),
                 $input_file,
                 particle_positions.len(),
                 reconstruction.mesh().triangles.len()
@@ -158,10 +159,10 @@ macro_rules! generate_test {
 
             if test_for_boundary(&parameters) {
                 // Ensure that the mesh does not have a boundary
-                if let Err(e) = check_mesh_consistency(reconstruction.grid(), reconstruction.mesh())
+                if let Err(e) = check_mesh_consistency(reconstruction.grid(), reconstruction.mesh(), true, true, true)
                 {
                     eprintln!("{}", e);
-                    panic!("Mesh contains boundary edges");
+                    panic!("Mesh contains topological/manifold errors");
                 }
             }
         }
