@@ -7,7 +7,7 @@ use rayon::prelude::*;
 use splashsurf_lib::mesh::{AttributeData, Mesh3d, MeshAttribute, MeshWithData, PointCloud3d};
 use splashsurf_lib::nalgebra::{Unit, Vector3};
 use splashsurf_lib::sph_interpolation::SphInterpolator;
-use splashsurf_lib::{density_map, profile, Index, Real};
+use splashsurf_lib::{density_map, profile, Aabb3d, Index, Real};
 use std::borrow::Cow;
 use std::convert::TryFrom;
 use std::path::PathBuf;
@@ -181,6 +181,26 @@ pub struct ReconstructSubcommandArgs {
     )]
     pub octree_sync_local_density: Switch,
 
+    /// Whether to enable decimation of some typical bad marching cubes triangle configurations (resulting in "barnacles" after Laplacian smoothing)
+    #[arg(
+        help_heading = ARGS_INTERP,
+        long,
+        default_value = "off",
+        value_name = "off|on",
+        ignore_case = true,
+        require_equals = true
+    )]
+    pub decimate_barnacles: Switch,
+    /// Whether to keep vertices without connectivity during decimation (faster and helps with debugging)
+    #[arg(
+        help_heading = ARGS_INTERP,
+        long,
+        default_value = "off",
+        value_name = "off|on",
+        ignore_case = true,
+        require_equals = true
+    )]
+    pub keep_vertices: Switch,
     /// Whether to compute surface normals at the mesh vertices and write them to the output file
     #[arg(
         help_heading = ARGS_INTERP,
@@ -201,9 +221,48 @@ pub struct ReconstructSubcommandArgs {
         require_equals = true
     )]
     pub sph_normals: Switch,
+    /// Number of smoothing iterations to run on the normal field if normal interpolation is enabled (disabled by default)
+    #[arg(help_heading = ARGS_INTERP, long)]
+    pub normals_smoothing_iters: Option<usize>,
+    /// Whether to write raw normals without smoothing to the output mesh if normal smoothing is enabled
+    #[arg(
+        help_heading = ARGS_INTERP,
+        long,
+        default_value = "off",
+        value_name = "off|on",
+        ignore_case = true,
+        require_equals = true
+    )]
+    pub output_raw_normals: Switch,
     /// List of point attribute field names from the input file that should be interpolated to the reconstructed surface. Currently this is only supported for VTK and VTU input files.
     #[arg(help_heading = ARGS_INTERP, long)]
     pub interpolate_attributes: Vec<String>,
+    /// Number of smoothing iterations to run on the reconstructed mesh
+    #[arg(help_heading = ARGS_INTERP, long)]
+    pub mesh_smoothing_iters: Option<usize>,
+    /// Whether to enable feature weights for mesh smoothing if mesh smoothing enabled. Preserves isolated particles even under strong smoothing.
+    #[arg(
+        help_heading = ARGS_INTERP,
+        long,
+        default_value = "off",
+        value_name = "off|on",
+        ignore_case = true,
+        require_equals = true
+    )]
+    pub mesh_smoothing_weights: Switch,
+    /// Normalization value from weighted number of neighbors to mesh smoothing weights
+    #[arg(help_heading = ARGS_INTERP, long, default_value = "13.0")]
+    pub mesh_smoothing_weights_normalization: f64,
+    /// Whether to write the smoothing weights to the output mesh file
+    #[arg(
+        help_heading = ARGS_INTERP,
+        long,
+        default_value = "off",
+        value_name = "off|on",
+        ignore_case = true,
+        require_equals = true
+    )]
+    pub output_smoothing_weights: Switch,
     /// Whether to write out the raw reconstructed mesh before applying any post-processing steps
     #[arg(
         help_heading = ARGS_INTERP,
@@ -369,13 +428,21 @@ mod arguments {
 
     pub struct ReconstructionRunnerPostprocessingArgs {
         pub check_mesh: bool,
+        pub decimate_barnacles: bool,
+        pub keep_vertices: bool,
         pub compute_normals: bool,
         pub sph_normals: bool,
+        pub normals_smoothing_iters: Option<usize>,
         pub interpolate_attributes: Vec<String>,
+        pub mesh_smoothing_iters: Option<usize>,
+        pub mesh_smoothing_weights: bool,
+        pub mesh_smoothing_weights_normalization: f64,
         pub generate_quads: bool,
         pub quad_max_edge_diag_ratio: f64,
         pub quad_max_normal_angle: f64,
         pub quad_max_interior_angle: f64,
+        pub output_mesh_smoothing_weights: bool,
+        pub output_raw_normals: bool,
         pub output_raw_mesh: bool,
         pub mesh_aabb: Option<Aabb3d<f64>>,
     }
@@ -509,13 +576,21 @@ mod arguments {
 
             let postprocessing = ReconstructionRunnerPostprocessingArgs {
                 check_mesh: args.check_mesh.into_bool(),
+                decimate_barnacles: args.decimate_barnacles.into_bool(),
+                keep_vertices: args.keep_vertices.into_bool(),
                 compute_normals: args.normals.into_bool(),
                 sph_normals: args.sph_normals.into_bool(),
+                normals_smoothing_iters: args.normals_smoothing_iters,
                 interpolate_attributes: args.interpolate_attributes.clone(),
+                mesh_smoothing_iters: args.mesh_smoothing_iters,
+                mesh_smoothing_weights: args.mesh_smoothing_weights.into_bool(),
+                mesh_smoothing_weights_normalization: args.mesh_smoothing_weights_normalization,
                 generate_quads: args.generate_quads.into_bool(),
                 quad_max_edge_diag_ratio: args.quad_max_edge_diag_ratio,
                 quad_max_normal_angle: args.quad_max_normal_angle,
                 quad_max_interior_angle: args.quad_max_interior_angle,
+                output_mesh_smoothing_weights: args.output_smoothing_weights.into_bool(),
+                output_raw_normals: args.output_raw_normals.into_bool(),
                 output_raw_mesh: args.output_raw_mesh.into_bool(),
                 mesh_aabb,
             };
@@ -937,8 +1012,21 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
     {
         profile!("postprocessing");
 
+        let mut vertex_connectivity = None;
+
+        // Decimate mesh if requested
+        if postprocessing.decimate_barnacles {
+            info!("Post-processing: Performing decimation");
+            vertex_connectivity = Some(splashsurf_lib::postprocessing::decimation(
+                mesh_with_data.mesh.to_mut(),
+                postprocessing.keep_vertices,
+            ));
+        }
+
         // Initialize SPH interpolator if required later
-        let interpolator_required = postprocessing.sph_normals || !attributes.is_empty();
+        let interpolator_required = postprocessing.mesh_smoothing_weights
+            || postprocessing.sph_normals
+            || !attributes.is_empty();
         let interpolator = if interpolator_required {
             profile!("initialize interpolator");
             info!("Post-processing: Initializing interpolator...");
@@ -973,6 +1061,131 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
             None
         };
 
+        // Compute mesh vertex-vertex connectivity map if required later
+        let vertex_connectivity_required = postprocessing.normals_smoothing_iters.is_some()
+            || postprocessing.mesh_smoothing_iters.is_some();
+        if vertex_connectivity.is_none() && vertex_connectivity_required {
+            vertex_connectivity = Some(mesh_with_data.mesh.vertex_vertex_connectivity());
+        }
+
+        // Compute smoothing weights if requested
+        let smoothing_weights = if postprocessing.mesh_smoothing_weights {
+            profile!("compute smoothing weights");
+            info!("Post-processing: Computing smoothing weights...");
+
+            // TODO: Switch between parallel/single threaded
+            // TODO: Re-use data from reconstruction?
+
+            // Global neighborhood search
+            let nl = {
+                let search_radius = params.compact_support_radius;
+
+                let mut domain = Aabb3d::from_points(particle_positions.as_slice());
+                domain.grow_uniformly(search_radius);
+
+                let mut nl = Vec::new();
+                splashsurf_lib::neighborhood_search::neighborhood_search_spatial_hashing_parallel::<
+                    I,
+                    R,
+                >(
+                    &domain,
+                    particle_positions.as_slice(),
+                    search_radius,
+                    &mut nl,
+                );
+                assert_eq!(nl.len(), particle_positions.len());
+                nl
+            };
+
+            // Compute weighted neighbor count
+            let squared_r = params.compact_support_radius * params.compact_support_radius;
+            let weighted_ncounts = nl
+                .par_iter()
+                .enumerate()
+                .map(|(i, nl)| {
+                    nl.iter()
+                        .copied()
+                        .map(|j| {
+                            let dist =
+                                (particle_positions[i] - particle_positions[j]).norm_squared();
+                            let weight = R::one() - (dist / squared_r).clamp(R::zero(), R::one());
+                            return weight;
+                        })
+                        .fold(R::zero(), R::add)
+                })
+                .collect::<Vec<_>>();
+
+            let vertex_weighted_num_neighbors = {
+                profile!("interpolate weighted neighbor counts");
+                interpolator
+                    .as_ref()
+                    .expect("interpolator is required")
+                    .interpolate_scalar_quantity(
+                        weighted_ncounts.as_slice(),
+                        &mesh_with_data.vertices(),
+                        true,
+                    )
+            };
+
+            let smoothing_weights = {
+                let offset = R::zero();
+                let normalization =
+                    R::from_f64(postprocessing.mesh_smoothing_weights_normalization).expect(
+                        "smoothing weight normalization value cannot be represented as Real type",
+                    ) - offset;
+
+                // Normalize number of neighbors
+                let smoothing_weights = vertex_weighted_num_neighbors
+                    .par_iter()
+                    .copied()
+                    .map(|n| (n - offset).max(R::zero()))
+                    .map(|n| (n / normalization).min(R::one()))
+                    // Smooth-Step function
+                    .map(|x| x.powi(5).times(6) - x.powi(4).times(15) + x.powi(3).times(10))
+                    .collect::<Vec<_>>();
+
+                if postprocessing.output_mesh_smoothing_weights {
+                    // Raw distance-weighted number of neighbors value per vertex (can be used to determine normalization value)
+                    mesh_with_data.point_attributes.push(MeshAttribute::new(
+                        "wnn".to_string(),
+                        AttributeData::ScalarReal(vertex_weighted_num_neighbors),
+                    ));
+                    // Final smoothing weights per vertex
+                    mesh_with_data.point_attributes.push(MeshAttribute::new(
+                        "sw".to_string(),
+                        AttributeData::ScalarReal(smoothing_weights.clone()),
+                    ));
+                }
+
+                smoothing_weights
+            };
+
+            Some(smoothing_weights)
+        } else {
+            None
+        };
+
+        // Perform smoothing if requested
+        if let Some(mesh_smoothing_iters) = postprocessing.mesh_smoothing_iters {
+            profile!("mesh smoothing");
+            info!("Post-processing: Smoothing mesh...");
+
+            // TODO: Switch between parallel/single threaded
+
+            let smoothing_weights = smoothing_weights
+                .unwrap_or_else(|| vec![R::one(); mesh_with_data.vertices().len()]);
+
+            splashsurf_lib::postprocessing::par_laplacian_smoothing_inplace(
+                mesh_with_data.mesh.to_mut(),
+                vertex_connectivity
+                    .as_ref()
+                    .expect("vertex connectivity is required"),
+                mesh_smoothing_iters,
+                R::one(),
+                &smoothing_weights,
+            );
+        }
+
         // Add normals to mesh if requested
         if postprocessing.compute_normals {
             profile!("compute normals");
@@ -996,10 +1209,35 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
                 bytemuck::allocation::cast_vec::<Unit<Vector3<R>>, Vector3<R>>(tri_normals)
             };
 
-            mesh_with_data.point_attributes.push(MeshAttribute::new(
-                "normals".to_string(),
-                AttributeData::Vector3Real(normals),
-            ));
+            // Smooth normals
+            if let Some(smoothing_iters) = postprocessing.normals_smoothing_iters {
+                info!("Post-processing: Smoothing normals...");
+
+                let mut smoothed_normals = normals.clone();
+                splashsurf_lib::postprocessing::par_laplacian_smoothing_normals_inplace(
+                    &mut smoothed_normals,
+                    vertex_connectivity
+                        .as_ref()
+                        .expect("vertex connectivity is required"),
+                    smoothing_iters,
+                );
+
+                mesh_with_data.point_attributes.push(MeshAttribute::new(
+                    "normals".to_string(),
+                    AttributeData::Vector3Real(smoothed_normals),
+                ));
+                if postprocessing.output_raw_normals {
+                    mesh_with_data.point_attributes.push(MeshAttribute::new(
+                        "raw_normals".to_string(),
+                        AttributeData::Vector3Real(normals),
+                    ));
+                }
+            } else {
+                mesh_with_data.point_attributes.push(MeshAttribute::new(
+                    "normals".to_string(),
+                    AttributeData::Vector3Real(normals),
+                ));
+            }
         }
 
         // Interpolate attributes if requested
