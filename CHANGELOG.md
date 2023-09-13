@@ -2,9 +2,18 @@
 
 The following changes are present in the `main` branch of the repository and are not yet part of a release:
 
- - CLI: Make new spatial decomposition available in CLI with `--subdomain-grid=on`
  - Lib: Implement new spatial decomposition based on a regular grid of subdomains, subdomains are dense marching cubes grids
- - Lib: Support for reading and writing PLY meshes
+ - CLI: Make new spatial decomposition available in CLI with `--subdomain-grid=on`
+ - Lib: Implement weighted Laplacian smoothing to remove bumps from surfaces according to paper "Weighted Laplacian Smoothing for Surface Reconstruction of Particle-based Fluids" (Löschner, Böttcher, Jeske, Bender 2023)
+ - CLI: Add arguments to enable and control weighted Laplacian smoothing `--mesh-smoothing-iters=...`, `--mesh-smoothing-weights=on` etc.
+ - Lib: Implement `marching_cubes_cleanup` function: a marching cubes "mesh cleanup" decimation inspired by "Mesh Displacement: An Improved Contouring Method for Trivariate Data" (Moore, Warren 1991)
+ - CLI: Add argument to enable mesh cleanup: `--mesh-cleanup=on`
+ - Lib: Add functions to `TriMesh3d` to find non-manifold edges and vertices
+ - CLI: Add arguments to check if output meshes are manifold (no non-manifold edges and vertices): `--mesh-check-manifold=on`, `--mesh-check-closed=on`
+ - Lib: Support for mixed triangle and quad meshes
+ - Lib: Implement `convert_tris_to_quads` function: greedily merge triangles to quads if they fulfill certain criteria (maximum angle in quad, "squareness" of the quad, angle between triangle normals)
+ - CLI: Add arguments to enable and control triangle to quad conversion with `--generate-quads=on` etc.
+ - Lib: Support for reading and writing PLY meshes (`MixedTriQuadMesh3d`)
  - CLI: Support for filtering input particles using an AABB with `--particle-aabb-min`/`--particle-aabb-max`
  - CLI: Support for clamping the triangle mesh using an AABB with `--mesh-aabb-min`/`--mesh-aabb-max`
 
@@ -69,9 +78,9 @@ The following changes are present in the `main` branch of the repository and are
 
 This release fixes a couple of bugs that may lead to inconsistent surface reconstructions when using domain decomposition (i.e. reconstructions with artificial bumps exactly at the subdomain boundaries, especially on flat surfaces). Currently there are no other known bugs and the domain decomposed approach appears to be really fast and robust.
 
-In addition the CLI now reports more detailed timing statistics for multi-threaded reconstructions.
+In addition, the CLI now reports more detailed timing statistics for multi-threaded reconstructions.
 
-Otherwise this release contains just some small changes to command line parameters.
+Otherwise, this release contains just some small changes to command line parameters.
 
  - Lib: Add a `ParticleDensityComputationStrategy` enum to the `SpatialDecompositionParameters` struct. In order for domain decomposition to work consistently, the per particle densities have to be evaluated to a consistent value between domains. This is especially important for the ghost particles. Previously, this resulted inconsistent density values on boundaries if the ghost particle margin was not at least 2x the compact support radius (as this ensures that the inner ghost particles actually have the correct density). This option is now still available as the `IndependentSubdomains` strategy. The preferred way, that avoids the 2x ghost particle margin is the `SynchronizeSubdomains` where the density values of the particles in the subdomains are first collected into a global storage. This can be faster as the previous method as this avoids having to collect a double-width ghost particle layer. In addition there is the "playing it safe" option, the `Global` strategy, where the particle densities are computed in a completely global step before any domain decomposition. This approach however is *really* slow for large quantities of particles. For more information, read the documentation on the `ParticleDensityComputationStrategy` enum.
  - Lib: Fix bug where the workspace storage was not cleared correctly leading to inconsistent results depending on the sequence of processed subdomains
@@ -91,7 +100,7 @@ Otherwise this release contains just some small changes to command line paramete
 
 The biggest new feature is a domain decomposed approach for the surface reconstruction by performing a spatial decomposition of the particle set with an octree.
 The resulting local patches can then be processed in parallel (leaving a single layer of boundary cells per patch untriangulated to avoid incompatible boundaries).
-Afterwards, a stitching procedure walks the octree back upwards and merges the octree leaves by averaging density values on the boundaries. 
+Afterward, a stitching procedure walks the octree back upwards and merges the octree leaves by averaging density values on the boundaries. 
 As the library uses task based parallelism, a task for stitching can be enqueued as soon as all children of an octree node are processed.
 Depending on the number of available threads and the particle data, this approach results in a speedup of 4-10x in comparison to the global parallel approach in selected benchmarks.
 At the moment, this domain decomposition approach is only available when allowing to parallelize over particles using the `--mt-particles` flag.
