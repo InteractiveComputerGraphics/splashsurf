@@ -2,7 +2,11 @@
 
 The following changes are present in the `main` branch of the repository and are not yet part of a release:
 
- - No major changes since last release
+ - CLI: Make new spatial decomposition available in CLI with `--subdomain-grid=on`
+ - Lib: Implement new spatial decomposition based on a regular grid of subdomains, subdomains are dense marching cubes grids
+ - Lib: Support for reading and writing PLY meshes
+ - CLI: Support for filtering input particles using an AABB with `--particle-aabb-min`/`--particle-aabb-max`
+ - CLI: Support for clamping the triangle mesh using an AABB with `--mesh-aabb-min`/`--mesh-aabb-max`
 
 ## Version 0.9.3
 
