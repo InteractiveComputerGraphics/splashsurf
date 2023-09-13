@@ -20,6 +20,7 @@ use bytemuck_derive::{Pod, Zeroable};
 use nalgebra::{Unit, Vector3};
 use rayon::prelude::*;
 use std::cell::RefCell;
+use std::collections::BTreeSet;
 use std::fmt::Debug;
 use thread_local::ThreadLocal;
 #[cfg(feature = "vtk_extras")]
@@ -643,6 +644,95 @@ impl TriangleCell {
     }
 }
 
+pub struct MeshEdgeInformation {
+    /// Map from sorted edge to `(edge_idx, edge_count)`
+    edge_counts: MapType<[usize; 2], (usize, usize)>,
+    /// For each edge_idx: (edge, face_idx, local_edge_idx)
+    edge_info: Vec<([usize; 2], usize, usize)>,
+}
+
+pub struct EdgeInformation {
+    /// The vertices of the edge
+    pub edge: [usize; 2],
+    /// The vertices of the edge in ascending order
+    pub edge_sorted: [usize; 2],
+    /// Total number of incident faces to the edge
+    pub incident_faces: usize,
+    /// One representative face that contains the edge with the given index
+    pub face: usize,
+    /// Local index of this edge in the representative face
+    pub local_edge_index: usize,
+}
+
+impl MeshEdgeInformation {
+    /// Iterator over all edge information stored in this struct
+    pub fn iter<'a>(&'a self) -> impl Iterator<Item = EdgeInformation> + 'a {
+        self.edge_counts.iter().map(|(e, (edge_idx, count))| {
+            let info = &self.edge_info[*edge_idx];
+            EdgeInformation {
+                edge: info.0,
+                edge_sorted: *e,
+                incident_faces: *count,
+                face: info.1,
+                local_edge_index: info.2,
+            }
+        })
+    }
+
+    /// Returns the number of boundary edges (i.e. edges with 1 incident face)
+    pub fn count_boundary_edges(&self) -> usize {
+        self.edge_counts
+            .values()
+            .filter(|(_, count)| *count == 1)
+            .count()
+    }
+
+    /// Returns the number of non-manifold edges (i.e. edges with more than 2 incident face)
+    pub fn count_non_manifold_edges(&self) -> usize {
+        self.edge_counts
+            .values()
+            .filter(|(_, count)| *count > 2)
+            .count()
+    }
+
+    /// Iterator over all boundary edges
+    pub fn boundary_edges<'a>(&'a self) -> impl Iterator<Item = [usize; 2]> + 'a {
+        self.edge_counts
+            .values()
+            .filter(|(_, count)| *count == 1)
+            .map(move |(edge_idx, _)| self.edge_info[*edge_idx].0)
+    }
+
+    /// Iterator over all non-manifold edges
+    pub fn non_manifold_edges<'a>(&'a self) -> impl Iterator<Item = [usize; 2]> + 'a {
+        self.edge_counts
+            .values()
+            .filter(|(_, count)| *count > 2)
+            .map(move |(edge_idx, _)| self.edge_info[*edge_idx].0)
+    }
+}
+
+pub struct MeshManifoldInformation {
+    /// List of all edges with only one incident face
+    pub boundary_edges: Vec<[usize; 2]>,
+    /// List of all non-manifold edges (edges with more than two incident faces)
+    pub non_manifold_edges: Vec<[usize; 2]>,
+    /// List of all non-manifold vertices (vertices with more than one fan of faces)
+    pub non_manifold_vertices: Vec<usize>,
+}
+
+impl MeshManifoldInformation {
+    /// Returns whether the associated mesh is closed (has no boundary edges)
+    pub fn is_closed(&self) -> bool {
+        self.boundary_edges.is_empty()
+    }
+
+    /// Returns whether the associated mesh is a 2-manifold (no non-manifold edges and no non-manifold vertices)
+    pub fn is_manifold(&self) -> bool {
+        self.non_manifold_edges.is_empty() && self.non_manifold_vertices.is_empty()
+    }
+}
+
 impl<R: Real> TriMesh3d<R> {
     /// Returns a slice of all triangles of the mesh as `TriangleCell`s
     pub fn triangle_cells(&self) -> &[TriangleCell] {
@@ -852,13 +942,8 @@ impl<R: Real> TriMesh3d<R> {
         normals
     }
 
-    /// Returns all boundary edges of the mesh
-    ///
-    /// Returns edges which are only connected to exactly one triangle, along with the connected triangle
-    /// index and the local index of the edge within that triangle.
-    ///
-    /// Note that the output order is not necessarily deterministic due to the internal use of hashmaps.
-    pub fn find_boundary_edges(&self) -> Vec<([usize; 2], usize, usize)> {
+    /// Computes a helper struct with information about all edges in the mesh (i.e. number of incident triangles etc.)
+    pub fn compute_edge_information(&self) -> MeshEdgeInformation {
         let mut sorted_edges = Vec::new();
         let mut edge_info = Vec::new();
 
@@ -896,6 +981,24 @@ impl<R: Real> TriMesh3d<R> {
                 .or_insert((edge_idx, 1));
         }
 
+        MeshEdgeInformation {
+            edge_counts,
+            edge_info,
+        }
+    }
+
+    /// Returns all boundary edges of the mesh
+    ///
+    /// Returns edges which are only connected to exactly one triangle, along with the connected triangle
+    /// index and the local index of the edge within that triangle.
+    ///
+    /// Note that the output order is not necessarily deterministic due to the internal use of hashmaps.
+    pub fn find_boundary_edges(&self) -> Vec<([usize; 2], usize, usize)> {
+        let MeshEdgeInformation {
+            edge_counts,
+            edge_info,
+        } = self.compute_edge_information();
+
         // Take only the faces which have a count of 1, which correspond to boundary faces
         edge_counts
             .into_iter()
@@ -904,31 +1007,248 @@ impl<R: Real> TriMesh3d<R> {
             .map(move |(edge_idx, _)| edge_info[edge_idx].clone())
             .collect()
     }
+
+    /// Returns all non-manifold vertices of this mesh
+    ///
+    /// A non-manifold vertex is generated by pinching two surface sheets together at that vertex
+    /// such that the vertex is incident to more than one fan of triangles.
+    ///
+    /// Note: This function assumes that all edges in the mesh are manifold edges! If there are non-
+    ///  manifold edges, it is possible to connect two triangle fans using a third fan which is not
+    ///  detected by this function.
+    pub fn find_non_manifold_vertices(&self) -> Vec<usize> {
+        let mut non_manifold_verts = Vec::new();
+        let mut tri_fan = Vec::new();
+
+        let sort_edge = |edge: (usize, usize)| -> (usize, usize) {
+            if edge.0 > edge.1 {
+                (edge.1, edge.0)
+            } else {
+                edge
+            }
+        };
+
+        let is_fan_triangle =
+            |vert: usize, next_tri: &TriangleCell, current_fan: &[TriangleCell]| -> bool {
+                let mut is_fan_tri = false;
+
+                // Check each edge of the tri against all triangles in the fan
+                'edge_loop: for edge in next_tri.edges().map(sort_edge) {
+                    // Only edges connected to the current vertex are relevant
+                    if edge.0 == vert || edge.1 == vert {
+                        // Check against all triangles of the current fan
+                        for fan_tri in current_fan {
+                            for fan_edge in fan_tri.edges().map(sort_edge) {
+                                if edge == fan_edge {
+                                    // Triangle is part of the current fan
+                                    is_fan_tri = true;
+                                    break 'edge_loop;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                is_fan_tri
+            };
+
+        let tris = self.triangle_cells();
+        let vert_face_connectivity = self.vertex_cell_connectivity();
+        for vert in 0..self.vertices.len() {
+            let mut remaining_faces = vert_face_connectivity[vert]
+                .iter()
+                .cloned()
+                .collect::<BTreeSet<_>>();
+
+            if remaining_faces.len() > 1 {
+                // Pick an arbitrary first face of the fan
+                tri_fan.push(tris[remaining_faces.pop_first().unwrap()]);
+                // Try to match all other faces
+                while !remaining_faces.is_empty() {
+                    let mut found_next = None;
+
+                    // Check all remaining faces against the current fan
+                    for &next_candidate in &remaining_faces {
+                        if is_fan_triangle(vert, &tris[next_candidate], &tri_fan) {
+                            found_next = Some(next_candidate);
+                            break;
+                        }
+                    }
+
+                    if let Some(next) = found_next {
+                        // New fan triangle found
+                        tri_fan.push(tris[next]);
+                        remaining_faces.remove(&next);
+                    } else {
+                        // None of the remaining faces are part of the fan
+                        break;
+                    }
+                }
+
+                if !remaining_faces.is_empty() {
+                    // At least one triangle is not part of the current fan
+                    //  -> Non-manifold vertex was found
+                    non_manifold_verts.push(vert);
+                }
+
+                tri_fan.clear();
+            }
+        }
+
+        non_manifold_verts
+    }
+
+    /// Returns a struct with lists of all boundary edges, non-manifold edges and non-manifold vertices
+    ///
+    /// Note that the output order is not necessarily deterministic due to the internal use of hashmaps.
+    pub fn compute_manifold_information(&self) -> MeshManifoldInformation {
+        let edges = self.compute_edge_information();
+        let boundary_edges = edges.boundary_edges().collect();
+        let non_manifold_edges = edges.non_manifold_edges().collect();
+
+        let non_manifold_vertices = self.find_non_manifold_vertices();
+
+        MeshManifoldInformation {
+            boundary_edges,
+            non_manifold_edges,
+            non_manifold_vertices,
+        }
+    }
 }
 
-#[test]
-fn test_find_boundary() {
-    // TODO: Needs a test with a real mesh
-    let mesh = TriMesh3d::<f64> {
-        vertices: vec![
-            Vector3::new_random(),
-            Vector3::new_random(),
-            Vector3::new_random(),
-        ],
-        triangles: vec![[0, 1, 2]],
-    };
+#[cfg(test)]
+mod tri_mesh_tests {
+    use super::*;
 
-    let mut boundary = mesh.find_boundary_edges();
-    boundary.sort_unstable();
+    fn mesh_one_tri() -> TriMesh3d<f64> {
+        TriMesh3d::<f64> {
+            vertices: vec![
+                Vector3::new_random(),
+                Vector3::new_random(),
+                Vector3::new_random(),
+            ],
+            triangles: vec![[0, 1, 2]],
+        }
+    }
 
-    assert_eq!(
-        boundary,
-        vec![
-            ([0usize, 1usize], 0, 0),
-            ([1usize, 2usize], 0, 1),
-            ([2usize, 0usize], 0, 2),
-        ]
-    );
+    fn mesh_non_manifold_edge() -> TriMesh3d<f64> {
+        TriMesh3d::<f64> {
+            vertices: vec![
+                Vector3::new(0.0, 0.0, 0.0),
+                Vector3::new(1.0, 0.0, 0.0),
+                Vector3::new(0.0, 1.0, 0.0),
+                Vector3::new(1.0, 1.0, 0.0),
+                Vector3::new(0.0, 0.0, 1.0),
+            ],
+            triangles: vec![[0, 1, 2], [1, 3, 2], [1, 2, 4]],
+        }
+    }
+
+    fn mesh_non_manifold_edge_double() -> TriMesh3d<f64> {
+        TriMesh3d::<f64> {
+            vertices: vec![
+                Vector3::new(0.0, 0.0, 0.0),
+                Vector3::new(1.0, 0.0, 0.0),
+                Vector3::new(0.0, 1.0, 0.0),
+                Vector3::new(1.0, 1.0, 0.0),
+                Vector3::new(0.0, 0.0, 1.0),
+            ],
+            triangles: vec![[0, 1, 2], [1, 3, 2], [1, 2, 4], [4, 2, 1]],
+        }
+    }
+
+    fn mesh_non_manifold_vertex() -> TriMesh3d<f64> {
+        TriMesh3d::<f64> {
+            vertices: vec![
+                Vector3::new(1.0, 0.0, 0.0),
+                Vector3::new(0.0, 1.0, 0.0),
+                Vector3::new(1.0, 1.0, 0.0),
+                Vector3::new(2.0, 1.0, 1.0),
+                Vector3::new(1.0, 2.0, 1.0),
+            ],
+            triangles: vec![[0, 2, 1], [2, 3, 4]],
+        }
+    }
+
+    #[test]
+    fn test_tri_mesh_find_boundary() {
+        let mesh = mesh_one_tri();
+
+        let mut boundary = mesh.find_boundary_edges();
+        boundary.sort_unstable();
+
+        assert_eq!(
+            boundary,
+            vec![
+                ([0usize, 1usize], 0, 0),
+                ([1usize, 2usize], 0, 1),
+                ([2usize, 0usize], 0, 2),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_tri_mesh_edge_info() {
+        let mesh = mesh_non_manifold_edge();
+        let edges = mesh.compute_edge_information();
+
+        for ei in edges.iter() {
+            if ei.edge_sorted == [1, 2] {
+                assert_eq!(ei.incident_faces, 3);
+            } else {
+                assert_eq!(ei.incident_faces, 1);
+            }
+        }
+
+        assert_eq!(edges.count_boundary_edges(), 6);
+        assert_eq!(edges.count_non_manifold_edges(), 1);
+    }
+
+    #[test]
+    fn test_tri_mesh_non_manifold_vertex_info() {
+        let mesh = mesh_non_manifold_vertex();
+        let non_manifold_vertes = mesh.find_non_manifold_vertices();
+        assert_eq!(non_manifold_vertes, [2]);
+    }
+
+    #[test]
+    fn test_tri_mesh_manifold_info() {
+        {
+            let mesh = mesh_one_tri();
+            let info = mesh.compute_manifold_information();
+            assert!(!info.is_closed());
+            assert!(info.is_manifold());
+            assert_eq!(info.non_manifold_edges.len(), 0);
+            assert_eq!(info.non_manifold_vertices.len(), 0);
+        }
+
+        {
+            let mesh = mesh_non_manifold_edge();
+            let info = mesh.compute_manifold_information();
+            assert!(!info.is_closed());
+            assert!(!info.is_manifold());
+            assert_eq!(info.non_manifold_edges.len(), 1);
+            assert_eq!(info.non_manifold_vertices.len(), 0);
+        }
+
+        {
+            let mesh = mesh_non_manifold_edge_double();
+            let info = mesh.compute_manifold_information();
+            assert!(!info.is_closed());
+            assert!(!info.is_manifold());
+            assert_eq!(info.non_manifold_edges.len(), 1);
+            assert_eq!(info.non_manifold_vertices.len(), 0);
+        }
+
+        {
+            let mesh = mesh_non_manifold_vertex();
+            let info = mesh.compute_manifold_information();
+            assert!(!info.is_closed());
+            assert!(!info.is_manifold());
+            assert_eq!(info.non_manifold_edges.len(), 0);
+            assert_eq!(info.non_manifold_vertices.len(), 1);
+        }
+    }
 }
 
 /// Wrapper type for meshes with attached point or cell data
