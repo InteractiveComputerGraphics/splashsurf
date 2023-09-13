@@ -1355,7 +1355,7 @@ impl<R: Real> MeshAttribute<R> {
         }
     }
 
-    /// Creates a new named mesh attribute with scalar values implementing the [`Real`](crate::Real) trait
+    /// Creates a new named mesh attribute with scalar values implementing the [`Real`] trait
     pub fn new_real_scalar<S: Into<String>>(name: S, data: impl Into<Vec<R>>) -> Self {
         Self {
             name: name.into(),
@@ -1363,7 +1363,7 @@ impl<R: Real> MeshAttribute<R> {
         }
     }
 
-    /// Creates a new named mesh attribute with scalar values implementing the [`Real`](crate::Real) trait
+    /// Creates a new named mesh attribute with scalar values implementing the [`Real`] trait
     pub fn new_real_vector3<S: Into<String>>(name: S, data: impl Into<Vec<Vector3<R>>>) -> Self {
         Self {
             name: name.into(),

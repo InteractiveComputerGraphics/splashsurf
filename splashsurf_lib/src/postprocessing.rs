@@ -82,7 +82,8 @@ pub fn par_laplacian_smoothing_normals_inplace<R: Real>(
 
 /// Mesh simplification designed for marching cubes surfaces meshes inspired by the "Compact Contouring"/"Mesh displacement" approach by Doug Moore and Joe Warren
 ///
-/// See ["Mesh Displacement: An Improved Contouring Method for Trivariate Data"](https://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.49.5214&rep=rep1&type=pdf).
+/// See Moore and Warren: ["Mesh Displacement: An Improved Contouring Method for Trivariate Data"](https://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.49.5214&rep=rep1&type=pdf) (1991)
+/// or Moore and Warren: "Compact Isocontours from Sampled Data" in "Graphics Gems III" (1992).
 pub fn marching_cubes_cleanup<I: Index, R: Real>(
     mesh: &mut TriMesh3d<R>,
     grid: &UniformCartesianCubeGrid3d<I, R>,

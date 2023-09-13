@@ -1,4 +1,4 @@
-//! Triangulation of [`DensityMap`](crate::density_map::DensityMap)s using marching cubes
+//! Triangulation of [`DensityMap`]s using marching cubes
 
 use crate::marching_cubes::narrow_band_extraction::{
     construct_mc_input, construct_mc_input_with_stitching_data,

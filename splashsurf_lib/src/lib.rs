@@ -9,7 +9,7 @@
 //! The following features are all non-default features to reduce the amount of additional dependencies.
 //!
 //! - **`vtk_extras`**: Enables helper functions and trait implementations to export meshes using [`vtkio`](https://github.com/elrnv/vtkio).
-//!  In particular it adds `From` impls for the [mesh](crate::mesh) types used by this crate to convert them to
+//!  In particular it adds `From` impls for the [mesh] types used by this crate to convert them to
 //!  [`vtkio::model::UnstructuredGridPiece`](https://docs.rs/vtkio/0.6.*/vtkio/model/struct.UnstructuredGridPiece.html) and [`vtkio::model::DataSet`](https://docs.rs/vtkio/0.6.*/vtkio/model/enum.DataSet.html)
 //!  types. If the feature is enabled, The crate exposes its `vtkio` dependency as `splashsurflib::vtkio`.
 //! - **`io`**: Enables the [`io`] module, containing functions to load and store particle and mesh files

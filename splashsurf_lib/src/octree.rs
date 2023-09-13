@@ -397,7 +397,7 @@ impl<I: Index, R: Real> OctreeNode<I, R> {
         &self.aabb
     }
 
-    /// Constructs a [`UniformGrid`](crate::UniformGrid) that represents the domain of this octree node
+    /// Constructs a [`UniformGrid`] that represents the domain of this octree node
     pub fn grid(
         &self,
         min: &Vector3<R>,
