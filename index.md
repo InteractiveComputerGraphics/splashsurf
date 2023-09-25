@@ -5,6 +5,20 @@
 [![Dependency status](https://deps.rs/repo/github/InteractiveComputerGraphics/splashsurf/status.svg)](https://deps.rs/repo/github/InteractiveComputerGraphics/splashsurf)
 [![Build and test GitHub Actions workflow](https://github.com/InteractiveComputerGraphics/splashsurf/workflows/Build%20and%20test/badge.svg)](https://github.com/InteractiveComputerGraphics/splashsurf/actions/workflows/build.yml)
 
+---
+**NEW**: The project now implements the paper ["Weighted Laplacian Smoothing for Surface Reconstruction of Particle-based Fluids" (Löschner, Böttcher, Jeske, Bender; 2023)](https://animation.rwth-aachen.de/publication/0583/). 
+It proposes a fast smoothing approach to avoid the typical bumpiness of the surfaces reconstructed from SPH simulations while preventing loss of volume for splashes and droplets that occurs with simple, non-speaclized smoothing methods.
+The images below show a rendering of a typical surface reconstruction (on the right) with visible bumps due to the SPH particles compared to the same surface reconstruction with weighted smoothing applied (on the left):
+
+<p align="center">
+<img src="assets/example_unsmoothed.jpg" alt="Image of the original surface reconstruction without smoothing (bumpy & rough)" width="48%"> <img src="assets/example_smoothed.jpg" alt="Image of the surface reconstruction with weighted smoothing applied (nice & smooth)" width="48%">
+</p>
+
+You can see this rendering in motion in [this video](https://youtu.be/2bYvaUXlBQs). For more details see the [paper](https://animation.rwth-aachen.de/publication/0583/) and the [readme](https://github.com/InteractiveComputerGraphics/splashsurf) in the repository.
+
+---
+
+
 This project consists of the following crates:
  - `splashsurf`: Binary crate with a CLI (command line interface) to quickly run surface reconstructions of SPH particle data files from the terminal
  - `splashsurf_lib`: Library that implements the reconstruction pipeline used by the CLI. Allows to integrate the reconstruction procedure directly into other Rust applications. Furthermore, it resembles a framework providing access to individual building blocks to create your own surface reconstruction pipeline.
