@@ -1,6 +1,6 @@
 //! SPH kernel function implementations
 
-use crate::Real;
+use crate::{Real, RealConvert};
 use nalgebra::Vector3;
 use numeric_literals::replace_float_literals;
 

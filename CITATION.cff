@@ -2,7 +2,7 @@
 # Visit https://bit.ly/cffinit to generate yours today!
 
 cff-version: 1.2.0
-title: splashsurf
+title: '"splashsurf" Surface Reconstruction Software'
 message: >-
   If you use this software in your work, please consider
   citing it using these metadata.
@@ -12,10 +12,10 @@ authors:
     given-names: Fabian
     affiliation: RWTH Aachen University
     orcid: 'https://orcid.org/0000-0001-6818-2953'
-url: 'https://www.floeschner.de/splashsurf'
+url: 'https://splashsurf.physics-simulation.org'
 abstract: >-
   Splashsurf is a surface reconstruction tool and framework
   for reconstructing surfaces from particle data.
 license: MIT
-version: 0.9.1
-date-released: '2023-04-19'
+version: 0.10.0
+date-released: '2023-09-25'

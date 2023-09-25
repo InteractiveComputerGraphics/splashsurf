@@ -4,6 +4,15 @@ use log::info;
 use rayon::prelude::*;
 use std::cell::UnsafeCell;
 
+/// "Convert" an empty vector to preserve allocated memory if size and alignment matches
+/// See https://users.rust-lang.org/t/pattern-how-to-reuse-a-vec-str-across-loop-iterations/61657/5
+/// See https://github.com/rust-lang/rfcs/pull/2802
+#[allow(unused)]
+pub(crate) fn recycle<A, B>(mut v: Vec<A>) -> Vec<B> {
+    v.clear();
+    v.into_iter().map(|_| unreachable!()).collect()
+}
+
 /// Macro version of Option::map that allows using e.g. using the ?-operator in the map expression
 ///
 /// For example:

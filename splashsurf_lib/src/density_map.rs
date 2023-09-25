@@ -13,7 +13,7 @@
 //! "flat point indices". These are computed from the background grid point coordinates `(i,j,k)`
 //! analogous to multidimensional array index flattening. That means for a grid with dimensions
 //! `[n_x, n_y, n_z]`, the flat point index is given by the expression `i*n_x + j*n_y + k*n_z`.
-//! For these point index operations, the [`UniformGrid`](crate::UniformGrid) is used.
+//! For these point index operations, the [`UniformGrid`] is used.
 //!
 //! Note that all density mapping functions always use the global background grid for flat point
 //! indices, even if the density map is only generated for a smaller subdomain.

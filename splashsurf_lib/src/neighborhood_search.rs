@@ -252,6 +252,12 @@ impl FlatNeighborhoodList {
         self.neighbor_ptr.len() - 1
     }
 
+    pub fn iter<'a>(&'a self) -> impl Iterator<Item = &'a [usize]> + 'a {
+        (0..self.neighbor_ptr.len())
+            .into_iter()
+            .flat_map(|i| self.get_neighbors(i))
+    }
+
     /// Returns a slice containing the neighborhood list of the given particle
     pub fn get_neighbors(&self, particle_i: usize) -> Option<&[usize]> {
         let range = self

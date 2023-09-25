@@ -1,9 +1,10 @@
+use anyhow::Context;
 use log::info;
 use nalgebra::Vector3;
 
 use crate::dense_subdomains::{
-    compute_global_density_vector, decomposition, initialize_parameters, reconstruction, stitching,
-    subdomain_classification::GhostMarginClassifier,
+    compute_global_densities_and_neighbors, decomposition, initialize_parameters, reconstruction,
+    stitching, subdomain_classification::GhostMarginClassifier,
 };
 use crate::{profile, Index, Parameters, Real, SurfaceReconstruction};
 
@@ -13,51 +14,58 @@ pub(crate) fn reconstruct_surface_subdomain_grid<'a, I: Index, R: Real>(
     parameters: &Parameters<R>,
     output_surface: &'a mut SurfaceReconstruction<I, R>,
 ) -> Result<(), anyhow::Error> {
-    let mesh = {
-        profile!("surface reconstruction subdomain-grid");
+    profile!("surface reconstruction subdomain-grid");
 
-        let parameters = initialize_parameters(parameters, &particle_positions, output_surface)?;
+    let internal_parameters =
+        initialize_parameters(parameters, &particle_positions, output_surface)?;
+    output_surface.grid = internal_parameters
+        .global_marching_cubes_grid()
+        .context("failed to convert global marching cubes grid")?;
 
-        // Filter "narrow band"
-        /*
-        let narrow_band_particles = extract_narrow_band(&parameters, &particles);
-        let particles = narrow_band_particles;
-         */
+    // Filter "narrow band"
+    /*
+    let narrow_band_particles = extract_narrow_band(&parameters, &particles);
+    let particles = narrow_band_particles;
+     */
 
-        let subdomains =
-            decomposition::<I, R, GhostMarginClassifier<I>>(&parameters, &particle_positions)?;
+    let subdomains =
+        decomposition::<I, R, GhostMarginClassifier<I>>(&internal_parameters, &particle_positions)?;
 
-        /*
-        {
-            use super::dense_subdomains::debug::*;
-            subdomain_stats(&parameters, &particle_positions, &subdomains);
-            info!(
-                "Number of subdomains with only ghost particles: {}",
-                count_no_owned_particles_subdomains(&parameters, &particle_positions, &subdomains)
-            );
-        }
-         */
-
-        let particle_densities =
-            compute_global_density_vector(&parameters, &particle_positions, &subdomains);
-
-        let surface_patches = reconstruction(
-            &parameters,
-            &particle_positions,
-            &particle_densities,
-            &subdomains,
-        );
-
-        let global_mesh = stitching(surface_patches);
+    /*
+    {
+        use super::dense_subdomains::debug::*;
+        subdomain_stats(&parameters, &particle_positions, &subdomains);
         info!(
-            "Global mesh has {} vertices and {} triangles.",
-            global_mesh.vertices.len(),
-            global_mesh.triangles.len()
+            "Number of subdomains with only ghost particles: {}",
+            count_no_owned_particles_subdomains(&parameters, &particle_positions, &subdomains)
         );
+    }
+     */
 
-        global_mesh
-    };
+    let (particle_densities, particle_neighbors) = compute_global_densities_and_neighbors(
+        &internal_parameters,
+        &particle_positions,
+        &subdomains,
+    );
 
-    let _ = std::mem::replace(&mut output_surface.mesh, mesh);
+    let surface_patches = reconstruction(
+        &internal_parameters,
+        &particle_positions,
+        &particle_densities,
+        &subdomains,
+    );
+
+    let global_mesh = stitching(surface_patches);
+    info!(
+        "Global mesh has {} vertices and {} triangles.",
+        global_mesh.vertices.len(),
+        global_mesh.triangles.len()
+    );
+
+    output_surface.mesh = global_mesh;
+    output_surface.particle_densities = Some(particle_densities);
+    if parameters.global_neighborhood_list {
+        output_surface.particle_neighbors = Some(particle_neighbors);
+    }
     Ok(())
 }

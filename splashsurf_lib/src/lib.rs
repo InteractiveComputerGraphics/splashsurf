@@ -9,7 +9,7 @@
 //! The following features are all non-default features to reduce the amount of additional dependencies.
 //!
 //! - **`vtk_extras`**: Enables helper functions and trait implementations to export meshes using [`vtkio`](https://github.com/elrnv/vtkio).
-//!  In particular it adds `From` impls for the [mesh](crate::mesh) types used by this crate to convert them to
+//!  In particular it adds `From` impls for the [mesh] types used by this crate to convert them to
 //!  [`vtkio::model::UnstructuredGridPiece`](https://docs.rs/vtkio/0.6.*/vtkio/model/struct.UnstructuredGridPiece.html) and [`vtkio::model::DataSet`](https://docs.rs/vtkio/0.6.*/vtkio/model/enum.DataSet.html)
 //!  types. If the feature is enabled, The crate exposes its `vtkio` dependency as `splashsurflib::vtkio`.
 //! - **`io`**: Enables the [`io`] module, containing functions to load and store particle and mesh files
@@ -37,7 +37,7 @@ pub use vtkio;
 pub use crate::aabb::{Aabb2d, Aabb3d, AxisAlignedBoundingBox};
 pub use crate::density_map::DensityMap;
 pub use crate::octree::SubdivisionCriterion;
-pub use crate::traits::{Index, Real, ThreadSafe};
+pub use crate::traits::{Index, Real, RealConvert, ThreadSafe};
 pub use crate::uniform_grid::UniformGrid;
 
 use crate::density_map::DensityMapError;
@@ -57,6 +57,7 @@ mod aabb;
 pub(crate) mod dense_subdomains;
 pub mod density_map;
 pub mod generic_tree;
+pub mod halfedge_mesh;
 #[cfg(feature = "io")]
 #[cfg_attr(doc_cfg, doc(cfg(feature = "io")))]
 pub mod io;
@@ -65,6 +66,7 @@ pub mod marching_cubes;
 pub mod mesh;
 pub mod neighborhood_search;
 pub mod octree;
+pub mod postprocessing;
 pub(crate) mod reconstruction;
 mod reconstruction_octree;
 pub mod sph_interpolation;
@@ -88,8 +90,10 @@ pub(crate) mod workspace;
 
 pub(crate) type HashState = fxhash::FxBuildHasher;
 pub(crate) type MapType<K, V> = std::collections::HashMap<K, V, HashState>;
+pub(crate) type SetType<K> = std::collections::HashSet<K, HashState>;
 pub(crate) fn new_map<K, V>() -> MapType<K, V> {
-    MapType::with_hasher(HashState::default())
+    // TODO: Remove this function
+    Default::default()
 }
 
 /*
@@ -265,10 +269,14 @@ pub struct Parameters<R: Real> {
     /// Parameters for the spatial decomposition of the surface reconstruction
     /// If not provided, no spatial decomposition is performed and a global approach is used instead.
     pub spatial_decomposition: Option<SpatialDecomposition<R>>,
+    /// Whether to return the global particle neighborhood list from the reconstruction.
+    /// Depending on the settings of the reconstruction, neighborhood lists are only computed locally
+    /// in subdomains. Enabling this flag joins this data over all particles which can add a small overhead.
+    pub global_neighborhood_list: bool,
 }
 
 impl<R: Real> Parameters<R> {
-    /// Tries to convert the parameters from one [Real] type to another [Real] type, returns None if conversion fails
+    /// Tries to convert the parameters from one [Real] type to another [Real] type, returns `None` if conversion fails
     pub fn try_convert<T: Real>(&self) -> Option<Parameters<T>> {
         Some(Parameters {
             particle_radius: self.particle_radius.try_convert()?,
@@ -279,6 +287,7 @@ impl<R: Real> Parameters<R> {
             particle_aabb: map_option!(&self.particle_aabb, aabb => aabb.try_convert()?),
             enable_multi_threading: self.enable_multi_threading,
             spatial_decomposition: map_option!(&self.spatial_decomposition, sd => sd.try_convert()?),
+            global_neighborhood_list: self.global_neighborhood_list,
         })
     }
 }
@@ -296,6 +305,8 @@ pub struct SurfaceReconstruction<I: Index, R: Real> {
     particle_densities: Option<Vec<R>>,
     /// If an AABB was specified to restrict the reconstruction, this stores per input particle whether they were inside
     particle_inside_aabb: Option<Vec<bool>>,
+    /// Per particles neighbor lists
+    particle_neighbors: Option<Vec<Vec<usize>>>,
     /// Surface mesh that is the result of the surface reconstruction
     mesh: TriMesh3d<R>,
     /// Workspace with allocated memory for subsequent surface reconstructions
@@ -310,6 +321,7 @@ impl<I: Index, R: Real> Default for SurfaceReconstruction<I, R> {
             octree: None,
             density_map: None,
             particle_densities: None,
+            particle_neighbors: None,
             particle_inside_aabb: None,
             mesh: TriMesh3d::default(),
             workspace: ReconstructionWorkspace::default(),
@@ -336,6 +348,11 @@ impl<I: Index, R: Real> SurfaceReconstruction<I, R> {
     /// Returns a reference to the global particle density vector if it was computed during the reconstruction (always `None` when using independent subdomains with domain decomposition)
     pub fn particle_densities(&self) -> Option<&Vec<R>> {
         self.particle_densities.as_ref()
+    }
+
+    /// Returns a reference to the global particle density vector if it was computed during the reconstruction (always `None` when using octree based domain decomposition)
+    pub fn particle_neighbors(&self) -> Option<&Vec<Vec<usize>>> {
+        self.particle_neighbors.as_ref()
     }
 
     /// Returns a reference to the virtual background grid that was used as a basis for discretization of the density map for marching cubes, can be used to convert the density map to a hex mesh (using [`density_map::sparse_density_map_to_hex_mesh`])

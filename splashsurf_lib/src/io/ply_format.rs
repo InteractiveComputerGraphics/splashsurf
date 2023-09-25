@@ -202,7 +202,7 @@ pub fn mesh_to_ply<R: Real, M: Mesh3d<R>, P: AsRef<Path>>(
         .truncate(true)
         .open(filename)
         .context("Failed to open file handle for writing PLY file")?;
-    let mut writer = BufWriter::with_capacity(100000, file);
+    let mut writer = BufWriter::with_capacity(1000000, file);
 
     write!(&mut writer, "ply\n")?;
     write!(&mut writer, "format binary_little_endian 1.0\n")?;
@@ -257,9 +257,9 @@ pub fn mesh_to_ply<R: Real, M: Mesh3d<R>, P: AsRef<Path>>(
     }
 
     for c in mesh.cells() {
-        let num_verts = M::Cell::num_vertices().to_u8().expect("failed to convert cell vertex count to u8");
+        let num_verts = c.num_vertices().to_u8().expect("failed to convert cell vertex count to u8");
         writer.write_all(&num_verts.to_le_bytes())?;
-        c.try_for_each_vertex(|v| {
+        c.vertices().iter().copied().try_for_each(|v| {
             let idx = v.to_u32().expect("failed to convert vertex index to u32");
             writer.write_all(&idx.to_le_bytes())
         })?;
@@ -271,6 +271,23 @@ pub fn mesh_to_ply<R: Real, M: Mesh3d<R>, P: AsRef<Path>>(
 #[cfg(test)]
 pub mod test {
     use super::*;
+
+    #[test]
+    fn test_ply_read_cube() -> Result<(), anyhow::Error> {
+        let input_file = Path::new("../data/cube.ply");
+
+        let mesh: MeshWithData<f32, _> = surface_mesh_from_ply(input_file).with_context(|| {
+            format!(
+                "Failed to load surface mesh from file \"{}\"",
+                input_file.display()
+            )
+        })?;
+
+        assert_eq!(mesh.mesh.vertices.len(), 24);
+        assert_eq!(mesh.mesh.triangles.len(), 12);
+
+        Ok(())
+    }
 
     #[test]
     fn test_ply_read_cube_with_normals() -> Result<(), anyhow::Error> {
@@ -291,23 +308,6 @@ pub mod test {
                 assert_eq!(normals.len(), 24)
             }
         }
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_ply_read_cube() -> Result<(), anyhow::Error> {
-        let input_file = Path::new("../data/cube.ply");
-
-        let mesh: MeshWithData<f32, _> = surface_mesh_from_ply(input_file).with_context(|| {
-            format!(
-                "Failed to load surface mesh from file \"{}\"",
-                input_file.display()
-            )
-        })?;
-
-        assert_eq!(mesh.mesh.vertices.len(), 24);
-        assert_eq!(mesh.mesh.triangles.len(), 12);
 
         Ok(())
     }

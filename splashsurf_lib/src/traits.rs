@@ -3,7 +3,7 @@ use std::hash::Hash;
 use std::ops::{AddAssign, MulAssign, SubAssign};
 
 use bytemuck::Pod;
-use nalgebra::{RealField, SVector};
+use nalgebra::{RealField, SMatrix};
 use num_integer::Integer;
 use num_traits::{
     Bounded, CheckedAdd, CheckedMul, CheckedSub, FromPrimitive, NumCast, SaturatingSub, ToPrimitive,
@@ -116,23 +116,6 @@ RealField
 + Pod
 + ThreadSafe
 {
-    /// Tries to convert this value to another [`Real`] type `T` by converting first to `f64` followed by `T::from_f64`. If the value cannot be represented by the target type, `None` is returned.
-    fn try_convert<T: Real>(self) -> Option<T> {
-        Some(T::from_f64(self.to_f64()?)?)
-    }
-
-    /// Tries to convert the values of a statically sized `nalgebra::SVector` to another type, same behavior as [`Real::try_convert`]
-    fn try_convert_vec_from<R, const D: usize>(vec: &SVector<R, D>) -> Option<SVector<Self, D>>
-        where
-            R: Real,
-    {
-        let mut converted = SVector::<Self, D>::zeros();
-        for i in 0..D {
-            converted[i] = vec[i].try_convert()?
-        }
-        Some(converted)
-    }
-
     /// Converts this value to the specified [`Index`] type. If the value cannot be represented by the target type, `None` is returned.
     fn to_index<I: Index>(self) -> Option<I> {
         I::from_f64(self.to_f64()?)
@@ -192,4 +175,42 @@ impl<
             + 'static,
     > Real for T
 {
+}
+
+/// Trait for converting values, matrices, etc. from one `Real` type to another.
+pub trait RealConvert: Sized {
+    type Out<To>
+    where
+        To: Real;
+
+    /// Tries to convert this value to the target type, returns `None` if value cannot be represented by the target type
+    fn try_convert<To: Real>(self) -> Option<Self::Out<To>>;
+    /// Converts this value to the target type, panics if value cannot be represented by the target type
+    fn convert<To: Real>(self) -> Self::Out<To> {
+        self.try_convert().expect("failed to convert")
+    }
+}
+
+impl<From: Real> RealConvert for &From {
+    type Out<To> = To where To: Real;
+
+    fn try_convert<To: Real>(self) -> Option<To> {
+        <To as NumCast>::from(*self)
+    }
+}
+
+impl<From: Real, const R: usize, const C: usize> RealConvert for SMatrix<From, R, C> {
+    type Out<To> = SMatrix<To, R, C> where To: Real;
+
+    fn try_convert<To: Real>(self) -> Option<SMatrix<To, R, C>> {
+        let mut m_out: SMatrix<To, R, C> = SMatrix::zeros();
+        m_out
+            .iter_mut()
+            .zip(self.iter())
+            .try_for_each(|(x_out, x_in)| {
+                *x_out = <To as NumCast>::from(*x_in)?;
+                Some(())
+            })?;
+        Some(m_out)
+    }
 }

@@ -19,7 +19,7 @@ use crate::neighborhood_search::{
     neighborhood_search_spatial_hashing_flat_filtered,
     neighborhood_search_spatial_hashing_parallel, FlatNeighborhoodList,
 };
-use crate::uniform_grid::{EdgeIndex, UniformCartesianCubeGrid3d};
+use crate::uniform_grid::{EdgeIndex, GridConstructionError, UniformCartesianCubeGrid3d};
 use crate::{
     new_map, new_parallel_map, profile, Aabb3d, MapType, Parameters, SpatialDecomposition,
     SurfaceReconstruction,
@@ -72,6 +72,25 @@ pub(crate) struct ParametersSubdomainGrid<I: Index, R: Real> {
     subdomain_grid: UniformCartesianCubeGrid3d<I, R>,
     /// Chunk size for chunked parallel processing
     chunk_size: usize,
+    /// Whether to return the global particle neighborhood list instead of only using per-domain lists internally
+    global_neighborhood_list: bool,
+}
+
+impl<I: Index, R: Real> ParametersSubdomainGrid<I, R> {
+    pub(crate) fn global_marching_cubes_grid(
+        &self,
+    ) -> Result<UniformCartesianCubeGrid3d<I, R>, GridConstructionError<I, R>> {
+        let n_cells = self.global_marching_cubes_grid.cells_per_dim();
+        UniformCartesianCubeGrid3d::new(
+            self.global_marching_cubes_grid.aabb().min(),
+            &[
+                I::from(n_cells[0]).ok_or(GridConstructionError::IndexTypeTooSmallCellsPerDim)?,
+                I::from(n_cells[1]).ok_or(GridConstructionError::IndexTypeTooSmallCellsPerDim)?,
+                I::from(n_cells[2]).ok_or(GridConstructionError::IndexTypeTooSmallCellsPerDim)?,
+            ],
+            self.global_marching_cubes_grid.cell_size(),
+        )
+    }
 }
 
 /// Result of the subdomain decomposition procedure
@@ -238,6 +257,7 @@ pub(crate) fn initialize_parameters<'a, I: Index, R: Real>(
         global_marching_cubes_grid: global_mc_grid,
         subdomain_grid,
         chunk_size,
+        global_neighborhood_list: parameters.global_neighborhood_list,
     })
 }
 
@@ -493,15 +513,16 @@ pub(crate) fn decomposition<
     })
 }
 
-pub(crate) fn compute_global_density_vector<I: Index, R: Real>(
+pub(crate) fn compute_global_densities_and_neighbors<I: Index, R: Real>(
     parameters: &ParametersSubdomainGrid<I, R>,
     global_particles: &[Vector3<R>],
     subdomains: &Subdomains<I>,
-) -> Vec<R> {
+) -> (Vec<R>, Vec<Vec<usize>>) {
     profile!(parent, "compute_global_density_vector");
     info!("Starting computation of global density vector.");
 
     let global_particle_densities = Mutex::new(vec![R::zero(); global_particles.len()]);
+    let global_neighbors = Mutex::new(vec![Vec::new(); global_particles.len()]);
 
     #[derive(Default)]
     struct SubdomainWorkspace<R: Real> {
@@ -610,9 +631,35 @@ pub(crate) fn compute_global_density_vector<I: Index, R: Real>(
                         global_particle_densities[particle_idx] = density;
                     });
             }
+
+            // Write particle neighbor lists into global storage
+            if parameters.global_neighborhood_list {
+                profile!("update global neighbor list");
+                // Lock global vector while this subdomain writes into it
+                let mut global_neighbors = global_neighbors.lock();
+                is_inside
+                    .iter()
+                    .copied()
+                    .zip(
+                        subdomain_particle_indices
+                            .iter()
+                            .copied()
+                            .zip(neighborhood_lists.iter()),
+                    )
+                    // Update density values only for particles inside of the subdomain (ghost particles have wrong values)
+                    .filter(|(is_inside, _)| *is_inside)
+                    .for_each(|(_, (particle_idx, neighbors))| {
+                        global_neighbors[particle_idx] = neighbors
+                            .iter()
+                            .copied()
+                            .map(|local| subdomain_particle_indices[local])
+                            .collect();
+                    });
+            }
         });
 
     let global_particle_densities = global_particle_densities.into_inner();
+    let global_neighbors = global_neighbors.into_inner();
 
     /*
     {
@@ -625,7 +672,7 @@ pub(crate) fn compute_global_density_vector<I: Index, R: Real>(
     }
     */
 
-    global_particle_densities
+    (global_particle_densities, global_neighbors)
 }
 
 pub(crate) struct SurfacePatch<I: Index, R: Real> {

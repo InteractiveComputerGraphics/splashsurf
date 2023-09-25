@@ -1,4 +1,4 @@
-//! Triangulation of [`DensityMap`](crate::density_map::DensityMap)s using marching cubes
+//! Triangulation of [`DensityMap`]s using marching cubes
 
 use crate::marching_cubes::narrow_band_extraction::{
     construct_mc_input, construct_mc_input_with_stitching_data,
@@ -195,21 +195,39 @@ pub(crate) fn triangulate_density_map_to_surface_patch<I: Index, R: Real>(
     })
 }
 
-/// Checks the consistency of the mesh (currently only checks for holes) and returns a string with debug information in case of problems
+/// Checks the consistency of the mesh (currently checks for holes, non-manifold edges and vertices) and returns a string with debug information in case of problems
 pub fn check_mesh_consistency<I: Index, R: Real>(
     grid: &UniformGrid<I, R>,
     mesh: &TriMesh3d<R>,
+    check_closed: bool,
+    check_manifold: bool,
+    debug: bool,
 ) -> Result<(), String> {
     profile!("check_mesh_consistency");
-    let boundary_edges = mesh.find_boundary_edges();
+    let edge_info = mesh.compute_edge_information();
 
-    if boundary_edges.is_empty() {
+    let boundary_edges = edge_info
+        .iter()
+        .filter(|ei| ei.incident_faces == 1)
+        .map(|ei| (ei.edge, ei.face, ei.local_edge_index))
+        .collect::<Vec<_>>();
+    let non_manifold_edges = edge_info
+        .iter()
+        .filter(|ei| ei.incident_faces > 2)
+        .map(|ei| (ei.edge, ei.face, ei.local_edge_index))
+        .collect::<Vec<_>>();
+
+    let non_manifold_vertices = mesh.find_non_manifold_vertices();
+
+    if (!check_closed || boundary_edges.is_empty())
+        && (!check_manifold || (non_manifold_edges.is_empty() && non_manifold_vertices.is_empty()))
+    {
         return Ok(());
     }
 
-    let mut error_string = String::new();
-    error_string += &format!("Mesh is not closed. It has {} boundary edges (edges that are connected to only one triangle):", boundary_edges.len());
-    for (edge, tri_idx, _) in boundary_edges {
+    let add_edge_errors = |error_string: &mut String, edge: ([usize; 2], usize, usize)| {
+        let (edge, tri_idx, _) = edge;
+
         let v0 = mesh.vertices[edge[0]];
         let v1 = mesh.vertices[edge[1]];
         let center = (v0 + v1) / (R::one() + R::one());
@@ -221,13 +239,43 @@ pub fn check_mesh_consistency<I: Index, R: Real>(
             let cell_center = grid.point_coordinates(&point_index)
                 + &Vector3::repeat(grid.cell_size().times_f64(0.5));
 
-            error_string += &format!("\n\tTriangle {}, boundary edge {:?} is located in cell with {:?} with center coordinates {:?} and edge length {}.", tri_idx, edge, cell_index, cell_center, grid.cell_size());
+            *error_string += &format!("\n\tTriangle {}, boundary edge {:?} is located in cell with {:?} with center coordinates {:?} and edge length {}.", tri_idx, edge, cell_index, cell_center, grid.cell_size());
         } else {
-            error_string += &format!(
-                "\n\tCannot get cell index for boundary edge {:?} of triangle {}",
+            *error_string += &format!(
+                "\n\tCannot get cell index for edge {:?} of triangle {}",
                 edge, tri_idx
             );
         }
+    };
+
+    let mut error_string = String::new();
+
+    if check_closed && !boundary_edges.is_empty() {
+        error_string += &format!("Mesh is not closed. It has {} boundary edges (edges that are connected to only one triangle).", boundary_edges.len());
+        if debug {
+            for e in boundary_edges {
+                add_edge_errors(&mut error_string, e);
+            }
+        }
+        error_string += &format!("\n");
+    }
+
+    if check_manifold && !non_manifold_edges.is_empty() {
+        error_string += &format!("Mesh is not manifold. It has {} non-manifold edges (edges that are connected to more than twi triangles).", non_manifold_edges.len());
+        if debug {
+            for e in non_manifold_edges {
+                add_edge_errors(&mut error_string, e);
+            }
+        }
+        error_string += &format!("\n");
+    }
+
+    if check_manifold && !non_manifold_vertices.is_empty() {
+        error_string += &format!("Mesh is not manifold. It has {} non-manifold vertices (vertices with more than one triangle fan).", non_manifold_vertices.len());
+        if debug {
+            error_string += &format!("\n\t{:?}", non_manifold_vertices);
+        }
+        error_string += &format!("\n");
     }
 
     Err(error_string)
@@ -240,7 +288,13 @@ fn check_mesh_with_cell_data<I: Index, R: Real>(
     marching_cubes_data: &MarchingCubesInput<I>,
     mesh: &TriMesh3d<R>,
 ) -> Result<(), String> {
-    let boundary_edges = mesh.find_boundary_edges();
+    let edge_info = mesh.compute_edge_information();
+
+    let boundary_edges = edge_info
+        .iter()
+        .filter(|ei| ei.incident_faces == 1)
+        .map(|ei| (ei.edge, ei.face, ei.local_edge_index))
+        .collect::<Vec<_>>();
 
     if boundary_edges.is_empty() {
         return Ok(());
@@ -263,7 +317,7 @@ fn check_mesh_with_cell_data<I: Index, R: Real>(
             let cell_data = marching_cubes_data
                 .cell_data
                 .get(&grid.flatten_cell_index(&cell_index))
-                .expect("Unabel to get cell data of cell");
+                .expect("Unable to get cell data of cell");
 
             error_string += &format!("\n\tTriangle {}, boundary edge {:?} is located in cell with {:?} with center coordinates {:?} and edge length {}. {:?}", tri_idx, edge, cell_index, cell_center, grid.cell_size(), cell_data);
         } else {

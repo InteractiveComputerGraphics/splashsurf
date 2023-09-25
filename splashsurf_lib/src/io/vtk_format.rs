@@ -1,8 +1,8 @@
 //! Helper functions for the VTK file format
 
-use crate::mesh::{AttributeData, MeshAttribute, MeshWithData, TriMesh3d};
+use crate::mesh::{AttributeData, IntoVtkDataSet, MeshAttribute, MeshWithData, TriMesh3d};
 use crate::utils::IteratorExt;
-use crate::Real;
+use crate::{Real, RealConvert};
 use anyhow::{anyhow, Context};
 use nalgebra::Vector3;
 use std::borrow::Cow;
@@ -183,7 +183,7 @@ pub fn surface_mesh_from_vtk<R: Real, P: AsRef<Path>>(
 
 /// Tries to write `data` that is convertible to a VTK `DataSet` into a big endian VTK file
 pub fn write_vtk<P: AsRef<Path>>(
-    data: impl Into<DataSet>,
+    data: impl IntoVtkDataSet,
     filename: P,
     title: &str,
 ) -> Result<(), anyhow::Error> {
@@ -192,7 +192,7 @@ pub fn write_vtk<P: AsRef<Path>>(
         title: title.to_string(),
         file_path: None,
         byte_order: ByteOrder::BigEndian,
-        data: data.into(),
+        data: data.into_dataset(),
     };
 
     let filename = filename.as_ref();
@@ -278,6 +278,10 @@ fn surface_mesh_from_unstructured_grid<R: Real>(
                 (num_cells, Cow::Owned(cell_verts))
             }
         };
+
+        // Sometimes VTK files from paraview start with an empty cell
+        let has_empty_cell = cell_verts.first().map(|c| *c == 0).unwrap_or(false);
+        let cell_verts = &cell_verts[cell_verts.len().min(has_empty_cell as usize)..];
 
         if cell_verts.len() % 4 != 0 {
             return Err(anyhow!("Length of cell vertex array is invalid. Expected 4 values per cell (3 for each triangle vertex index + 1 for vertex count). There are {} values for {} cells.", cell_verts.len(), num_cells));

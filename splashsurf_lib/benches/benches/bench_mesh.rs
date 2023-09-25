@@ -33,6 +33,7 @@ fn reconstruct_particles<P: AsRef<Path>>(particle_file: P) -> SurfaceReconstruct
                     ParticleDensityComputationStrategy::SynchronizeSubdomains,
             },
         )),
+        global_neighborhood_list: false,
     };
 
     reconstruct_surface::<i64, _>(particle_positions.as_slice(), &parameters).unwrap()
