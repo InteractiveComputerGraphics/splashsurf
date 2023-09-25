@@ -2,7 +2,13 @@
 
 The following changes are present in the `main` branch of the repository and are not yet part of a release:
 
- - Lib: Implement new spatial decomposition based on a regular grid of subdomains, subdomains are dense marching cubes grids
+ - N/A
+
+## Version 0.10.0
+
+This release implements ["Weighted Laplacian Smoothing for Surface Reconstruction of Particle-based Fluids" (Löschner, Böttcher, Jeske, Bender; 2023)](https://animation.rwth-aachen.de/publication/0583/), mesh cleanup based on ["Mesh Displacement: An Improved Contouring Method for Trivariate Data" (Moore, Warren; 1991)](https://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.49.5214&rep=rep1&type=pdf) and a new, more efficient domain decomposition (see README.md for more details).
+
+ - Lib: Implement new spatial decomposition based on a regular grid of subdomains (subdomains are dense marching cubes grids)
  - CLI: Make new spatial decomposition available in CLI with `--subdomain-grid=on`
  - Lib: Implement weighted Laplacian smoothing to remove bumps from surfaces according to paper "Weighted Laplacian Smoothing for Surface Reconstruction of Particle-based Fluids" (Löschner, Böttcher, Jeske, Bender 2023)
  - CLI: Add arguments to enable and control weighted Laplacian smoothing `--mesh-smoothing-iters=...`, `--mesh-smoothing-weights=on` etc.
