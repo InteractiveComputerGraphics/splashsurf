@@ -94,7 +94,7 @@ pub struct ReconstructSubcommandArgs {
     )]
     pub particle_aabb_max: Option<Vec<f64>>,
 
-    /// Enable multi-threading to process multiple input files in parallel
+    /// Enable multi-threading to process multiple input files in parallel (NOTE: Currently, the subdomain-grid domain decomposition approach and some post-processing functions including interpolation do not have sequential versions and therefore do not work well with this option enabled)
     #[arg(
         help_heading = ARGS_ADV,
         long = "mt-files",
@@ -222,7 +222,7 @@ pub struct ReconstructSubcommandArgs {
     #[arg(
         help_heading = ARGS_POSTPROC,
         long,
-        default_value = "on",
+        default_value = "off",
         value_name = "off|on",
         ignore_case = true,
         require_equals = true
