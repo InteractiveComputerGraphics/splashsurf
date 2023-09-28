@@ -452,6 +452,21 @@ Options:
           Print version
 ```
 
+## Citation 
+
+To cite `splashsurf` you can use this BibTeX entry:
+
+```bibtex
+@inproceedings {LBJB23,
+  booktitle = {Vision, Modeling, and Visualization},
+  title = {{Weighted Laplacian Smoothing for Surface Reconstruction of Particle-based Fluids}},
+  author = {Löschner, Fabian and Böttcher, Timna and Rhys Jeske, Stefan and Bender, Jan},
+  year = {2023},
+  publisher = {The Eurographics Association},
+  DOI = {10.2312/vmv.20231245}
+}
+```
+
 # License
 
 For license information of this project, see the [LICENSE](LICENSE) file.
