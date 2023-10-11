@@ -4,10 +4,10 @@ use clap::value_parser;
 use indicatif::{ProgressBar, ProgressStyle};
 use log::info;
 use rayon::prelude::*;
-use splashsurf_lib::mesh::{AttributeData, Mesh3d, MeshAttribute, MeshWithData, PointCloud3d};
+use splashsurf_lib::mesh::{AttributeData, Mesh3d, MeshAttribute, MeshWithData};
 use splashsurf_lib::nalgebra::{Unit, Vector3};
 use splashsurf_lib::sph_interpolation::SphInterpolator;
-use splashsurf_lib::{density_map, profile, Aabb3d, Index, Real};
+use splashsurf_lib::{profile, Aabb3d, Index, Real};
 use std::borrow::Cow;
 use std::convert::TryFrom;
 use std::path::PathBuf;
@@ -131,55 +131,6 @@ pub struct ReconstructSubcommandArgs {
     /// Each subdomain will be a cube consisting of this number of MC cube cells along each coordinate axis
     #[arg(help_heading = ARGS_OCTREE, long, default_value="64")]
     pub subdomain_cubes: u32,
-
-    /// Enable spatial decomposition using an octree (faster) instead of a global approach
-    #[arg(
-        help_heading = ARGS_OCTREE,
-        long,
-        default_value = "on",
-        value_name = "off|on",
-        ignore_case = true,
-        require_equals = true
-    )]
-    pub octree_decomposition: Switch,
-    /// Enable stitching of the disconnected local meshes resulting from the reconstruction when spatial decomposition is enabled (slower, but without stitching meshes will not be closed)
-    #[arg(
-        help_heading = ARGS_OCTREE,
-        long,
-        default_value = "on",
-        value_name = "off|on",
-        ignore_case = true,
-        require_equals = true
-    )]
-    pub octree_stitch_subdomains: Switch,
-    /// The maximum number of particles for leaf nodes of the octree, default is to compute it based on the number of threads and particles
-    #[arg(help_heading = ARGS_OCTREE, long)]
-    pub octree_max_particles: Option<usize>,
-    /// Safety factor applied to the kernel compact support radius when it's used as a margin to collect ghost particles in the leaf nodes when performing the spatial decomposition
-    #[arg(help_heading = ARGS_OCTREE, long)]
-    pub octree_ghost_margin_factor: Option<f64>,
-    /// Enable computing particle densities in a global step before domain decomposition (slower)
-    #[arg(
-        help_heading = ARGS_OCTREE,
-        long,
-        default_value = "off",
-        value_name = "off|on",
-        ignore_case = true,
-        require_equals = true
-    )]
-    pub octree_global_density: Switch,
-    /// Enable computing particle densities per subdomain but synchronize densities for ghost-particles (faster, recommended).
-    /// Note: if both this and global particle density computation is disabled the ghost particle margin has to be increased to at least 2.0
-    /// to compute correct density values for ghost particles.
-    #[arg(
-        help_heading = ARGS_OCTREE,
-        long,
-        default_value = "on",
-        value_name = "off|on",
-        ignore_case = true,
-        require_equals = true
-    )]
-    pub octree_sync_local_density: Switch,
 
     /// Enable omputing surface normals at the mesh vertices and write them to the output file
     #[arg(
@@ -337,15 +288,6 @@ pub struct ReconstructSubcommandArgs {
     )]
     pub output_raw_mesh: Switch,
 
-    /// Optional filename for writing the point cloud representation of the intermediate density map to disk
-    #[arg(help_heading = ARGS_DEBUG, long, value_parser = value_parser!(PathBuf))]
-    pub output_dm_points: Option<PathBuf>,
-    /// Optional filename for writing the grid representation of the intermediate density map to disk
-    #[arg(help_heading = ARGS_DEBUG, long, value_parser = value_parser!(PathBuf))]
-    pub output_dm_grid: Option<PathBuf>,
-    /// Optional filename for writing the octree used to partition the particles to disk
-    #[arg(help_heading = ARGS_DEBUG, long, value_parser = value_parser!(PathBuf))]
-    pub output_octree: Option<PathBuf>,
     /// Enable checking the final mesh for holes and non-manifold edges and vertices
     #[arg(
         help_heading = ARGS_DEBUG,
@@ -472,7 +414,7 @@ mod arguments {
     use log::info;
     use regex::{escape, Regex};
     use splashsurf_lib::nalgebra::Vector3;
-    use splashsurf_lib::{Aabb3d, ParticleDensityComputationStrategy};
+    use splashsurf_lib::Aabb3d;
     use std::convert::TryFrom;
     use std::fs;
     use std::path::{Path, PathBuf};
@@ -577,37 +519,7 @@ mod arguments {
                 Some(splashsurf_lib::SpatialDecomposition::UniformGrid(
                     splashsurf_lib::GridDecompositionParameters {
                         subdomain_num_cubes_per_dim: args.subdomain_cubes,
-                    },
-                ))
-            } else if args.octree_decomposition.into_bool() {
-                let subdivision_criterion = if let Some(max_particles) = args.octree_max_particles {
-                    splashsurf_lib::SubdivisionCriterion::MaxParticleCount(max_particles)
-                } else {
-                    splashsurf_lib::SubdivisionCriterion::MaxParticleCountAuto
-                };
-                let ghost_particle_safety_factor = args.octree_ghost_margin_factor;
-                let enable_stitching = args.octree_stitch_subdomains.into_bool();
-
-                let particle_density_computation = if args.octree_global_density.into_bool()
-                    && args.octree_sync_local_density.into_bool()
-                {
-                    return Err(anyhow!("Cannot enable both global and merged local particle density computation at the same time. Switch off at least one."));
-                } else {
-                    if args.octree_global_density.into_bool() {
-                        ParticleDensityComputationStrategy::Global
-                    } else if args.octree_sync_local_density.into_bool() {
-                        ParticleDensityComputationStrategy::SynchronizeSubdomains
-                    } else {
-                        ParticleDensityComputationStrategy::IndependentSubdomains
-                    }
-                };
-
-                Some(splashsurf_lib::SpatialDecomposition::Octree(
-                    splashsurf_lib::OctreeDecompositionParameters {
-                        subdivision_criterion,
-                        ghost_particle_safety_factor,
-                        enable_stitching,
-                        particle_density_computation,
+                        ..Default::default()
                     },
                 ))
             } else {
@@ -673,9 +585,6 @@ mod arguments {
         is_sequence: bool,
         input_file: PathBuf,
         output_file: PathBuf,
-        output_density_map_points_file: Option<PathBuf>,
-        output_density_map_grid_file: Option<PathBuf>,
-        output_octree_file: Option<PathBuf>,
         sequence_range: (Option<usize>, Option<usize>),
     }
 
@@ -685,17 +594,11 @@ mod arguments {
             input_file: P,
             output_base_path: Option<P>,
             output_file: P,
-            output_density_map_points_file: Option<P>,
-            output_density_map_grid_file: Option<P>,
-            output_octree_file: Option<P>,
             sequence_range: (Option<usize>, Option<usize>),
         ) -> Result<Self, anyhow::Error> {
             let input_file = input_file.into();
             let output_base_path = output_base_path.map(|p| p.into());
             let output_file = output_file.into();
-            let output_density_map_points_file = output_density_map_points_file.map(|p| p.into());
-            let output_density_map_grid_file = output_density_map_grid_file.map(|p| p.into());
-            let output_octree_file = output_octree_file.map(|p| p.into());
 
             if let (Some(start), Some(end)) = sequence_range {
                 if start > end {
@@ -727,11 +630,6 @@ mod arguments {
                     is_sequence,
                     input_file,
                     output_file,
-                    output_density_map_points_file: output_density_map_points_file
-                        .map(|f| output_base_path.join(f)),
-                    output_density_map_grid_file: output_density_map_grid_file
-                        .map(|f| output_base_path.join(f)),
-                    output_octree_file: output_octree_file.map(|f| output_base_path.join(f)),
                     sequence_range,
                 })
             } else {
@@ -739,9 +637,6 @@ mod arguments {
                     is_sequence,
                     input_file,
                     output_file,
-                    output_density_map_points_file,
-                    output_density_map_grid_file,
-                    output_octree_file,
                     sequence_range,
                 })
             }
@@ -821,14 +716,7 @@ mod arguments {
                         let output_filename_i = output_pattern.replace("{}", index);
                         let output_file_i = output_dir.join(output_filename_i);
 
-                        paths.push(ReconstructionRunnerPaths::new(
-                            input_file_i,
-                            output_file_i,
-                            // Don't write density maps etc. when processing a sequence of files
-                            None,
-                            None,
-                            None,
-                        ));
+                        paths.push(ReconstructionRunnerPaths::new(input_file_i, output_file_i));
                     }
                 }
 
@@ -851,9 +739,6 @@ mod arguments {
                     ReconstructionRunnerPaths::new(
                         self.input_file.clone(),
                         self.output_file.clone(),
-                        self.output_density_map_points_file.clone(),
-                        self.output_density_map_grid_file.clone(),
-                        self.output_octree_file.clone(),
                     );
                     1
                 ]
@@ -950,9 +835,6 @@ mod arguments {
                 args.input_file_or_sequence.clone(),
                 args.output_dir.clone(),
                 output_filename,
-                args.output_dm_points.clone(),
-                args.output_dm_grid.clone(),
-                args.output_octree.clone(),
                 (args.start_index, args.end_index),
             )
         }
@@ -963,25 +845,13 @@ mod arguments {
     pub(crate) struct ReconstructionRunnerPaths {
         pub input_file: PathBuf,
         pub output_file: PathBuf,
-        pub output_density_map_points_file: Option<PathBuf>,
-        pub output_density_map_grid_file: Option<PathBuf>,
-        pub output_octree_file: Option<PathBuf>,
     }
 
     impl ReconstructionRunnerPaths {
-        fn new(
-            input_file: PathBuf,
-            output_file: PathBuf,
-            output_density_map_points_file: Option<PathBuf>,
-            output_density_map_grid_file: Option<PathBuf>,
-            output_octree_file: Option<PathBuf>,
-        ) -> Self {
+        fn new(input_file: PathBuf, output_file: PathBuf) -> Self {
             ReconstructionRunnerPaths {
                 input_file,
                 output_file,
-                output_density_map_points_file,
-                output_density_map_grid_file,
-                output_octree_file,
             }
         }
     }
@@ -1420,74 +1290,6 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
                 paths.output_file.display()
             )
         })?;
-        info!("Done.");
-    }
-
-    // Store octree leaf nodes as hex cells
-    if let Some(output_octree_file) = &paths.output_octree_file {
-        info!("Writing octree to \"{}\"...", output_octree_file.display());
-        io::vtk_format::write_vtk(
-            reconstruction.octree().unwrap().hexmesh(grid, true),
-            output_octree_file,
-            "mesh",
-        )
-        .with_context(|| {
-            format!(
-                "Failed to write octree to output file \"{}\"",
-                output_octree_file.display()
-            )
-        })?;
-        info!("Done.");
-    }
-
-    // Store point cloud density map
-    if let Some(output_density_map_points_file) = &paths.output_density_map_points_file {
-        info!("Constructing density map point cloud...");
-        let density_map = reconstruction
-            .density_map()
-            .ok_or_else(|| anyhow::anyhow!("No density map was created during reconstruction"))?;
-
-        let point_cloud: PointCloud3d<R> = {
-            let mut points = Vec::with_capacity(density_map.len());
-            density_map.for_each(|flat_point_index, _| {
-                let point = grid.try_unflatten_point_index(flat_point_index).unwrap();
-                points.push(grid.point_coordinates(&point));
-            });
-
-            PointCloud3d::new(points)
-        };
-
-        info!(
-            "Saving density map point cloud to \"{}\"...",
-            output_density_map_points_file.display()
-        );
-
-        io::vtk_format::write_vtk(
-            &point_cloud,
-            output_density_map_points_file,
-            "density_map_points",
-        )?;
-
-        info!("Done.");
-    }
-
-    // Store hex-mesh density map
-    if let Some(output_density_map_grid_file) = &paths.output_density_map_grid_file {
-        info!("Constructing density map hex mesh...");
-        let density_map = reconstruction
-            .density_map()
-            .ok_or_else(|| anyhow::anyhow!("No density map was created during reconstruction"))?;
-
-        let density_mesh =
-            density_map::sparse_density_map_to_hex_mesh(&density_map, &grid, R::zero());
-
-        info!(
-            "Saving density map hex mesh to \"{}\"...",
-            output_density_map_grid_file.display()
-        );
-
-        io::vtk_format::write_vtk(density_mesh, output_density_map_grid_file, "density_map")?;
-
         info!("Done.");
     }
 

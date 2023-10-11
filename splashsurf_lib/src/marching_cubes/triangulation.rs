@@ -1,7 +1,6 @@
 use crate::marching_cubes::marching_cubes_lut::marching_cubes_triangulation_iter;
 use crate::marching_cubes::{CellData, MarchingCubesInput};
 use crate::mesh::TriMesh3d;
-use crate::topology::Axis;
 use crate::uniform_grid::{DummySubdomain, GridBoundaryFaceFlags, Subdomain, UniformGrid};
 use crate::{profile, Index, Real};
 use anyhow::Context;
@@ -32,10 +31,6 @@ pub(crate) trait TriangulationCriterion<I: Index, R: Real, S: Subdomain<I, R>> {
 pub(crate) struct TriangulationIdentityCriterion;
 /// A triangulation criterion that ensures that every cell is part of the subdomain but skips one layer of boundary cells
 pub(crate) struct TriangulationSkipBoundaryCells;
-/// A triangulation criterion that ensures that only the interior of the stitching domain is triangulated (boundary layer except in stitching direction is skipped)
-pub(crate) struct TriangulationStitchingInterior {
-    stitching_axis: Axis,
-}
 
 /// Trait that is used by the marching cubes [triangulate_with_criterion] function to convert a marching cubes triangulation to actual triangle-vertex connectivity
 pub(crate) trait TriangleGenerator<I: Index, R: Real, S: Subdomain<I, R>> {
@@ -157,37 +152,6 @@ impl<I: Index, R: Real, S: Subdomain<I, R>> TriangulationCriterion<I, R, S>
             GridBoundaryFaceFlags::classify_cell(subdomain.subdomain_grid(), &local_cell);
 
         return cell_grid_boundaries.is_empty();
-    }
-}
-
-impl TriangulationStitchingInterior {
-    pub(crate) fn new(stitching_axis: Axis) -> Self {
-        Self { stitching_axis }
-    }
-}
-
-impl<I: Index, R: Real, S: Subdomain<I, R>> TriangulationCriterion<I, R, S>
-    for TriangulationStitchingInterior
-{
-    #[inline(always)]
-    fn triangulate_cell(&self, subdomain: &S, flat_cell_index: I, _: &CellData) -> bool {
-        let global_cell = subdomain
-            .global_grid()
-            .try_unflatten_cell_index(flat_cell_index)
-            .unwrap();
-
-        let local_cell = subdomain
-            .map_cell(&global_cell)
-            .expect("Cell is not part of the subdomain");
-
-        let subdomain_grid = subdomain.subdomain_grid();
-        let index = local_cell.index();
-
-        // Skip only boundary cells in directions orthogonal to the stitching axis
-        !self.stitching_axis.orthogonal_axes().iter().any(|&axis| {
-            index[axis.dim()] == I::zero()
-                || index[axis.dim()] == subdomain_grid.cells_per_dim()[axis.dim()] - I::one()
-        })
     }
 }
 

@@ -4,9 +4,8 @@ use splashsurf_lib::io::particles_from_file;
 #[allow(dead_code)]
 use splashsurf_lib::io::vtk_format::write_vtk;
 use splashsurf_lib::{
-    reconstruct_surface, reconstruct_surface_inplace, GridDecompositionParameters,
-    OctreeDecompositionParameters, Parameters, ParticleDensityComputationStrategy,
-    SpatialDecomposition, SubdivisionCriterion, SurfaceReconstruction,
+    reconstruct_surface, reconstruct_surface_inplace, GridDecompositionParameters, Parameters,
+    SpatialDecomposition, SurfaceReconstruction,
 };
 use std::time::Duration;
 
@@ -121,46 +120,6 @@ pub fn surface_reconstruction_dam_break(c: &mut Criterion) {
         })
     });
 
-    group.bench_function("surface_reconstruction_dam_break_par_octree", |b| {
-        b.iter(|| {
-            let mut parameters = parameters.clone();
-            parameters.spatial_decomposition = Some(SpatialDecomposition::Octree(
-                OctreeDecompositionParameters {
-                    subdivision_criterion: SubdivisionCriterion::MaxParticleCountAuto,
-                    ghost_particle_safety_factor: Some(1.0),
-                    enable_stitching: false,
-                    particle_density_computation:
-                        ParticleDensityComputationStrategy::SynchronizeSubdomains,
-                },
-            ));
-
-            reconstruction =
-                reconstruct_surface::<i64, _>(particle_positions.as_slice(), &parameters).unwrap()
-        })
-    });
-
-    group.bench_function(
-        "surface_reconstruction_dam_break_par_octree_stitching",
-        |b| {
-            b.iter(|| {
-                let mut parameters = parameters.clone();
-                parameters.spatial_decomposition = Some(SpatialDecomposition::Octree(
-                    OctreeDecompositionParameters {
-                        subdivision_criterion: SubdivisionCriterion::MaxParticleCountAuto,
-                        ghost_particle_safety_factor: Some(1.0),
-                        enable_stitching: true,
-                        particle_density_computation:
-                            ParticleDensityComputationStrategy::SynchronizeSubdomains,
-                    },
-                ));
-
-                reconstruction =
-                    reconstruct_surface::<i64, _>(particle_positions.as_slice(), &parameters)
-                        .unwrap()
-            })
-        },
-    );
-
     group.bench_function("surface_reconstruction_dam_break_par_grid_64", |b| {
         b.iter(|| {
             let mut parameters = parameters.clone();
@@ -220,46 +179,6 @@ pub fn surface_reconstruction_double_dam_break(c: &mut Criterion) {
         })
     });
 
-    group.bench_function("surface_reconstruction_double_dam_break_par_octree", |b| {
-        b.iter(|| {
-            let mut parameters = parameters.clone();
-            parameters.spatial_decomposition = Some(SpatialDecomposition::Octree(
-                OctreeDecompositionParameters {
-                    subdivision_criterion: SubdivisionCriterion::MaxParticleCountAuto,
-                    ghost_particle_safety_factor: Some(1.0),
-                    enable_stitching: false,
-                    particle_density_computation:
-                        ParticleDensityComputationStrategy::SynchronizeSubdomains,
-                },
-            ));
-
-            reconstruction =
-                reconstruct_surface::<i64, _>(particle_positions.as_slice(), &parameters).unwrap()
-        })
-    });
-
-    group.bench_function(
-        "surface_reconstruction_double_dam_break_par_octree_stitching",
-        |b| {
-            b.iter(|| {
-                let mut parameters = parameters.clone();
-                parameters.spatial_decomposition = Some(SpatialDecomposition::Octree(
-                    OctreeDecompositionParameters {
-                        subdivision_criterion: SubdivisionCriterion::MaxParticleCountAuto,
-                        ghost_particle_safety_factor: Some(1.0),
-                        enable_stitching: true,
-                        particle_density_computation:
-                            ParticleDensityComputationStrategy::SynchronizeSubdomains,
-                    },
-                ));
-
-                reconstruction =
-                    reconstruct_surface::<i64, _>(particle_positions.as_slice(), &parameters)
-                        .unwrap()
-            })
-        },
-    );
-
     group.bench_function("surface_reconstruction_double_dam_break_par_grid_64", |b| {
         b.iter(|| {
             let mut parameters = parameters.clone();
@@ -316,56 +235,6 @@ pub fn surface_reconstruction_double_dam_break_inplace(c: &mut Criterion) {
         "surface_reconstruction_double_dam_break_inplace_par_global",
         |b| {
             b.iter(|| {
-                reconstruct_surface_inplace::<i64, _>(
-                    particle_positions.as_slice(),
-                    &parameters,
-                    &mut reconstruction,
-                )
-                .unwrap()
-            })
-        },
-    );
-
-    group.bench_function(
-        "surface_reconstruction_double_dam_break_inplace_par_octree",
-        |b| {
-            b.iter(|| {
-                let mut parameters = parameters.clone();
-                parameters.spatial_decomposition = Some(SpatialDecomposition::Octree(
-                    OctreeDecompositionParameters {
-                        subdivision_criterion: SubdivisionCriterion::MaxParticleCountAuto,
-                        ghost_particle_safety_factor: Some(1.0),
-                        enable_stitching: false,
-                        particle_density_computation:
-                            ParticleDensityComputationStrategy::SynchronizeSubdomains,
-                    },
-                ));
-
-                reconstruct_surface_inplace::<i64, _>(
-                    particle_positions.as_slice(),
-                    &parameters,
-                    &mut reconstruction,
-                )
-                .unwrap()
-            })
-        },
-    );
-
-    group.bench_function(
-        "surface_reconstruction_double_dam_break_inplace_par_octree_stitching",
-        |b| {
-            b.iter(|| {
-                let mut parameters = parameters.clone();
-                parameters.spatial_decomposition = Some(SpatialDecomposition::Octree(
-                    OctreeDecompositionParameters {
-                        subdivision_criterion: SubdivisionCriterion::MaxParticleCountAuto,
-                        ghost_particle_safety_factor: Some(1.0),
-                        enable_stitching: true,
-                        particle_density_computation:
-                            ParticleDensityComputationStrategy::SynchronizeSubdomains,
-                    },
-                ));
-
                 reconstruct_surface_inplace::<i64, _>(
                     particle_positions.as_slice(),
                     &parameters,
