@@ -82,17 +82,6 @@ pub struct NeighborEdge<'a, 'b: 'a, I: Index> {
     connectivity: DirectedAxis,
 }
 
-/// A [`UniformGrid`] that represents a subdomain with an offset inside of a global grid, can be used for mapping between the grids using the [`Subdomain`] trait
-#[derive(Clone, Debug)]
-pub struct OwningSubdomainGrid<I: Index, R: Real> {
-    /// The global or outer grid
-    global_grid: UniformGrid<I, R>,
-    /// The smaller subdomain grid inside of the global grid
-    subdomain_grid: UniformGrid<I, R>,
-    /// The offset of the subdomain grid relative to the global grid
-    subdomain_offset: [I; 3],
-}
-
 /// A dummy subdomain grid that is actually identical to its global grid, note that this type assumes that any point and cell indices are valid for this grid
 #[derive(Clone, Debug)]
 pub struct DummySubdomain<'a, I: Index, R: Real> {
@@ -786,39 +775,6 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
             self.cell_size()
         );
         trace!("The resulting domain size is: {:?}", self.aabb());
-    }
-}
-
-impl<I: Index, R: Real> OwningSubdomainGrid<I, R> {
-    /// Creates a new subdomain grid
-    pub fn new(
-        global_grid: UniformGrid<I, R>,
-        subdomain_grid: UniformGrid<I, R>,
-        subdomain_offset: [I; 3],
-    ) -> Self {
-        OwningSubdomainGrid {
-            global_grid,
-            subdomain_grid,
-            subdomain_offset,
-        }
-    }
-}
-
-impl<I: Index, R: Real> Subdomain<I, R> for OwningSubdomainGrid<I, R> {
-    /// Returns a reference to the global grid corresponding to the subdomain
-    #[inline(always)]
-    fn global_grid(&self) -> &UniformGrid<I, R> {
-        &self.global_grid
-    }
-    /// Returns a reference to the subdomain grid
-    #[inline(always)]
-    fn subdomain_grid(&self) -> &UniformGrid<I, R> {
-        &self.subdomain_grid
-    }
-    /// Returns the offset of the subdomain grid relative to the global grid
-    #[inline(always)]
-    fn subdomain_offset(&self) -> &[I; 3] {
-        &self.subdomain_offset
     }
 }
 

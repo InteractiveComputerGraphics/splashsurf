@@ -84,11 +84,8 @@ fn default_params<R: Real>() -> Parameters<R> {
     default_params_with(Strategy::Global)
 }
 
-fn test_for_boundary<R: Real>(params: &Parameters<R>) -> bool {
-    match &params.spatial_decomposition {
-        Some(SpatialDecomposition::UniformGrid(_)) => true,
-        None => true,
-    }
+fn test_for_boundary<R: Real>(_params: &Parameters<R>) -> bool {
+    true
 }
 
 macro_rules! generate_test {

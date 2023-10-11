@@ -6,7 +6,7 @@ use crate::mesh::TriMesh3d;
 use crate::uniform_grid::UniformGrid;
 use crate::workspace::LocalReconstructionWorkspace;
 use crate::{
-    density_map, marching_cubes, neighborhood_search, new_map, profile, Index, Parameters, Real,
+    density_map, marching_cubes, neighborhood_search, profile, Index, Parameters, Real,
     ReconstructionError, SurfaceReconstruction,
 };
 use anyhow::Context;
@@ -108,7 +108,6 @@ pub(crate) fn reconstruct_surface_global<'a, I: Index, R: Real>(
         &mut *workspace,
         &output_surface.grid,
         particle_positions,
-        None,
         parameters,
         &mut output_surface.mesh,
     )?;
@@ -118,7 +117,7 @@ pub(crate) fn reconstruct_surface_global<'a, I: Index, R: Real>(
     Ok(())
 }
 
-/// Computes per particle densities into the workspace, also performs the required neighborhood search
+/// Performs global neighborhood search and computes per particle densities
 pub(crate) fn compute_particle_densities_and_neighbors<I: Index, R: Real>(
     grid: &UniformGrid<I, R>,
     particle_positions: &[Vector3<R>],
@@ -158,7 +157,6 @@ pub(crate) fn reconstruct_single_surface_append<'a, I: Index, R: Real>(
     workspace: &mut LocalReconstructionWorkspace<I, R>,
     grid: &UniformGrid<I, R>,
     particle_positions: &[Vector3<R>],
-    particle_densities: Option<&[R]>,
     parameters: &Parameters<R>,
     output_mesh: &'a mut TriMesh3d<R>,
 ) -> Result<(), ReconstructionError<I, R>> {
@@ -167,10 +165,7 @@ pub(crate) fn reconstruct_single_surface_append<'a, I: Index, R: Real>(
         * parameters.particle_radius.powi(3);
     let particle_rest_mass = particle_rest_volume * particle_rest_density;
 
-    let particle_densities = if let Some(particle_densities) = particle_densities {
-        assert_eq!(particle_densities.len(), particle_positions.len());
-        particle_densities
-    } else {
+    let particle_densities = {
         compute_particle_densities_and_neighbors(
             grid,
             particle_positions,
@@ -183,10 +178,9 @@ pub(crate) fn reconstruct_single_surface_append<'a, I: Index, R: Real>(
 
     // Create a new density map, reusing memory with the workspace is bad for cache efficiency
     // Alternatively one could reuse memory with a custom caching allocator
-    let mut density_map = new_map().into();
+    let mut density_map = Default::default();
     density_map::generate_sparse_density_map(
         grid,
-        None,
         particle_positions,
         particle_densities,
         None,
@@ -199,7 +193,6 @@ pub(crate) fn reconstruct_single_surface_append<'a, I: Index, R: Real>(
 
     marching_cubes::triangulate_density_map_append(
         grid,
-        None,
         &density_map,
         parameters.iso_surface_threshold,
         output_mesh,

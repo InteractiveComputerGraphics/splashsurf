@@ -22,7 +22,7 @@ use crate::aabb::Aabb3d;
 use crate::kernel::DiscreteSquaredDistanceCubicKernel;
 use crate::mesh::{HexMesh3d, MeshAttribute, MeshWithData};
 use crate::neighborhood_search::NeighborhoodList;
-use crate::uniform_grid::{OwningSubdomainGrid, Subdomain, UniformGrid};
+use crate::uniform_grid::UniformGrid;
 use crate::utils::{ChunkSize, ParallelPolicy};
 use crate::{new_map, profile, HashState, Index, MapType, ParallelMapType, Real};
 use dashmap::ReadOnlyView as ReadDashMap;
@@ -224,6 +224,12 @@ pub enum DensityMap<I: Index, R: Real> {
     DashMap(ReadDashMap<I, R, HashState>),
 }
 
+impl<I: Index, R: Real> Default for DensityMap<I, R> {
+    fn default() -> Self {
+        DensityMap::Standard(MapType::default())
+    }
+}
+
 impl<I: Index, R: Real> From<MapType<I, R>> for DensityMap<I, R> {
     fn from(map: MapType<I, R>) -> Self {
         Self::Standard(map)
@@ -261,17 +267,6 @@ impl<I: Index, R: Real> DensityMap<I, R> {
         }
     }
 
-    /// Returns a mutable reference to the contained standard map, replaces itself if not of standard type
-    fn standard_or_insert_mut(&mut self) -> &mut MapType<I, R> {
-        match self {
-            DensityMap::Standard(map) => return map,
-            _ => {}
-        }
-
-        *self = new_map().into();
-        self.standard_or_insert_mut()
-    }
-
     /// Calls a closure for each `(flat_point_index, density_value)` tuple in the map
     pub fn for_each<F: FnMut(I, R)>(&self, f: F) {
         let mut f = f;
@@ -286,7 +281,6 @@ impl<I: Index, R: Real> DensityMap<I, R> {
 #[inline(never)]
 pub fn generate_sparse_density_map<I: Index, R: Real>(
     grid: &UniformGrid<I, R>,
-    subdomain: Option<&OwningSubdomainGrid<I, R>>,
     particle_positions: &[Vector3<R>],
     particle_densities: &[R],
     active_particles: Option<&[usize]>,
@@ -305,44 +299,27 @@ pub fn generate_sparse_density_map<I: Index, R: Real>(
         }
     );
 
-    if let Some(subdomain) = subdomain {
-        if allow_threading {
-            panic!("Multi threading not implemented for density map with subdomain");
-        } else {
-            sequential_generate_sparse_density_map_subdomain(
-                subdomain,
-                particle_positions,
-                particle_densities,
-                active_particles,
-                particle_rest_mass,
-                compact_support_radius,
-                cube_size,
-                density_map,
-            )?;
-        }
+    if allow_threading {
+        *density_map = parallel_generate_sparse_density_map(
+            grid,
+            particle_positions,
+            particle_densities,
+            active_particles,
+            particle_rest_mass,
+            compact_support_radius,
+            cube_size,
+        )?
     } else {
-        if allow_threading {
-            *density_map = parallel_generate_sparse_density_map(
-                grid,
-                particle_positions,
-                particle_densities,
-                active_particles,
-                particle_rest_mass,
-                compact_support_radius,
-                cube_size,
-            )?
-        } else {
-            *density_map = sequential_generate_sparse_density_map(
-                grid,
-                particle_positions,
-                particle_densities,
-                active_particles,
-                particle_rest_mass,
-                compact_support_radius,
-                cube_size,
-            )?
-        }
-    };
+        *density_map = sequential_generate_sparse_density_map(
+            grid,
+            particle_positions,
+            particle_densities,
+            active_particles,
+            particle_rest_mass,
+            compact_support_radius,
+            cube_size,
+        )?
+    }
 
     trace!(
         "Sparse density map was constructed. (Output: density map with {} grid point data entries)",
@@ -397,55 +374,6 @@ pub fn sequential_generate_sparse_density_map<I: Index, R: Real>(
     }
 
     Ok(sparse_densities.into())
-}
-
-/// Computes a sparse density map for the fluid restricted to the specified subdomain
-#[inline(never)]
-pub fn sequential_generate_sparse_density_map_subdomain<I: Index, R: Real>(
-    subdomain: &OwningSubdomainGrid<I, R>,
-    particle_positions: &[Vector3<R>],
-    particle_densities: &[R],
-    active_particles: Option<&[usize]>,
-    particle_rest_mass: R,
-    compact_support_radius: R,
-    cube_size: R,
-    density_map: &mut DensityMap<I, R>,
-) -> Result<(), DensityMapError<R>> {
-    profile!("sequential_generate_sparse_density_map_subdomain");
-
-    let mut sparse_densities = density_map.standard_or_insert_mut();
-    sparse_densities.clear();
-
-    let density_map_generator = SparseDensityMapGenerator::try_new(
-        &subdomain.global_grid(),
-        compact_support_radius,
-        cube_size,
-        particle_rest_mass,
-    )?;
-
-    let process_particle = |particle_data: (&Vector3<R>, R)| {
-        let (particle, particle_density) = particle_data;
-        density_map_generator.compute_particle_density_contribution_subdomain(
-            subdomain,
-            &mut sparse_densities,
-            particle,
-            particle_density,
-        );
-    };
-
-    match active_particles {
-        None => particle_positions
-            .iter()
-            .zip(particle_densities.iter().copied())
-            .for_each(process_particle),
-        Some(indices) => indices
-            .iter()
-            .map(|&i| &particle_positions[i])
-            .zip(indices.iter().map(|&i| particle_densities[i]))
-            .for_each(process_particle),
-    }
-
-    Ok(())
 }
 
 /// Computes a sparse density map for the fluid based on the specified background grid, multi-threaded implementation
@@ -691,84 +619,6 @@ impl<I: Index, R: Real> SparseDensityMapGenerator<I, R> {
             min_supported_point_ijk[1] + self.supported_points,
             min_supported_point_ijk[2] + self.supported_points,
         ];
-
-        self.particle_support_loop(
-            sparse_densities,
-            grid,
-            &min_supported_point_ijk,
-            &max_supported_point_ijk,
-            particle,
-            particle_density,
-        );
-    }
-
-    /// Computes all density contributions of a particle to a subdomain of the background grid into the given map
-    fn compute_particle_density_contribution_subdomain(
-        &self,
-        subdomain: &OwningSubdomainGrid<I, R>,
-        sparse_densities: &mut MapType<I, R>,
-        particle: &Vector3<R>,
-        particle_density: R,
-    ) {
-        let grid = subdomain.global_grid();
-        let subdomain_grid = subdomain.subdomain_grid();
-        let subdomain_offset = subdomain.subdomain_offset();
-
-        // Skip particles outside of allowed domain
-        if !self.allowed_domain.contains_point(particle) {
-            return;
-        }
-
-        let global_subdomain_min_point = subdomain_offset;
-        // Note: max supported point is one past the actual max point index
-        let global_subdomain_max_point = [
-            global_subdomain_min_point[0] + subdomain_grid.points_per_dim()[0],
-            global_subdomain_min_point[1] + subdomain_grid.points_per_dim()[1],
-            global_subdomain_min_point[2] + subdomain_grid.points_per_dim()[2],
-        ];
-
-        // Compute cuboid region of grid points that may be affected by the particle
-        // This excludes grid points outside of the current subdomain
-
-        let min_supported_point_ijk = {
-            let cell_ijk = grid.enclosing_cell(particle);
-            [
-                (cell_ijk[0] - self.half_supported_cells).max(global_subdomain_min_point[0]),
-                (cell_ijk[1] - self.half_supported_cells).max(global_subdomain_min_point[1]),
-                (cell_ijk[2] - self.half_supported_cells).max(global_subdomain_min_point[2]),
-            ]
-        };
-
-        let max_supported_point_ijk = {
-            [
-                (min_supported_point_ijk[0] + self.supported_points)
-                    .min(global_subdomain_max_point[0]),
-                (min_supported_point_ijk[1] + self.supported_points)
-                    .min(global_subdomain_max_point[1]),
-                (min_supported_point_ijk[2] + self.supported_points)
-                    .min(global_subdomain_max_point[2]),
-            ]
-        };
-
-        // Check if lower corner of the supported domain is above of subdomain
-        if min_supported_point_ijk
-            .iter()
-            .copied()
-            .zip(global_subdomain_max_point.iter().copied())
-            .any(|(min_support, subdomain_max)| min_support > subdomain_max)
-        {
-            return;
-        }
-
-        // Check if upper corner of the supported domain is below of subdomain
-        if max_supported_point_ijk
-            .iter()
-            .copied()
-            .zip(global_subdomain_min_point.iter().copied())
-            .any(|(max_support, subdomain_min)| max_support < subdomain_min)
-        {
-            return;
-        }
 
         self.particle_support_loop(
             sparse_densities,

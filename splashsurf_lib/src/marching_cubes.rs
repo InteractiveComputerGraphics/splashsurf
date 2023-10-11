@@ -3,7 +3,7 @@
 use crate::marching_cubes::narrow_band_extraction::construct_mc_input;
 use crate::marching_cubes::triangulation::triangulate;
 use crate::mesh::TriMesh3d;
-use crate::uniform_grid::{DummySubdomain, OwningSubdomainGrid};
+use crate::uniform_grid::DummySubdomain;
 use crate::{new_map, profile, DensityMap, Index, MapType, Real, UniformGrid};
 use nalgebra::Vector3;
 use thiserror::Error as ThisError;
@@ -115,28 +115,20 @@ pub fn triangulate_density_map<I: Index, R: Real>(
     profile!("triangulate_density_map");
 
     let mut mesh = TriMesh3d::default();
-    triangulate_density_map_append(grid, None, density_map, iso_surface_threshold, &mut mesh)?;
+    triangulate_density_map_append(grid, density_map, iso_surface_threshold, &mut mesh)?;
     Ok(mesh)
 }
 
 /// Performs a marching cubes triangulation of a density map on the given background grid, appends triangles to the given mesh
 pub fn triangulate_density_map_append<I: Index, R: Real>(
     grid: &UniformGrid<I, R>,
-    subdomain: Option<&OwningSubdomainGrid<I, R>>,
     density_map: &DensityMap<I, R>,
     iso_surface_threshold: R,
     mesh: &mut TriMesh3d<R>,
 ) -> Result<(), MarchingCubesError> {
     profile!("triangulate_density_map_append");
 
-    let marching_cubes_data = if let Some(subdomain) = subdomain {
-        construct_mc_input(
-            subdomain,
-            &density_map,
-            iso_surface_threshold,
-            &mut mesh.vertices,
-        )
-    } else {
+    let marching_cubes_data = {
         let subdomain = DummySubdomain::new(grid);
         construct_mc_input(
             &subdomain,
