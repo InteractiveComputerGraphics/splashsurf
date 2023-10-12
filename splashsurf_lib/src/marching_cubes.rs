@@ -3,7 +3,6 @@
 use crate::marching_cubes::narrow_band_extraction::construct_mc_input;
 use crate::marching_cubes::triangulation::triangulate;
 use crate::mesh::TriMesh3d;
-use crate::uniform_grid::DummySubdomain;
 use crate::{new_map, profile, DensityMap, Index, MapType, Real, UniformGrid};
 use nalgebra::Vector3;
 use thiserror::Error as ThisError;
@@ -119,15 +118,12 @@ pub fn triangulate_density_map_append<I: Index, R: Real>(
 ) -> Result<(), MarchingCubesError> {
     profile!("triangulate_density_map_append");
 
-    let marching_cubes_data = {
-        let subdomain = DummySubdomain::new(grid);
-        construct_mc_input(
-            &subdomain,
-            &density_map,
-            iso_surface_threshold,
-            &mut mesh.vertices,
-        )
-    };
+    let marching_cubes_data = construct_mc_input(
+        grid,
+        &density_map,
+        iso_surface_threshold,
+        &mut mesh.vertices,
+    );
 
     triangulate(marching_cubes_data, mesh)?;
     Ok(())
@@ -335,15 +331,14 @@ fn test_interpolate_cell_data() {
 
     let mut sparse_data = new_map();
 
-    let marching_cubes_data = {
-        let subdomain = DummySubdomain::new(&grid);
+    let marching_cubes_data =
         construct_mc_input(
-            &subdomain,
+            &grid,
             &sparse_data.clone().into(),
             iso_surface_threshold,
             &mut trimesh.vertices,
         )
-    };
+    ;
 
     assert_eq!(trimesh.vertices.len(), 0);
     assert_eq!(marching_cubes_data.cell_data.len(), 0);
@@ -363,15 +358,14 @@ fn test_interpolate_cell_data() {
         sparse_data.insert(grid.flatten_point_index_array(&ijk), val);
     }
 
-    let marching_cubes_data = {
-        let subdomain = DummySubdomain::new(&grid);
+    let marching_cubes_data =
         construct_mc_input(
-            &subdomain,
+            &grid,
             &sparse_data.clone().into(),
             iso_surface_threshold,
             &mut trimesh.vertices,
         )
-    };
+    ;
 
     assert_eq!(marching_cubes_data.cell_data.len(), 1);
     // Check that the correct number of vertices was created

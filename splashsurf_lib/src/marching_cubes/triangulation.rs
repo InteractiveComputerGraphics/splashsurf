@@ -24,15 +24,6 @@ pub(crate) fn triangulate<I: Index, R: Real>(
     input: MarchingCubesInput<I>,
     mesh: &mut TriMesh3d<R>,
 ) -> Result<(), TriangulationError> {
-    triangulate_with_criterion(input, mesh)
-}
-
-/// Converts the marching cubes input cell data into a triangle surface mesh, appends triangles to existing mesh with custom criterion to filter out cells during triangulation
-#[inline(never)]
-pub(crate) fn triangulate_with_criterion<I: Index, R: Real>(
-    input: MarchingCubesInput<I>,
-    mesh: &mut TriMesh3d<R>,
-) -> Result<(), TriangulationError> {
     profile!("triangulate_with_criterion");
 
     let MarchingCubesInput { cell_data } = input;
