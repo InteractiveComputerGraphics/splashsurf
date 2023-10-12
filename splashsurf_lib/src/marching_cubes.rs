@@ -331,14 +331,12 @@ fn test_interpolate_cell_data() {
 
     let mut sparse_data = new_map();
 
-    let marching_cubes_data =
-        construct_mc_input(
-            &grid,
-            &sparse_data.clone().into(),
-            iso_surface_threshold,
-            &mut trimesh.vertices,
-        )
-    ;
+    let marching_cubes_data = construct_mc_input(
+        &grid,
+        &sparse_data.clone().into(),
+        iso_surface_threshold,
+        &mut trimesh.vertices,
+    );
 
     assert_eq!(trimesh.vertices.len(), 0);
     assert_eq!(marching_cubes_data.cell_data.len(), 0);
@@ -358,14 +356,12 @@ fn test_interpolate_cell_data() {
         sparse_data.insert(grid.flatten_point_index_array(&ijk), val);
     }
 
-    let marching_cubes_data =
-        construct_mc_input(
-            &grid,
-            &sparse_data.clone().into(),
-            iso_surface_threshold,
-            &mut trimesh.vertices,
-        )
-    ;
+    let marching_cubes_data = construct_mc_input(
+        &grid,
+        &sparse_data.clone().into(),
+        iso_surface_threshold,
+        &mut trimesh.vertices,
+    );
 
     assert_eq!(marching_cubes_data.cell_data.len(), 1);
     // Check that the correct number of vertices was created

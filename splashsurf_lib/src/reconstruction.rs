@@ -93,7 +93,7 @@ pub(crate) fn reconstruct_surface_global<'a, I: Index, R: Real>(
 
     // Reuse allocated memory: swap particle densities from output object into the workspace if the former has a larger capacity
     if let Some(output_densities) = output_surface.particle_densities.as_ref() {
-        if output_densities.capacity() > output_surface.workspace.densities().capacity() {
+        if output_densities.capacity() > workspace.particle_densities.capacity() {
             std::mem::swap(
                 output_surface.particle_densities.as_mut().unwrap(),
                 &mut workspace.particle_densities,
@@ -154,7 +154,7 @@ pub(crate) fn compute_particle_densities_and_neighbors<I: Index, R: Real>(
 
 /// Reconstruct a surface, appends triangulation to the given mesh
 pub(crate) fn reconstruct_single_surface_append<'a, I: Index, R: Real>(
-    workspace: &mut LocalReconstructionWorkspace<I, R>,
+    workspace: &mut LocalReconstructionWorkspace<R>,
     grid: &UniformGrid<I, R>,
     particle_positions: &[Vector3<R>],
     parameters: &Parameters<R>,

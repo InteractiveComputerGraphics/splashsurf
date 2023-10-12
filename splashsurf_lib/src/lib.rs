@@ -209,7 +209,7 @@ pub struct SurfaceReconstruction<I: Index, R: Real> {
     /// Surface mesh that is the result of the surface reconstruction
     mesh: TriMesh3d<R>,
     /// Workspace with allocated memory for subsequent surface reconstructions
-    workspace: ReconstructionWorkspace<I, R>,
+    workspace: ReconstructionWorkspace<R>,
 }
 
 impl<I: Index, R: Real> Default for SurfaceReconstruction<I, R> {
