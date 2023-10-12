@@ -122,7 +122,7 @@ pub struct ReconstructSubcommandArgs {
     #[arg(
         help_heading = ARGS_OCTREE,
         long,
-        default_value = "off",
+        default_value = "on",
         value_name = "off|on",
         ignore_case = true,
         require_equals = true
