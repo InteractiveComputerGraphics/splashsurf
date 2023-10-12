@@ -1,12 +1,10 @@
 use crate::marching_cubes::marching_cubes_lut::marching_cubes_triangulation_iter;
 use crate::marching_cubes::{CellData, MarchingCubesInput};
 use crate::mesh::TriMesh3d;
-use crate::uniform_grid::{DummySubdomain, GridBoundaryFaceFlags, Subdomain, UniformGrid};
+use crate::uniform_grid::{DummySubdomain, Subdomain, UniformGrid};
 use crate::{profile, Index, Real};
 use anyhow::Context;
 use log::trace;
-use nalgebra::Vector3;
-use std::marker::PhantomData;
 use thiserror::Error as ThisError;
 
 /// Error enum for the marching cubes triangulation stage
@@ -29,8 +27,6 @@ pub(crate) trait TriangulationCriterion<I: Index, R: Real, S: Subdomain<I, R>> {
 
 /// An identity triangulation criterion that accepts all cells
 pub(crate) struct TriangulationIdentityCriterion;
-/// A triangulation criterion that ensures that every cell is part of the subdomain but skips one layer of boundary cells
-pub(crate) struct TriangulationSkipBoundaryCells;
 
 /// Trait that is used by the marching cubes [triangulate_with_criterion] function to convert a marching cubes triangulation to actual triangle-vertex connectivity
 pub(crate) trait TriangleGenerator<I: Index, R: Real, S: Subdomain<I, R>> {
@@ -45,8 +41,6 @@ pub(crate) trait TriangleGenerator<I: Index, R: Real, S: Subdomain<I, R>> {
 
 /// Maps the edges indices directly to the vertex indices in the cell data
 pub(crate) struct DefaultTriangleGenerator;
-/// Tries to map the edge indices to the vertex indices in the cell data, returns an error with debug information if vertices are missing
-pub(crate) struct DebugTriangleGenerator;
 
 /// Converts the marching cubes input cell data into a triangle surface mesh, appends triangles to existing mesh
 #[inline(never)]
@@ -59,7 +53,7 @@ pub(crate) fn triangulate<I: Index, R: Real>(
         input,
         mesh,
         TriangulationIdentityCriterion,
-        DebugTriangleGenerator,
+        DefaultTriangleGenerator,
     )
 }
 
@@ -116,73 +110,12 @@ pub(crate) fn triangulate_with_criterion<
     Ok(())
 }
 
-/// Forwards to the wrapped triangulation criterion but first makes some assertions on the cell data
-struct DebugTriangulationCriterion<
-    I: Index,
-    R: Real,
-    S: Subdomain<I, R>,
-    C: TriangulationCriterion<I, R, S>,
-> {
-    triangulation_criterion: C,
-    phantom: PhantomData<(I, R, S)>,
-}
-
 impl<I: Index, R: Real, S: Subdomain<I, R>> TriangulationCriterion<I, R, S>
     for TriangulationIdentityCriterion
 {
     #[inline(always)]
     fn triangulate_cell(&self, _: &S, _: I, _: &CellData) -> bool {
         true
-    }
-}
-
-impl<I: Index, R: Real, S: Subdomain<I, R>> TriangulationCriterion<I, R, S>
-    for TriangulationSkipBoundaryCells
-{
-    #[inline(always)]
-    fn triangulate_cell(&self, subdomain: &S, flat_cell_index: I, _: &CellData) -> bool {
-        let global_cell = subdomain
-            .global_grid()
-            .try_unflatten_cell_index(flat_cell_index)
-            .unwrap();
-        let local_cell = subdomain
-            .map_cell(&global_cell)
-            .expect("Cell is not part of the subdomain");
-        let cell_grid_boundaries =
-            GridBoundaryFaceFlags::classify_cell(subdomain.subdomain_grid(), &local_cell);
-
-        return cell_grid_boundaries.is_empty();
-    }
-}
-
-impl<I: Index, R: Real, S: Subdomain<I, R>, C: TriangulationCriterion<I, R, S>>
-    DebugTriangulationCriterion<I, R, S, C>
-{
-    #[allow(unused)]
-    fn new(triangulation_criterion: C) -> Self {
-        Self {
-            triangulation_criterion,
-            phantom: Default::default(),
-        }
-    }
-}
-
-impl<I: Index, R: Real, S: Subdomain<I, R>, C: TriangulationCriterion<I, R, S>>
-    TriangulationCriterion<I, R, S> for DebugTriangulationCriterion<I, R, S, C>
-{
-    #[inline(always)]
-    fn triangulate_cell(&self, subdomain: &S, flat_cell_index: I, cell_data: &CellData) -> bool {
-        assert!(
-            !cell_data
-                .corner_above_threshold
-                .iter()
-                .any(|c| c.is_indeterminate()),
-            "{}",
-            cell_debug_string(subdomain, flat_cell_index, cell_data)
-        );
-
-        self.triangulation_criterion
-            .triangulate_cell(subdomain, flat_cell_index, cell_data)
     }
 }
 
@@ -205,20 +138,6 @@ impl<I: Index, R: Real, S: Subdomain<I, R>> TriangleGenerator<I, R, S>
         //
         //  If this happens, it's a bug in the cell data map generation.
         get_triangle(cell_data, edge_indices)
-    }
-}
-
-impl<I: Index, R: Real, S: Subdomain<I, R>> TriangleGenerator<I, R, S> for DebugTriangleGenerator {
-    #[inline(always)]
-    fn triangle_connectivity(
-        &self,
-        subdomain: &S,
-        flat_cell_index: I,
-        cell_data: &CellData,
-        edge_indices: [i32; 3],
-    ) -> Result<[usize; 3], anyhow::Error> {
-        get_triangle(cell_data, edge_indices)
-            .with_context(|| cell_debug_string(subdomain, flat_cell_index, cell_data))
     }
 }
 
@@ -258,33 +177,4 @@ fn get_triangle(cell_data: &CellData, edge_indices: [i32; 3]) -> Result<[usize; 
                 )
             })?,
     ])
-}
-
-/// Helper function that returns a formatted string to debug triangulation failures
-fn cell_debug_string<I: Index, R: Real, S: Subdomain<I, R>>(
-    subdomain: &S,
-    flat_cell_index: I,
-    cell_data: &CellData,
-) -> String {
-    let global_cell_index = subdomain
-        .global_grid()
-        .try_unflatten_cell_index(flat_cell_index)
-        .expect("Failed to get cell index");
-
-    let point_index = subdomain
-        .global_grid()
-        .get_point(*global_cell_index.index())
-        .expect("Unable to get point index of cell");
-    let cell_center = subdomain.global_grid().point_coordinates(&point_index)
-        + &Vector3::repeat(subdomain.global_grid().cell_size().times_f64(0.5));
-
-    format!(
-        "Unable to construct triangle for cell {:?}, with center coordinates {:?} and edge length {}.\n{:?}\nStitching domain: (offset: {:?}, cells_per_dim: {:?})",
-        global_cell_index.index(),
-        cell_center,
-        subdomain.global_grid().cell_size(),
-        cell_data,
-        subdomain.subdomain_offset(),
-        subdomain.subdomain_grid().cells_per_dim(),
-    )
 }

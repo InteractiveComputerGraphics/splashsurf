@@ -53,15 +53,6 @@ impl RelativeToThreshold {
             }
         }
     }
-
-    /// Returns if the value is above the iso-surface threshold or `None` if the value is indeterminate
-    fn is_indeterminate(&self) -> bool {
-        if let RelativeToThreshold::Indeterminate = self {
-            true
-        } else {
-            false
-        }
-    }
 }
 
 /// Data for a single cell required by marching cubes
