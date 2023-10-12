@@ -54,7 +54,7 @@ fn interpolate_points_to_cell_data_generic<I: Index, R: Real>(
     vertices: &mut Vec<Vector3<R>>,
     marching_cubes_data: &mut MarchingCubesInput<I>,
 ) {
-    profile!("interpolate_points_to_cell_data_skip_boundary");
+    profile!("interpolate_points_to_cell_data_generic");
     trace!("Starting interpolation of cell data for marching cubes (excluding boundary layer)... (Input: {} existing vertices)", vertices.len());
 
     // Map from flat cell index to all data that is required per cell for the marching cubes triangulation

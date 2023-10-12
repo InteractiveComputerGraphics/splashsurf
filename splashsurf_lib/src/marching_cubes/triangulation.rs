@@ -24,7 +24,7 @@ pub(crate) fn triangulate<I: Index, R: Real>(
     input: MarchingCubesInput<I>,
     mesh: &mut TriMesh3d<R>,
 ) -> Result<(), TriangulationError> {
-    profile!("triangulate_with_criterion");
+    profile!("triangulate");
 
     let MarchingCubesInput { cell_data } = input;
 
