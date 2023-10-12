@@ -392,12 +392,6 @@ pub fn reconstruct_surface_inplace<'a, I: Index, R: Real>(
     Ok(())
 }
 
-/*
-fn filter_particles<I: Index, R: Real>(particle_positions: &[Vector3<R>], particle_aabb: &Aabb3d<R>, enable_multi_threading: bool) -> Vec<Vector3<R>> {
-    use rayon::prelude::*;
-    let is_inside = particle_positions.par_iter().map(|p| particle_aabb.contains_point(p)).collect::<Vec<_>>();
-}*/
-
 /// Constructs the background grid for marching cubes based on the parameters supplied to the surface reconstruction
 pub fn grid_for_reconstruction<I: Index, R: Real>(
     particle_positions: &[Vector3<R>],
