@@ -21,7 +21,7 @@ fn test_halfedge_ico() -> Result<(), anyhow::Error> {
     let (tri_mesh, _vertex_map) = he_mesh.into_parts(true);
     let _tri_vertex_map = tri_mesh.vertex_vertex_connectivity();
 
-    io::obj_format::mesh_to_obj(&MeshWithData::new(tri_mesh), "../icosphere_new.obj")?;
+    io::obj_format::mesh_to_obj(&MeshWithData::new(tri_mesh), "../out/icosphere_new.obj")?;
     Ok(())
 }
 
@@ -34,7 +34,7 @@ fn test_halfedge_plane() -> Result<(), anyhow::Error> {
         v.y = -0.1 * (v.x * v.x + v.z * v.z);
     }
 
-    io::obj_format::mesh_to_obj(&MeshWithData::new(mesh.clone()), "../plane_new_0.obj")?;
+    io::obj_format::mesh_to_obj(&MeshWithData::new(mesh.clone()), "../out/plane_new_0.obj")?;
 
     let mut he_mesh = HalfEdgeTriMesh::from(mesh);
 
@@ -61,6 +61,6 @@ fn test_halfedge_plane() -> Result<(), anyhow::Error> {
     let (tri_mesh, _vertex_map) = he_mesh.into_parts(true);
     let _tri_vertex_map = tri_mesh.vertex_vertex_connectivity();
 
-    io::obj_format::mesh_to_obj(&MeshWithData::new(tri_mesh), "../plane_new_1.obj")?;
+    io::obj_format::mesh_to_obj(&MeshWithData::new(tri_mesh), "../out/plane_new_1.obj")?;
     Ok(())
 }
