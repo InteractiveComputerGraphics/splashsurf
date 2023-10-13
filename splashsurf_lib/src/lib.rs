@@ -65,7 +65,6 @@ pub mod mesh;
 pub mod neighborhood_search;
 pub mod postprocessing;
 pub(crate) mod reconstruction;
-mod reconstruction_octree;
 pub mod sph_interpolation;
 pub mod topology;
 mod traits;
@@ -201,8 +200,6 @@ impl<R: Real> Parameters<R> {
 pub struct SurfaceReconstruction<I: Index, R: Real> {
     /// Background grid that was used as a basis for generating the density map for marching cubes
     grid: UniformGrid<I, R>,
-    /// Point-based density map generated from the particles that was used as input to marching cubes
-    density_map: Option<DensityMap<I, R>>,
     /// Per particle densities (contains only data of particles inside the domain)
     particle_densities: Option<Vec<R>>,
     /// If an AABB was specified to restrict the reconstruction, this stores per input particle whether they were inside
@@ -220,7 +217,6 @@ impl<I: Index, R: Real> Default for SurfaceReconstruction<I, R> {
     fn default() -> Self {
         Self {
             grid: UniformGrid::new_zero(),
-            density_map: None,
             particle_densities: None,
             particle_neighbors: None,
             particle_inside_aabb: None,
@@ -234,11 +230,6 @@ impl<I: Index, R: Real> SurfaceReconstruction<I, R> {
     /// Returns a reference to the actual triangulated surface mesh that is the result of the reconstruction
     pub fn mesh(&self) -> &TriMesh3d<R> {
         &self.mesh
-    }
-
-    /// Returns a reference to the sparse density map (discretized on the vertices of the background grid) that is used as input for marching cubes (always `None` when using domain decomposition)
-    pub fn density_map(&self) -> Option<&DensityMap<I, R>> {
-        self.density_map.as_ref()
     }
 
     /// Returns a reference to the global particle density vector if it was computed during the reconstruction (always `None` when using independent subdomains with domain decomposition)
@@ -385,7 +376,7 @@ pub fn reconstruct_surface_inplace<'a, I: Index, R: Real>(
                 output_surface,
             )?
         }
-        None => reconstruction_octree::reconstruct_surface_global(
+        None => reconstruction::reconstruct_surface_global(
             particle_positions,
             parameters,
             output_surface,
