@@ -2,7 +2,10 @@
 
 The following changes are present in the `main` branch of the repository and are not yet part of a release:
 
- - N/A
+ - Lib: Remove octree-based domain decomposition (superseded by regular grid subdivision approach `--subdomain-grid`)
+ - CLI: Set `--subdomain-grid=on` by default
+ - CLI: Remove all arguments for octree-based domain decomposition
+ - CLI: Remove options to output some debug files (octree grid, density map, etc.)
 
 ## Version 0.10.0
 

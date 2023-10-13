@@ -23,6 +23,7 @@ fn parameters_canyon() -> Parameters<f32> {
         spatial_decomposition: Some(SpatialDecomposition::UniformGrid(
             GridDecompositionParameters {
                 subdomain_num_cubes_per_dim: 32,
+                ..Default::default()
             },
         )),
         global_neighborhood_list: false,
@@ -50,6 +51,7 @@ pub fn grid_canyon(c: &mut Criterion) {
             parameters.spatial_decomposition = Some(SpatialDecomposition::UniformGrid(
                 GridDecompositionParameters {
                     subdomain_num_cubes_per_dim: 32,
+                    ..Default::default()
                 },
             ));
             reconstruction =
@@ -64,6 +66,7 @@ pub fn grid_canyon(c: &mut Criterion) {
             parameters.spatial_decomposition = Some(SpatialDecomposition::UniformGrid(
                 GridDecompositionParameters {
                     subdomain_num_cubes_per_dim: 48,
+                    ..Default::default()
                 },
             ));
             reconstruction =
@@ -78,6 +81,7 @@ pub fn grid_canyon(c: &mut Criterion) {
             parameters.spatial_decomposition = Some(SpatialDecomposition::UniformGrid(
                 GridDecompositionParameters {
                     subdomain_num_cubes_per_dim: 64,
+                    ..Default::default()
                 },
             ));
             reconstruction =
@@ -111,6 +115,7 @@ pub fn grid_optimal_num_cubes_canyon(c: &mut Criterion) {
                     parameters.spatial_decomposition = Some(SpatialDecomposition::UniformGrid(
                         GridDecompositionParameters {
                             subdomain_num_cubes_per_dim: num_cubes,
+                            ..Default::default()
                         },
                     ));
                     reconstruction =

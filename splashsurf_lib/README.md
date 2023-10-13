@@ -37,13 +37,15 @@ For each of the features, `splashsurf_lib` re-exports the corresponding dependen
 
 Currently, only one method based on a "spatial hashing" strategy is implemented.
 
+`TODO: This section is missing a description of the domain decomposition for more efficient parallelization`
+
 **Short summary**: The fluid density is evaluated or mapped onto a sparse grid using spatial hashing in the support radius of each fluid particle. This implies that memory is only allocated in areas where the fluid density is non-zero. This is in contrast to a naive approach where the marching cubes background grid is allocated for the whole domain. Finally, the marching cubes reconstruction is performed only in those grid cells where an edge crosses the surface threshold. Cells completely in the interior of the fluid are skipped in the marching cubes phase.
 
 **Individual steps**:
  1. Construct a "virtual background grid" with the desired resolution of the marching cubes algorithm. In the end, the procedure will place a single surface mesh vertex on each edge of this virtual grid, where the fluid surface crosses the edge (or rather, where the fluid density crosses the specified threshold). Virtual means that no storage is actually allocated for this grid yet; only its topology is used implicitly later.
  2. Compute the density of each fluid particle
-   - Perform a neighborhood search
-   - Per particle, evaluate an SPH sum over the neighbors to compute its density (based on input parameters of kernel radius and particle rest mass)
+    - Perform a neighborhood search
+    - Per particle, evaluate an SPH sum over the neighbors to compute its density (based on input parameters of kernel radius and particle rest mass)
  3. Optional: filter out (or rather mask as inactive) single particles if the user provided a "splash detection radius". This is done by performing an additional neighborhood search using this splash detection radius instead of the kernel radius.
  4. Compute a "sparse density map": a map from the index of a vertex of the virtual background grid to the corresponding fluid density value. The map will only contain entries for vertices where the fluid density is non-zero. Construction of the map:
     - Iterate over all active particles

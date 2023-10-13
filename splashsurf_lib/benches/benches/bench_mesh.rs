@@ -2,8 +2,7 @@ use criterion::{criterion_group, Criterion};
 use splashsurf_lib::io::particles_from_file;
 use splashsurf_lib::nalgebra::Vector3;
 use splashsurf_lib::{
-    reconstruct_surface, OctreeDecompositionParameters, Parameters,
-    ParticleDensityComputationStrategy, SpatialDecomposition, SubdivisionCriterion,
+    reconstruct_surface, GridDecompositionParameters, Parameters, SpatialDecomposition,
     SurfaceReconstruction,
 };
 use std::path::Path;
@@ -24,14 +23,8 @@ fn reconstruct_particles<P: AsRef<Path>>(particle_file: P) -> SurfaceReconstruct
         iso_surface_threshold: 0.6,
         particle_aabb: None,
         enable_multi_threading: true,
-        spatial_decomposition: Some(SpatialDecomposition::Octree(
-            OctreeDecompositionParameters {
-                subdivision_criterion: SubdivisionCriterion::MaxParticleCountAuto,
-                ghost_particle_safety_factor: None,
-                enable_stitching: true,
-                particle_density_computation:
-                    ParticleDensityComputationStrategy::SynchronizeSubdomains,
-            },
+        spatial_decomposition: Some(SpatialDecomposition::UniformGrid(
+            GridDecompositionParameters::default(),
         )),
         global_neighborhood_list: false,
     };

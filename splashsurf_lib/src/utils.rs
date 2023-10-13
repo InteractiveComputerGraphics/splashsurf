@@ -94,6 +94,7 @@ pub(crate) fn reserve_total<T>(vec: &mut Vec<T>, total_capacity: usize) {
 }
 
 /// Resizes the given vector to the given length and fills new entries with `value.clone()`, parallel or sequential depending on runtime parameter
+#[allow(unused)]
 pub(crate) fn resize_and_fill<T: Clone + Send + Sync>(
     vec: &mut Vec<T>,
     new_len: usize,
@@ -108,6 +109,7 @@ pub(crate) fn resize_and_fill<T: Clone + Send + Sync>(
 }
 
 /// Resizes the given vector to the given length and fills new entries with `value.clone()`, sequential version
+#[allow(unused)]
 pub(crate) fn seq_resize_and_fill<T: Clone>(vec: &mut Vec<T>, new_len: usize, value: T) {
     let old_len = vec.len();
     vec.iter_mut()
@@ -117,6 +119,7 @@ pub(crate) fn seq_resize_and_fill<T: Clone>(vec: &mut Vec<T>, new_len: usize, va
 }
 
 /// Resizes the given vector to the given length and fills new entries with `value.clone()`, parallel version
+#[allow(unused)]
 pub(crate) fn par_resize_and_fill<T: Clone + Send + Sync>(
     vec: &mut Vec<T>,
     new_len: usize,

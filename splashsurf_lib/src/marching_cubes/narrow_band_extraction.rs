@@ -1,67 +1,27 @@
-use crate::marching_cubes::stitching::{collect_boundary_cell_data, BoundaryData};
 use crate::marching_cubes::{CellData, MarchingCubesInput, RelativeToThreshold};
-use crate::topology::{Axis, DirectedAxisArray};
-use crate::uniform_grid::{CellIndex, GridBoundaryFaceFlags, PointIndex, Subdomain};
-use crate::{profile, DensityMap, Index, MapType, Real};
+use crate::uniform_grid::CellIndex;
+use crate::{profile, DensityMap, Index, MapType, Real, UniformGrid};
 use log::trace;
 use nalgebra::Vector3;
 
-/// Trait used by [interpolate_points_to_cell_data_generic] to filter out points and edges during construction of iso-surface vertices in narrow-band cells
-trait DensityMapFilter<I: Index, R: Real, S: Subdomain<I, R>> {
-    /// Returns whether the given point should be considered for the density map to cell data conversion
-    fn process_point(
-        &mut self,
-        density_map: &DensityMap<I, R>,
-        subdomain: &S,
-        flat_point_index: I,
-        subdomain_point: &PointIndex<I>,
-        point_value: R,
-    ) -> bool;
-
-    /// Returns whether the given edge should be considered for the density map to cell data conversion
-    fn process_edge(
-        &mut self,
-        density_map: &DensityMap<I, R>,
-        subdomain: &S,
-        flat_point_index: I,
-        subdomain_point: &PointIndex<I>,
-        flat_neighbor_index: I,
-        subdomain_neighbor: &PointIndex<I>,
-    ) -> bool;
-}
-
-/// Cell data interpolation filter that accepts all points and edges
-struct IdentityDensityMapFilter;
-
-/// Cell data interpolation filter that skips one boundary layer of cells of the domain and builds the boundary density maps
-struct SkipBoundaryLayerFilter<I: Index, R: Real> {
-    boundary_density_maps: DirectedAxisArray<MapType<I, R>>,
-}
-
-/// Cell data interpolation filter for processing the stitching domain between two reconstructed surface patches
-struct StitchingDomainNarrowBandFilter {
-    stitching_axis: Axis,
-}
-
 /// Returns the marching cubes input data for the narrow band of a single contiguous domain without support for stitching
-pub(crate) fn construct_mc_input<I: Index, R: Real, S: Subdomain<I, R>>(
-    subdomain: &S,
+pub(crate) fn construct_mc_input<I: Index, R: Real>(
+    grid: &UniformGrid<I, R>,
     density_map: &DensityMap<I, R>,
     iso_surface_threshold: R,
     vertices: &mut Vec<Vector3<R>>,
 ) -> MarchingCubesInput<I> {
     let mut marching_cubes_data = MarchingCubesInput::default();
-    let _ = interpolate_points_to_cell_data_generic::<I, R, _, _>(
-        subdomain,
+    let _ = interpolate_points_to_cell_data_generic::<I, R>(
+        grid,
         density_map,
         iso_surface_threshold,
         vertices,
         &mut marching_cubes_data,
-        IdentityDensityMapFilter,
     );
 
     update_cell_data_threshold_flags(
-        subdomain,
+        grid,
         density_map,
         iso_surface_threshold,
         true,
@@ -69,69 +29,6 @@ pub(crate) fn construct_mc_input<I: Index, R: Real, S: Subdomain<I, R>>(
     );
 
     marching_cubes_data
-}
-
-/// Returns marching cubes input data for the narrow band of the subdomain and collects all data on the boundaries required for stitching of this domain to neighboring domains
-pub(crate) fn construct_mc_input_with_stitching_data<I: Index, R: Real, S: Subdomain<I, R>>(
-    subdomain: &S,
-    density_map: &DensityMap<I, R>,
-    iso_surface_threshold: R,
-    vertices: &mut Vec<Vector3<R>>,
-) -> (MarchingCubesInput<I>, DirectedAxisArray<BoundaryData<I, R>>) {
-    let mut marching_cubes_data = MarchingCubesInput::default();
-    let boundary_filter = interpolate_points_to_cell_data_generic(
-        subdomain,
-        density_map,
-        iso_surface_threshold,
-        vertices,
-        &mut marching_cubes_data,
-        SkipBoundaryLayerFilter::new(),
-    );
-
-    update_cell_data_threshold_flags(
-        subdomain,
-        density_map,
-        iso_surface_threshold,
-        true,
-        &mut marching_cubes_data,
-    );
-
-    let mut boundary_density_maps = boundary_filter.into_inner();
-    let mut boundary_cell_data = collect_boundary_cell_data(subdomain, &mut marching_cubes_data);
-
-    let boundary_data = DirectedAxisArray::new_with(|axis| BoundaryData {
-        boundary_density_map: std::mem::take(boundary_density_maps.get_mut(axis)),
-        boundary_cell_data: std::mem::take(boundary_cell_data.get_mut(axis)),
-    });
-
-    (marching_cubes_data, boundary_data)
-}
-
-/// Updates the marching cubes input data in the narrow band of a stitching domain between two reconstructed patches
-pub(crate) fn update_mc_input_for_stitching_domain<I: Index, R: Real, S: Subdomain<I, R>>(
-    subdomain: &S,
-    density_map: &DensityMap<I, R>,
-    iso_surface_threshold: R,
-    stitching_axis: Axis,
-    vertices: &mut Vec<Vector3<R>>,
-    marching_cubes_input: &mut MarchingCubesInput<I>,
-) {
-    let _ = interpolate_points_to_cell_data_generic(
-        subdomain,
-        density_map,
-        iso_surface_threshold,
-        vertices,
-        marching_cubes_input,
-        StitchingDomainNarrowBandFilter::new(stitching_axis),
-    );
-
-    update_cell_data_threshold_flags(
-        subdomain,
-        density_map,
-        iso_surface_threshold,
-        false,
-        marching_cubes_input,
-    );
 }
 
 /// Generates input data for performing the actual marching cubes triangulation
@@ -150,23 +47,14 @@ pub(crate) fn update_mc_input_for_stitching_domain<I: Index, R: Real, S: Subdoma
 ///
 /// Note: This functions assumes that the default value for missing point data is below the iso-surface threshold.
 #[inline(never)]
-fn interpolate_points_to_cell_data_generic<
-    I: Index,
-    R: Real,
-    S: Subdomain<I, R>,
-    F: DensityMapFilter<I, R, S>,
->(
-    subdomain: &S,
+fn interpolate_points_to_cell_data_generic<I: Index, R: Real>(
+    grid: &UniformGrid<I, R>,
     density_map: &DensityMap<I, R>,
     iso_surface_threshold: R,
     vertices: &mut Vec<Vector3<R>>,
     marching_cubes_data: &mut MarchingCubesInput<I>,
-    mut filter: F,
-) -> F {
-    let grid = subdomain.global_grid();
-    let subdomain_grid = subdomain.subdomain_grid();
-
-    profile!("interpolate_points_to_cell_data_skip_boundary");
+) {
+    profile!("interpolate_points_to_cell_data_generic");
     trace!("Starting interpolation of cell data for marching cubes (excluding boundary layer)... (Input: {} existing vertices)", vertices.len());
 
     // Map from flat cell index to all data that is required per cell for the marching cubes triangulation
@@ -176,23 +64,7 @@ fn interpolate_points_to_cell_data_generic<
     {
         profile!("generate_iso_surface_vertices");
         density_map.for_each(|flat_point_index, point_value| {
-            let global_point = grid.try_unflatten_point_index(flat_point_index).unwrap();
-            let point = subdomain
-                .map_point(&global_point)
-                .expect("Point cannot be mapped into subdomain.");
-
-            // First check if the point should be processed, this can also be used to store certain
-            // values in a separate storage, e.g. to filter out points on the boundary but store them
-            // in a separate list to process them later.
-            if !filter.process_point(
-                density_map,
-                subdomain,
-                flat_point_index,
-                &point,
-                point_value,
-            ) {
-                return;
-            }
+            let point = grid.try_unflatten_point_index(flat_point_index).unwrap();
 
             // We want to find edges that cross the iso-surface,
             // therefore we can choose to either skip all points above or below the threshold.
@@ -206,14 +78,12 @@ fn interpolate_points_to_cell_data_generic<
                 return;
             }
 
-            let neighborhood = subdomain_grid.get_point_neighborhood(&point);
+            let neighborhood = grid.get_point_neighborhood(&point);
             // Iterate over all neighbors of the point to find edges crossing the iso-surface
             for neighbor_edge in neighborhood.neighbor_edge_iter() {
                 let neighbor = neighbor_edge.neighbor_index();
-
                 // Get flat index of neighbor on global grid
-                let global_neighbor = subdomain.inv_map_point(neighbor).unwrap();
-                let flat_neighbor_index = grid.flatten_point_index(&global_neighbor);
+                let flat_neighbor_index = grid.flatten_point_index(&neighbor);
 
                 // Try to read out the function value at the neighboring point
                 let neighbor_value = if let Some(v) = density_map.get(flat_neighbor_index) {
@@ -231,21 +101,10 @@ fn interpolate_points_to_cell_data_generic<
                     continue;
                 }
 
-                if !filter.process_edge(
-                    density_map,
-                    subdomain,
-                    flat_point_index,
-                    &point,
-                    flat_neighbor_index,
-                    neighbor,
-                ) {
-                    continue;
-                }
-
                 // Interpolate iso-surface vertex on the edge
                 let alpha = (iso_surface_threshold - point_value) / (neighbor_value - point_value);
-                let point_coords = subdomain_grid.point_coordinates(&point);
-                let neighbor_coords = subdomain_grid.point_coordinates(neighbor);
+                let point_coords = grid.point_coordinates(&point);
+                let neighbor_coords = grid.point_coordinates(neighbor);
                 let interpolated_coords =
                     (point_coords) * (R::one() - alpha) + neighbor_coords * alpha;
 
@@ -256,13 +115,8 @@ fn interpolate_points_to_cell_data_generic<
                 // Store the data required for the marching cubes triangulation for
                 // each cell adjacent to the edge crossing the iso-surface.
                 // This includes the above/below iso-surface flags and the interpolated vertex index.
-                for cell in subdomain_grid
-                    .cells_adjacent_to_edge(&neighbor_edge)
-                    .iter()
-                    .flatten()
-                {
-                    let global_cell = subdomain.inv_map_cell(cell).unwrap();
-                    let flat_cell_index = grid.flatten_cell_index(&global_cell);
+                for cell in grid.cells_adjacent_to_edge(&neighbor_edge).iter().flatten() {
+                    let flat_cell_index = grid.flatten_cell_index(&cell);
 
                     let cell_data_entry = cell_data
                         .entry(flat_cell_index)
@@ -292,13 +146,11 @@ fn interpolate_points_to_cell_data_generic<
         cell_data.len(),
         vertices.len()
     );
-
-    filter
 }
 
 /// Loops through all corner vertices in the given marching cubes input and updates the above/below threshold flags
-fn update_cell_data_threshold_flags<I: Index, R: Real, S: Subdomain<I, R>>(
-    subdomain: &S,
+fn update_cell_data_threshold_flags<I: Index, R: Real>(
+    grid: &UniformGrid<I, R>,
     density_map: &DensityMap<I, R>,
     iso_surface_threshold: R,
     skip_points_above_threshold: bool,
@@ -318,8 +170,6 @@ fn update_cell_data_threshold_flags<I: Index, R: Real, S: Subdomain<I, R>>(
     // Similarly, they have to be treated in a second pass because we don't want to initialize cells only
     // consisting of missing points and points below the surface.
     profile!("relative_to_threshold_postprocessing");
-
-    let grid = subdomain.global_grid();
 
     let update_corner_flags =
         |cell: &CellIndex<I>, local_point_index: usize, flag: &mut RelativeToThreshold| {
@@ -367,206 +217,5 @@ fn update_cell_data_threshold_flags<I: Index, R: Real, S: Subdomain<I, R>>(
                     update_corner_flags(&cell, local_point_index, flag)
                 });
         }
-    }
-}
-
-impl<I: Index, R: Real, S: Subdomain<I, R>> DensityMapFilter<I, R, S> for IdentityDensityMapFilter {
-    #[inline(always)]
-    fn process_point(
-        &mut self,
-        _density_map: &DensityMap<I, R>,
-        _subdomain: &S,
-        _flat_point_index: I,
-        _subdomain_point: &PointIndex<I>,
-        _point_value: R,
-    ) -> bool {
-        return true;
-    }
-
-    #[inline(always)]
-    fn process_edge(
-        &mut self,
-        _density_map: &DensityMap<I, R>,
-        _subdomain: &S,
-        _flat_point_index: I,
-        _subdomain_point: &PointIndex<I>,
-        _flat_neighbor_index: I,
-        _subdomain_neighbor: &PointIndex<I>,
-    ) -> bool {
-        return true;
-    }
-}
-
-impl<I: Index, R: Real> SkipBoundaryLayerFilter<I, R> {
-    /// Constructs a new empty filter
-    fn new() -> Self {
-        Self {
-            boundary_density_maps: Default::default(),
-        }
-    }
-
-    /// Consumes self and returns the collected boundary density maps
-    fn into_inner(self) -> DirectedAxisArray<MapType<I, R>> {
-        self.boundary_density_maps
-    }
-}
-
-impl<I: Index, R: Real, S: Subdomain<I, R>> DensityMapFilter<I, R, S>
-    for SkipBoundaryLayerFilter<I, R>
-{
-    #[inline(always)]
-    fn process_point(
-        &mut self,
-        density_map: &DensityMap<I, R>,
-        subdomain: &S,
-        flat_point_index: I,
-        subdomain_point: &PointIndex<I>,
-        point_value: R,
-    ) -> bool {
-        let grid = subdomain.global_grid();
-        let subdomain_grid = subdomain.subdomain_grid();
-
-        // Skip points directly at the boundary but add them to the respective boundary density map
-        {
-            let point_boundary_flags =
-                GridBoundaryFaceFlags::classify_point(subdomain_grid, &subdomain_point);
-            if !point_boundary_flags.is_empty() {
-                // Insert the point into each boundary density map it belongs to
-                for boundary in point_boundary_flags.iter_individual() {
-                    let boundary_map = self.boundary_density_maps.get_mut(&boundary);
-                    boundary_map.insert(flat_point_index, point_value);
-
-                    // Also insert second row neighbor, if present
-                    if let Some(flat_neighbor_index) = subdomain_grid
-                        // Get neighbor in subdomain
-                        .get_point_neighbor(&subdomain_point, boundary.opposite())
-                        // Map neighbor from subdomain to global grid
-                        .and_then(|neighbor| subdomain.inv_map_point(&neighbor))
-                        // Flatten on global grid
-                        .map(|global_neighbor| grid.flatten_point_index(&global_neighbor))
-                    {
-                        if let Some(density_value) = density_map.get(flat_neighbor_index) {
-                            boundary_map.insert(flat_neighbor_index, density_value);
-                        }
-                    }
-                }
-                // Skip this point for interpolation
-                return false;
-            }
-        }
-
-        // Otherwise the point can be processed
-        return true;
-    }
-
-    #[inline(always)]
-    fn process_edge(
-        &mut self,
-        _density_map: &DensityMap<I, R>,
-        subdomain: &S,
-        _flat_point_index: I,
-        _subdomain_point: &PointIndex<I>,
-        _flat_neighbor_index: I,
-        subdomain_neighbor: &PointIndex<I>,
-    ) -> bool {
-        let subdomain_grid = subdomain.subdomain_grid();
-
-        // Check if the neighbor is on the boundary of the subdomain
-        let point_boundary_flags =
-            GridBoundaryFaceFlags::classify_point(subdomain_grid, subdomain_neighbor);
-        let point_is_on_outer_boundary = !point_boundary_flags.is_empty();
-
-        // Skip edges that go into the boundary layer
-        if point_is_on_outer_boundary {
-            return false;
-        }
-
-        return true;
-    }
-}
-
-impl StitchingDomainNarrowBandFilter {
-    /// Constructs a new filter for the narrow band of a stitching domain
-    fn new(stitching_axis: Axis) -> Self {
-        StitchingDomainNarrowBandFilter { stitching_axis }
-    }
-
-    /// Detects points that are on the positive/negative side of the stitching domain, along the stitching axis
-    fn point_is_on_stitching_surface<I: Index, R: Real, S: Subdomain<I, R>>(
-        &self,
-        subdomain: &S,
-        p: &PointIndex<I>,
-    ) -> bool {
-        let subdomain_grid = subdomain.subdomain_grid();
-
-        let index = p.index();
-        index[self.stitching_axis.dim()] == I::zero()
-            || index[self.stitching_axis.dim()]
-                == subdomain_grid.points_per_dim()[self.stitching_axis.dim()] - I::one()
-    }
-
-    /// Detects points that are on a boundary other than the stitching surfaces
-    fn point_is_outside_stitching_volume<I: Index, R: Real, S: Subdomain<I, R>>(
-        &self,
-        subdomain: &S,
-        p: &PointIndex<I>,
-    ) -> bool {
-        let subdomain_grid = subdomain.subdomain_grid();
-
-        let index = p.index();
-        self.stitching_axis
-            .orthogonal_axes()
-            .iter()
-            .copied()
-            .any(|axis| {
-                index[axis.dim()] == I::zero()
-                    || index[axis.dim()] == subdomain_grid.points_per_dim()[axis.dim()] - I::one()
-            })
-    }
-}
-
-impl<I: Index, R: Real, S: Subdomain<I, R>> DensityMapFilter<I, R, S>
-    for StitchingDomainNarrowBandFilter
-{
-    #[inline(always)]
-    fn process_point(
-        &mut self,
-        _density_map: &DensityMap<I, R>,
-        subdomain: &S,
-        _flat_point_index: I,
-        subdomain_point: &PointIndex<I>,
-        _point_value: R,
-    ) -> bool {
-        // Skip points on the outside of the stitching domain (except if they are on the stitching surface)
-        if self.point_is_outside_stitching_volume(subdomain, subdomain_point) {
-            return false;
-        }
-
-        true
-    }
-
-    #[inline(always)]
-    fn process_edge(
-        &mut self,
-        _density_map: &DensityMap<I, R>,
-        subdomain: &S,
-        _flat_point_index: I,
-        subdomain_point: &PointIndex<I>,
-        _flat_neighbor_index: I,
-        subdomain_neighbor: &PointIndex<I>,
-    ) -> bool {
-        // Skip edges that are on the stitching surface (were already triangulated by the patches)
-        if self.point_is_on_stitching_surface(subdomain, subdomain_point)
-            && self.point_is_on_stitching_surface(subdomain, subdomain_neighbor)
-        {
-            return false;
-        }
-
-        // Skip edges that go out of the stitching domain
-        if self.point_is_outside_stitching_volume(subdomain, subdomain_neighbor) {
-            return false;
-        }
-
-        true
     }
 }

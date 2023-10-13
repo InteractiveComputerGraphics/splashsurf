@@ -36,14 +36,12 @@ pub use vtkio;
 
 pub use crate::aabb::{Aabb2d, Aabb3d, AxisAlignedBoundingBox};
 pub use crate::density_map::DensityMap;
-pub use crate::octree::SubdivisionCriterion;
 pub use crate::traits::{Index, Real, RealConvert, ThreadSafe};
 pub use crate::uniform_grid::UniformGrid;
 
 use crate::density_map::DensityMapError;
 use crate::marching_cubes::MarchingCubesError;
 use crate::mesh::TriMesh3d;
-use crate::octree::Octree;
 use crate::uniform_grid::GridConstructionError;
 use crate::workspace::ReconstructionWorkspace;
 
@@ -65,10 +63,8 @@ pub mod kernel;
 pub mod marching_cubes;
 pub mod mesh;
 pub mod neighborhood_search;
-pub mod octree;
 pub mod postprocessing;
 pub(crate) mod reconstruction;
-mod reconstruction_octree;
 pub mod sph_interpolation;
 pub mod topology;
 mod traits;
@@ -121,30 +117,18 @@ fn new_parallel_map<K: Eq + Hash, V>() -> ParallelMapType<K, V> {
 
 /// Approach used for spatial decomposition of the surface reconstruction and its parameters
 #[derive(Clone, Debug)]
-pub enum SpatialDecomposition<R: Real> {
+pub enum SpatialDecomposition {
     /// Use a uniform grid of subdomains with contiguous (dense) marching cubes grids per subdomain
     ///
     /// Only subdomains containing at least one particle will be processed.
     /// The small contiguous grid per subdomain make this approach very cache efficient.
     UniformGrid(GridDecompositionParameters),
-    /// Use an octree for decomposition with hashing based (sparse) marching cubes grids per subdomain
-    Octree(OctreeDecompositionParameters<R>),
 }
 
 /// Default parameters for the spatial decomposition use the uniform grid based decomposition approach
-impl<R: Real> Default for SpatialDecomposition<R> {
+impl Default for SpatialDecomposition {
     fn default() -> Self {
         Self::UniformGrid(GridDecompositionParameters::default())
-    }
-}
-
-impl<R: Real> SpatialDecomposition<R> {
-    /// Tries to convert the parameters from one [`Real`] type to another [`Real`] type, returns `None` if conversion fails
-    pub fn try_convert<T: Real>(&self) -> Option<SpatialDecomposition<T>> {
-        match &self {
-            Self::UniformGrid(g) => Some(SpatialDecomposition::UniformGrid(g.clone())),
-            Self::Octree(o) => o.try_convert().map(|o| SpatialDecomposition::Octree(o)),
-        }
     }
 }
 
@@ -160,87 +144,6 @@ impl Default for GridDecompositionParameters {
         Self {
             subdomain_num_cubes_per_dim: 64,
         }
-    }
-}
-
-/// Parameters for the octree-based spatial decomposition
-#[derive(Clone, Debug)]
-pub struct OctreeDecompositionParameters<R: Real> {
-    /// Criterion used for subdivision of the octree cells
-    pub subdivision_criterion: SubdivisionCriterion,
-    /// Safety factor applied to the kernel radius when it's used as a margin to collect ghost particles in the leaf nodes
-    pub ghost_particle_safety_factor: Option<R>,
-    /// Whether to enable stitching of all disjoint subdomain meshes to a global manifold mesh
-    pub enable_stitching: bool,
-    /// Which method to use for computing the densities of the particles
-    pub particle_density_computation: ParticleDensityComputationStrategy,
-}
-
-/// Available strategies for the computation of the particle densities
-#[derive(Copy, Clone, Debug)]
-pub enum ParticleDensityComputationStrategy {
-    /// Compute the particle densities globally before performing domain decomposition.
-    ///
-    /// With this approach the particle densities are computed globally on all particles before any
-    /// domain decomposition is performed.
-    ///
-    /// This approach is guaranteed to lead to consistent results and does not depend on the following
-    /// decomposition. However, it is also by far the *slowest method* as global operations (especially
-    /// the global neighborhood search) are much slower.
-    Global,
-    /// Compute particle densities for all particles locally followed by a synchronization step.
-    ///
-    /// **This is the recommended approach.**
-    /// The particle densities will be evaluated for all particles per subdomain, possibly in parallel.
-    /// Afterwards, the values for all non-ghost particles are written to a global array.
-    /// This happens in a separate step before performing any reconstructions
-    /// For the following reconstruction procedure, each subdomain will update the densities of its ghost particles
-    /// from this global array. This ensures that all ghost-particles receive correct density values
-    /// without requiring to double the width of the ghost-particle margin just to ensure correct values
-    /// for the actual inner ghost-particles (i.e. in contrast to the completely local approach).
-    ///
-    /// The actual synchronization overhead is relatively low and this approach is often the fastest method.
-    ///
-    /// This approach should always lead consistent results. Only in very rare cases when a particle is not
-    /// uniquely assigned during domain decomposition this might lead to problems. If you encounter such
-    /// problems with this approach please report it as a bug.
-    SynchronizeSubdomains,
-    /// Compute densities locally per subdomain without global synchronization.
-    ///
-    /// The particle densities will be evaluated per subdomain on-the-fly just before the reconstruction
-    /// of the subdomain happens. In order to compute correct densities for the ghost particles of each
-    /// subdomain it is required that the ghost-particle margin is at least two times the kernel compact
-    /// support radius. This may add a lot of additional ghost-particles to each subdomain.
-    ///
-    /// If the ghost-particle margin is not set wide enough, this may lead to density differences on subdomain
-    /// boundaries. Otherwise this approach robust with respect to the classification of particles into the
-    /// subdomains.
-    IndependentSubdomains,
-}
-
-impl<R: Real> Default for OctreeDecompositionParameters<R> {
-    fn default() -> Self {
-        Self {
-            subdivision_criterion: SubdivisionCriterion::MaxParticleCountAuto,
-            ghost_particle_safety_factor: None,
-            enable_stitching: true,
-            particle_density_computation: ParticleDensityComputationStrategy::SynchronizeSubdomains,
-        }
-    }
-}
-
-impl<R: Real> OctreeDecompositionParameters<R> {
-    /// Tries to convert the parameters from one [`Real`] type to another [`Real`] type, returns `None` if conversion fails
-    pub fn try_convert<T: Real>(&self) -> Option<OctreeDecompositionParameters<T>> {
-        Some(OctreeDecompositionParameters {
-            subdivision_criterion: self.subdivision_criterion.clone(),
-            ghost_particle_safety_factor: map_option!(
-                &self.ghost_particle_safety_factor,
-                r => r.try_convert()?
-            ),
-            enable_stitching: self.enable_stitching,
-            particle_density_computation: self.particle_density_computation,
-        })
     }
 }
 
@@ -268,7 +171,7 @@ pub struct Parameters<R: Real> {
     pub enable_multi_threading: bool,
     /// Parameters for the spatial decomposition of the surface reconstruction
     /// If not provided, no spatial decomposition is performed and a global approach is used instead.
-    pub spatial_decomposition: Option<SpatialDecomposition<R>>,
+    pub spatial_decomposition: Option<SpatialDecomposition>,
     /// Whether to return the global particle neighborhood list from the reconstruction.
     /// Depending on the settings of the reconstruction, neighborhood lists are only computed locally
     /// in subdomains. Enabling this flag joins this data over all particles which can add a small overhead.
@@ -286,7 +189,7 @@ impl<R: Real> Parameters<R> {
             iso_surface_threshold: self.iso_surface_threshold.try_convert()?,
             particle_aabb: map_option!(&self.particle_aabb, aabb => aabb.try_convert()?),
             enable_multi_threading: self.enable_multi_threading,
-            spatial_decomposition: map_option!(&self.spatial_decomposition, sd => sd.try_convert()?),
+            spatial_decomposition: self.spatial_decomposition.clone(),
             global_neighborhood_list: self.global_neighborhood_list,
         })
     }
@@ -297,10 +200,6 @@ impl<R: Real> Parameters<R> {
 pub struct SurfaceReconstruction<I: Index, R: Real> {
     /// Background grid that was used as a basis for generating the density map for marching cubes
     grid: UniformGrid<I, R>,
-    /// Octree constructed for domain decomposition (if octree-based spatial decomposition was enabled)
-    octree: Option<Octree<I, R>>,
-    /// Point-based density map generated from the particles that was used as input to marching cubes
-    density_map: Option<DensityMap<I, R>>,
     /// Per particle densities (contains only data of particles inside the domain)
     particle_densities: Option<Vec<R>>,
     /// If an AABB was specified to restrict the reconstruction, this stores per input particle whether they were inside
@@ -310,7 +209,7 @@ pub struct SurfaceReconstruction<I: Index, R: Real> {
     /// Surface mesh that is the result of the surface reconstruction
     mesh: TriMesh3d<R>,
     /// Workspace with allocated memory for subsequent surface reconstructions
-    workspace: ReconstructionWorkspace<I, R>,
+    workspace: ReconstructionWorkspace<R>,
 }
 
 impl<I: Index, R: Real> Default for SurfaceReconstruction<I, R> {
@@ -318,8 +217,6 @@ impl<I: Index, R: Real> Default for SurfaceReconstruction<I, R> {
     fn default() -> Self {
         Self {
             grid: UniformGrid::new_zero(),
-            octree: None,
-            density_map: None,
             particle_densities: None,
             particle_neighbors: None,
             particle_inside_aabb: None,
@@ -333,16 +230,6 @@ impl<I: Index, R: Real> SurfaceReconstruction<I, R> {
     /// Returns a reference to the actual triangulated surface mesh that is the result of the reconstruction
     pub fn mesh(&self) -> &TriMesh3d<R> {
         &self.mesh
-    }
-
-    /// Returns a reference to the octree generated for spatial decomposition of the input particles (mostly useful for debugging visualization)
-    pub fn octree(&self) -> Option<&Octree<I, R>> {
-        self.octree.as_ref()
-    }
-
-    /// Returns a reference to the sparse density map (discretized on the vertices of the background grid) that is used as input for marching cubes (always `None` when using domain decomposition)
-    pub fn density_map(&self) -> Option<&DensityMap<I, R>> {
-        self.density_map.as_ref()
     }
 
     /// Returns a reference to the global particle density vector if it was computed during the reconstruction (always `None` when using independent subdomains with domain decomposition)
@@ -489,14 +376,7 @@ pub fn reconstruct_surface_inplace<'a, I: Index, R: Real>(
                 output_surface,
             )?
         }
-        Some(SpatialDecomposition::Octree(_)) => {
-            reconstruction_octree::reconstruct_surface_domain_decomposition(
-                particle_positions,
-                parameters,
-                output_surface,
-            )?
-        }
-        None => reconstruction_octree::reconstruct_surface_global(
+        None => reconstruction::reconstruct_surface_global(
             particle_positions,
             parameters,
             output_surface,
@@ -511,12 +391,6 @@ pub fn reconstruct_surface_inplace<'a, I: Index, R: Real>(
 
     Ok(())
 }
-
-/*
-fn filter_particles<I: Index, R: Real>(particle_positions: &[Vector3<R>], particle_aabb: &Aabb3d<R>, enable_multi_threading: bool) -> Vec<Vector3<R>> {
-    use rayon::prelude::*;
-    let is_inside = particle_positions.par_iter().map(|p| particle_aabb.contains_point(p)).collect::<Vec<_>>();
-}*/
 
 /// Constructs the background grid for marching cubes based on the parameters supplied to the surface reconstruction
 pub fn grid_for_reconstruction<I: Index, R: Real>(
