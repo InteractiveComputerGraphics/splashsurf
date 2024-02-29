@@ -87,10 +87,10 @@ fn run_splashsurf() -> Result<(), anyhow::Error> {
     logging::log_program_info();
 
     // Delegate to subcommands
-    match &cmd_args.subcommand {
-        Subcommand::Reconstruct(cmd_args) => reconstruction::reconstruct_subcommand(cmd_args)?,
-        Subcommand::Convert(cmd_args) => convert::convert_subcommand(cmd_args)?,
-    }
+    let result = match &cmd_args.subcommand {
+        Subcommand::Reconstruct(cmd_args) => reconstruction::reconstruct_subcommand(cmd_args),
+        Subcommand::Convert(cmd_args) => convert::convert_subcommand(cmd_args),
+    };
 
     // Write coarse_prof stats using log::info
     info!("Timings:");
@@ -114,7 +114,7 @@ fn run_splashsurf() -> Result<(), anyhow::Error> {
         chrono::Local::now().to_rfc3339_opts(chrono::SecondsFormat::Micros, false)
     );
 
-    Ok(())
+    result
 }
 
 #[derive(Copy, Clone, Debug)]
