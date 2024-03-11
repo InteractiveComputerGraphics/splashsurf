@@ -52,7 +52,7 @@ bitflags = "2.4"
 smallvec = { version = "1.11", features = ["union"] }
 arrayvec = "0.7"
 bytemuck = { version = "1.9", features = ["extern_crate_alloc"] }
-bytemuck_derive = "1.3"
+bytemuck_derive = "1.6"
 numeric_literals = "0.2"
 rstar = "0.12"
 
