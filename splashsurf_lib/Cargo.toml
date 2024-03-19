@@ -48,7 +48,7 @@ thread_local = "1.1.4"
 rayon = "1.7"
 dashmap = "5.2.0"
 fxhash = "0.2"
-bitflags = "2.4"
+bitflags = "2.5"
 smallvec = { version = "1.11", features = ["union"] }
 arrayvec = "0.7"
 bytemuck = { version = "1.9", features = ["extern_crate_alloc"] }
