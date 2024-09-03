@@ -7,7 +7,7 @@
 
 ---
 **NEW**: The project now implements the paper ["Weighted Laplacian Smoothing for Surface Reconstruction of Particle-based Fluids" (Löschner, Böttcher, Jeske, Bender; 2023)](https://animation.rwth-aachen.de/publication/0583/). 
-It proposes a fast smoothing approach to avoid the typical bumpiness of the surfaces reconstructed from SPH simulations while preventing loss of volume for splashes and droplets that occurs with simple, non-speaclized smoothing methods.
+It proposes a fast smoothing approach to avoid the typical bumpiness of the surfaces reconstructed from SPH simulations while preventing loss of volume for splashes and droplets that occurs with simple, non-specialized smoothing methods.
 The images below show a rendering of a typical surface reconstruction (on the left) with visible bumps due to the SPH particles compared to the same surface reconstruction with weighted smoothing applied (on the right):
 
 <p align="center">
