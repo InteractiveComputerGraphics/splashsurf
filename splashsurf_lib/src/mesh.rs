@@ -1373,7 +1373,7 @@ impl<R: Real> MeshAttribute<R> {
 
     /// Converts the mesh attribute to a [`vtkio::model::Attribute`])
     #[cfg(feature = "vtk_extras")]
-    #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "vtk_extras")))]
     fn to_vtk_attribute(&self) -> Attribute {
         match &self.data {
             AttributeData::ScalarU64(u64_vec) => {
@@ -1433,7 +1433,7 @@ where
     for<'a> &'a MeshT: IntoVtkUnstructuredGridPiece,
 {
     /// Creates a [`vtkio::model::UnstructuredGridPiece`] representing this mesh including its attached [`MeshAttribute`]s
-    #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "vtk_extras")))]
     fn unstructured_grid(&self) -> UnstructuredGridPiece {
         let mut grid_piece: UnstructuredGridPiece = (&self.mesh).into_unstructured_grid();
         for point_attribute in &self.point_attributes {
@@ -1452,7 +1452,7 @@ where
 macro_rules! impl_into_vtk {
     ($name:tt) => {
         #[cfg(feature = "vtk_extras")]
-        #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
+        #[cfg_attr(docsrs, doc(cfg(feature = "vtk_extras")))]
         impl<R: Real> IntoVtkUnstructuredGridPiece for $name<R> {
             fn into_unstructured_grid(self) -> UnstructuredGridPiece {
                 vtk_helper::mesh_to_unstructured_grid(&self)
@@ -1460,7 +1460,7 @@ macro_rules! impl_into_vtk {
         }
 
         #[cfg(feature = "vtk_extras")]
-        #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
+        #[cfg_attr(docsrs, doc(cfg(feature = "vtk_extras")))]
         impl<R: Real> IntoVtkUnstructuredGridPiece for &$name<R> {
             fn into_unstructured_grid(self) -> UnstructuredGridPiece {
                 vtk_helper::mesh_to_unstructured_grid(self)
@@ -1468,7 +1468,7 @@ macro_rules! impl_into_vtk {
         }
 
         #[cfg(feature = "vtk_extras")]
-        #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
+        #[cfg_attr(docsrs, doc(cfg(feature = "vtk_extras")))]
         impl<'a, R: Real> IntoVtkUnstructuredGridPiece for std::borrow::Cow<'a, $name<R>> {
             fn into_unstructured_grid(self) -> UnstructuredGridPiece {
                 vtk_helper::mesh_to_unstructured_grid(&self)
@@ -1476,7 +1476,7 @@ macro_rules! impl_into_vtk {
         }
 
         #[cfg(feature = "vtk_extras")]
-        #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
+        #[cfg_attr(docsrs, doc(cfg(feature = "vtk_extras")))]
         impl<'a, R: Real> IntoVtkUnstructuredGridPiece for &std::borrow::Cow<'a, $name<R>> {
             fn into_unstructured_grid(self) -> UnstructuredGridPiece {
                 vtk_helper::mesh_to_unstructured_grid(self)
@@ -1484,7 +1484,7 @@ macro_rules! impl_into_vtk {
         }
 
         #[cfg(feature = "vtk_extras")]
-        #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
+        #[cfg_attr(docsrs, doc(cfg(feature = "vtk_extras")))]
         impl<R: Real> IntoVtkUnstructuredGridPiece for &MeshWithData<R, $name<R>> {
             fn into_unstructured_grid(self) -> UnstructuredGridPiece {
                 self.unstructured_grid()
@@ -1492,7 +1492,7 @@ macro_rules! impl_into_vtk {
         }
 
         #[cfg(feature = "vtk_extras")]
-        #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
+        #[cfg_attr(docsrs, doc(cfg(feature = "vtk_extras")))]
         impl<R: Real> IntoVtkUnstructuredGridPiece for MeshWithData<R, $name<R>> {
             fn into_unstructured_grid(self) -> UnstructuredGridPiece {
                 self.unstructured_grid()
@@ -1500,7 +1500,7 @@ macro_rules! impl_into_vtk {
         }
 
         #[cfg(feature = "vtk_extras")]
-        #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
+        #[cfg_attr(docsrs, doc(cfg(feature = "vtk_extras")))]
         impl<'a, R: Real> IntoVtkUnstructuredGridPiece
             for &MeshWithData<R, std::borrow::Cow<'a, $name<R>>>
         {
@@ -1518,7 +1518,7 @@ impl_into_vtk!(PointCloud3d);
 
 /// Trait implementations to convert meshes into types supported by [`vtkio`]
 #[cfg(feature = "vtk_extras")]
-#[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
+#[cfg_attr(docsrs, doc(cfg(feature = "vtk_extras")))]
 pub mod vtk_helper {
     use vtkio::model::{
         Attributes, CellType, Cells, DataSet, UnstructuredGridPiece, VertexNumbers,
@@ -1530,20 +1530,20 @@ pub mod vtk_helper {
     };
 
     /// Trait that can be implemented by mesh cells to return the corresponding [`vtkio::model::CellType`]
-    #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "vtk_extras")))]
     pub trait HasVtkCellType {
         /// Returns the corresponding [`vtkio::model::CellType`] of the cell
         fn vtk_cell_type(&self) -> CellType;
     }
 
-    #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "vtk_extras")))]
     impl HasVtkCellType for TriangleCell {
         fn vtk_cell_type(&self) -> CellType {
             CellType::Triangle
         }
     }
 
-    #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "vtk_extras")))]
     impl HasVtkCellType for TriangleOrQuadCell {
         fn vtk_cell_type(&self) -> CellType {
             match self {
@@ -1553,14 +1553,14 @@ pub mod vtk_helper {
         }
     }
 
-    #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "vtk_extras")))]
     impl HasVtkCellType for HexCell {
         fn vtk_cell_type(&self) -> CellType {
             CellType::Hexahedron
         }
     }
 
-    #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "vtk_extras")))]
     impl HasVtkCellType for PointCell {
         fn vtk_cell_type(&self) -> CellType {
             CellType::Vertex
@@ -1568,13 +1568,13 @@ pub mod vtk_helper {
     }
 
     /// Conversion of meshes into a [`vtkio::model::UnstructuredGridPiece`]
-    #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "vtk_extras")))]
     pub trait IntoVtkUnstructuredGridPiece {
         fn into_unstructured_grid(self) -> UnstructuredGridPiece;
     }
 
     /// Direct conversion of meshes into a full [`vtkio::model::DataSet`]
-    #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "vtk_extras")))]
     pub trait IntoVtkDataSet {
         fn into_dataset(self) -> DataSet;
     }
@@ -1598,7 +1598,7 @@ pub mod vtk_helper {
     }
 
     /// Converts any supported mesh to a [`vtkio::model::UnstructuredGridPiece`]
-    #[cfg_attr(doc_cfg, doc(cfg(feature = "vtk_extras")))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "vtk_extras")))]
     pub fn mesh_to_unstructured_grid<'a, R, MeshT>(mesh: &'a MeshT) -> UnstructuredGridPiece
     where
         R: Real,

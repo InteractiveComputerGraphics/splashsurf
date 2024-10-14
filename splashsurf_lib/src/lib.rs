@@ -1,4 +1,4 @@
-#![cfg_attr(doc_cfg, feature(doc_cfg))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 //!
 //! Library for surface reconstruction of SPH particle data using marching cubes.
@@ -46,7 +46,7 @@ use crate::uniform_grid::GridConstructionError;
 use crate::workspace::ReconstructionWorkspace;
 
 #[cfg(feature = "profiling")]
-#[cfg_attr(doc_cfg, doc(cfg(feature = "profiling")))]
+#[cfg_attr(docsrs, doc(cfg(feature = "profiling")))]
 pub mod profiling;
 #[doc(hidden)]
 pub mod profiling_macro;
@@ -57,7 +57,7 @@ pub mod density_map;
 pub mod generic_tree;
 pub mod halfedge_mesh;
 #[cfg(feature = "io")]
-#[cfg_attr(doc_cfg, doc(cfg(feature = "io")))]
+#[cfg_attr(docsrs, doc(cfg(feature = "io")))]
 pub mod io;
 pub mod kernel;
 pub mod marching_cubes;
