@@ -159,7 +159,7 @@ pub enum GridConstructionError<I: Index, R: Real> {
     #[error("index type is too small to index number of points per dimension of the domain (max index: {})", I::max_value())]
     IndexTypeTooSmallPointsPerDim,
     /// The index type is too small to index the total number of points in the whole domain (nx * ny * nz)
-    #[error("index type is too small to index the total number of points in the whole domain ({0}x{1}x{2}, max index: {})", I::max_value())]
+    #[error("index type is too small to index the total number of points in the whole domain ({0}x{1}x{2}, max index: {max})", max = I::max_value())]
     IndexTypeTooSmallTotalPoints(I, I, I),
     /// The real type is too small to store the coordinates of all possible points in the domain
     #[error("real type is too small to store the coordinates of all points in the domain (max value: {})", <R as Bounded>::max_value())]

@@ -35,16 +35,16 @@ io = ["vtk_extras", "vtkio", "ply-rs", "nom", "serde_json", "flate2"]
 
 [dependencies]
 log = "0.4"
-nalgebra = { version = "0.32", features = ["rand", "bytemuck"] }
+nalgebra = { version = "0.33", features = ["rand", "bytemuck"] }
 num-traits = "0.2"
 num-integer = "0.1"
 anyhow = "1.0"
-thiserror = "1.0"
-itertools = "0.12"
+thiserror = "2.0"
+itertools = "0.13"
 parking_lot = "0.12"
 thread_local = "1.1.4"
 rayon = "1.7"
-dashmap = "5.2.0"
+dashmap = "6.1.0"
 fxhash = "0.2"
 bitflags = "2.4"
 smallvec = { version = "1.11", features = ["union"] }
