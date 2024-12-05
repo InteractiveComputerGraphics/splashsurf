@@ -192,7 +192,10 @@ pub trait RealConvert: Sized {
 }
 
 impl<From: Real> RealConvert for &From {
-    type Out<To> = To where To: Real;
+    type Out<To>
+        = To
+    where
+        To: Real;
 
     fn try_convert<To: Real>(self) -> Option<To> {
         <To as NumCast>::from(*self)
@@ -200,7 +203,10 @@ impl<From: Real> RealConvert for &From {
 }
 
 impl<From: Real, const R: usize, const C: usize> RealConvert for SMatrix<From, R, C> {
-    type Out<To> = SMatrix<To, R, C> where To: Real;
+    type Out<To>
+        = SMatrix<To, R, C>
+    where
+        To: Real;
 
     fn try_convert<To: Real>(self) -> Option<SMatrix<To, R, C>> {
         let mut m_out: SMatrix<To, R, C> = SMatrix::zeros();
