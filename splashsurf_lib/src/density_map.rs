@@ -528,7 +528,7 @@ pub(crate) fn compute_kernel_evaluation_radius<I: Index, R: Real>(
     // The number of points corresponding to the number of supported cells
     let supported_points: I = I::one() + supported_cells;
 
-    // Evaluate kernel in a smaller domain, points outside of this radius have to be assumed to be outside of the iso-surface
+    // Evaluate kernel in a smaller domain, points outside of this radius have to be assumed to be outside the iso-surface
     let kernel_evaluation_radius =
         cube_size * half_supported_cells_real * (R::one() + R::default_epsilon().sqrt());
 
@@ -599,7 +599,7 @@ impl<I: Index, R: Real> SparseDensityMapGenerator<I, R> {
         particle: &Vector3<R>,
         particle_density: R,
     ) {
-        // Skip particles outside of allowed domain
+        // Skip particles outside allowed domain
         if !self.allowed_domain.contains_point(particle) {
             return;
         }

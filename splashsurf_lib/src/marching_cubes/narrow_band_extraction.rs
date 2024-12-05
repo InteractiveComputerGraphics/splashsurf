@@ -45,7 +45,7 @@ pub(crate) fn construct_mc_input<I: Index, R: Real>(
 /// Note: The threshold flags in the resulting cell data are not complete and still have to be updated after
 /// this procedure using the [update_cell_data_threshold_flags] function.
 ///
-/// Note: This functions assumes that the default value for missing point data is below the iso-surface threshold.
+/// Note: This functions assumes that the default value for missing point data is zero.
 #[inline(never)]
 fn interpolate_points_to_cell_data_generic<I: Index, R: Real>(
     grid: &UniformGrid<I, R>,
@@ -66,15 +66,13 @@ fn interpolate_points_to_cell_data_generic<I: Index, R: Real>(
         density_map.for_each(|flat_point_index, point_value| {
             let point = grid.try_unflatten_point_index(flat_point_index).unwrap();
 
-            // We want to find edges that cross the iso-surface,
-            // therefore we can choose to either skip all points above or below the threshold.
-            //
-            // In most scenes, the sparse density map should contain more entries above than
-            // below the threshold, as it contains the whole fluid interior, whereas areas completely
-            // devoid of fluid are not part of the density map.
-            //
-            // Skip points with densities above the threshold to improve efficiency
-            if point_value > iso_surface_threshold {
+            // We want to find edges that cross the iso-surface, i.e. edges where one point is above
+            // and the other below the threshold. To not process an edge twice, we skip all points
+            // that are already below the iso-surface threshold. Note that we cannot do it the other
+            // way around, as some points below the threshold might not be part of the density map
+            // at all (e.g. points outside the kernel evaluation radius). This could lead to missing
+            // edges that go directly from above the threshold to e.g. zero.
+            if point_value < iso_surface_threshold {
                 return;
             }
 
@@ -89,15 +87,13 @@ fn interpolate_points_to_cell_data_generic<I: Index, R: Real>(
                 let neighbor_value = if let Some(v) = density_map.get(flat_neighbor_index) {
                     v
                 } else {
-                    // Neighbors that are not in the point-value map were outside of the kernel evaluation radius.
-                    // This should only happen for cells that are completely outside of the compact support of a particle.
-                    // The point-value map has to be consistent such that for each cell, where at least one point-value
-                    // is missing like this, the cell has to be completely below the iso-surface threshold.
-                    continue;
+                    // Neighbors that are not in the point-value map were outside the kernel evaluation radius.
+                    // Assume zero density for these points.
+                    R::zero()
                 };
 
                 // Skip edges that don't cross the iso-surface
-                if !(neighbor_value > iso_surface_threshold) {
+                if !(neighbor_value < iso_surface_threshold) {
                     continue;
                 }
 
@@ -132,8 +128,8 @@ fn interpolate_points_to_cell_data_generic<I: Index, R: Real>(
                     );
                     cell_data_entry.iso_surface_vertices[local_edge_index] = Some(vertex_index);
 
-                    // Mark the neighbor as above the iso-surface threshold
-                    let local_vertex_index = cell.local_point_index_of(neighbor.index()).unwrap();
+                    // Mark the corner of the current point as above the iso-surface threshold
+                    let local_vertex_index = cell.local_point_index_of(point.index()).unwrap();
                     cell_data_entry.corner_above_threshold[local_vertex_index] =
                         RelativeToThreshold::Above;
                 }

@@ -412,7 +412,7 @@ pub fn grid_for_reconstruction<I: Index, R: Real>(
             } else {
                 Aabb3d::from_points(particle_positions)
             };
-            // TODO: Is this really necessary?
+            // TODO: Is this really necessary? This seems unnecessary purely for the density map...
             aabb.grow_uniformly(particle_radius);
             aabb
         };
