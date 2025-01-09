@@ -2,7 +2,7 @@
 
 use crate::mesh::{AttributeData, IntoVtkDataSet, MeshAttribute, MeshWithData, TriMesh3d};
 use crate::utils::IteratorExt;
-use crate::{Real, RealConvert};
+use crate::{utils, Real, RealConvert};
 use anyhow::{anyhow, Context};
 use nalgebra::Vector3;
 use std::borrow::Cow;
@@ -312,24 +312,12 @@ fn try_convert_io_buffer_to_attribute<R: Real>(
 ) -> Result<AttributeData<R>, anyhow::Error> {
     match num_comp {
         1 => match &io_buffer {
-            IOBuffer::U32(vec) => try_map_scalars_to_real(vec, |val| {
-                R::from_u32(val).ok_or_else(|| {
-                    anyhow!("Cannot convert an attribute value from u32 to Real type")
-                })
-            })
-            .map(|v| AttributeData::ScalarReal(v)),
-            IOBuffer::F32(vec) => try_map_scalars_to_real(vec, |val| {
-                R::from_f32(val).ok_or_else(|| {
-                    anyhow!("Cannot convert an attribute value from f32 to Real type")
-                })
-            })
-            .map(|v| AttributeData::ScalarReal(v)),
-            IOBuffer::F64(vec) => try_map_scalars_to_real(vec, |val| {
-                R::from_f64(val).ok_or_else(|| {
-                    anyhow!("Cannot convert an attribute value from f64 to Real type")
-                })
-            })
-            .map(|v| AttributeData::ScalarReal(v)),
+            IOBuffer::U32(vec) => utils::try_convert_scalar_slice(vec, R::from_u32)
+                .map(|v| AttributeData::ScalarReal(v)),
+            IOBuffer::F32(vec) => utils::try_convert_scalar_slice(vec, R::from_f32)
+                .map(|v| AttributeData::ScalarReal(v)),
+            IOBuffer::F64(vec) => utils::try_convert_scalar_slice(vec, R::from_f64)
+                .map(|v| AttributeData::ScalarReal(v)),
             _ => Err(anyhow!("Unsupported IOBuffer scalar data type")),
         },
         3 => match &io_buffer {
@@ -348,45 +336,12 @@ fn try_convert_io_buffer_to_attribute<R: Real>(
     }
 }
 
-fn try_map_scalars_to_real<R: Real, T: Copy, F: Fn(T) -> Result<R, anyhow::Error>>(
-    io_buffer: &[T],
-    f: F,
-) -> Result<Vec<R>, anyhow::Error> {
-    io_buffer
-        .iter()
-        .copied()
-        .map(f)
-        .try_collect_with_capacity(io_buffer.len())
-}
-
 /// Tries to convert a vector of consecutive coordinate triplets into a vector of `Vector3`, also converts between floating point types
 fn particles_from_coords<RealOut: Real, RealIn: Real>(
     coords: &[RealIn],
 ) -> Result<Vec<Vector3<RealOut>>, anyhow::Error> {
-    if coords.len() % 3 != 0 {
-        return Err(anyhow!(
-            "Particle point buffer length is not divisible by 3"
-        ));
-    }
-
-    let num_points = coords.len() / 3;
-    let positions = coords
-        .chunks_exact(3)
-        .map(|triplet| {
-            Some(Vector3::new(
-                triplet[0].try_convert()?,
-                triplet[1].try_convert()?,
-                triplet[2].try_convert()?,
-            ))
-        })
-        .map(|vec| {
-            vec.ok_or_else(|| {
-                anyhow!("Failed to convert coordinate from input to output float type, value out of range?")
-            })
-        })
-        .try_collect_with_capacity(num_points)?;
-
-    Ok(positions)
+    utils::try_convert_scalar_slice_to_vectors(coords, |v| v.try_convert())
+        .context(anyhow!("failed to convert particle coordinates"))
 }
 
 /// Wrapper for a slice of particle positions for converting it into a VTK `UnstructuredGridPiece`

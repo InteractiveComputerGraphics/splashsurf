@@ -1,13 +1,12 @@
-use std::fmt::{Debug, Display};
-use std::hash::Hash;
-use std::ops::{AddAssign, MulAssign, SubAssign};
-
 use bytemuck::Pod;
 use nalgebra::{RealField, SMatrix};
 use num_integer::Integer;
 use num_traits::{
     Bounded, CheckedAdd, CheckedMul, CheckedSub, FromPrimitive, NumCast, SaturatingSub, ToPrimitive,
 };
+use std::fmt::{Debug, Display};
+use std::hash::Hash;
+use std::ops::{AddAssign, MulAssign, SubAssign};
 
 /// Convenience trait that combines `Send` and `Sync`
 pub trait ThreadSafe: Sync + Send {}

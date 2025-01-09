@@ -1,8 +1,91 @@
 //! Internal helper functions and types
 
+use anyhow::{anyhow, Context};
 use log::info;
+use nalgebra::{SVector, Scalar};
+use num_traits::Zero;
 use rayon::prelude::*;
 use std::cell::UnsafeCell;
+use std::fmt::Debug;
+
+/// Converts a slice of scalar values to a vector of the same length, returns an error if conversion fails
+pub fn try_convert_scalar_slice<
+    ScalarFrom: Copy + Debug,
+    ScalarTo,
+    F: Fn(ScalarFrom) -> Option<ScalarTo>,
+>(
+    values: &[ScalarFrom],
+    f: F,
+) -> Result<Vec<ScalarTo>, anyhow::Error> {
+    values
+        .iter()
+        .copied()
+        .map(|v| {
+            f(v).ok_or_else(|| {
+                anyhow!(
+                    "failed to convert value {:?} from type {} to {}",
+                    v,
+                    std::any::type_name::<ScalarFrom>(),
+                    std::any::type_name::<ScalarTo>()
+                )
+            })
+        })
+        .try_collect_with_capacity(values.len())
+}
+
+/// Converts a slice of scalar values to a vector of [`nalgebra::SVector`], returns an error if conversion fails or the input slice's length is not a multiple of the vector length.
+pub fn try_convert_scalar_slice_to_vectors<
+    const N: usize,
+    ScalarFrom: Copy + Debug,
+    ScalarTo: Scalar + Zero,
+    F: Fn(ScalarFrom) -> Option<ScalarTo>,
+>(
+    values: &[ScalarFrom],
+    f: F,
+) -> Result<Vec<SVector<ScalarTo, N>>, anyhow::Error> {
+    {
+        if values.len() % N != 0 {
+            Err(anyhow!("input slice length is not a multiple of {}", N))
+        } else {
+            values
+                .chunks_exact(N)
+                .map(|v| {
+                    let mut v_out = SVector::zeros();
+                    for i in 0..N {
+                        v_out[i] = f(v[i]).ok_or_else(|| {
+                            anyhow!(
+                                "failed to convert value {:?} from type {} to {}",
+                                v,
+                                std::any::type_name::<ScalarFrom>(),
+                                std::any::type_name::<ScalarTo>()
+                            )
+                        })?;
+                    }
+                    Ok(v_out)
+                })
+                .try_collect_with_capacity(values.len() / N)
+        }
+    }
+    .context(anyhow!(
+        "failed to convert scalar slice to vectors of length {}",
+        N
+    ))
+}
+
+#[cfg(test)]
+mod tests {
+    use num_traits::FromPrimitive;
+    #[test]
+    fn test_try_convert_scalar_slice() {
+        let values = vec![1, -1];
+        assert!(super::try_convert_scalar_slice(&values, u64::from_i32).is_err());
+        let values = vec![1, -1];
+        assert_eq!(
+            super::try_convert_scalar_slice(&values, f32::from_i64).unwrap(),
+            vec![1.0, -1.0]
+        );
+    }
+}
 
 /// "Convert" an empty vector to preserve allocated memory if size and alignment matches
 /// See https://users.rust-lang.org/t/pattern-how-to-reuse-a-vec-str-across-loop-iterations/61657/5

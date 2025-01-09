@@ -1,21 +1,22 @@
 //! Helper functions for the BGEO file format
 
+use crate::mesh::{AttributeData, MeshAttribute};
 use crate::utils::IteratorExt;
-use crate::Real;
+use crate::{utils, Real};
 use anyhow::{anyhow, Context};
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use nalgebra::Vector3;
 use nom::{Finish, Parser};
+use num_traits::FromPrimitive;
 use num_traits::ToPrimitive;
+use parser::bgeo_parser;
 use std::fs::{File, OpenOptions};
 use std::io;
 use std::io::{BufWriter, Read};
 use std::path::Path;
 
-use crate::mesh::{AttributeData, MeshAttribute};
-use parser::bgeo_parser;
 // TODO: Find out why there is a 1.0 float value between position vector and id int in splishsplash output
 // TODO: Better error messages, skip nom errors
 
@@ -332,57 +333,20 @@ impl AttributeStorage {
 
     /// Tries to convert this BGEO attribute storage into a mesh [`AttributeData`] storage
     fn try_into_attribute_data<R: Real>(&self) -> Result<AttributeData<R>, anyhow::Error> {
-        // TODO: Simplify error handling and de-duplicate with e.g. VTK code
         match self {
-            AttributeStorage::Int(data) => {
-                let data = data
-                    .iter()
-                    .map(|v| u64::try_from(*v))
-                    .collect::<Result<Vec<_>, _>>()
-                    .context(anyhow!(
-                        "Failed to convert an attribute value from i32 to u64 type"
-                    ))?;
-                Ok(AttributeData::ScalarU64(data))
-            }
-            AttributeStorage::Float(data) => {
-                let data = data
-                    .iter()
-                    .map(|v| {
-                        R::from_f32(*v).ok_or_else(|| {
-                            anyhow!("Cannot convert an attribute value from f32 to Real type")
-                        })
-                    })
-                    .collect::<Result<Vec<_>, _>>()
-                    .context(anyhow!(
-                        "Failed to convert an attribute value from f32 to Real type"
-                    ))?;
-                Ok(AttributeData::ScalarReal(data))
-            }
+            AttributeStorage::Int(data) => utils::try_convert_scalar_slice(data, u64::from_i32)
+                .map(|v| AttributeData::ScalarU64(v))
+                .context(anyhow!("failed to convert integer attribute")),
+            AttributeStorage::Float(data) => utils::try_convert_scalar_slice(data, R::from_f32)
+                .map(|v| AttributeData::ScalarReal(v))
+                .context(anyhow!("failed to convert float attribute")),
             AttributeStorage::Vector(n, data) => {
                 if *n == 3 {
-                    let data = data
-                        .chunks_exact(3)
-                        .map(|v| {
-                            Some(Vector3::new(
-                                R::from_f32(v[0])?,
-                                R::from_f32(v[1])?,
-                                R::from_f32(v[2])?,
-                            ))
-                        })
-                        .map(|vec| {
-                            vec.ok_or_else(|| {
-                                anyhow!(
-                                    "Failed to convert an attribute vector from f32 to Real type"
-                                )
-                            })
-                        })
-                        .collect::<Result<Vec<_>, _>>()
-                        .context(anyhow!(
-                            "Failed to convert an attribute vector from f32 to Real type"
-                        ))?;
-                    Ok(AttributeData::Vector3Real(data))
+                    utils::try_convert_scalar_slice_to_vectors(data, R::from_f32)
+                        .map(|v| AttributeData::Vector3Real(v))
+                        .context(anyhow!("failed to convert vector attribute"))
                 } else {
-                    Err(anyhow!("Unsupported vector attribute dimension: {}", n))
+                    Err(anyhow!("unsupported vector attribute size: {}", n))
                 }
             }
         }
