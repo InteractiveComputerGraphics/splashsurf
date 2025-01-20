@@ -25,10 +25,10 @@ jobs:
 
     strategy:
       matrix:
-        os: [ubuntu-latest, ubuntu24.04-arm]
+        os: [ubuntu-latest, ubuntu-24.04-arm]
         include:
           - os: ubuntu-latest
-          - os: ubuntu24.04-arm
+          - os: ubuntu-24.04-arm
             rust-target: aarch64-unknown-linux-gnu
 
     steps:
@@ -36,11 +36,11 @@ jobs:
       with:
         lfs: true
     - uses: actions/setup-python@v4
-      if: matrix.os == 'ubuntu24.04-arm'
+      if: matrix.os == 'ubuntu-24.04-arm'
       with:
         python-version: '3.12'
     - name: Install rust toolchain (ARM)
-      if: matrix.os == 'ubuntu24.04-arm'
+      if: matrix.os == 'ubuntu-24.04-arm'
       run: |
         rustup toolchain install stable-aarch64-unknown-linux-gnu
         rustup default stable-aarch64-unknown-linux-gnu
@@ -62,10 +62,10 @@ jobs:
 
     strategy:
       matrix:
-        os: [ubuntu-latest, ubuntu24.04-arm]
+        os: [ubuntu-latest, ubuntu-24.04-arm]
         include:
           - os: ubuntu-latest
-          - os: ubuntu24.04-arm
+          - os: ubuntu-24.04-arm
             rust-target: aarch64-unknown-linux-gnu
 
     steps:
@@ -73,11 +73,11 @@ jobs:
         with:
           lfs: true
       - uses: actions/setup-python@v4
-        if: matrix.os == 'ubuntu24.04-arm'
+        if: matrix.os == 'ubuntu-24.04-arm'
         with:
           python-version: '3.12'
       - name: Install rust toolchain (ARM)
-        if: matrix.os == 'ubuntu24.04-arm'
+        if: matrix.os == 'ubuntu-24.04-arm'
         run: |
           rustup toolchain install stable-aarch64-unknown-linux-gnu
           rustup default stable-aarch64-unknown-linux-gnu
@@ -98,10 +98,10 @@ jobs:
 
     strategy:
       matrix:
-        os: [ubuntu-latest, ubuntu24.04-arm]
+        os: [ubuntu-latest, ubuntu-24.04-arm]
         include:
           - os: ubuntu-latest
-          - os: ubuntu24.04-arm
+          - os: ubuntu-24.04-arm
             rust-target: aarch64-unknown-linux-gnu
     
     steps:
@@ -109,11 +109,11 @@ jobs:
         with:
           lfs: true
       - uses: actions/setup-python@v4
-        if: matrix.os == 'ubuntu24.04-arm'
+        if: matrix.os == 'ubuntu-24.04-arm'
         with:
           python-version: '3.12'
       - name: Install rust toolchain (ARM)
-        if: matrix.os == 'ubuntu24.04-arm'
+        if: matrix.os == 'ubuntu-24.04-arm'
         run: |
           rustup toolchain install stable-aarch64-unknown-linux-gnu
           rustup default stable-aarch64-unknown-linux-gnu
