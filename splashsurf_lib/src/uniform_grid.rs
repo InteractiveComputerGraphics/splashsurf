@@ -189,7 +189,7 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
             .unscale(cell_size)
             .map(|x| x.floor())
             .scale(cell_size);
-        let aabb = Aabb3d::new(aligned_min, aabb.max().clone());
+        let aabb = Aabb3d::new(aligned_min, *aabb.max());
 
         let n_cells_real = aabb.extents() / cell_size;
         let n_cells_per_dim = Self::checked_n_cells_per_dim(&n_cells_real)
@@ -204,7 +204,7 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
         n_cells_per_dim: &[I; 3],
         cell_size: R,
     ) -> Result<Self, GridConstructionError<I, R>> {
-        let n_cells_per_dim = n_cells_per_dim.clone();
+        let n_cells_per_dim = *n_cells_per_dim;
         let n_points_per_dim = Self::checked_n_points_per_dim(&n_cells_per_dim)
             .ok_or(GridConstructionError::IndexTypeTooSmallPointsPerDim)?;
 
@@ -284,7 +284,7 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
     }
 
     pub fn get_edge(&self, origin_ijk: [I; 3], axis: Axis) -> Option<EdgeIndex<I>> {
-        let mut target_ijk = origin_ijk.clone();
+        let mut target_ijk = origin_ijk;
         target_ijk[axis.dim()] += I::one();
         if self.point_exists(&origin_ijk) && self.point_exists(&target_ijk) {
             Some(EdgeIndex {
@@ -479,7 +479,7 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
             return None;
         }
 
-        let mut neighbor_ijk = point_ijk.clone();
+        let mut neighbor_ijk = *point_ijk;
         neighbor_ijk[dim] = direction.apply_step(neighbor_ijk[dim], I::one());
         Some(PointIndex::from_ijk(neighbor_ijk))
     }
@@ -493,7 +493,7 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
         let DirectedAxis { axis, direction } = direction;
         let dim = axis.dim();
 
-        let mut neighbor_ijk = point_ijk.clone();
+        let mut neighbor_ijk = *point_ijk;
         neighbor_ijk[dim] = direction.apply_step(neighbor_ijk[dim], I::one());
         neighbor_ijk
     }
@@ -533,7 +533,7 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
 
         // Try to obtain all points that might be the origin or lower corner of a cell
         // Some of them (p1, p3 or both) might not exist if the edge is at the boundary of the grid
-        let p0 = Some(edge_start_point.clone());
+        let p0 = Some(*edge_start_point);
         let p1 = self.get_point_neighbor(edge_start_point, step_dir1);
         let p3 = self.get_point_neighbor(edge_start_point, step_dir3);
         // Get the last origin point by combining both steps
@@ -665,7 +665,7 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
                 cell_size * n_cells_per_dim[2].to_real()?,
             );
 
-        Some(Aabb3d::new(min.clone(), max))
+        Some(Aabb3d::new(*min, max))
     }
 
     fn checked_num_points(n_points_per_dim: &[I; 3]) -> Option<I> {

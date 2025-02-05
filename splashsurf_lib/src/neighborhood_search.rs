@@ -523,7 +523,7 @@ pub fn neighborhood_search_spatial_hashing_parallel<I: Index, R: Real>(
 
                 let neighborhood_test =
                     |pos_i: Vector3<R>, particle_j: usize, local_buffer: &mut Vec<usize>| {
-                        let pos_j = unsafe { particle_positions.get_unchecked(particle_j).clone() };
+                        let pos_j = unsafe { *particle_positions.get_unchecked(particle_j) };
 
                         // TODO: We might not be able to guarantee that this is symmetric.
                         //  Therefore, it might be possible that only one side of some neighborhood relationships gets detected.
@@ -536,7 +536,7 @@ pub fn neighborhood_search_spatial_hashing_parallel<I: Index, R: Real>(
 
                 // Iterate over all particles of the current cell
                 for (i, particle_i) in cell_k_particles.iter().copied().enumerate() {
-                    let pos_i = unsafe { particle_positions.get_unchecked(particle_i).clone() };
+                    let pos_i = unsafe { *particle_positions.get_unchecked(particle_i) };
 
                     // Check for neighborhood with particles of all adjacent cells
                     // Transitive neighborhood relationship is not handled explicitly.

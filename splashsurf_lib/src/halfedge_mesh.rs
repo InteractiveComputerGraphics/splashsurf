@@ -120,7 +120,7 @@ impl<R: Real> HalfEdgeTriMesh<R> {
         self.vertex_half_edge_map[vertex]
             .iter()
             .copied()
-            .map(|he_i| self.half_edges[he_i].clone())
+            .map(|he_i| self.half_edges[he_i])
     }
 
     /// Iterator over all incident faces of the given vertex
@@ -137,7 +137,7 @@ impl<R: Real> HalfEdgeTriMesh<R> {
         for &he_idx in from_edges {
             let he = &self.half_edges[he_idx];
             if he.to == to {
-                return Some(he.clone());
+                return Some(*he);
             }
         }
 

@@ -39,7 +39,7 @@ pub fn par_laplacian_smoothing_inplace<R: Real>(
                 // Compute mean position of neighboring vertices
                 let mut vertex_sum = Vector3::zeros();
                 for j in vertex_connectivity[i].iter() {
-                    vertex_sum += vertex_buffer[j.clone()];
+                    vertex_sum += vertex_buffer[*j];
                 }
                 if vertex_connectivity[i].len() > 0 {
                     let n = R::from_usize(vertex_connectivity[i].len()).unwrap();

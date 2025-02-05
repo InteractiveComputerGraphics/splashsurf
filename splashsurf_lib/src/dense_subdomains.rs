@@ -359,7 +359,7 @@ pub(crate) fn extract_narrow_band<I: Index, R: Real>(
         profile!("Collect narrow band positions");
         let narrow_band_positions = narrow_band
             .into_iter()
-            .map(|i| particles[i].clone())
+            .map(|i| particles[i])
             .collect::<Vec<_>>();
         narrow_band_positions
     }
@@ -762,15 +762,15 @@ pub(crate) fn reconstruction<I: Index, R: Real>(
 
         if !is_max[0] && !is_max[1] {
             // Edge is already in the correct subdomain
-            (subdomain_index, local_edge.clone())
+            (subdomain_index, *local_edge)
         } else {
             // We have to translate to the neighboring subdomain (+1 in all directions where is_max == true)
             let subdomain_cell = subdomain_grid
                 .try_unflatten_cell_index(subdomain_index)
                 .expect("invalid subdomain index");
 
-            let mut target_subdomain_ijk = subdomain_cell.index().clone();
-            let mut target_local_origin_ijk = local_edge.origin().index().clone();
+            let mut target_subdomain_ijk = *subdomain_cell.index();
+            let mut target_local_origin_ijk = *local_edge.origin().index();
 
             // Obtain index of new subdomain and new origin point
             for (&orth_axis, &is_max) in local_edge
@@ -932,8 +932,8 @@ pub(crate) fn reconstruction<I: Index, R: Real>(
                             // Use global coordinate calculation for consistency with neighboring domains
                             let global_point_ijk = local_to_global_point_ijk(
                                 point_ijk,
-                                subdomain_ijk.clone(),
-                                mc_cells_per_subdomain.clone(),
+                                *subdomain_ijk,
+                                *mc_cells_per_subdomain,
                             );
                             let global_point = parameters
                                 .global_marching_cubes_grid
@@ -1185,8 +1185,8 @@ pub(crate) fn reconstruction<I: Index, R: Real>(
                             // Use global coordinate calculation for consistency with neighboring domains
                             let global_point_ijk = local_to_global_point_ijk(
                                 point_ijk,
-                                subdomain_ijk.clone(),
-                                mc_cells_per_subdomain.clone(),
+                                *subdomain_ijk,
+                                *mc_cells_per_subdomain,
                             );
                             let global_point = parameters
                                 .global_marching_cubes_grid
@@ -1464,7 +1464,7 @@ pub(crate) fn stitching<I: Index, R: Real>(
                                 .for_each(
                                     |(_exterior_local_idx, ((old_local_idx, vert), edge_index))| {
                                         let global_index = *exterior_vertex_mapping
-                                            .entry(edge_index.clone())
+                                            .entry(*edge_index)
                                             .or_insert_with(|| {
                                                 // Exterior vertices will come after all interior vertices in the mesh
                                                 let global_index = total_interior_vert_count
@@ -1795,7 +1795,7 @@ pub(crate) mod debug {
             let subdomain_ijk = subdomain_grid
                 .try_unflatten_cell_index(flat_subdomain_idx as I)
                 .unwrap();
-            let [i, j, k] = subdomain_ijk.index().clone();
+            let [i, j, k] = *subdomain_ijk.index();
 
             let vertex_offset = hexmesh.vertices.len();
 

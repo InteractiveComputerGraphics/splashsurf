@@ -428,7 +428,7 @@ fn keep_cells_impl<R: Real, MeshT: Mesh3d<R>>(
             .copied()
             .enumerate()
             .filter_map(|(i, should_keep)| if should_keep { Some(i) } else { None })
-            .map(|index| vertices[index].clone())
+            .map(|index| vertices[index])
             .collect();
 
         MeshT::from_vertices_and_connectivity(relabeled_vertices, relabeled_cells)
@@ -1391,13 +1391,13 @@ impl<R: Real> MeshAttribute<R> {
     fn keep_indices(&self, indices: &[usize]) -> Self {
         let data = match &self.data {
             AttributeData::ScalarU64(d) => {
-                AttributeData::ScalarU64(indices.iter().copied().map(|i| d[i].clone()).collect())
+                AttributeData::ScalarU64(indices.iter().copied().map(|i| d[i]).collect())
             }
             AttributeData::ScalarReal(d) => {
-                AttributeData::ScalarReal(indices.iter().copied().map(|i| d[i].clone()).collect())
+                AttributeData::ScalarReal(indices.iter().copied().map(|i| d[i]).collect())
             }
             AttributeData::Vector3Real(d) => {
-                AttributeData::Vector3Real(indices.iter().copied().map(|i| d[i].clone()).collect())
+                AttributeData::Vector3Real(indices.iter().copied().map(|i| d[i]).collect())
             }
         };
 
