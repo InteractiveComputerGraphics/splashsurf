@@ -21,12 +21,30 @@ jobs:
 
   build_workspace:
 
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm]
+        include:
+          - os: ubuntu-latest
+          - os: ubuntu-24.04-arm
+            rust-target: aarch64-unknown-linux-gnu
 
     steps:
     - uses: actions/checkout@v4
       with:
         lfs: true
+    - uses: actions/setup-python@v4
+      if: matrix.os == 'ubuntu-24.04-arm'
+      with:
+        python-version: '3.12'
+    - name: Install rust toolchain (ARM)
+      if: matrix.os == 'ubuntu-24.04-arm'
+      run: |
+        rustup toolchain install stable-aarch64-unknown-linux-gnu
+        rustup default stable-aarch64-unknown-linux-gnu
+        rustup target add ${{ matrix.rust-target }}
     - name: Check
       run: cargo check --verbose
     - name: Check with examples
@@ -40,12 +58,30 @@ jobs:
 
   build_lib_all_features:
 
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm]
+        include:
+          - os: ubuntu-latest
+          - os: ubuntu-24.04-arm
+            rust-target: aarch64-unknown-linux-gnu
 
     steps:
       - uses: actions/checkout@v4
         with:
           lfs: true
+      - uses: actions/setup-python@v4
+        if: matrix.os == 'ubuntu-24.04-arm'
+        with:
+          python-version: '3.12'
+      - name: Install rust toolchain (ARM)
+        if: matrix.os == 'ubuntu-24.04-arm'
+        run: |
+          rustup toolchain install stable-aarch64-unknown-linux-gnu
+          rustup default stable-aarch64-unknown-linux-gnu
+          rustup target add ${{ matrix.rust-target }}
       - name: Build
         run: |
           cargo build --manifest-path="splashsurf_lib/Cargo.toml" --all-features --verbose
@@ -58,12 +94,30 @@ jobs:
 
   build_lib_no_default_features:
 
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
 
+    strategy:
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm]
+        include:
+          - os: ubuntu-latest
+          - os: ubuntu-24.04-arm
+            rust-target: aarch64-unknown-linux-gnu
+    
     steps:
       - uses: actions/checkout@v4
         with:
           lfs: true
+      - uses: actions/setup-python@v4
+        if: matrix.os == 'ubuntu-24.04-arm'
+        with:
+          python-version: '3.12'
+      - name: Install rust toolchain (ARM)
+        if: matrix.os == 'ubuntu-24.04-arm'
+        run: |
+          rustup toolchain install stable-aarch64-unknown-linux-gnu
+          rustup default stable-aarch64-unknown-linux-gnu
+          rustup target add ${{ matrix.rust-target }}
       - name: Build
         run: |
           cargo build --manifest-path="splashsurf_lib/Cargo.toml" --no-default-features --verbose
