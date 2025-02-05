@@ -315,10 +315,7 @@ pub fn marching_cubes_triangulation_iter(
     vertices_inside: &[bool; 8],
 ) -> impl Iterator<Item = [i32; 3]> {
     let triangulation = get_marching_cubes_triangulation_raw(vertices_inside);
-    (0..5)
-        .into_iter()
-        .map(move |i| triangulation_to_triangle(triangulation, i))
-        .flatten()
+    (0..5).filter_map(move |i| triangulation_to_triangle(triangulation, i))
 }
 
 /// Converts an array of bool representing bits to the corresponding usize, the order of the bits is least to most significant
@@ -341,7 +338,7 @@ fn triangulation_to_triangle(triangulation: &[i32; 16], triangle_index: usize) -
         Some([
             triangulation[3 * i + 2],
             triangulation[3 * i + 1],
-            triangulation[3 * i + 0],
+            triangulation[3 * i],
         ])
     }
 }

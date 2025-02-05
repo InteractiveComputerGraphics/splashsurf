@@ -22,14 +22,8 @@ pub struct FormatParameters {
 }
 
 /// File format parameters for input files
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct InputFormatParameters {}
-
-impl Default for InputFormatParameters {
-    fn default() -> Self {
-        Self {}
-    }
-}
 
 /// File format parameters for output files
 #[derive(Clone, Debug)]
@@ -107,7 +101,7 @@ pub fn read_particle_positions_with_attributes<R: Real, P: AsRef<Path>>(
 
     let vtk_pieces = VtkFile::load_file(input_file)
         .map(|f| f.into_pieces())
-        .with_context(|| format!("Failed to load particle positions from file"))?;
+        .with_context(|| "Failed to load particle positions from file".to_string())?;
 
     if vtk_pieces.len() > 1 {
         warn!("VTK file contains more than one \"piece\". Only the first one will be loaded.");
@@ -176,13 +170,13 @@ pub fn write_particle_positions<R: Real, P: AsRef<Path>>(
             .ok_or(anyhow!("Invalid extension of output file"))?;
 
         match extension.to_lowercase().as_str() {
-            "vtk" => vtk_format::particles_to_vtk(particles, &output_file),
+            "vtk" => vtk_format::particles_to_vtk(particles, output_file),
             "bgeo" => bgeo_format::particles_to_bgeo(
                 particles,
-                &output_file,
+                output_file,
                 format_params.enable_compression,
             ),
-            "json" => json_format::particles_to_json(particles, &output_file),
+            "json" => json_format::particles_to_json(particles, output_file),
             _ => Err(anyhow!(
                 "Unsupported file format extension \"{}\" for writing particles",
                 extension
@@ -214,8 +208,8 @@ pub fn read_surface_mesh<R: Real, P: AsRef<Path>>(
             .ok_or(anyhow!("Invalid extension of input file"))?;
 
         match extension.to_lowercase().as_str() {
-            "vtk" => vtk_format::surface_mesh_from_vtk(&input_file),
-            "ply" => ply_format::surface_mesh_from_ply(&input_file),
+            "vtk" => vtk_format::surface_mesh_from_vtk(input_file),
+            "ply" => ply_format::surface_mesh_from_ply(input_file),
             _ => Err(anyhow!(
                 "Unsupported file format extension \"{}\" for reading surface meshes",
                 extension
@@ -261,9 +255,9 @@ where
             .ok_or(anyhow!("Invalid extension of output file"))?;
 
         match extension.to_lowercase().as_str() {
-            "vtk" => vtk_format::write_vtk(mesh, &output_file, "mesh"),
-            "ply" => ply_format::mesh_to_ply(mesh, &output_file),
-            "obj" => obj_format::mesh_to_obj(mesh, &output_file),
+            "vtk" => vtk_format::write_vtk(mesh, output_file, "mesh"),
+            "ply" => ply_format::mesh_to_ply(mesh, output_file),
+            "obj" => obj_format::mesh_to_obj(mesh, output_file),
             _ => Err(anyhow!(
                 "Unsupported file format extension \"{}\"",
                 extension,

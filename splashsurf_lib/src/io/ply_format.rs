@@ -44,7 +44,7 @@ fn parse_particles_from_ply<R: Real>(
         .ok_or(anyhow!("PLY file is missing a 'vertex' element"))?;
 
     let particles = elements
-        .into_iter()
+        .iter()
         .map(|e| {
             let vertex = (
                 e.get("x").unwrap(),
@@ -130,7 +130,7 @@ fn parse_mesh_from_ply<R: Real>(
         .ok_or(anyhow!("PLY file is missing a 'face' element"))?;
 
     let triangles = faces
-        .into_iter()
+        .iter()
         .map(|e| {
             let indices = e
                 .get("vertex_indices")
@@ -204,32 +204,32 @@ pub fn mesh_to_ply<R: Real, M: Mesh3d<R>, P: AsRef<Path>>(
         .context("Failed to open file handle for writing PLY file")?;
     let mut writer = BufWriter::with_capacity(1000000, file);
 
-    write!(&mut writer, "ply\n")?;
-    write!(&mut writer, "format binary_little_endian 1.0\n")?;
-    write!(&mut writer, "element vertex {}\n", mesh.vertices().len())?;
-    write!(&mut writer, "property float x\n")?;
-    write!(&mut writer, "property float y\n")?;
-    write!(&mut writer, "property float z\n")?;
+    writeln!(&mut writer, "ply")?;
+    writeln!(&mut writer, "format binary_little_endian 1.0")?;
+    writeln!(&mut writer, "element vertex {}", mesh.vertices().len())?;
+    writeln!(&mut writer, "property float x")?;
+    writeln!(&mut writer, "property float y")?;
+    writeln!(&mut writer, "property float z")?;
     for p_attr in &mesh.point_attributes {
         if p_attr.name == "normals" {
-            write!(&mut writer, "property float nx\n")?;
-            write!(&mut writer, "property float ny\n")?;
-            write!(&mut writer, "property float nz\n")?;
+            writeln!(&mut writer, "property float nx")?;
+            writeln!(&mut writer, "property float ny")?;
+            writeln!(&mut writer, "property float nz")?;
         } else {
             match p_attr.data {
-                AttributeData::ScalarU64(_) => write!(&mut writer, "property uint {}\n", p_attr.name)?,
-                AttributeData::ScalarReal(_) => write!(&mut writer, "property float {}\n", p_attr.name)?,
+                AttributeData::ScalarU64(_) => writeln!(&mut writer, "property uint {}", p_attr.name)?,
+                AttributeData::ScalarReal(_) => writeln!(&mut writer, "property float {}", p_attr.name)?,
                 AttributeData::Vector3Real(_) => {
-                    write!(&mut writer, "property float {}_x\n", p_attr.name)?;
-                    write!(&mut writer, "property float {}_y\n", p_attr.name)?;
-                    write!(&mut writer, "property float {}_z\n", p_attr.name)?;
+                    writeln!(&mut writer, "property float {}_x", p_attr.name)?;
+                    writeln!(&mut writer, "property float {}_y", p_attr.name)?;
+                    writeln!(&mut writer, "property float {}_z", p_attr.name)?;
                 },
             }
         }
     }
-    write!(&mut writer, "element face {}\n", mesh.cells().len())?;
-    write!(&mut writer, "property list uchar uint vertex_indices\n")?;
-    write!(&mut writer, "end_header\n")?;
+    writeln!(&mut writer, "element face {}", mesh.cells().len())?;
+    writeln!(&mut writer, "property list uchar uint vertex_indices")?;
+    writeln!(&mut writer, "end_header")?;
 
     for (i, v) in mesh.vertices().iter().enumerate() {
         writer.write_all(&v.x.to_f32().expect("failed to convert coordinate to f32").to_le_bytes())?;

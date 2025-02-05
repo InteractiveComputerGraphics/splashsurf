@@ -42,7 +42,7 @@ pub(crate) fn triangulate<I: Index, R: Real>(
         {
             // TODO: Allow user to set option to skip invalid triangles?
             let global_triangle = get_triangle(cell_data, triangle)
-                .map_err(|e| TriangulationError::TriangleConnectivityError(e))?;
+                .map_err(TriangulationError::TriangleConnectivityError)?;
             mesh.triangles.push(global_triangle);
         }
     }

@@ -5,7 +5,7 @@ use parking_lot::RwLock;
 use std::collections::hash_map::RandomState;
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
-use std::hash::{BuildHasher, Hash, Hasher};
+use std::hash::{BuildHasher, Hash};
 use std::io;
 use std::time::{Duration, Instant};
 use thread_local::ThreadLocal;
@@ -110,10 +110,7 @@ pub struct ScopeId {
 
 impl ScopeId {
     fn get_hash(id: Option<&ScopeId>) -> u64 {
-        let mut hasher = RANDOM_STATE.build_hasher();
-        id.hash(&mut hasher);
-        let hash = hasher.finish();
-        hash
+        RANDOM_STATE.hash_one(id)
     }
 }
 

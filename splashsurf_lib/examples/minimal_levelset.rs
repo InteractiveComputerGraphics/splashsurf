@@ -88,7 +88,7 @@ pub fn marching_cubes<R: Real, L: MarchingCubesLevelSet<R>>(
                         let vertex_index = *edge_to_vertex.entry(edge).or_insert_with(|| {
                             let vertex_index = vertices.len();
 
-                            let origin_coords = grid.point_coordinates(&edge.origin());
+                            let origin_coords = grid.point_coordinates(edge.origin());
                             let target_coords = grid.point_coordinates(&edge.target());
 
                             let origin_value = level_set.evaluate(&origin_coords);

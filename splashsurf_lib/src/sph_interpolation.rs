@@ -277,10 +277,9 @@ fn build_rtree<R: Real>(
         .collect();
 
     // Build the R-tree to accelerate SPH neighbor queries near the interpolation points
-    let tree = {
+
+    {
         profile!("build R-tree");
         RTree::bulk_load(particles)
-    };
-
-    tree
+    }
 }

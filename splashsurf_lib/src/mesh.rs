@@ -367,7 +367,8 @@ fn vertex_keep_table<R: Real, MeshT: Mesh3d<R>>(mesh: &MeshT, cell_indices: &[us
     let cells = mesh.cells();
 
     // Each entry is true if this vertex should be kept, false otherwise
-    let vertex_keep_table = {
+
+    {
         let mut table = vec![false; vertices.len()];
         for cell in cell_indices.iter().copied().map(|c_i| &cells[c_i]) {
             for &vertex_index in cell.vertices() {
@@ -375,9 +376,7 @@ fn vertex_keep_table<R: Real, MeshT: Mesh3d<R>>(mesh: &MeshT, cell_indices: &[us
             }
         }
         table
-    };
-
-    vertex_keep_table
+    }
 }
 
 /// Returns a new mesh keeping only the given cells and vertices in the mesh
@@ -428,7 +427,7 @@ fn keep_cells_impl<R: Real, MeshT: Mesh3d<R>>(
             .copied()
             .enumerate()
             .filter_map(|(i, should_keep)| if should_keep { Some(i) } else { None })
-            .map(|index| vertices[index].clone())
+            .map(|index| vertices[index])
             .collect();
 
         MeshT::from_vertices_and_connectivity(relabeled_vertices, relabeled_cells)
@@ -496,7 +495,7 @@ impl CellConnectivity for TriangleOrQuadCell {
     }
 
     fn num_vertices(&self) -> usize {
-        return self.num_vertices();
+        self.num_vertices()
     }
 
     fn vertices(&self) -> &[usize] {
@@ -617,7 +616,7 @@ impl<R: Real> Mesh3d<R> for PointCloud3d<R> {
     }
 }
 
-impl<'a, R: Real, MeshT: Mesh3d<R> + Clone> Mesh3d<R> for std::borrow::Cow<'a, MeshT> {
+impl<R: Real, MeshT: Mesh3d<R> + Clone> Mesh3d<R> for std::borrow::Cow<'_, MeshT> {
     type Cell = MeshT::Cell;
 
     fn vertices(&self) -> &[Vector3<R>] {
@@ -639,7 +638,7 @@ impl<'a, R: Real, MeshT: Mesh3d<R> + Clone> Mesh3d<R> for std::borrow::Cow<'a, M
 
 impl TriangleCell {
     /// Returns an iterator over all edges of this triangle
-    pub fn edges<'a>(&'a self) -> impl Iterator<Item = (usize, usize)> + 'a {
+    pub fn edges(&self) -> impl Iterator<Item = (usize, usize)> + '_ {
         (0..3).map(|i| (self.0[i], self.0[(i + 1) % 3]))
     }
 }
@@ -666,7 +665,7 @@ pub struct EdgeInformation {
 
 impl MeshEdgeInformation {
     /// Iterator over all edge information stored in this struct
-    pub fn iter<'a>(&'a self) -> impl Iterator<Item = EdgeInformation> + 'a {
+    pub fn iter(&self) -> impl Iterator<Item = EdgeInformation> + '_ {
         self.edge_counts.iter().map(|(e, (edge_idx, count))| {
             let info = &self.edge_info[*edge_idx];
             EdgeInformation {
@@ -696,7 +695,7 @@ impl MeshEdgeInformation {
     }
 
     /// Iterator over all boundary edges
-    pub fn boundary_edges<'a>(&'a self) -> impl Iterator<Item = [usize; 2]> + 'a {
+    pub fn boundary_edges(&self) -> impl Iterator<Item = [usize; 2]> + '_ {
         self.edge_counts
             .values()
             .filter(|(_, count)| *count == 1)
@@ -704,7 +703,7 @@ impl MeshEdgeInformation {
     }
 
     /// Iterator over all non-manifold edges
-    pub fn non_manifold_edges<'a>(&'a self) -> impl Iterator<Item = [usize; 2]> + 'a {
+    pub fn non_manifold_edges(&self) -> impl Iterator<Item = [usize; 2]> + '_ {
         self.edge_counts
             .values()
             .filter(|(_, count)| *count > 2)
@@ -857,7 +856,7 @@ impl<R: Real> TriMesh3d<R> {
     }
 
     /// Same as [`Self::vertex_normals_inplace`] but assumes that the output is already zeroed
-    fn vertex_normals_inplace_assume_zeroed<'a>(&self, normals: &'a mut [Unit<Vector3<R>>]) {
+    fn vertex_normals_inplace_assume_zeroed(&self, normals: &mut [Unit<Vector3<R>>]) {
         assert_eq!(normals.len(), self.vertices.len());
 
         // First, compute the directions of the normals...
@@ -876,7 +875,7 @@ impl<R: Real> TriMesh3d<R> {
     }
 
     /// Same as [`Self::par_vertex_normals_inplace`] but assumes that the output is already zeroed
-    fn par_vertex_normals_inplace_assume_zeroed<'a>(&self, normals: &'a mut [Unit<Vector3<R>>]) {
+    fn par_vertex_normals_inplace_assume_zeroed(&self, normals: &mut [Unit<Vector3<R>>]) {
         assert_eq!(normals.len(), self.vertices.len());
 
         // First, compute the directions of the normals...
@@ -1281,7 +1280,7 @@ impl<R: Real, MeshT: Mesh3d<R>> Mesh3d<R> for MeshWithData<R, MeshT> {
         let cell_attributes = self
             .cell_attributes
             .iter()
-            .map(|attr| attr.keep_indices(&cell_indices))
+            .map(|attr| attr.keep_indices(cell_indices))
             .collect();
         new_mesh.cell_attributes = cell_attributes;
 
@@ -1391,13 +1390,13 @@ impl<R: Real> MeshAttribute<R> {
     fn keep_indices(&self, indices: &[usize]) -> Self {
         let data = match &self.data {
             AttributeData::ScalarU64(d) => {
-                AttributeData::ScalarU64(indices.iter().copied().map(|i| d[i].clone()).collect())
+                AttributeData::ScalarU64(indices.iter().copied().map(|i| d[i]).collect())
             }
             AttributeData::ScalarReal(d) => {
-                AttributeData::ScalarReal(indices.iter().copied().map(|i| d[i].clone()).collect())
+                AttributeData::ScalarReal(indices.iter().copied().map(|i| d[i]).collect())
             }
             AttributeData::Vector3Real(d) => {
-                AttributeData::Vector3Real(indices.iter().copied().map(|i| d[i].clone()).collect())
+                AttributeData::Vector3Real(indices.iter().copied().map(|i| d[i]).collect())
             }
         };
 
@@ -1607,7 +1606,7 @@ pub mod vtk_helper {
     {
         let points = {
             let mut points: Vec<R> = Vec::with_capacity(mesh.vertices().len() * 3);
-            points.extend(mesh.vertices().iter().map(|p| p.as_slice()).flatten());
+            points.extend(mesh.vertices().iter().flat_map(|p| p.as_slice()));
             points
         };
 

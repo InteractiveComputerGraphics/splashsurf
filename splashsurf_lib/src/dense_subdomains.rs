@@ -101,10 +101,10 @@ pub(crate) struct Subdomains<I: Index> {
     per_subdomain_particles: Vec<Vec<usize>>,
 }
 
-pub(crate) fn initialize_parameters<'a, I: Index, R: Real>(
+pub(crate) fn initialize_parameters<I: Index, R: Real>(
     parameters: &Parameters<R>,
     _particles: &[Vector3<R>],
-    output_surface: &'a SurfaceReconstruction<I, R>,
+    output_surface: &SurfaceReconstruction<I, R>,
 ) -> Result<ParametersSubdomainGrid<I, R>, anyhow::Error> {
     let chunk_size = 500;
 
@@ -199,7 +199,7 @@ pub(crate) fn initialize_parameters<'a, I: Index, R: Real>(
     .context("compute global number of marching cubes cells per dimension")?;
 
     let global_mc_grid = UniformCartesianCubeGrid3d::<GlobalIndex, R>::new(
-        &global_mc_grid.aabb().min(),
+        global_mc_grid.aabb().min(),
         &num_global_mc_cells,
         cube_size,
     )
@@ -225,7 +225,7 @@ pub(crate) fn initialize_parameters<'a, I: Index, R: Real>(
     let subdomain_size = cube_size * subdomain_cubes.to_real_unchecked();
     // Background grid of the subdomains
     let subdomain_grid = UniformCartesianCubeGrid3d::<I, R>::new(
-        &global_mc_grid.aabb().min(),
+        global_mc_grid.aabb().min(),
         &num_subdomains,
         subdomain_size,
     )?;
@@ -275,7 +275,7 @@ pub(crate) fn extract_narrow_band<I: Index, R: Real>(
 
     // AABB of the particles
     let aabb = {
-        let mut aabb = Aabb3d::<R>::par_from_points(&particles);
+        let mut aabb = Aabb3d::<R>::par_from_points(particles);
         // Add some safety margin, this should be large enough such that all mesh vertices are guaranteed to be inside of it
         aabb.grow_uniformly(ghost_particle_margin);
         info!("Enlarged AABB: {:?}", aabb);
@@ -287,7 +287,7 @@ pub(crate) fn extract_narrow_band<I: Index, R: Real>(
         let mut neighbors = Vec::new();
         neighborhood_search_spatial_hashing_parallel::<GlobalIndex, _>(
             &aabb,
-            &particles,
+            particles,
             compact_support_radius,
             &mut neighbors,
         );
@@ -312,8 +312,7 @@ pub(crate) fn extract_narrow_band<I: Index, R: Real>(
         let mut first_ring = surface_particles
             .iter()
             .copied()
-            .map(|i| neighbor_lists[i].iter().copied())
-            .flatten()
+            .flat_map(|i| neighbor_lists[i].iter().copied())
             .collect::<Vec<_>>();
         info!("First ring before dedup: {}", first_ring.len());
         {
@@ -326,8 +325,7 @@ pub(crate) fn extract_narrow_band<I: Index, R: Real>(
         let mut second_ring = first_ring
             .iter()
             .copied()
-            .map(|i| neighbor_lists[i].iter().copied())
-            .flatten()
+            .flat_map(|i| neighbor_lists[i].iter().copied())
             .collect::<Vec<_>>();
         info!("Second ring before dedup: {}", second_ring.len());
         {
@@ -357,11 +355,11 @@ pub(crate) fn extract_narrow_band<I: Index, R: Real>(
 
     {
         profile!("Collect narrow band positions");
-        let narrow_band_positions = narrow_band
+
+        narrow_band
             .into_iter()
-            .map(|i| particles[i].clone())
-            .collect::<Vec<_>>();
-        narrow_band_positions
+            .map(|i| particles[i])
+            .collect::<Vec<_>>()
     }
 }
 
@@ -596,14 +594,14 @@ pub(crate) fn compute_global_densities_and_neighbors<I: Index, R: Real>(
 
             neighborhood_search_spatial_hashing_flat_filtered::<I, R>(
                 &margin_aabb,
-                &subdomain_particles,
+                subdomain_particles,
                 parameters.compact_support_radius,
                 neighborhood_lists,
                 |i| is_inside[i],
             );
 
             sequential_compute_particle_densities_filtered::<I, R, _>(
-                &subdomain_particles,
+                subdomain_particles,
                 neighborhood_lists,
                 parameters.compact_support_radius,
                 parameters.particle_rest_mass,
@@ -762,15 +760,15 @@ pub(crate) fn reconstruction<I: Index, R: Real>(
 
         if !is_max[0] && !is_max[1] {
             // Edge is already in the correct subdomain
-            (subdomain_index, local_edge.clone())
+            (subdomain_index, *local_edge)
         } else {
             // We have to translate to the neighboring subdomain (+1 in all directions where is_max == true)
             let subdomain_cell = subdomain_grid
                 .try_unflatten_cell_index(subdomain_index)
                 .expect("invalid subdomain index");
 
-            let mut target_subdomain_ijk = subdomain_cell.index().clone();
-            let mut target_local_origin_ijk = local_edge.origin().index().clone();
+            let mut target_subdomain_ijk = *subdomain_cell.index();
+            let mut target_local_origin_ijk = *local_edge.origin().index();
 
             // Obtain index of new subdomain and new origin point
             for (&orth_axis, &is_max) in local_edge
@@ -932,8 +930,8 @@ pub(crate) fn reconstruction<I: Index, R: Real>(
                             // Use global coordinate calculation for consistency with neighboring domains
                             let global_point_ijk = local_to_global_point_ijk(
                                 point_ijk,
-                                subdomain_ijk.clone(),
-                                mc_cells_per_subdomain.clone(),
+                                *subdomain_ijk,
+                                *mc_cells_per_subdomain,
                             );
                             let global_point = parameters
                                 .global_marching_cubes_grid
@@ -1004,11 +1002,11 @@ pub(crate) fn reconstruction<I: Index, R: Real>(
                         let vertex_index = *edge_to_vertex.entry(edge).or_insert_with(|| {
                             // TODO: Nonlinear interpolation
 
-                            let origin_coords = mc_grid.point_coordinates(&edge.origin());
+                            let origin_coords = mc_grid.point_coordinates(edge.origin());
                             let target_coords = mc_grid.point_coordinates(&edge.target());
 
                             let flat_origin_idx = mc_grid
-                                .flatten_point_index(&edge.origin())
+                                .flatten_point_index(edge.origin())
                                 .to_usize()
                                 .unwrap();
                             let flat_target_idx = mc_grid
@@ -1185,8 +1183,8 @@ pub(crate) fn reconstruction<I: Index, R: Real>(
                             // Use global coordinate calculation for consistency with neighboring domains
                             let global_point_ijk = local_to_global_point_ijk(
                                 point_ijk,
-                                subdomain_ijk.clone(),
-                                mc_cells_per_subdomain.clone(),
+                                *subdomain_ijk,
+                                *mc_cells_per_subdomain,
                             );
                             let global_point = parameters
                                 .global_marching_cubes_grid
@@ -1271,11 +1269,11 @@ pub(crate) fn reconstruction<I: Index, R: Real>(
                         let vertex_index = *edge_to_vertex.entry(edge).or_insert_with(|| {
                             // TODO: Nonlinear interpolation
 
-                            let origin_coords = mc_grid.point_coordinates(&edge.origin());
+                            let origin_coords = mc_grid.point_coordinates(edge.origin());
                             let target_coords = mc_grid.point_coordinates(&edge.target());
 
                             let flat_origin_idx = mc_grid
-                                .flatten_point_index(&edge.origin())
+                                .flatten_point_index(edge.origin())
                                 .to_usize()
                                 .unwrap();
                             let flat_target_idx = mc_grid
@@ -1460,22 +1458,18 @@ pub(crate) fn stitching<I: Index, R: Real>(
                                 })
                                 // For each exterior vertex there is a corresponding globalized edge index
                                 .zip(patch.exterior_vertex_edge_indices.iter())
-                                .enumerate()
-                                .for_each(
-                                    |(_exterior_local_idx, ((old_local_idx, vert), edge_index))| {
-                                        let global_index = *exterior_vertex_mapping
-                                            .entry(edge_index.clone())
-                                            .or_insert_with(|| {
-                                                // Exterior vertices will come after all interior vertices in the mesh
-                                                let global_index = total_interior_vert_count
-                                                    + exterior_vertices.len();
-                                                exterior_vertices.push(*vert);
-                                                global_index
-                                            });
-                                        local_to_global_vertex_mapping[old_local_idx] =
-                                            global_index;
-                                    },
-                                );
+                                .for_each(|((old_local_idx, vert), edge_index)| {
+                                    let global_index = *exterior_vertex_mapping
+                                        .entry(*edge_index)
+                                        .or_insert_with(|| {
+                                            // Exterior vertices will come after all interior vertices in the mesh
+                                            let global_index =
+                                                total_interior_vert_count + exterior_vertices.len();
+                                            exterior_vertices.push(*vert);
+                                            global_index
+                                        });
+                                    local_to_global_vertex_mapping[old_local_idx] = global_index;
+                                });
                         }
 
                         // Insert exterior triangles
@@ -1795,7 +1789,7 @@ pub(crate) mod debug {
             let subdomain_ijk = subdomain_grid
                 .try_unflatten_cell_index(flat_subdomain_idx as I)
                 .unwrap();
-            let [i, j, k] = subdomain_ijk.index().clone();
+            let [i, j, k] = *subdomain_ijk.index();
 
             let vertex_offset = hexmesh.vertices.len();
 
@@ -1821,7 +1815,7 @@ pub(crate) mod debug {
             }
 
             hexmesh.cells.push([
-                vertex_offset + 0,
+                vertex_offset,
                 vertex_offset + 1,
                 vertex_offset + 2,
                 vertex_offset + 3,
@@ -1881,8 +1875,7 @@ pub(crate) mod debug {
                 }
             });
 
-        let no_owned_particles_counter = no_owned_particles_counter.into_inner();
-        no_owned_particles_counter
+        no_owned_particles_counter.into_inner()
     }
 }
 

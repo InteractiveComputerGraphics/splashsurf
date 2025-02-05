@@ -21,7 +21,7 @@ unsafe impl<A: GlobalAlloc> GlobalAlloc for CountingAllocator<A> {
             self.peak_allocation
                 .fetch_max(current_allocation, Ordering::AcqRel);
         }
-        return ret;
+        ret
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {

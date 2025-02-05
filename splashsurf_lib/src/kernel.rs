@@ -41,7 +41,7 @@ impl<R: Real> CubicSplineKernel<R> {
     #[replace_float_literals(R::from_f64(literal).expect("Literal must fit in R"))]
     fn cubic_function(q: R) -> R {
         if q < R::one() {
-            return (3.0 / (2.0 * R::pi())) * ((2.0 / 3.0) - q * q + 0.5 * q * q * q);
+            (3.0 / (2.0 * R::pi())) * ((2.0 / 3.0) - q * q + 0.5 * q * q * q)
         } else if q < 2.0 {
             let x = 2.0 - q;
             return (R::one() / (4.0 * R::pi())) * x * x * x;
@@ -54,7 +54,7 @@ impl<R: Real> CubicSplineKernel<R> {
     #[replace_float_literals(R::from_f64(literal).expect("Literal must fit in R"))]
     fn cubic_function_dq(q: R) -> R {
         if q < 1.0 {
-            return (3.0 / (4.0 * R::pi())) * (-4.0 * q + 3.0 * q * q);
+            (3.0 / (4.0 * R::pi())) * (-4.0 * q + 3.0 * q * q)
         } else if q < 2.0 {
             let x = 2.0 - q;
             return -(3.0 / (4.0 * R::pi())) * x * x;

@@ -108,7 +108,7 @@ impl<R: Real> HalfEdgeTriMesh<R> {
     }
 
     /// Iterator over the one-ring vertex neighbors of the given vertex
-    pub fn vertex_one_ring<'a>(&'a self, vertex: usize) -> impl Iterator<Item = usize> + 'a {
+    pub fn vertex_one_ring(&self, vertex: usize) -> impl Iterator<Item = usize> + '_ {
         self.vertex_half_edge_map[vertex]
             .iter()
             .copied()
@@ -116,15 +116,15 @@ impl<R: Real> HalfEdgeTriMesh<R> {
     }
 
     /// Iterator over the outgoing half-edges of the given vertex
-    pub fn outgoing_half_edges<'a>(&'a self, vertex: usize) -> impl Iterator<Item = HalfEdge> + 'a {
+    pub fn outgoing_half_edges(&self, vertex: usize) -> impl Iterator<Item = HalfEdge> + '_ {
         self.vertex_half_edge_map[vertex]
             .iter()
             .copied()
-            .map(|he_i| self.half_edges[he_i].clone())
+            .map(|he_i| self.half_edges[he_i])
     }
 
     /// Iterator over all incident faces of the given vertex
-    pub fn incident_faces<'a>(&'a self, vertex: usize) -> impl Iterator<Item = usize> + 'a {
+    pub fn incident_faces(&self, vertex: usize) -> impl Iterator<Item = usize> + '_ {
         self.outgoing_half_edges(vertex).filter_map(|he| he.face)
     }
 
@@ -137,7 +137,7 @@ impl<R: Real> HalfEdgeTriMesh<R> {
         for &he_idx in from_edges {
             let he = &self.half_edges[he_idx];
             if he.to == to {
-                return Some(he.clone());
+                return Some(*he);
             }
         }
 
@@ -146,7 +146,7 @@ impl<R: Real> HalfEdgeTriMesh<R> {
 
     /// Returns whether the given half-edge or its opposite half-edge is a boundary edge
     pub fn is_boundary_edge(&self, half_edge: HalfEdge) -> bool {
-        return half_edge.is_boundary() || self.opposite(half_edge).is_boundary();
+        half_edge.is_boundary() || self.opposite(half_edge).is_boundary()
     }
 
     /// Returns whether the given vertex is a boundary vertex
@@ -241,10 +241,12 @@ impl<R: Real> HalfEdgeTriMesh<R> {
         for &he in &self.vertex_half_edge_map[v0] {
             let he = &self.half_edges[he];
             let vv = he.to;
-            if vv != v1 && Some(vv) != v_pos && Some(vv) != v_neg {
-                if let Some(_) = self.half_edge(vv, v1) {
-                    return Err(IllegalHalfEdgeCollapse::IntersectionOfOneRing);
-                }
+            if vv != v1
+                && Some(vv) != v_pos
+                && Some(vv) != v_neg
+                && self.half_edge(vv, v1).is_some()
+            {
+                return Err(IllegalHalfEdgeCollapse::IntersectionOfOneRing);
             }
         }
 
@@ -320,13 +322,13 @@ impl<R: Real> HalfEdgeTriMesh<R> {
 
         // Update the faces referencing the removed vertex
         for &he_idx in &conn_from {
-            self.half_edges[he_idx].face.map(|f| {
+            if let Some(f) = self.half_edges[he_idx].face {
                 self.triangles[f].iter_mut().for_each(|i| {
                     if *i == v_from {
                         *i = v_to;
                     }
                 })
-            });
+            }
         }
 
         // Update the half-edges around the collapsed triangles (they become opposites)

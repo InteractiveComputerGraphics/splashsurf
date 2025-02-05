@@ -22,15 +22,15 @@ impl<T: Write + Send> ProgressHandler<T> {
     fn handle<F: FnOnce(&mut Self) -> R, R>(&mut self, inner_function: F) -> R {
         let handle = get_progress_bar();
 
-        return match handle {
-            Some(pb) => pb.suspend(|| return inner_function(self)),
+        match handle {
+            Some(pb) => pb.suspend(|| inner_function(self)),
             None => inner_function(self),
-        };
+        }
     }
 
     /// Create a new instance of "Self"
     pub fn new(pipe: T) -> Self {
-        return Self(pipe);
+        Self(pipe)
     }
 }
 
@@ -44,12 +44,12 @@ impl<T: Write + Send + 'static> ProgressHandler<T> {
 impl<T: Write + Send> Write for ProgressHandler<T> {
     #[inline]
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        return self.handle(|this| this.0.write(buf));
+        self.handle(|this| this.0.write(buf))
     }
 
     #[inline]
     fn flush(&mut self) -> std::io::Result<()> {
-        return self.handle(|this| this.0.flush());
+        self.handle(|this| this.0.flush())
     }
 }
 

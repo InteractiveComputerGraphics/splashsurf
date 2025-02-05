@@ -7,7 +7,7 @@ use anyhow::{anyhow, Context};
 use nalgebra::Vector3;
 use std::borrow::Cow;
 use std::fs::create_dir_all;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use vtkio::model::{
     Attribute, Attributes, CellType, Cells, PolyDataPiece, UnstructuredGridPiece, VertexNumbers,
 };
@@ -71,8 +71,8 @@ impl DataPiece {
         };
 
         match points {
-            IOBuffer::F64(coords) => particles_from_coords(&coords),
-            IOBuffer::F32(coords) => particles_from_coords(&coords),
+            IOBuffer::F64(coords) => particles_from_coords(coords),
+            IOBuffer::F32(coords) => particles_from_coords(coords),
             _ => Err(anyhow!(
                 "Point coordinate IOBuffer does not contain f32 or f64 values"
             )),
@@ -214,18 +214,18 @@ pub fn read_vtk<P: AsRef<Path>>(filename: P) -> Result<Vtk, anyhow::Error> {
 
 /// Loads all supported pieces of the given VTK file
 fn load_pieces(vtk_file: Vtk) -> Result<Vec<DataPiece>, anyhow::Error> {
-    let file_path = vtk_file.file_path.as_ref().map(PathBuf::as_path);
+    let file_path = vtk_file.file_path.as_deref();
 
     let loaded_pieces = match vtk_file.data {
         DataSet::UnstructuredGrid { pieces, .. } => pieces
             .into_iter()
             .map(|p| p.into_loaded_piece_data(file_path))
-            .map(|p| p.map(|p| DataPiece::UnstructuredGrid(p)))
+            .map(|p| p.map(DataPiece::UnstructuredGrid))
             .collect::<Result<Vec<_>, _>>()?,
         DataSet::PolyData { pieces, .. } => pieces
             .into_iter()
             .map(|p| p.into_loaded_piece_data(file_path))
-            .map(|p| p.map(|p| DataPiece::PolyData(p)))
+            .map(|p| p.map(DataPiece::PolyData))
             .collect::<Result<Vec<_>, _>>()?,
         _ => Err(anyhow!(
             "VTK file does not contain supported data set pieces"
@@ -287,7 +287,7 @@ fn surface_mesh_from_unstructured_grid<R: Real>(
             return Err(anyhow!("Length of cell vertex array is invalid. Expected 4 values per cell (3 for each triangle vertex index + 1 for vertex count). There are {} values for {} cells.", cell_verts.len(), num_cells));
         }
 
-        let cells = cell_verts
+        cell_verts
             .chunks_exact(4)
             .enumerate()
             .map(|(cell_idx, cell)| {
@@ -296,8 +296,7 @@ fn surface_mesh_from_unstructured_grid<R: Real>(
                     .then(|| [cell[1] as usize, cell[2] as usize, cell[3] as usize])
                     .ok_or_else(|| anyhow!("Expected only triangle cells. Invalid number of vertex indices ({}) of cell {}", cell[0], cell_idx))
             })
-            .try_collect_with_capacity(num_cells as usize)?;
-        cells
+            .try_collect_with_capacity(num_cells as usize)?
     };
 
     Ok(MeshWithData::new(TriMesh3d {
@@ -313,19 +312,19 @@ fn try_convert_io_buffer_to_attribute<R: Real>(
 ) -> Result<AttributeData<R>, anyhow::Error> {
     match num_comp {
         1 => match &io_buffer {
-            IOBuffer::U32(vec) => try_map_scalars_to_real(&vec, |val| {
+            IOBuffer::U32(vec) => try_map_scalars_to_real(vec, |val| {
                 R::from_u32(val).ok_or_else(|| {
                     anyhow!("Cannot convert an attribute value from u32 to Real type")
                 })
             })
             .map(|v| AttributeData::ScalarReal(v)),
-            IOBuffer::F32(vec) => try_map_scalars_to_real(&vec, |val| {
+            IOBuffer::F32(vec) => try_map_scalars_to_real(vec, |val| {
                 R::from_f32(val).ok_or_else(|| {
                     anyhow!("Cannot convert an attribute value from f32 to Real type")
                 })
             })
             .map(|v| AttributeData::ScalarReal(v)),
-            IOBuffer::F64(vec) => try_map_scalars_to_real(&vec, |val| {
+            IOBuffer::F64(vec) => try_map_scalars_to_real(vec, |val| {
                 R::from_f64(val).ok_or_else(|| {
                     anyhow!("Cannot convert an attribute value from f64 to Real type")
                 })

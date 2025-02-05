@@ -12,7 +12,7 @@ fn parameters_canyon() -> Parameters<f32> {
     let compact_support_radius = 4.0 * particle_radius;
     let cube_size = 1.5 * particle_radius;
 
-    let parameters = Parameters {
+    Parameters {
         particle_radius,
         rest_density: 1000.0,
         compact_support_radius,
@@ -27,9 +27,7 @@ fn parameters_canyon() -> Parameters<f32> {
             },
         )),
         global_neighborhood_list: false,
-    };
-
-    parameters
+    }
 }
 
 pub fn grid_canyon(c: &mut Criterion) {

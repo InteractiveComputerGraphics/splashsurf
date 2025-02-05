@@ -171,7 +171,7 @@ pub fn neighborhood_search_spatial_hashing_filtered<I: Index, R: Real>(
     let search_radius_squared = search_radius * search_radius;
 
     // Create a new grid for neighborhood search
-    let grid = UniformGrid::from_aabb(&domain, search_radius)
+    let grid = UniformGrid::from_aabb(domain, search_radius)
         .expect("Failed to construct grid for neighborhood search!");
     // Map for spatially hashed storage of all particles (map from cell -> enclosed particles)
     let particles_per_cell =
@@ -252,10 +252,8 @@ impl FlatNeighborhoodList {
         self.neighbor_ptr.len() - 1
     }
 
-    pub fn iter<'a>(&'a self) -> impl Iterator<Item = &'a [usize]> + 'a {
-        (0..self.neighbor_ptr.len())
-            .into_iter()
-            .flat_map(|i| self.get_neighbors(i))
+    pub fn iter(&self) -> impl Iterator<Item = &[usize]> + '_ {
+        (0..self.neighbor_ptr.len()).flat_map(|i| self.get_neighbors(i))
     }
 
     /// Returns a slice containing the neighborhood list of the given particle
@@ -369,7 +367,7 @@ pub fn neighborhood_search_spatial_hashing_flat_filtered<I: Index, R: Real>(
     let search_radius_squared = search_radius * search_radius;
 
     // Create a new grid for neighborhood search
-    let grid = UniformGrid::from_aabb(&domain, search_radius)
+    let grid = UniformGrid::from_aabb(domain, search_radius)
         .expect("Failed to construct grid for neighborhood search!");
     // Map for spatially hashed storage of all particles (map from cell -> enclosed particles)
     let particles_per_cell =
@@ -414,7 +412,7 @@ pub fn neighborhood_search_spatial_hashing_flat_filtered<I: Index, R: Real>(
                 })
                 .flatten()
                 .copied()
-                .for_each(|particle_j| neighbor_test(particle_j));
+                .for_each(&mut neighbor_test);
 
             // Loop over current cell
             std::iter::once(current_cell)
@@ -463,7 +461,7 @@ pub fn neighborhood_search_spatial_hashing_parallel<I: Index, R: Real>(
     let search_radius_squared = search_radius * search_radius;
 
     // Create a new grid for neighborhood search
-    let grid = UniformGrid::from_aabb(&domain, search_radius)
+    let grid = UniformGrid::from_aabb(domain, search_radius)
         .expect("Failed to construct grid for neighborhood search!");
 
     // Map for spatially hashed storage of all particles (map from cell -> enclosed particles)
@@ -523,7 +521,7 @@ pub fn neighborhood_search_spatial_hashing_parallel<I: Index, R: Real>(
 
                 let neighborhood_test =
                     |pos_i: Vector3<R>, particle_j: usize, local_buffer: &mut Vec<usize>| {
-                        let pos_j = unsafe { particle_positions.get_unchecked(particle_j).clone() };
+                        let pos_j = unsafe { *particle_positions.get_unchecked(particle_j) };
 
                         // TODO: We might not be able to guarantee that this is symmetric.
                         //  Therefore, it might be possible that only one side of some neighborhood relationships gets detected.
@@ -536,7 +534,7 @@ pub fn neighborhood_search_spatial_hashing_parallel<I: Index, R: Real>(
 
                 // Iterate over all particles of the current cell
                 for (i, particle_i) in cell_k_particles.iter().copied().enumerate() {
-                    let pos_i = unsafe { particle_positions.get_unchecked(particle_i).clone() };
+                    let pos_i = unsafe { *particle_positions.get_unchecked(particle_i) };
 
                     // Check for neighborhood with particles of all adjacent cells
                     // Transitive neighborhood relationship is not handled explicitly.

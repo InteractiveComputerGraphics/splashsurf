@@ -189,7 +189,7 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
             .unscale(cell_size)
             .map(|x| x.floor())
             .scale(cell_size);
-        let aabb = Aabb3d::new(aligned_min, aabb.max().clone());
+        let aabb = Aabb3d::new(aligned_min, *aabb.max());
 
         let n_cells_real = aabb.extents() / cell_size;
         let n_cells_per_dim = Self::checked_n_cells_per_dim(&n_cells_real)
@@ -204,7 +204,7 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
         n_cells_per_dim: &[I; 3],
         cell_size: R,
     ) -> Result<Self, GridConstructionError<I, R>> {
-        let n_cells_per_dim = n_cells_per_dim.clone();
+        let n_cells_per_dim = *n_cells_per_dim;
         let n_points_per_dim = Self::checked_n_points_per_dim(&n_cells_per_dim)
             .ok_or(GridConstructionError::IndexTypeTooSmallPointsPerDim)?;
 
@@ -284,7 +284,7 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
     }
 
     pub fn get_edge(&self, origin_ijk: [I; 3], axis: Axis) -> Option<EdgeIndex<I>> {
-        let mut target_ijk = origin_ijk.clone();
+        let mut target_ijk = origin_ijk;
         target_ijk[axis.dim()] += I::one();
         if self.point_exists(&origin_ijk) && self.point_exists(&target_ijk) {
             Some(EdgeIndex {
@@ -479,7 +479,7 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
             return None;
         }
 
-        let mut neighbor_ijk = point_ijk.clone();
+        let mut neighbor_ijk = *point_ijk;
         neighbor_ijk[dim] = direction.apply_step(neighbor_ijk[dim], I::one());
         Some(PointIndex::from_ijk(neighbor_ijk))
     }
@@ -493,7 +493,7 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
         let DirectedAxis { axis, direction } = direction;
         let dim = axis.dim();
 
-        let mut neighbor_ijk = point_ijk.clone();
+        let mut neighbor_ijk = *point_ijk;
         neighbor_ijk[dim] = direction.apply_step(neighbor_ijk[dim], I::one());
         neighbor_ijk
     }
@@ -509,9 +509,9 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
     }
 
     /// Returns an array of all cells that may be adjacent to the specified edge
-    pub fn cells_adjacent_to_edge<'a, 'b>(
+    pub fn cells_adjacent_to_edge(
         &self,
-        edge: &NeighborEdge<'a, 'b, I>,
+        edge: &NeighborEdge<'_, '_, I>,
     ) -> [Option<CellIndex<I>>; 4] {
         // Each cell has the same index as the point in its lower corner, its 'origin point'.
         // To get all cells adjacent to the given edge, all corresponding origin points have to be found
@@ -533,7 +533,7 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
 
         // Try to obtain all points that might be the origin or lower corner of a cell
         // Some of them (p1, p3 or both) might not exist if the edge is at the boundary of the grid
-        let p0 = Some(edge_start_point.clone());
+        let p0 = Some(*edge_start_point);
         let p1 = self.get_point_neighbor(edge_start_point, step_dir1);
         let p3 = self.get_point_neighbor(edge_start_point, step_dir3);
         // Get the last origin point by combining both steps
@@ -559,9 +559,9 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
     }
 
     /// Returns an array of all cells that contain the point which is the origin point of the given neighborhood
-    pub fn cells_adjacent_to_point<'a>(
+    pub fn cells_adjacent_to_point(
         &self,
-        neighborhood: &Neighborhood<'a, I>,
+        neighborhood: &Neighborhood<'_, I>,
     ) -> [Option<CellIndex<I>>; 8] {
         let cells_above = neighborhood
             .get_neighbor_edge(Axis::Z.with_direction(Direction::Positive))
@@ -665,7 +665,7 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
                 cell_size * n_cells_per_dim[2].to_real()?,
             );
 
-        Some(Aabb3d::new(min.clone(), max))
+        Some(Aabb3d::new(*min, max))
     }
 
     fn checked_num_points(n_points_per_dim: &[I; 3]) -> Option<I> {
@@ -741,7 +741,7 @@ impl<I: Index> CellIndex<I> {
     }
 
     #[inline(always)]
-    pub fn local_edge_index_of<'a, 'b>(&self, edge: &NeighborEdge<'a, 'b, I>) -> Option<usize> {
+    pub fn local_edge_index_of(&self, edge: &NeighborEdge<'_, '_, I>) -> Option<usize> {
         let (start_point, _) = edge.ascending_point_order();
         let start_point_local = self.local_point_index_of(start_point.index())?;
         let edge_dim = edge.connectivity.axis.dim();
@@ -1007,7 +1007,7 @@ const CELL_LOCAL_EDGE_TO_FACE_FLAGS: [FaceFlags; 12] = [
     FaceFlags::from_bits_truncate(FaceFlags::X_NEG.bits() | FaceFlags::Y_POS.bits()),
 ];
 
-impl<'a, I: Index> Neighborhood<'a, I> {
+impl<I: Index> Neighborhood<'_, I> {
     /// Returns if the origin point has a valid neighbor following the specified directed axis
     #[inline(always)]
     pub fn has_neighbor(&self, direction: DirectedAxis) -> bool {
@@ -1022,10 +1022,7 @@ impl<'a, I: Index> Neighborhood<'a, I> {
 
     /// Get the edge to a specific neighbor in the given direction from the origin point of the neighborhood
     #[inline(always)]
-    pub fn get_neighbor_edge<'b>(
-        &'b self,
-        direction: DirectedAxis,
-    ) -> Option<NeighborEdge<'b, 'b, I>> {
+    pub fn get_neighbor_edge(&self, direction: DirectedAxis) -> Option<NeighborEdge<'_, '_, I>> {
         self.neighbors
             .get(&direction)
             .as_ref()
@@ -1033,7 +1030,7 @@ impl<'a, I: Index> Neighborhood<'a, I> {
     }
 
     /// Iterate over all valid neighbor points and the corresponding directed axis from the origin to the neighbor
-    pub fn neighbor_edge_iter<'b>(&'b self) -> impl Iterator<Item = NeighborEdge<'b, 'b, I>> {
+    pub fn neighbor_edge_iter(&self) -> impl Iterator<Item = NeighborEdge<'_, '_, I>> {
         self.neighbors
             .iter()
             .filter_map(move |(&connectivity, optional_neighbor)| {
@@ -1056,17 +1053,17 @@ impl<'a, I: Index> Neighborhood<'a, I> {
     }
 }
 
-impl<'a, 'b, I: Index> NeighborEdge<'a, 'b, I> {
+impl<I: Index> NeighborEdge<'_, '_, I> {
     /// Returns the origin of this neighbor edge
     #[inline(always)]
     pub fn origin_index(&self) -> &PointIndex<I> {
-        &self.neighborhood.origin
+        self.neighborhood.origin
     }
 
     /// Returns the neighbor of the origin node connected by this neighbor edge
     #[inline(always)]
     pub fn neighbor_index(&self) -> &PointIndex<I> {
-        &self.neighbor
+        self.neighbor
     }
 
     /// Returns the connectivity between the origin point and its neighbor in terms of a directed axis
@@ -1080,9 +1077,9 @@ impl<'a, 'b, I: Index> NeighborEdge<'a, 'b, I> {
     #[inline(always)]
     pub fn ascending_point_order(&self) -> (&PointIndex<I>, &PointIndex<I>) {
         if self.connectivity.direction.is_positive() {
-            (self.origin_index(), &self.neighbor_index())
+            (self.origin_index(), self.neighbor_index())
         } else {
-            (&self.neighbor_index(), self.origin_index())
+            (self.neighbor_index(), self.origin_index())
         }
     }
 }

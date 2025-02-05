@@ -97,7 +97,7 @@ fn run_splashsurf() -> Result<(), anyhow::Error> {
     splashsurf_lib::profiling::write_to_string()
         .unwrap()
         .split("\n")
-        .filter(|l| l.len() > 0)
+        .filter(|l| !l.is_empty())
         .for_each(|l| info!("{}", l));
 
     // Print memory stats if available

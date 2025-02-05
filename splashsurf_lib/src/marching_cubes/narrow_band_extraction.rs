@@ -12,7 +12,7 @@ pub(crate) fn construct_mc_input<I: Index, R: Real>(
     vertices: &mut Vec<Vector3<R>>,
 ) -> MarchingCubesInput<I> {
     let mut marching_cubes_data = MarchingCubesInput::default();
-    let _ = interpolate_points_to_cell_data_generic::<I, R>(
+    interpolate_points_to_cell_data_generic::<I, R>(
         grid,
         density_map,
         iso_surface_threshold,
@@ -81,7 +81,7 @@ fn interpolate_points_to_cell_data_generic<I: Index, R: Real>(
             for neighbor_edge in neighborhood.neighbor_edge_iter() {
                 let neighbor = neighbor_edge.neighbor_index();
                 // Get flat index of neighbor on global grid
-                let flat_neighbor_index = grid.flatten_point_index(&neighbor);
+                let flat_neighbor_index = grid.flatten_point_index(neighbor);
 
                 // Try to read out the function value at the neighboring point
                 let neighbor_value = if let Some(v) = density_map.get(flat_neighbor_index) {
@@ -112,11 +112,9 @@ fn interpolate_points_to_cell_data_generic<I: Index, R: Real>(
                 // each cell adjacent to the edge crossing the iso-surface.
                 // This includes the above/below iso-surface flags and the interpolated vertex index.
                 for cell in grid.cells_adjacent_to_edge(&neighbor_edge).iter().flatten() {
-                    let flat_cell_index = grid.flatten_cell_index(&cell);
+                    let flat_cell_index = grid.flatten_cell_index(cell);
 
-                    let cell_data_entry = cell_data
-                        .entry(flat_cell_index)
-                        .or_insert_with(CellData::default);
+                    let cell_data_entry = cell_data.entry(flat_cell_index).or_default();
 
                     // Store the index of the interpolated vertex on the corresponding local edge of the cell
                     let local_edge_index = cell.local_edge_index_of(&neighbor_edge).unwrap();

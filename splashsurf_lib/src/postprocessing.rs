@@ -39,9 +39,9 @@ pub fn par_laplacian_smoothing_inplace<R: Real>(
                 // Compute mean position of neighboring vertices
                 let mut vertex_sum = Vector3::zeros();
                 for j in vertex_connectivity[i].iter() {
-                    vertex_sum += vertex_buffer[j.clone()];
+                    vertex_sum += vertex_buffer[*j];
                 }
-                if vertex_connectivity[i].len() > 0 {
+                if !vertex_connectivity[i].is_empty() {
                     let n = R::from_usize(vertex_connectivity[i].len()).unwrap();
                     vertex_sum /= n;
                 }
@@ -164,7 +164,7 @@ pub fn marching_cubes_cleanup<I: Index, R: Real>(
                 for &v1 in vertex_buffer.iter() {
                     if mesh.is_valid_vertex(v1) {
                         if let Some(he) = mesh.half_edge(v1, v0) {
-                            if let Ok(_) = mesh.try_half_edge_collapse(he) {
+                            if mesh.try_half_edge_collapse(he).is_ok() {
                                 collapse_count += 1;
 
                                 // Move to averaged position
@@ -211,7 +211,7 @@ pub fn decimation<R: Real>(mesh: &mut TriMesh3d<R>, keep_vertices: bool) -> Vec<
         profile!("convert mesh back");
         let (new_mesh, vertex_map) = half_edge_mesh.into_parts(keep_vertices);
         *mesh = new_mesh;
-        return vertex_map;
+        vertex_map
     }
 }
 
@@ -297,12 +297,9 @@ fn process_triangle_collapse_queue<R: Real>(
 
                 if let Some(he) = mesh.half_edge(from, to) {
                     last_res = Some(mesh.try_half_edge_collapse(he));
-                    match last_res {
-                        Some(Ok(_)) => {
-                            processed += 1;
-                            return None;
-                        }
-                        _ => {}
+                    if let Some(Ok(_)) = last_res {
+                        processed += 1;
+                        return None;
                     }
                 } else {
                     warn!(
@@ -319,7 +316,7 @@ fn process_triangle_collapse_queue<R: Real>(
                     warn!("Invalid collapse: {:?} (from {} to {})", e, from, to);
                     None
                 }
-                _ => return None,
+                _ => None,
             }
         })
         .collect();
@@ -422,7 +419,7 @@ pub fn merge_single_barnacle_configurations_he<R: Real>(mesh: &mut HalfEdgeTriMe
                     && mesh
                         .vertex_one_ring(i)
                         .map(|j| mesh.vertex_one_ring_len(j))
-                        .all(|len| len >= 4 && len <= 6)
+                        .all(|len| (4..=6).contains(&len))
                     && mesh
                         .vertex_one_ring(i)
                         .map(|j| mesh.vertex_one_ring_len(j))
@@ -592,7 +589,7 @@ pub fn merge_double_barnacle_configurations_he<R: Real>(mesh: &mut HalfEdgeTriMe
                         if let Some(other_pair) = candidate_to_pair_map.get(&l) {
                             return *other_pair < pair;
                         }
-                        return false;
+                        false
                     })
             };
 
@@ -621,14 +618,12 @@ pub fn merge_double_barnacle_configurations_he<R: Real>(mesh: &mut HalfEdgeTriMe
                 if k != j {
                     if mesh.vertex_one_ring(k).all(|l| l != j) {
                         half_edge_collapses.insert(k, i);
+                    } else if (mesh.vertices[k] - mesh.vertices[i]).norm()
+                        <= (mesh.vertices[k] - mesh.vertices[j]).norm()
+                    {
+                        half_edge_collapses.insert(k, i);
                     } else {
-                        if (mesh.vertices[k] - mesh.vertices[i]).norm()
-                            <= (mesh.vertices[k] - mesh.vertices[j]).norm()
-                        {
-                            half_edge_collapses.insert(k, i);
-                        } else {
-                            half_edge_collapses.insert(k, j);
-                        }
+                        half_edge_collapses.insert(k, j);
                     }
                 }
             };
@@ -690,14 +685,12 @@ pub fn convert_tris_to_quads<R: Real>(
                 quad[2] = tri_i[2];
                 quad[3] = missing_vertex;
             }
+        } else if tri_j.contains(&tri_i[1]) {
+            quad[1] = tri_i[1];
+            quad[2] = missing_vertex;
+            quad[3] = tri_i[2];
         } else {
-            if tri_j.contains(&tri_i[1]) {
-                quad[1] = tri_i[1];
-                quad[2] = missing_vertex;
-                quad[3] = tri_i[2];
-            } else {
-                panic!("this should not happen");
-            }
+            panic!("this should not happen");
         }
 
         quad
@@ -815,7 +808,7 @@ pub fn convert_tris_to_quads<R: Real>(
                 }
             }
 
-            return None;
+            None
         })
         .collect::<MapType<_, _>>();
 
@@ -867,12 +860,8 @@ pub fn convert_tris_to_quads<R: Real>(
     );
 
     let mut cells = Vec::with_capacity(filtered_triangles.len() + quads.len());
-    cells.extend(
-        filtered_triangles
-            .into_iter()
-            .map(|tri| TriangleOrQuadCell::Tri(tri)),
-    );
-    cells.extend(quads.into_iter().map(|quad| TriangleOrQuadCell::Quad(quad)));
+    cells.extend(filtered_triangles.into_iter().map(TriangleOrQuadCell::Tri));
+    cells.extend(quads.into_iter().map(TriangleOrQuadCell::Quad));
 
     MixedTriQuadMesh3d {
         vertices: mesh.vertices.clone(),

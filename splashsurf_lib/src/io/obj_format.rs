@@ -30,7 +30,7 @@ pub fn mesh_to_obj<R: Real, M: Mesh3d<R>, P: AsRef<Path>>(
     let mesh_vertices = &mesh.mesh;
 
     for v in mesh_vertices.vertices() {
-        write!(&mut writer, "v {} {} {}\n", v.x, v.y, v.z)?;
+        writeln!(&mut writer, "v {} {} {}", v.x, v.y, v.z)?;
     }
 
     let normals = mesh
@@ -39,13 +39,10 @@ pub fn mesh_to_obj<R: Real, M: Mesh3d<R>, P: AsRef<Path>>(
         .find(|attrib| attrib.name == "normals");
 
     if let Some(normals) = normals {
-        match &normals.data {
-            AttributeData::Vector3Real(normals) => {
-                for n in normals {
-                    write!(&mut writer, "vn {} {} {}\n", n.x, n.y, n.z)?;
-                }
+        if let AttributeData::Vector3Real(normals) = &normals.data {
+            for n in normals {
+                writeln!(&mut writer, "vn {} {} {}", n.x, n.y, n.z)?;
             }
-            _ => {}
         }
     }
 
@@ -56,7 +53,7 @@ pub fn mesh_to_obj<R: Real, M: Mesh3d<R>, P: AsRef<Path>>(
                 .iter()
                 .copied()
                 .try_for_each(|v| write!(writer, " {}//{}", v + 1, v + 1))?;
-            write!(writer, "\n")?;
+            writeln!(writer)?;
         }
     } else {
         for f in mesh_vertices.cells() {
@@ -65,7 +62,7 @@ pub fn mesh_to_obj<R: Real, M: Mesh3d<R>, P: AsRef<Path>>(
                 .iter()
                 .copied()
                 .try_for_each(|v| write!(writer, " {}", v + 1))?;
-            write!(writer, "\n")?;
+            writeln!(writer)?;
         }
     }
 

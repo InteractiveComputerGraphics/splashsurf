@@ -109,7 +109,7 @@ pub fn particles_to_bgeo<R: Real, P: AsRef<Path>>(
 }
 
 fn particles_to_bgeo_impl<R: Real>(particles: &[Vector3<R>]) -> Result<BgeoFile, anyhow::Error> {
-    let particles_f32 = particles.iter().map(|x| x.as_slice()).flatten().copied().map(|x| Some(x.to_f32())?)
+    let particles_f32 = particles.iter().flat_map(|x| x.as_slice()).copied().map(|x| Some(x.to_f32())?)
         .map(|vec| {
             vec.ok_or_else(|| {
                 anyhow!("Failed to convert coordinate from input float type to f32, value out of range?")
@@ -165,7 +165,7 @@ pub fn write_bgeo_file<W: io::Write>(
 
         // Write attribute definitions
         for attrib in &bgeo.attribute_definitions {
-            writer.write_all(&(attrib.name.as_bytes().len() as u16).to_be_bytes())?;
+            writer.write_all(&(attrib.name.len() as u16).to_be_bytes())?;
             writer.write_all(attrib.name.as_bytes())?;
             writer.write_all(&(attrib.size as u16).to_be_bytes())?;
             writer.write_all(&(attrib.attr_type.to_i32()).to_be_bytes())?;
@@ -203,8 +203,8 @@ pub fn write_bgeo_file<W: io::Write>(
         }
 
         // End bytes
-        writer.write_all(&(0x00 as u8).to_be_bytes())?;
-        writer.write_all(&(0xff as u8).to_be_bytes())?;
+        writer.write_all(&0x00_u8.to_be_bytes())?;
+        writer.write_all(&0xff_u8.to_be_bytes())?;
 
         Ok(())
     }
@@ -505,12 +505,10 @@ mod parser {
 
                 Ok((input, attr))
             }
-            _ => {
-                return Err(make_bgeo_error(
-                    input,
-                    BgeoParserErrorKind::UnsupportedAttributeType(attr_type),
-                ));
-            }
+            _ => Err(make_bgeo_error(
+                input,
+                BgeoParserErrorKind::UnsupportedAttributeType(attr_type),
+            )),
         }
     }
 
@@ -780,7 +778,7 @@ mod error {
                 for (_, kind) in self.backtrace.iter().skip(1) {
                     err = err.context(format!("{:?}", kind));
                 }
-                return err;
+                err
             } else {
                 anyhow!("Unknown")
             }
@@ -899,7 +897,7 @@ fn test_bgeo_roundtrip_uncompressed() {
 
     // Read if not compressed
     if !is_compressed {
-        File::open(&input_file)
+        File::open(input_file)
             .unwrap()
             .read_to_end(&mut orig)
             .unwrap();

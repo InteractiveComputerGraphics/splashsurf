@@ -17,7 +17,7 @@ pub fn particles_from_xyz<R: Real, P: AsRef<Path>>(
 
     let get_four_bytes = |buffer: &[u8], offset: usize| -> [u8; 4] {
         [
-            buffer[offset + 0],
+            buffer[offset],
             buffer[offset + 1],
             buffer[offset + 2],
             buffer[offset + 3],
@@ -26,7 +26,7 @@ pub fn particles_from_xyz<R: Real, P: AsRef<Path>>(
 
     let mut particles = Vec::new();
 
-    while let Ok(_) = reader.read_exact(&mut buffer) {
+    while reader.read_exact(&mut buffer).is_ok() {
         let x = f32::from_ne_bytes(get_four_bytes(&buffer, 0));
         let y = f32::from_ne_bytes(get_four_bytes(&buffer, 4));
         let z = f32::from_ne_bytes(get_four_bytes(&buffer, 8));

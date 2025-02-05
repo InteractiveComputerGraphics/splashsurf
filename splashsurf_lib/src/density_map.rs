@@ -645,7 +645,7 @@ impl<I: Index, R: Real> SparseDensityMapGenerator<I, R> {
         let particle_volume = self.particle_rest_mass / particle_density;
 
         // TODO: Check performance with just using multiplication
-        let min_supported_point = grid.point_coordinates_array(&min_supported_point_ijk);
+        let min_supported_point = grid.point_coordinates_array(min_supported_point_ijk);
 
         // dx, dy, dz are the deltas of the supported points as seen from the current particle position
         let mut dx = min_supported_point[0] - particle[0]
@@ -685,11 +685,11 @@ impl<I: Index, R: Real> SparseDensityMapGenerator<I, R> {
                             .entry(flat_point_index)
                             .or_insert(R::zero()) += density_contribution;
                     }
-                    k = k + I::one();
+                    k += I::one();
                 }
-                j = j + I::one();
+                j += I::one();
             }
-            i = i + I::one();
+            i += I::one();
         }
     }
 }

@@ -30,9 +30,9 @@ where
         if points.is_empty() {
             Self::zeros()
         } else if points.len() == 1 {
-            Self::from_point(points[0].clone())
+            Self::from_point(points[0])
         } else {
-            let initial_aabb = Self::from_point(points[0].clone());
+            let initial_aabb = Self::from_point(points[0]);
             points[1..]
                 .par_iter()
                 .fold(
@@ -73,7 +73,7 @@ where
     #[inline(always)]
     pub fn from_point(point: SVector<R, D>) -> Self {
         Self {
-            min: point.clone(),
+            min: point,
             max: point,
         }
     }

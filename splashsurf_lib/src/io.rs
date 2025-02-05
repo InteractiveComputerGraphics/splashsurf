@@ -23,12 +23,12 @@ pub fn particles_from_file<R: Real, P: AsRef<Path>>(
             .ok_or(anyhow!("Invalid extension of input file"))?;
 
         match extension.to_lowercase().as_str() {
-            "vtk" => vtk_format::particles_from_vtk(&input_file),
-            "vtu" => vtk_format::particles_from_vtk(&input_file),
-            "xyz" => xyz_format::particles_from_xyz(&input_file),
-            "ply" => ply_format::particles_from_ply(&input_file),
-            "bgeo" => bgeo_format::particles_from_bgeo(&input_file),
-            "json" => json_format::particles_from_json(&input_file),
+            "vtk" => vtk_format::particles_from_vtk(input_file),
+            "vtu" => vtk_format::particles_from_vtk(input_file),
+            "xyz" => xyz_format::particles_from_xyz(input_file),
+            "ply" => ply_format::particles_from_ply(input_file),
+            "bgeo" => bgeo_format::particles_from_bgeo(input_file),
+            "json" => json_format::particles_from_json(input_file),
             _ => Err(anyhow!(
                 "Unsupported file format extension \"{}\" for reading particles",
                 extension

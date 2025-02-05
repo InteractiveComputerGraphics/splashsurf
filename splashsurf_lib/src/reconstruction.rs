@@ -14,15 +14,15 @@ use log::{info, trace};
 use nalgebra::Vector3;
 
 /// Performs a surface reconstruction with a regular grid for domain decomposition
-pub(crate) fn reconstruct_surface_subdomain_grid<'a, I: Index, R: Real>(
+pub(crate) fn reconstruct_surface_subdomain_grid<I: Index, R: Real>(
     particle_positions: &[Vector3<R>],
     parameters: &Parameters<R>,
-    output_surface: &'a mut SurfaceReconstruction<I, R>,
+    output_surface: &mut SurfaceReconstruction<I, R>,
 ) -> Result<(), anyhow::Error> {
     profile!("surface reconstruction subdomain-grid");
 
     let internal_parameters =
-        initialize_parameters(parameters, &particle_positions, output_surface)?;
+        initialize_parameters(parameters, particle_positions, output_surface)?;
     output_surface.grid = internal_parameters
         .global_marching_cubes_grid()
         .context("failed to convert global marching cubes grid")?;
@@ -34,7 +34,7 @@ pub(crate) fn reconstruct_surface_subdomain_grid<'a, I: Index, R: Real>(
      */
 
     let subdomains =
-        decomposition::<I, R, GhostMarginClassifier<I>>(&internal_parameters, &particle_positions)?;
+        decomposition::<I, R, GhostMarginClassifier<I>>(&internal_parameters, particle_positions)?;
 
     /*
     {
@@ -49,13 +49,13 @@ pub(crate) fn reconstruct_surface_subdomain_grid<'a, I: Index, R: Real>(
 
     let (particle_densities, particle_neighbors) = compute_global_densities_and_neighbors(
         &internal_parameters,
-        &particle_positions,
+        particle_positions,
         &subdomains,
     );
 
     let surface_patches = reconstruction(
         &internal_parameters,
-        &particle_positions,
+        particle_positions,
         &particle_densities,
         &subdomains,
     );
@@ -76,10 +76,10 @@ pub(crate) fn reconstruct_surface_subdomain_grid<'a, I: Index, R: Real>(
 }
 
 /// Performs a global surface reconstruction without domain decomposition
-pub(crate) fn reconstruct_surface_global<'a, I: Index, R: Real>(
+pub(crate) fn reconstruct_surface_global<I: Index, R: Real>(
     particle_positions: &[Vector3<R>],
     parameters: &Parameters<R>,
-    output_surface: &'a mut SurfaceReconstruction<I, R>,
+    output_surface: &mut SurfaceReconstruction<I, R>,
 ) -> Result<(), ReconstructionError<I, R>> {
     profile!("reconstruct_surface_global");
 
@@ -134,7 +134,7 @@ pub(crate) fn compute_particle_densities_and_neighbors<I: Index, R: Real>(
 
     trace!("Starting neighborhood search...");
     neighborhood_search::search_inplace::<I, R>(
-        &grid.aabb(),
+        grid.aabb(),
         particle_positions,
         parameters.compact_support_radius,
         parameters.enable_multi_threading,
@@ -153,12 +153,12 @@ pub(crate) fn compute_particle_densities_and_neighbors<I: Index, R: Real>(
 }
 
 /// Reconstruct a surface, appends triangulation to the given mesh
-pub(crate) fn reconstruct_single_surface_append<'a, I: Index, R: Real>(
+pub(crate) fn reconstruct_single_surface_append<I: Index, R: Real>(
     workspace: &mut LocalReconstructionWorkspace<R>,
     grid: &UniformGrid<I, R>,
     particle_positions: &[Vector3<R>],
     parameters: &Parameters<R>,
-    output_mesh: &'a mut TriMesh3d<R>,
+    output_mesh: &mut TriMesh3d<R>,
 ) -> Result<(), ReconstructionError<I, R>> {
     let particle_rest_density = parameters.rest_density;
     let particle_rest_volume = R::from_f64((4.0 / 3.0) * std::f64::consts::PI).unwrap()

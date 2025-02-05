@@ -118,12 +118,8 @@ pub fn triangulate_density_map_append<I: Index, R: Real>(
 ) -> Result<(), MarchingCubesError> {
     profile!("triangulate_density_map_append");
 
-    let marching_cubes_data = construct_mc_input(
-        grid,
-        &density_map,
-        iso_surface_threshold,
-        &mut mesh.vertices,
-    );
+    let marching_cubes_data =
+        construct_mc_input(grid, density_map, iso_surface_threshold, &mut mesh.vertices);
 
     triangulate(marching_cubes_data, mesh)?;
     Ok(())
@@ -191,7 +187,7 @@ pub fn check_mesh_consistency<I: Index, R: Real>(
                 add_edge_errors(&mut error_string, e);
             }
         }
-        error_string += &format!("\n");
+        error_string += "\n";
     }
 
     if check_manifold && !non_manifold_edges.is_empty() {
@@ -201,7 +197,7 @@ pub fn check_mesh_consistency<I: Index, R: Real>(
                 add_edge_errors(&mut error_string, e);
             }
         }
-        error_string += &format!("\n");
+        error_string += "\n";
     }
 
     if check_manifold && !non_manifold_vertices.is_empty() {
@@ -209,7 +205,7 @@ pub fn check_mesh_consistency<I: Index, R: Real>(
         if debug {
             error_string += &format!("\n\t{:?}", non_manifold_vertices);
         }
-        error_string += &format!("\n");
+        error_string += "\n";
     }
 
     Err(error_string)

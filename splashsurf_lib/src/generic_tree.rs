@@ -39,12 +39,12 @@ pub trait TreeNodeMut: TreeNode {
 /// Trait for non-mutable sequential tree iteration algorithms. Automatically implemented for types that implement [`TreeNode`].
 pub trait VisitableTree: TreeNode {
     /// An iterator over all nodes and its children in depth-first order.
-    fn dfs_iter<'a>(&'a self) -> DfsIter<'a, Self> {
+    fn dfs_iter(&self) -> DfsIter<'_, Self> {
         DfsIter::new(self)
     }
 
     /// An iterator over all nodes and its children in breadth-first order.
-    fn bfs_iter<'a>(&'a self) -> BfsIter<'a, Self> {
+    fn bfs_iter(&self) -> BfsIter<'_, Self> {
         BfsIter::new(self)
     }
 }
@@ -110,7 +110,7 @@ impl<'a, T: TreeNode + ?Sized> Iterator for DfsIter<'a, T> {
     }
 }
 
-impl<'a, T: TreeNode + ?Sized> FusedIterator for DfsIter<'a, T> {}
+impl<T: TreeNode + ?Sized> FusedIterator for DfsIter<'_, T> {}
 
 /// Breadth-first search iterator returned by the [`VisitableTree::bfs_iter`] function
 pub struct BfsIter<'a, T: ?Sized> {
@@ -139,7 +139,7 @@ impl<'a, T: TreeNode + ?Sized> Iterator for BfsIter<'a, T> {
     }
 }
 
-impl<'a, T: TreeNode + ?Sized> FusedIterator for BfsIter<'a, T> {}
+impl<T: TreeNode + ?Sized> FusedIterator for BfsIter<'_, T> {}
 
 /// Trait for non-mutable parallel tree visitation algorithms. Automatically implemented for types that implement [`TreeNode`] and [`ThreadSafe`](crate::ThreadSafe).
 pub trait ParVisitableTree: TreeNode {

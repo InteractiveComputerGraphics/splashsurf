@@ -136,13 +136,11 @@ fn convert_mesh(cmd_args: &ConvertSubcommandArgs) -> Result<(), anyhow::Error> {
 
 /// Returns an error if the file already exists but overwrite is disabled
 fn overwrite_check(cmd_args: &ConvertSubcommandArgs) -> Result<(), anyhow::Error> {
-    if !cmd_args.overwrite {
-        if cmd_args.output_file.exists() {
-            return Err(anyhow!(
-                "Aborting: Output file \"{}\" already exists. Use overwrite flag to ignore this.",
-                cmd_args.output_file.display()
-            ));
-        }
+    if !cmd_args.overwrite && cmd_args.output_file.exists() {
+        return Err(anyhow!(
+            "Aborting: Output file \"{}\" already exists. Use overwrite flag to ignore this.",
+            cmd_args.output_file.display()
+        ));
     }
 
     Ok(())

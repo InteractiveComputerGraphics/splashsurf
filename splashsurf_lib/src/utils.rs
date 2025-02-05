@@ -57,8 +57,8 @@ pub(crate) struct UnsafeSlice<'a, T> {
     slice: &'a [UnsafeCell<T>],
 }
 
-unsafe impl<'a, T: Send + Sync> Send for UnsafeSlice<'a, T> {}
-unsafe impl<'a, T: Send + Sync> Sync for UnsafeSlice<'a, T> {}
+unsafe impl<T: Send + Sync> Send for UnsafeSlice<'_, T> {}
+unsafe impl<T: Send + Sync> Sync for UnsafeSlice<'_, T> {}
 
 impl<'a, T> UnsafeSlice<'a, T> {
     /// Wraps a slice to be able to share mutable access between threads
@@ -167,8 +167,8 @@ impl ChunkSize {
         } else {
             // Ensure that there are the desired amount of tasks/chunks per thread
             let num_tasks = parallel_policy.tasks_per_thread * num_threads;
-            let task_size = (num_items / num_tasks).max(parallel_policy.min_task_size);
-            task_size
+
+            (num_items / num_tasks).max(parallel_policy.min_task_size)
         }
         // Ensure that we don't have less than a minimum number of items per thread
         .max(16);

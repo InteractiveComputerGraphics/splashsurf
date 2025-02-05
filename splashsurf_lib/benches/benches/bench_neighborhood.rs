@@ -10,13 +10,13 @@ static COMPACT_SUPPORT_RADIUS: f64 = 4.0 * PARTICLE_RADIUS;
 //static NUM_PARTICLES: Option<usize> = Some(800);
 static NUM_PARTICLES: Option<usize> = None;
 
-static PARTICLE_FILE: &'static str = "../data/bunny_frame_14_7705_particles.vtk";
+static PARTICLE_FILE: &str = "../data/bunny_frame_14_7705_particles.vtk";
 
 fn particle_subset(particle_positions: &[Vector3<f32>]) -> &[Vector3<f32>] {
-    if let Some(n_particles) = NUM_PARTICLES.clone() {
+    if let Some(n_particles) = NUM_PARTICLES {
         &particle_positions[0..n_particles]
     } else {
-        &particle_positions[..]
+        particle_positions
     }
 }
 
@@ -35,7 +35,7 @@ pub fn neighborhood_search_naive(c: &mut Criterion) {
         b.iter(|| {
             neighborhood_lists.clear();
             neighborhood_search::neighborhood_search_naive(
-                &particle_positions,
+                particle_positions,
                 COMPACT_SUPPORT_RADIUS as f32,
                 &mut neighborhood_lists,
             );
@@ -64,7 +64,7 @@ pub fn neighborhood_search_spatial_hashing(c: &mut Criterion) {
             neighborhood_lists.clear();
             neighborhood_search::neighborhood_search_spatial_hashing::<i32, f32>(
                 &domain,
-                &particle_positions,
+                particle_positions,
                 COMPACT_SUPPORT_RADIUS as f32,
                 &mut neighborhood_lists,
             );
@@ -93,7 +93,7 @@ pub fn neighborhood_search_spatial_hashing_parallel(c: &mut Criterion) {
             neighborhood_lists.clear();
             neighborhood_search::neighborhood_search_spatial_hashing_parallel::<i32, f32>(
                 &domain,
-                &particle_positions,
+                particle_positions,
                 COMPACT_SUPPORT_RADIUS as f32,
                 &mut neighborhood_lists,
             );

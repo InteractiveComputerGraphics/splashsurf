@@ -309,10 +309,10 @@ pub fn reconstruct_surface<I: Index, R: Real>(
 }
 
 /// Performs a marching cubes surface construction of the fluid represented by the given particle positions, inplace
-pub fn reconstruct_surface_inplace<'a, I: Index, R: Real>(
+pub fn reconstruct_surface_inplace<I: Index, R: Real>(
     particle_positions: &[Vector3<R>],
     parameters: &Parameters<R>,
-    output_surface: &'a mut SurfaceReconstruction<I, R>,
+    output_surface: &mut SurfaceReconstruction<I, R>,
 ) -> Result<(), ReconstructionError<I, R>> {
     // Clear the existing mesh
     output_surface.mesh.clear();

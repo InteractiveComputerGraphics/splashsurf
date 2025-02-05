@@ -375,27 +375,30 @@ pub fn reconstruct_subcommand(cmd_args: &ReconstructSubcommandArgs) -> Result<()
                         path.input_file.display()
                     )
                 })
-                .map_err(|err| {
+                .inspect_err(|err| {
                     // Already log the error in case there are multiple errors
-                    logging::log_error(&err);
-                    err
+                    logging::log_error(err);
                 })
-                .and_then(|_| {
-                    logging::get_progress_bar().map(|pb| pb.inc(1));
-                    Ok(())
+                .map(|_| {
+                    if let Some(pb) = logging::get_progress_bar() {
+                        pb.inc(1)
+                    }
                 })
         })
     } else {
         paths.iter().try_for_each(|path| {
-            reconstruction_pipeline(path, &args).and_then(|_| {
-                logging::get_progress_bar().map(|pb| pb.inc(1));
-                Ok(())
+            reconstruction_pipeline(path, &args).map(|_| {
+                if let Some(pb) = logging::get_progress_bar() {
+                    pb.inc(1)
+                }
             })
         })
     };
 
     if paths.len() > 1 {
-        logging::get_progress_bar().map(|pb| pb.finish());
+        if let Some(pb) = logging::get_progress_bar() {
+            pb.finish()
+        }
         logging::set_progress_bar(None);
     }
 
@@ -922,7 +925,7 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
             .parent()
             // Add a trailing separator if the parent is non-empty
             .map(|p| p.join(""))
-            .unwrap_or_else(PathBuf::new);
+            .unwrap_or_default();
         let output_filename = format!(
             "raw_{}",
             paths.output_file.file_name().unwrap().to_string_lossy()
@@ -1028,7 +1031,7 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
             // Global neighborhood search
             let nl = reconstruction
                 .particle_neighbors()
-                .map(|nl| Cow::Borrowed(nl))
+                .map(Cow::Borrowed)
                 .unwrap_or_else(||
                     {
                         let search_radius = params.compact_support_radius;
@@ -1059,8 +1062,8 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
                         .map(|j| {
                             let dist =
                                 (particle_positions[i] - particle_positions[j]).norm_squared();
-                            let weight = R::one() - (dist / squared_r).clamp(R::zero(), R::one());
-                            return weight;
+
+                            R::one() - (dist / squared_r).clamp(R::zero(), R::one())
                         })
                         .fold(R::zero(), R::add)
                 })
@@ -1073,7 +1076,7 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
                     .expect("interpolator is required")
                     .interpolate_scalar_quantity(
                         weighted_ncounts.as_slice(),
-                        &mesh_with_data.vertices(),
+                        mesh_with_data.vertices(),
                         true,
                     )
             };
