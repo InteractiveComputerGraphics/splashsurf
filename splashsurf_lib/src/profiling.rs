@@ -1,21 +1,20 @@
 //! Implementation details for the [`profile`](crate::profile) macro
 
-use lazy_static::lazy_static;
 use parking_lot::RwLock;
 use std::collections::hash_map::RandomState;
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::hash::{BuildHasher, Hash};
 use std::io;
+use std::sync::LazyLock;
 use std::time::{Duration, Instant};
 use thread_local::ThreadLocal;
 
-lazy_static! {
-    /// Thread local storage of the [`Profiler`](Profiler)s storing all [`Scope`](Scope)s of the thread
-    pub static ref PROFILER: ThreadLocal<RwLock<Profiler>> = ThreadLocal::new();
-    /// `RandomState` used to obtain `Hasher`s to hash [`ScopeId`](ScopeId)s for parent/child identification
-    pub static ref RANDOM_STATE: RandomState = RandomState::new();
-}
+/// Thread local storage of the [`Profiler`](Profiler)s storing all [`Scope`](Scope)s of the thread
+pub static PROFILER: LazyLock<ThreadLocal<RwLock<Profiler>>> = LazyLock::new(ThreadLocal::new);
+
+/// `RandomState` used to obtain `Hasher`s to hash [`ScopeId`](ScopeId)s for parent/child identification
+pub static RANDOM_STATE: LazyLock<RandomState> = LazyLock::new(RandomState::new);
 
 /// Implementation of the profile macro, use [`profile`](crate::profile) instead
 #[doc(hidden)]
