@@ -803,11 +803,7 @@ pub fn convert_tris_to_quads<R: Real>(
                             // Check normal deviation of triangles
                             if convert {
                                 let dot_i_j = tri_normals[i].dot(&tri_normals[j]);
-                                if dot_i_j >= min_dot {
-                                    convert = convert;
-                                } else {
-                                    convert = false;
-                                }
+                                convert = dot_i_j >= min_dot;
                             }
 
                             if convert {

@@ -79,7 +79,8 @@ impl<'a, T> UnsafeSlice<'a, T> {
     }
 
     /// Returns a mutable reference to an element of the wrapped slice without doing bounds checking, simultaneous access has to be disjoint!
-    /// SAFETY: It is UB to obtain two mutable references to the same index.
+    /// SAFETY: It is unsound to obtain two mutable references to the same index.
+    #[allow(clippy::mut_from_ref)]
     pub unsafe fn get_mut_unchecked(&self, i: usize) -> &mut T {
         debug_assert!(i < self.len(), "index out of bounds");
         &mut *self.slice.get_unchecked(i).get()

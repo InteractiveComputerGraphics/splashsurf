@@ -287,7 +287,7 @@ pub fn to_binary_f32<R: Real, P: AsRef<Path>>(file: P, values: &[R]) -> Result<(
 
     for v in values {
         let v_f32 = v.to_f32().unwrap();
-        writer.write(&v_f32.to_ne_bytes())?;
+        writer.write_all(&v_f32.to_ne_bytes())?;
     }
 
     Ok(())

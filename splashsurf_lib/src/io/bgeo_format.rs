@@ -481,7 +481,6 @@ mod parser {
 
     /// Parses a single BGEO attribute definition
     fn parse_attr_def(input: &[u8]) -> IResult<&[u8], AttribDefinition, BgeoParserError<&[u8]>> {
-        let input = input;
         let (input, name_length) = number::be_u16(input)?;
         let (input, name) = map_res(take(name_length as usize), |input: &[u8]| {
             std::str::from_utf8(input).map_err(|_| BgeoParserErrorKind::InvalidAttributeName)
