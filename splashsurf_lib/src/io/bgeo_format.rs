@@ -719,10 +719,7 @@ mod error {
     impl BgeoParserErrorKind {
         /// Returns whether the variant is an internal nom error
         pub fn is_nom_error(&self) -> bool {
-            match self {
-                BgeoParserErrorKind::NomError(_) => true,
-                _ => false,
-            }
+            matches!(self, BgeoParserErrorKind::NomError(_))
         }
     }
 

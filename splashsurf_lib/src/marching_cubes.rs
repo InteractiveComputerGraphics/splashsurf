@@ -167,7 +167,7 @@ pub fn check_mesh_consistency<I: Index, R: Real>(
                 .get_point(*cell_index.index())
                 .expect("Unable to get point index of cell");
             let cell_center = grid.point_coordinates(&point_index)
-                + &Vector3::repeat(grid.cell_size().times_f64(0.5));
+                + Vector3::repeat(grid.cell_size().times_f64(0.5));
 
             *error_string += &format!("\n\tTriangle {}, boundary edge {:?} is located in cell with {:?} with center coordinates {:?} and edge length {}.", tri_idx, edge, cell_index, cell_center, grid.cell_size());
         } else {
@@ -242,7 +242,7 @@ fn check_mesh_with_cell_data<I: Index, R: Real>(
                 .get_point(*cell_index.index())
                 .expect("Unable to get point index of cell");
             let cell_center = grid.point_coordinates(&point_index)
-                + &Vector3::repeat(grid.cell_size().times_f64(0.5));
+                + Vector3::repeat(grid.cell_size().times_f64(0.5));
 
             let cell_data = marching_cubes_data
                 .cell_data

@@ -9,18 +9,18 @@
 //! The following features are all non-default features to reduce the amount of additional dependencies.
 //!
 //! - **`vtk_extras`**: Enables helper functions and trait implementations to export meshes using [`vtkio`](https://github.com/elrnv/vtkio).
-//!  In particular it adds `From` impls for the [mesh] types used by this crate to convert them to
-//!  [`vtkio::model::UnstructuredGridPiece`](https://docs.rs/vtkio/0.6.*/vtkio/model/struct.UnstructuredGridPiece.html) and [`vtkio::model::DataSet`](https://docs.rs/vtkio/0.6.*/vtkio/model/enum.DataSet.html)
-//!  types. If the feature is enabled, The crate exposes its `vtkio` dependency as `splashsurflib::vtkio`.
+//!   In particular it adds `From` impls for the [mesh] types used by this crate to convert them to
+//!   [`vtkio::model::UnstructuredGridPiece`](https://docs.rs/vtkio/0.6.*/vtkio/model/struct.UnstructuredGridPiece.html) and [`vtkio::model::DataSet`](https://docs.rs/vtkio/0.6.*/vtkio/model/enum.DataSet.html)
+//!   types. If the feature is enabled, The crate exposes its `vtkio` dependency as `splashsurflib::vtkio`.
 //! - **`io`**: Enables the [`io`] module, containing functions to load and store particle and mesh files
-//!  from various file formats, e.g. `VTK`, `OBJ`, `BGEO` etc. This feature implies the `vtk_extras` feature.
-//!  It is disabled by default because a pure "online" surface reconstruction might not need any file IO.
-//!  The feature adds several dependencies to support the file formats.
+//!   from various file formats, e.g. `VTK`, `OBJ`, `BGEO` etc. This feature implies the `vtk_extras` feature.
+//!   It is disabled by default because a pure "online" surface reconstruction might not need any file IO.
+//!   The feature adds several dependencies to support the file formats.
 //! - **`profiling`**: Enables profiling of internal functions. The resulting data can be displayed using the functions
-//!  from the [`profiling`] module of this crate. Furthermore, it exposes the [`profile`] macro that can be used e.g.
-//!  by binary crates calling into this library to add their own profiling scopes to the measurements.
-//!  If this features is not enabled, the macro will just expend to a no-op and remove the (small)
-//!  performance overhead of the profiling.
+//!   from the [`profiling`] module of this crate. Furthermore, it exposes the [`profile`] macro that can be used e.g.
+//!   by binary crates calling into this library to add their own profiling scopes to the measurements.
+//!   If this features is not enabled, the macro will just expend to a no-op and remove the (small)
+//!   performance overhead of the profiling.
 //!
 
 use log::info;

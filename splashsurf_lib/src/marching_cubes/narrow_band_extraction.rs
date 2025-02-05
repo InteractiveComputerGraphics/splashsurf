@@ -42,6 +42,7 @@ pub(crate) fn construct_mc_input<I: Index, R: Real>(
 /// For each cell, this function collects
 ///   1) an array with a flag per corner vertex, indicating whether it's above/below the iso-surface threshold
 ///   2) an array with an optional index per edge, referring to the interpolated vertex if the edge crosses the iso-surface
+///
 /// Note: The threshold flags in the resulting cell data are not complete and still have to be updated after
 /// this procedure using the [update_cell_data_threshold_flags] function.
 ///

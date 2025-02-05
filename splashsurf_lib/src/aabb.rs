@@ -209,7 +209,7 @@ where
 
     /// Returns the geometric centroid of the AABB (mean of the corner points)
     pub fn centroid(&self) -> SVector<R, D> {
-        &self.min + (self.extents() / (R::one() + R::one()))
+        self.min + (self.extents() / (R::one() + R::one()))
     }
 
     /// Checks if the given AABB is inside of the AABB, the AABB is considered to be half-open to its max coordinate
@@ -236,7 +236,7 @@ where
     /// Multiplies a uniform, local scaling to the AABB (i.e. multiplying its extents as if it was centered at the origin)
     pub fn scale_uniformly(&mut self, scaling: R) {
         let center = self.centroid();
-        self.translate(&(&center * R::one().neg()));
+        self.translate(&(center * R::one().neg()));
         self.min *= scaling;
         self.max *= scaling;
         self.translate(&center);

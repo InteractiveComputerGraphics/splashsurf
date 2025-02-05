@@ -459,8 +459,8 @@ mod arguments {
     }
 
     fn try_aabb_from_min_max(
-        min: &Vec<f64>,
-        max: &Vec<f64>,
+        min: &[f64],
+        max: &[f64],
         error_str: &'static str,
     ) -> Result<Aabb3d<f64>, anyhow::Error> {
         // This should already be ensured by StructOpt parsing
@@ -468,8 +468,8 @@ mod arguments {
         assert_eq!(max.len(), 3);
 
         let aabb = Aabb3d::new(
-            Vector3::from_iterator(min.clone()),
-            Vector3::from_iterator(max.clone()),
+            Vector3::from_column_slice(min),
+            Vector3::from_column_slice(max),
         );
 
         if !aabb.is_consistent() {

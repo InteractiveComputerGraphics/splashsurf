@@ -361,7 +361,7 @@ fn try_map_scalars_to_real<R: Real, T: Copy, F: Fn(T) -> Result<R, anyhow::Error
 
 /// Tries to convert a vector of consecutive coordinate triplets into a vector of `Vector3`, also converts between floating point types
 fn particles_from_coords<RealOut: Real, RealIn: Real>(
-    coords: &Vec<RealIn>,
+    coords: &[RealIn],
 ) -> Result<Vec<Vector3<RealOut>>, anyhow::Error> {
     if coords.len() % 3 != 0 {
         return Err(anyhow!(
