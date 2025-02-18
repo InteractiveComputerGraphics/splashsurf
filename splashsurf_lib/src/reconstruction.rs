@@ -27,25 +27,8 @@ pub(crate) fn reconstruct_surface_subdomain_grid<I: Index, R: Real>(
         .global_marching_cubes_grid()
         .context("failed to convert global marching cubes grid")?;
 
-    // Filter "narrow band"
-    /*
-    let narrow_band_particles = extract_narrow_band(&parameters, &particles);
-    let particles = narrow_band_particles;
-     */
-
     let subdomains =
         decomposition::<I, R, GhostMarginClassifier<I>>(&internal_parameters, particle_positions)?;
-
-    /*
-    {
-        use super::dense_subdomains::debug::*;
-        subdomain_stats(&parameters, &particle_positions, &subdomains);
-        info!(
-            "Number of subdomains with only ghost particles: {}",
-            count_no_owned_particles_subdomains(&parameters, &particle_positions, &subdomains)
-        );
-    }
-     */
 
     let (particle_densities, particle_neighbors) = compute_global_densities_and_neighbors(
         &internal_parameters,
@@ -70,6 +53,7 @@ pub(crate) fn reconstruct_surface_subdomain_grid<I: Index, R: Real>(
     output_surface.mesh = global_mesh;
     output_surface.particle_densities = Some(particle_densities);
     if parameters.global_neighborhood_list {
+        // The global neighborhood list is only non-empty if requested from the user (requires merging)
         output_surface.particle_neighbors = Some(particle_neighbors);
     }
     Ok(())
@@ -92,14 +76,20 @@ pub(crate) fn reconstruct_surface_global<I: Index, R: Real>(
         .borrow_mut();
 
     // Reuse allocated memory: swap particle densities from output object into the workspace if the former has a larger capacity
-    if let Some(output_densities) = output_surface.particle_densities.as_ref() {
-        if output_densities.capacity() > workspace.particle_densities.capacity() {
-            std::mem::swap(
-                output_surface.particle_densities.as_mut().unwrap(),
-                &mut workspace.particle_densities,
-            );
+    fn swap_output_vec<T>(output_vec: &mut Option<Vec<T>>, workspace_vec: &mut Vec<T>) {
+        if output_vec.as_ref().map(Vec::capacity).unwrap_or(0) > workspace_vec.capacity() {
+            std::mem::swap(output_vec.as_mut().unwrap(), workspace_vec);
         }
     }
+
+    swap_output_vec(
+        &mut output_surface.particle_densities,
+        &mut workspace.particle_densities,
+    );
+    swap_output_vec(
+        &mut output_surface.particle_neighbors,
+        &mut workspace.particle_neighbor_lists,
+    );
 
     // Clear the current mesh, as reconstruction will be appended to output
     output_surface.mesh.clear();
@@ -113,6 +103,8 @@ pub(crate) fn reconstruct_surface_global<I: Index, R: Real>(
     )?;
 
     output_surface.particle_densities = Some(std::mem::take(&mut workspace.particle_densities));
+    output_surface.particle_neighbors =
+        Some(std::mem::take(&mut workspace.particle_neighbor_lists));
 
     Ok(())
 }

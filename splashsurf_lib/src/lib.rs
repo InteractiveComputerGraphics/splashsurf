@@ -213,7 +213,7 @@ pub struct SurfaceReconstruction<I: Index, R: Real> {
 }
 
 impl<I: Index, R: Real> Default for SurfaceReconstruction<I, R> {
-    /// Returns an empty [SurfaceReconstruction] to pass into the inplace surface reconstruction
+    /// Returns an empty [SurfaceReconstruction] to pass into the in-place surface reconstruction
     fn default() -> Self {
         Self {
             grid: UniformGrid::new_zero(),
@@ -227,22 +227,22 @@ impl<I: Index, R: Real> Default for SurfaceReconstruction<I, R> {
 }
 
 impl<I: Index, R: Real> SurfaceReconstruction<I, R> {
-    /// Returns a reference to the actual triangulated surface mesh that is the result of the reconstruction
+    /// Returns a reference to the surface mesh that is the result of the reconstruction
     pub fn mesh(&self) -> &TriMesh3d<R> {
         &self.mesh
     }
 
-    /// Returns a reference to the global particle density vector if it was computed during the reconstruction (always `None` when using independent subdomains with domain decomposition)
+    /// Returns a reference to the global particle density vector if computed during the reconstruction (currently, all reconstruction approaches return this)
     pub fn particle_densities(&self) -> Option<&Vec<R>> {
         self.particle_densities.as_ref()
     }
 
-    /// Returns a reference to the global particle density vector if it was computed during the reconstruction (always `None` when using octree based domain decomposition)
+    /// Returns a reference to the global list of per-particle neighborhood lists if computed during the reconstruction (`None` if not specified in the parameters)
     pub fn particle_neighbors(&self) -> Option<&Vec<Vec<usize>>> {
         self.particle_neighbors.as_ref()
     }
 
-    /// Returns a reference to the virtual background grid that was used as a basis for discretization of the density map for marching cubes, can be used to convert the density map to a hex mesh (using [`density_map::sparse_density_map_to_hex_mesh`])
+    /// Returns a reference to the virtual background grid that was used for marching cubes
     pub fn grid(&self) -> &UniformGrid<I, R> {
         &self.grid
     }
@@ -308,7 +308,7 @@ pub fn reconstruct_surface<I: Index, R: Real>(
     Ok(surface)
 }
 
-/// Performs a marching cubes surface construction of the fluid represented by the given particle positions, inplace
+/// Performs a marching cubes surface construction of the fluid represented by the given particle positions, in-place
 pub fn reconstruct_surface_inplace<I: Index, R: Real>(
     particle_positions: &[Vector3<R>],
     parameters: &Parameters<R>,

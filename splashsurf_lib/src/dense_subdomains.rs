@@ -623,7 +623,7 @@ pub(crate) fn compute_global_densities_and_neighbors<I: Index, R: Real>(
                             .copied()
                             .zip(particle_densities.iter().copied()),
                     )
-                    // Update density values only for particles inside of the subdomain (ghost particles have wrong values)
+                    // Update density values only for particles inside the subdomain (ghost particles have wrong values)
                     .filter(|(is_inside, _)| *is_inside)
                     .for_each(|(_, (particle_idx, density))| {
                         global_particle_densities[particle_idx] = density;
@@ -658,17 +658,6 @@ pub(crate) fn compute_global_densities_and_neighbors<I: Index, R: Real>(
 
     let global_particle_densities = global_particle_densities.into_inner();
     let global_neighbors = global_neighbors.into_inner();
-
-    /*
-    {
-        let points = PointCloud3d::new(global_particles.clone());
-        let mesh = MeshWithData::new(points).with_cell_data(MeshAttribute::new_real_scalar(
-            "density".to_string(),
-            global_particle_densities.clone(),
-        ));
-        splashsurf_lib::io::vtk_format::write_vtk(&mesh, "out/new_density.vtk", "particles").unwrap();
-    }
-    */
 
     (global_particle_densities, global_neighbors)
 }
