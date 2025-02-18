@@ -3,7 +3,7 @@ use crate::{io, logging};
 use anyhow::{anyhow, Context};
 use clap::value_parser;
 use indicatif::{ProgressBar, ProgressStyle};
-use log::{error, info, warn};
+use log::{error, info};
 use rayon::prelude::*;
 use splashsurf_lib::mesh::{AttributeData, Mesh3d, MeshAttribute, MeshWithData};
 use splashsurf_lib::nalgebra::{Unit, Vector3};

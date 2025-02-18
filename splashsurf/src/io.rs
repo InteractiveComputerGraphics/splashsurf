@@ -166,12 +166,10 @@ pub fn read_particle_positions_with_attributes<R: Real, P: AsRef<Path>>(
                     }
                 }
 
-                let attributes = bgeo_format::attributes_from_bgeo_file(
+                bgeo_format::attributes_from_bgeo_file(
                     &bgeo_file,
                     &Vec::from_iter(attributes_to_interpolate),
-                )?;
-
-                attributes
+                )?
             };
 
             (particle_positions, attributes)
