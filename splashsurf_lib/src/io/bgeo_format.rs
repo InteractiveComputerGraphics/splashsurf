@@ -14,32 +14,33 @@ use std::io;
 use std::io::{BufWriter, Read};
 use std::path::Path;
 
+use crate::mesh::{AttributeData, MeshAttribute};
 use parser::bgeo_parser;
-
 // TODO: Find out why there is a 1.0 float value between position vector and id int in splishsplash output
 // TODO: Better error messages, skip nom errors
 
-/// Convenience function for loading particles from a BGEO file
+/// Convenience function for loading particles from a BGEO file path
 pub fn particles_from_bgeo<R: Real, P: AsRef<Path>>(
     bgeo_file: P,
 ) -> Result<Vec<Vector3<R>>, anyhow::Error> {
     // Load positions from BGEO file
     let bgeo_file = load_bgeo_file(bgeo_file).context("Error while loading BGEO file")?;
-    particles_from_bgeo_impl(bgeo_file)
+    particles_from_bgeo_file(&bgeo_file)
 }
 
-fn particles_from_bgeo_impl<R: Real>(
-    bgeo_file: BgeoFile,
+/// Returns particle positions from a loaded BGEO file
+pub fn particles_from_bgeo_file<R: Real>(
+    bgeo_file: &BgeoFile,
 ) -> Result<Vec<Vector3<R>>, anyhow::Error> {
     let position_storage = {
-        let storage = bgeo_file.positions;
+        let storage = &bgeo_file.positions;
 
         if let AttributeStorage::Vector(dim, storage) = storage {
-            assert_eq!(dim, 3);
+            assert_eq!(*dim, 3);
             assert_eq!(storage.len() % dim, 0);
             storage
         } else {
-            panic!("Positions are not stored as vectors");
+            return Err(anyhow!("Positions are not stored as vectors in BGEO file"));
         }
     };
 
@@ -56,6 +57,28 @@ fn particles_from_bgeo_impl<R: Real>(
         .collect();
 
     Ok(positions)
+}
+
+/// Convenience function that converts the point attributes with the given names from the BGEO file into mesh attributes
+pub fn attributes_from_bgeo_file<R: Real>(
+    bgeo_file: &BgeoFile,
+    names: &[String],
+) -> Result<Vec<MeshAttribute<R>>, anyhow::Error> {
+    let mut mesh_attributes = Vec::new();
+
+    'fields: for field_name in names {
+        for (name, storage) in bgeo_file.attribute_data.iter() {
+            if name == field_name {
+                let attribute_data = storage
+                    .try_into_attribute_data::<R>()
+                    .context(anyhow!("Failed to convert attribute \"{name}\""))?;
+                mesh_attributes.push(MeshAttribute::new(field_name.clone(), attribute_data));
+                continue 'fields;
+            }
+        }
+    }
+
+    Ok(mesh_attributes)
 }
 
 /// Loads and parses a BGEO file to memory
@@ -304,6 +327,64 @@ impl AttributeStorage {
             AttributeStorage::Int(v) => v.len(),
             AttributeStorage::Float(v) => v.len(),
             AttributeStorage::Vector(n, v) => v.len() / n,
+        }
+    }
+
+    /// Tries to convert this BGEO attribute storage into a mesh [`AttributeData`] storage
+    fn try_into_attribute_data<R: Real>(&self) -> Result<AttributeData<R>, anyhow::Error> {
+        // TODO: Simplify error handling and de-duplicate with e.g. VTK code
+        match self {
+            AttributeStorage::Int(data) => {
+                let data = data
+                    .iter()
+                    .map(|v| u64::try_from(*v))
+                    .collect::<Result<Vec<_>, _>>()
+                    .context(anyhow!(
+                        "Failed to convert an attribute value from i32 to u64 type"
+                    ))?;
+                Ok(AttributeData::ScalarU64(data))
+            }
+            AttributeStorage::Float(data) => {
+                let data = data
+                    .iter()
+                    .map(|v| {
+                        R::from_f32(*v).ok_or_else(|| {
+                            anyhow!("Cannot convert an attribute value from f32 to Real type")
+                        })
+                    })
+                    .collect::<Result<Vec<_>, _>>()
+                    .context(anyhow!(
+                        "Failed to convert an attribute value from f32 to Real type"
+                    ))?;
+                Ok(AttributeData::ScalarReal(data))
+            }
+            AttributeStorage::Vector(n, data) => {
+                if *n == 3 {
+                    let data = data
+                        .chunks_exact(3)
+                        .map(|v| {
+                            Some(Vector3::new(
+                                R::from_f32(v[0])?,
+                                R::from_f32(v[1])?,
+                                R::from_f32(v[2])?,
+                            ))
+                        })
+                        .map(|vec| {
+                            vec.ok_or_else(|| {
+                                anyhow!(
+                                    "Failed to convert an attribute vector from f32 to Real type"
+                                )
+                            })
+                        })
+                        .collect::<Result<Vec<_>, _>>()
+                        .context(anyhow!(
+                            "Failed to convert an attribute vector from f32 to Real type"
+                        ))?;
+                    Ok(AttributeData::Vector3Real(data))
+                } else {
+                    Err(anyhow!("Unsupported vector attribute dimension: {}", n))
+                }
+            }
         }
     }
 }
@@ -863,7 +944,7 @@ fn test_bgeo_write_dam_break() {
         .context("Error while parsing the BGEO file contents")
         .unwrap();
 
-    let particles_read = particles_from_bgeo_impl(bgeo_read).unwrap();
+    let particles_read = particles_from_bgeo_file(&bgeo_read).unwrap();
 
     assert_eq!(particles_read.len(), 6859);
     assert_eq!(particles, particles_read);

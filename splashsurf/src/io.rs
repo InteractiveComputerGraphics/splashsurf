@@ -82,63 +82,107 @@ pub fn read_particle_positions_with_attributes<R: Real, P: AsRef<Path>>(
 
     profile!("loading particle positions and attributes");
 
-    // Check file extension: only VTK is supported for reading attributes at the moment
-    {
-        let extension = input_file.extension().ok_or(anyhow!(
-            "Unable to detect file format of particle input file (file name has to end with supported extension)",
-        ))?.to_str().ok_or(anyhow!("Invalid extension of input file"))?.to_lowercase();
+    // Check file extension: only VTK and BGEO is supported for reading attributes at the moment
+    let extension = input_file.extension().ok_or(anyhow!(
+        "Unable to detect file format of particle input file (file name has to end with supported extension)",
+    ))?.to_str().ok_or(anyhow!("Invalid extension of input file"))?.to_lowercase();
 
-        match extension.as_str() {
-            "vtk" | "vtu" => {}
-            _ => {
-                return Err(anyhow!(
-                    "Unsupported file format extension \"{}\" for reading particles and attributes",
-                    extension
-                ));
+    let attributes_to_interpolate = attribute_names.iter().cloned().collect::<HashSet<_>>();
+
+    let (particle_positions, attributes) = match extension.as_str() {
+        "vtk" | "vtu" => {
+            let vtk_pieces = VtkFile::load_file(input_file)
+                .map(|f| f.into_pieces())
+                .with_context(|| "Error while loading VTK file".to_string())?;
+
+            if vtk_pieces.len() > 1 {
+                warn!(
+                    "VTK file contains more than one \"piece\". Only the first one will be loaded."
+                );
             }
-        }
-    }
 
-    let vtk_pieces = VtkFile::load_file(input_file)
-        .map(|f| f.into_pieces())
-        .with_context(|| "Failed to load particle positions from file".to_string())?;
-
-    if vtk_pieces.len() > 1 {
-        warn!("VTK file contains more than one \"piece\". Only the first one will be loaded.");
-    }
-
-    let first_piece = vtk_pieces
-        .into_iter()
-        .next()
-        .ok_or(anyhow!("VTK file does not contain a supported \"piece\"."))?;
-
-    // Load particles
-    let particle_positions = first_piece.load_as_particles()?;
-
-    // Load attributes that should be interpolated
-    let attributes = {
-        // Check if all attributes to interpolate are present in the input file
-        {
-            let attributes_to_interpolate = attribute_names.iter().cloned().collect::<HashSet<_>>();
-            let attributes = first_piece
-                .point_attribute_names()
+            let first_piece = vtk_pieces
                 .into_iter()
-                .collect::<HashSet<_>>();
+                .next()
+                .ok_or(anyhow!("VTK file does not contain a supported \"piece\"."))?;
 
-            let missing_attributes = attributes_to_interpolate
-                .difference(&attributes)
-                .cloned()
-                .collect::<Vec<_>>();
-            if !missing_attributes.is_empty() {
-                return Err(anyhow!(
-                    "Missing attribute(s) \"{}\" in input file",
-                    missing_attributes.join("\", \""),
-                ));
-            }
+            // Load particles
+            let particle_positions = first_piece.load_as_particles()?;
+
+            // Load attributes that should be interpolated
+            let attributes = {
+                // Check if all attributes to interpolate are present in the input file
+                {
+                    let available_attributes = first_piece
+                        .point_attribute_names()
+                        .into_iter()
+                        .collect::<HashSet<_>>();
+
+                    let missing_attributes = attributes_to_interpolate
+                        .difference(&available_attributes)
+                        .cloned()
+                        .collect::<Vec<_>>();
+                    if !missing_attributes.is_empty() {
+                        return Err(anyhow!(
+                            "Missing attribute(s) \"{}\" in input file",
+                            missing_attributes.join("\", \""),
+                        ));
+                    }
+                }
+
+                first_piece.load_point_attributes::<R>(attribute_names)
+            }?;
+
+            (particle_positions, attributes)
         }
+        "bgeo" => {
+            let bgeo_file = bgeo_format::load_bgeo_file(input_file)
+                .with_context(|| "Error while loading BGEO file".to_string())?;
 
-        first_piece.load_point_attributes::<R>(attribute_names)
-    }?;
+            let particle_positions = bgeo_format::particles_from_bgeo_file::<R>(&bgeo_file)
+                .with_context(|| {
+                    "Error while loading particle positions from BGEO file".to_string()
+                })?;
+
+            // Load attributes that should be interpolated
+            let attributes = {
+                // Check if all attributes to interpolate are present in the input file
+                {
+                    let available_attributes = bgeo_file
+                        .attribute_definitions
+                        .iter()
+                        .map(|a| a.name.clone())
+                        .collect::<HashSet<_>>();
+
+                    let missing_attributes = attributes_to_interpolate
+                        .difference(&available_attributes)
+                        .cloned()
+                        .collect::<Vec<_>>();
+                    if !missing_attributes.is_empty() {
+                        return Err(anyhow!(
+                            "Missing attribute(s) \"{}\" in input file",
+                            missing_attributes.join("\", \""),
+                        ));
+                    }
+                }
+
+                let attributes = bgeo_format::attributes_from_bgeo_file(
+                    &bgeo_file,
+                    &Vec::from_iter(attributes_to_interpolate),
+                )?;
+
+                attributes
+            };
+
+            (particle_positions, attributes)
+        }
+        _ => {
+            return Err(anyhow!(
+                "Unsupported file format extension \"{}\" for reading particles and attributes",
+                extension
+            ));
+        }
+    };
 
     info!(
         "Successfully loaded point {} attribute(s): \"{}\"",
