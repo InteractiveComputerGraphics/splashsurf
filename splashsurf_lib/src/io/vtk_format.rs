@@ -189,7 +189,8 @@ pub fn write_vtk<P: AsRef<Path>>(
 ) -> Result<(), anyhow::Error> {
     profile!("write_vtk");
     let vtk_file = Vtk {
-        version: Version::new((4, 2)),
+        //version: Version::new((4, 2)),
+        version: Version::new_legacy(4, 2),
         title: title.to_string(),
         file_path: None,
         byte_order: ByteOrder::BigEndian,
@@ -413,14 +414,20 @@ pub mod test {
     }
 
     #[test]
+    #[ignore = "Disabled due to vtkio/XML parser not supporting raw embedded binary data (https://github.com/elrnv/vtkio/issues/27)"]
     fn test_cube_8_particles_from_vtu() -> Result<(), anyhow::Error> {
         test_load_num_particles("../data/cube_8_particles.vtu", 8)
     }
 
     #[test]
-    #[ignore = "Disabled due to bug in vtkio (https://github.com/elrnv/vtkio/issues/21#issuecomment-1513195315)"]
+    //#[ignore = "Disabled due to bug in vtkio (https://github.com/elrnv/vtkio/issues/21#issuecomment-1513195315)"]
     fn test_cube_8_particles_from_vtk() -> Result<(), anyhow::Error> {
-        test_load_num_particles("../data/cube_8_particles.vtk", 250)
+        test_load_num_particles("../data/cube_8_particles.vtk", 8)
+    }
+
+    #[test]
+    fn test_double_dam_break_4732_particles_from_vtk() -> Result<(), anyhow::Error> {
+        test_load_num_particles("../data/double_dam_break_frame_01_4732_particles.vtk", 4732)
     }
 
     #[test]
@@ -429,7 +436,7 @@ pub mod test {
     }
 
     #[test]
-    #[ignore = "Disabled due to bug in vtkio/XML parser (https://github.com/elrnv/vtkio/issues/27)"]
+    #[ignore = "Disabled due to vtkio/XML parser not supporting raw embedded binary data (https://github.com/elrnv/vtkio/issues/27)"]
     fn test_fluid_250_particles_from_vtu() -> Result<(), anyhow::Error> {
         test_load_num_particles("../data/fluid_250_particles.vtu", 250)
     }
