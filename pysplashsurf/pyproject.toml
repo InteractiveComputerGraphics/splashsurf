@@ -1,0 +1,9 @@
+[project]
+name = "pysplashsurf"
+version = "0.0.0"
+description = "Coming soon"
+readme = "README.md"
+
+[project.urls]
+homepage = "https://splashsurf.physics-simulation.org/"
+repository = "https://github.com/InteractiveComputerGraphics/splashsurf.git"
