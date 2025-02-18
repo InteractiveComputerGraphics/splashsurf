@@ -879,10 +879,8 @@ fn test_bgeo_read_dam_break_attributes() {
     let bgeo_file = load_bgeo_file(input_file).unwrap();
 
     let particles = particles_from_bgeo_file::<f32>(&bgeo_file).unwrap();
-
     assert_eq!(particles.len(), 6859);
 
-    eprintln!("{:?}", bgeo_file.attribute_definitions);
     assert_eq!(bgeo_file.attribute_definitions.len(), 3);
     assert_eq!(bgeo_file.attribute_data.len(), 3);
 
