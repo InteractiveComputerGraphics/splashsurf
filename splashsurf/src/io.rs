@@ -290,8 +290,6 @@ where
     );
 
     if let Some(extension) = output_file.extension() {
-        profile!("writing mesh");
-
         let extension = extension
             .to_str()
             .ok_or(anyhow!("Invalid extension of output file"))?;

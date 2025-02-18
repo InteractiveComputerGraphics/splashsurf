@@ -3,7 +3,7 @@
 use crate::mesh::{
     AttributeData, CellConnectivity, Mesh3d, MeshAttribute, MeshWithData, TriMesh3d,
 };
-use crate::{utils, Real};
+use crate::{profile, utils, Real};
 use anyhow::Context;
 use nalgebra::Vector3;
 use std::fs;
@@ -18,6 +18,7 @@ pub fn mesh_to_obj<R: Real, M: Mesh3d<R>, P: AsRef<Path>>(
     mesh: &MeshWithData<R, M>,
     filename: P,
 ) -> Result<(), anyhow::Error> {
+    profile!("mesh_to_obj");
     let file = fs::OpenOptions::new()
         .read(true)
         .write(true)

@@ -4,7 +4,7 @@ use crate::mesh::{
     AttributeData, CellConnectivity, Mesh3d, MeshAttribute, MeshWithData, TriMesh3d,
 };
 use crate::utils::IteratorExt;
-use crate::Real;
+use crate::{profile, Real};
 use anyhow::{anyhow, Context};
 use nalgebra::Vector3;
 use num_traits::ToPrimitive;
@@ -194,7 +194,7 @@ pub fn mesh_to_ply<R: Real, M: Mesh3d<R>, P: AsRef<Path>>(
     filename: P,
 ) -> Result<(), anyhow::Error> {
     // TODO: Support attributes
-
+    profile!("mesh_to_ply");
     let file = fs::OpenOptions::new()
         .read(true)
         .write(true)

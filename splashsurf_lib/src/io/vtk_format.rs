@@ -2,7 +2,7 @@
 
 use crate::mesh::{AttributeData, IntoVtkDataSet, MeshAttribute, MeshWithData, TriMesh3d};
 use crate::utils::IteratorExt;
-use crate::{utils, Real, RealConvert};
+use crate::{profile, utils, Real, RealConvert};
 use anyhow::{anyhow, Context};
 use nalgebra::Vector3;
 use std::borrow::Cow;
@@ -187,6 +187,7 @@ pub fn write_vtk<P: AsRef<Path>>(
     filename: P,
     title: &str,
 ) -> Result<(), anyhow::Error> {
+    profile!("write_vtk");
     let vtk_file = Vtk {
         version: Version::new((4, 2)),
         title: title.to_string(),
