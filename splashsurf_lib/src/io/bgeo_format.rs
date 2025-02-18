@@ -356,20 +356,21 @@ impl AttributeStorage {
 mod parser {
     use nom::branch::alt;
     use nom::bytes::streaming::{tag, take};
-    use nom::combinator::{map, map_opt, map_res, not, recognize, value, verify};
-    use nom::multi::count;
+    use nom::combinator::{map_opt, map_res, not, recognize, value, verify};
+    use nom::multi::{count, fold};
     use nom::number::complete as number;
     use nom::{IResult, Parser};
 
     use super::error::{bgeo_error, make_bgeo_error, BgeoParserError, BgeoParserErrorKind};
     use super::{AttribDefinition, AttributeStorage, BgeoAttributeType, BgeoFile, BgeoHeader};
 
-    pub fn bgeo_parser<'a>() -> impl Parser<&'a [u8], BgeoFile, BgeoParserError<&'a [u8]>> {
+    pub fn bgeo_parser<'a>(
+    ) -> impl Parser<&'a [u8], Output = BgeoFile, Error = BgeoParserError<&'a [u8]>> {
         move |input: &'a [u8]| -> IResult<&'a [u8], BgeoFile, BgeoParserError<&'a [u8]>> {
             // Parse file header and attribute definitions
             let (input, header) = parse_header(input)?;
             let (input, named_attribute_definitions) =
-                count(parse_attr_def, header.num_point_attrib as usize)(input)?;
+                count(parse_attr_def, header.num_point_attrib as usize).parse(input)?;
 
             // Add the "position" attribute which should always be present
             let special_attribute_definitions = {
@@ -418,12 +419,12 @@ mod parser {
 
     /// Parses the BGEO format magic bytes
     fn parse_magic_bytes(input: &[u8]) -> IResult<&[u8], &[u8], BgeoParserError<&[u8]>> {
-        tag("Bgeo")(input)
+        tag("Bgeo").parse(input)
     }
 
     /// Parses the (unsupported) new BGEO format magic bytes
     fn parse_new_magic_bytes(input: &[u8]) -> IResult<&[u8], &[u8], BgeoParserError<&[u8]>> {
-        tag([0x7f, 0x4e, 0x53, 0x4a])(input)
+        tag([0x7f, 0x4e, 0x53, 0x4a].as_slice()).parse(input)
     }
 
     /// Parses and validates the magic bytes of a BGEO file header
@@ -442,7 +443,8 @@ mod parser {
                 BgeoParserErrorKind::UnsupportedFormatVersion,
                 value("".as_bytes(), not(parse_new_magic_bytes)),
             )),
-        ))(input)
+        ))
+        .parse(input)
     }
 
     #[test]
@@ -528,7 +530,8 @@ mod parser {
         let (input, name_length) = number::be_u16(input)?;
         let (input, name) = map_res(take(name_length as usize), |input: &[u8]| {
             std::str::from_utf8(input).map_err(|_| BgeoParserErrorKind::InvalidAttributeName)
-        })(input)?;
+        })
+        .parse(input)?;
 
         let (input, size) = number::be_u16(input)?;
         let (input, attr_type) = bgeo_error(
@@ -538,7 +541,7 @@ mod parser {
 
         match attr_type {
             BgeoAttributeType::Float | BgeoAttributeType::Int | BgeoAttributeType::Vector => {
-                let (input, default_values) = count(number::be_i32, size as usize)(input)?;
+                let (input, default_values) = count(number::be_i32, size as usize).parse(input)?;
 
                 let attr = AttribDefinition {
                     name: name.to_string(),
@@ -585,12 +588,12 @@ mod parser {
             let mut input = input;
 
             // Get the parser functions
-            let mut parser_funs: Vec<_> = parsers.iter_mut().map(|p| p.parser()).collect();
+            //let mut parser_funs: Vec<_> = parsers.iter_mut().map(|p| p.parser()).collect();
             // For each point...
             for _ in 0..num_points {
                 // ...apply all parsers in succession
-                for parser in &mut parser_funs {
-                    let (i, _) = (parser).parse(input)?;
+                for parser in parsers.iter_mut() {
+                    let (i, _) = parser.parse(input)?;
                     input = i;
                 }
             }
@@ -682,58 +685,39 @@ mod parser {
             Self { attrib, storage }
         }
 
-        /// Returns a boxed parser for this attribute
-        fn parser<'a, 'b>(
-            &'b mut self,
-        ) -> Box<dyn Parser<&'a [u8], (), BgeoParserError<&'a [u8]>> + 'b> {
+        fn parse<'a>(
+            &mut self,
+            input: &'a [u8],
+        ) -> IResult<&'a [u8], (), BgeoParserError<&'a [u8]>> {
             match self.attrib.attr_type {
                 BgeoAttributeType::Int => {
                     let storage = self.storage.as_int_mut();
-                    let size = self.attrib.size;
-                    Box::new(
-                        move |input: &'a [u8]| -> IResult<&'a [u8], (), BgeoParserError<&'a [u8]>> {
-                            let (input, _) = count(
-                                map(number::be_i32, |val| {
-                                    //println!("i32: {}", val);
-                                    storage.push(val);
-                                }),
-                                size,
-                            )(input)?;
-                            Ok((input, ()))
-                        },
-                    )
+                    map_res(number::be_i32, |val| {
+                        storage.push(val);
+                        Ok(())
+                    })
+                    .parse(input)
                 }
                 BgeoAttributeType::Float => {
                     let storage = self.storage.as_float_mut();
-                    let size = self.attrib.size;
-                    Box::new(
-                        move |input: &'a [u8]| -> IResult<&'a [u8], (), BgeoParserError<&'a [u8]>> {
-                            let (input, _) = count(
-                                map(number::be_f32, |val| {
-                                    //println!("f32: {}", val);
-                                    storage.push(val);
-                                }),
-                                size,
-                            )(input)?;
-                            Ok((input, ()))
-                        },
-                    )
+                    map_res(number::be_f32, |val| {
+                        storage.push(val);
+                        Ok(())
+                    })
+                    .parse(input)
                 }
                 BgeoAttributeType::Vector => {
                     let storage = self.storage.as_vec_mut();
                     let size = self.attrib.size;
-                    Box::new(
-                        move |input: &'a [u8]| -> IResult<&'a [u8], (), BgeoParserError<&'a [u8]>> {
-                            let (input, _) = count(
-                                map(number::be_f32, |val| {
-                                    //println!("vec: {}", val);
-                                    storage.push(val);
-                                }),
-                                size,
-                            )(input)?;
-                            Ok((input, ()))
+                    fold(
+                        size,
+                        number::be_f32,
+                        || (),
+                        |_, val| {
+                            storage.push(val);
                         },
                     )
+                    .parse(input)
                 }
                 _ => panic!("Unsupported attribute type"),
             }
@@ -859,7 +843,7 @@ mod error {
         mut f: F,
     ) -> impl FnMut(I) -> IResult<I, O, BgeoParserError<I>>
     where
-        F: Parser<I, O, BgeoParserError<I>>,
+        F: Parser<I, Output = O, Error = BgeoParserError<I>>,
     {
         use nom::Err;
         move |i: I| match f.parse(i.clone()) {
@@ -886,6 +870,68 @@ fn test_bgeo_read_dam_break() {
     );
 
     assert!(enclosing.contains_aabb(&aabb));
+}
+
+#[test]
+fn test_bgeo_read_dam_break_attributes() {
+    let input_file = Path::new("../data/dam_break_frame_9_6859_particles.bgeo");
+
+    let bgeo_file = load_bgeo_file(input_file).unwrap();
+
+    let particles = particles_from_bgeo_file::<f32>(&bgeo_file).unwrap();
+
+    assert_eq!(particles.len(), 6859);
+
+    eprintln!("{:?}", bgeo_file.attribute_definitions);
+    assert_eq!(bgeo_file.attribute_definitions.len(), 3);
+    assert_eq!(bgeo_file.attribute_data.len(), 3);
+
+    use crate::Aabb3d;
+    let aabb = Aabb3d::from_points(&particles);
+    let enclosing = Aabb3d::new(
+        Vector3::new(-2.0, 0.03, -0.8),
+        Vector3::new(-0.3, 0.7, 0.72),
+    );
+
+    assert!(enclosing.contains_aabb(&aabb));
+
+    let attribs = attributes_from_bgeo_file::<f32>(
+        &bgeo_file,
+        &[
+            "id".to_string(),
+            "density".to_string(),
+            "velocity".to_string(),
+        ],
+    )
+    .unwrap();
+
+    assert_eq!(attribs.len(), 3);
+
+    assert!(matches!(attribs[0].data, AttributeData::ScalarU64(_)));
+    assert!(matches!(attribs[1].data, AttributeData::ScalarReal(_)));
+    assert!(matches!(attribs[2].data, AttributeData::Vector3Real(_)));
+
+    if let AttributeData::ScalarU64(ids) = &attribs[0].data {
+        assert_eq!(ids.len(), particles.len());
+        assert_eq!(ids[0], 30);
+        assert_eq!(ids[1], 11);
+        assert_eq!(ids[2], 12);
+    }
+
+    if let AttributeData::ScalarReal(densities) = &attribs[1].data {
+        assert_eq!(densities.len(), particles.len());
+        assert_eq!(densities[0], 1000.1286);
+        assert_eq!(densities[1], 1001.53424);
+        assert_eq!(densities[2], 1001.6626);
+    }
+
+    if let AttributeData::Vector3Real(velocities) = &attribs[2].data {
+        assert_eq!(velocities.len(), particles.len());
+        assert_eq!(
+            velocities[0],
+            Vector3::new(0.3670507, -0.41762838, 0.42659923)
+        );
+    }
 }
 
 #[test]

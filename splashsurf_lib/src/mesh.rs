@@ -165,7 +165,7 @@ pub struct MeshAttribute<R: Real> {
 
 /// Data of an [`MeshAttribute`] that can be attached to the vertices or cells of a mesh
 ///
-/// One value in the data-set corresponds is associated to a point or cell of the mesh.
+/// One value in the data-set is associated to a point or cell of the mesh.
 #[derive(Clone, Debug)]
 pub enum AttributeData<R: Real> {
     ScalarU64(Vec<u64>),
