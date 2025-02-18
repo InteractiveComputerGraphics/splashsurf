@@ -2,6 +2,8 @@
 
 The following changes are present in the `main` branch of the repository and are not yet part of a release:
 
+ - CLI: Add a switch `--check_mesh_orientation` to check if the mesh orientation is consistent (i.e. vertex normals have the same orientation as all adjacent face normals)
+ - CLI: Support for reading point/particle attributes (integers, floats and vectors of floats) from BGEO files
  - Lib: Remove octree-based domain decomposition (superseded by regular grid subdivision approach `--subdomain-grid`)
  - CLI: Set `--subdomain-grid=on` by default
  - CLI: Remove all arguments for octree-based domain decomposition
