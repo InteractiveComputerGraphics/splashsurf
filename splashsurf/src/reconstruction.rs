@@ -242,7 +242,7 @@ pub struct ReconstructSubcommandArgs {
     /// Maximum allowed angle (in degrees) between triangle normals to merge them to a quad
     #[arg(help_heading = ARGS_POSTPROC, long, default_value = "10")]
     pub quad_max_normal_angle: f64,
-    /// Maximum allowed vertex interior angle (in degrees) inside of a quad to merge two triangles to a quad
+    /// Maximum allowed vertex interior angle (in degrees) inside a quad to merge two triangles to a quad
     #[arg(help_heading = ARGS_POSTPROC, long, default_value = "135")]
     pub quad_max_interior_angle: f64,
 
@@ -266,7 +266,7 @@ pub struct ReconstructSubcommandArgs {
         requires = "mesh_aabb_min",
     )]
     pub mesh_aabb_max: Option<Vec<f64>>,
-    /// Enable clamping of vertices outside of the specified mesh AABB to the AABB (only has an effect if mesh-aabb-min/max are specified)
+    /// Enable clamping of vertices outside the specified mesh AABB to the AABB (only has an effect if mesh-aabb-min/max are specified)
     #[arg(
         help_heading = ARGS_POSTPROC,
         long,
