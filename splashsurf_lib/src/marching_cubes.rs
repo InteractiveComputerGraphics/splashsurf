@@ -169,10 +169,10 @@ pub fn check_mesh_consistency<I: Index, R: Real>(
             let cell_center = grid.point_coordinates(&point_index)
                 + Vector3::repeat(grid.cell_size().times_f64(0.5));
 
-            error_strings.push(format!("\n\tTriangle {}, boundary edge {:?} is located in cell with {:?} with center coordinates {:?} and edge length {}.", tri_idx, edge, cell_index, cell_center, grid.cell_size()));
+            error_strings.push(format!("\tTriangle {}, boundary edge {:?} is located in cell with {:?} with center coordinates {:?} and edge length {}.", tri_idx, edge, cell_index, cell_center, grid.cell_size()));
         } else {
             error_strings.push(format!(
-                "\n\tCannot get cell index for edge {:?} of triangle {}",
+                "\tCannot get cell index for edge {:?} of triangle {}",
                 edge, tri_idx
             ));
         }

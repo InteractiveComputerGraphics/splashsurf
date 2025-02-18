@@ -1,3 +1,4 @@
+use crate::reconstruction::arguments::*;
 use crate::{io, logging};
 use anyhow::{anyhow, Context};
 use clap::value_parser;
@@ -9,10 +10,9 @@ use splashsurf_lib::nalgebra::{Unit, Vector3};
 use splashsurf_lib::sph_interpolation::SphInterpolator;
 use splashsurf_lib::{profile, Aabb3d, Index, Real};
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::path::PathBuf;
-
-use arguments::*;
 
 // TODO: Detect smallest index type (i.e. check if ok to use i32 as index)
 
@@ -318,7 +318,17 @@ pub struct ReconstructSubcommandArgs {
         require_equals = true
     )]
     pub check_mesh_manifold: Switch,
-    /// Enable debug output for the check-mesh operations (has no effect if no other check-mesh option is enabled)
+    /// Enable checking the final mesh for inverted triangles (compares angle between vertex normals and adjacent face normals)
+    #[arg(
+        help_heading = ARGS_DEBUG,
+        long,
+        default_value = "off",
+        value_name = "off|on",
+        ignore_case = true,
+        require_equals = true
+    )]
+    pub check_mesh_orientation: Switch,
+    /// Enable additional debug output for the check-mesh operations (has no effect if no other check-mesh option is enabled)
     #[arg(
         help_heading = ARGS_DEBUG,
         long,
@@ -427,6 +437,7 @@ mod arguments {
     pub struct ReconstructionRunnerPostprocessingArgs {
         pub check_mesh_closed: bool,
         pub check_mesh_manifold: bool,
+        pub check_mesh_orientation: bool,
         pub check_mesh_debug: bool,
         pub mesh_cleanup: bool,
         pub decimate_barnacles: bool,
@@ -552,6 +563,8 @@ mod arguments {
                     || args.check_mesh_closed.into_bool(),
                 check_mesh_manifold: args.check_mesh.into_bool()
                     || args.check_mesh_manifold.into_bool(),
+                check_mesh_orientation: args.check_mesh.into_bool()
+                    || args.check_mesh_orientation.into_bool(),
                 check_mesh_debug: args.check_mesh_debug.into_bool(),
                 mesh_cleanup: args.mesh_cleanup.into_bool(),
                 decimate_barnacles: args.decimate_barnacles.into_bool(),
@@ -896,10 +909,6 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
     postprocessing: &ReconstructionRunnerPostprocessingArgs,
 ) -> Result<(), anyhow::Error> {
     profile!("surface reconstruction");
-
-    let check_mesh = postprocessing.check_mesh_closed
-        || postprocessing.check_mesh_manifold
-        || postprocessing.check_mesh_debug;
 
     // Load particle positions and attributes to interpolate
     let (particle_positions, attributes) = io::read_particle_positions_with_attributes(
@@ -1294,7 +1303,9 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
         })?;
     }
 
-    if check_mesh {
+    // TODO: Option to continue processing sequences even if checks fail. Maybe return special error type?
+
+    if postprocessing.check_mesh_closed || postprocessing.check_mesh_manifold {
         if let Err(err) = match (&tri_mesh, &tri_quad_mesh) {
             (Some(mesh), None) => splashsurf_lib::marching_cubes::check_mesh_consistency(
                 grid,
@@ -1316,6 +1327,72 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
                 .context(format!("Problem found with mesh file \"{}\"", paths.output_file.display()));
         } else {
             info!("Checked mesh for problems (holes: {}, non-manifold edges/vertices: {}), no problems were found.", postprocessing.check_mesh_closed, postprocessing.check_mesh_manifold);
+        }
+    }
+
+    if postprocessing.check_mesh_orientation {
+        if let Err(err) = match (&tri_mesh, &tri_quad_mesh) {
+            (Some(mesh), None) => {
+                use splashsurf_lib::mesh::TriMesh3dExt;
+
+                let tri_normals = mesh
+                    .mesh
+                    .triangles
+                    .par_iter()
+                    .map(|ijk| mesh.mesh.tri_normal_ijk::<R>(ijk))
+                    .collect::<Vec<_>>();
+                let vertex_face_map = mesh.vertex_cell_connectivity();
+                let vertex_normals = mesh.mesh.par_vertex_normals();
+
+                let mut flipped_faces = HashMap::new();
+                for i in 0..vertex_normals.len() {
+                    let n1 = vertex_normals[i];
+                    for j in 0..vertex_face_map[i].len() {
+                        let tri = vertex_face_map[i][j];
+                        let n2 = tri_normals[tri];
+                        let angle = n1.angle(&n2).to_f64().unwrap();
+                        if angle > std::f64::consts::PI * 0.99 {
+                            flipped_faces.insert(tri, (i, angle));
+                        }
+                    }
+                }
+
+                if !flipped_faces.is_empty() {
+                    let mut error_strings = Vec::new();
+                    error_strings.push(format!("Mesh is not consistently oriented. Found {} faces with normals flipped relative to adjacent vertices.", flipped_faces.len()));
+                    if postprocessing.check_mesh_debug {
+                        for (tri, (i, angle)) in flipped_faces.iter() {
+                            error_strings.push(format!(
+                                "\tAngle between normals of face {} and vertex {} is {:.2}°",
+                                tri,
+                                i,
+                                angle.to_degrees()
+                            ));
+                        }
+                    }
+                    Err(anyhow!(error_strings.join("\n")))
+                } else {
+                    Ok(())
+                }
+            }
+            (None, Some(_mesh)) => {
+                info!(
+                    "Checking for normal orientation not implemented for quad mesh at the moment."
+                );
+                return Ok(());
+            }
+            _ => unreachable!(),
+        } {
+            error!("Checked mesh orientation (flipped normals), problems were found!");
+            error!("{}", err);
+            return Err(anyhow!("{}", err))
+                .context("Checked mesh orientation (flipped normals), problems were found!")
+                .context(format!(
+                    "Problem found with mesh file \"{}\"",
+                    paths.output_file.display()
+                ));
+        } else {
+            info!("Checked mesh orientation (flipped normals), no problems were found.");
         }
     }
 
