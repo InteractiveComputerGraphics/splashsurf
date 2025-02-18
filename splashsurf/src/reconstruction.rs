@@ -2,7 +2,7 @@ use crate::{io, logging};
 use anyhow::{anyhow, Context};
 use clap::value_parser;
 use indicatif::{ProgressBar, ProgressStyle};
-use log::info;
+use log::{error, info, warn};
 use rayon::prelude::*;
 use splashsurf_lib::mesh::{AttributeData, Mesh3d, MeshAttribute, MeshWithData};
 use splashsurf_lib::nalgebra::{Unit, Vector3};
@@ -897,6 +897,10 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
 ) -> Result<(), anyhow::Error> {
     profile!("surface reconstruction");
 
+    let check_mesh = postprocessing.check_mesh_closed
+        || postprocessing.check_mesh_manifold
+        || postprocessing.check_mesh_debug;
+
     // Load particle positions and attributes to interpolate
     let (particle_positions, attributes) = io::read_particle_positions_with_attributes(
         &paths.input_file,
@@ -948,7 +952,6 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
     // Perform post-processing
     {
         profile!("postprocessing");
-
         let mut vertex_connectivity = None;
 
         if postprocessing.mesh_cleanup {
@@ -1272,10 +1275,6 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
     // Store the surface mesh
     {
         profile!("write surface mesh to file");
-        info!(
-            "Writing surface mesh to \"{}\"...",
-            paths.output_file.display()
-        );
 
         match (&tri_mesh, &tri_quad_mesh) {
             (Some(mesh), None) => {
@@ -1293,13 +1292,9 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
                 paths.output_file.display()
             )
         })?;
-        info!("Done.");
     }
 
-    if postprocessing.check_mesh_closed
-        || postprocessing.check_mesh_manifold
-        || postprocessing.check_mesh_debug
-    {
+    if check_mesh {
         if let Err(err) = match (&tri_mesh, &tri_quad_mesh) {
             (Some(mesh), None) => splashsurf_lib::marching_cubes::check_mesh_consistency(
                 grid,
@@ -1314,7 +1309,11 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
             }
             _ => unreachable!(),
         } {
-            return Err(anyhow!("{}", err));
+            error!("Checked mesh for problems (holes: {}, non-manifold edges/vertices: {}), problems were found!", postprocessing.check_mesh_closed, postprocessing.check_mesh_manifold);
+            error!("{}", err);
+            return Err(anyhow!("{}", err))
+                .context(format!("Checked mesh for problems (holes: {}, non-manifold edges/vertices: {}), problems were found!", postprocessing.check_mesh_closed, postprocessing.check_mesh_manifold))
+                .context(format!("Problem found with mesh file \"{}\"", paths.output_file.display()));
         } else {
             info!("Checked mesh for problems (holes: {}, non-manifold edges/vertices: {}), no problems were found.", postprocessing.check_mesh_closed, postprocessing.check_mesh_manifold);
         }

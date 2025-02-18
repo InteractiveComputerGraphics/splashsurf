@@ -155,7 +155,7 @@ pub fn check_mesh_consistency<I: Index, R: Real>(
         return Ok(());
     }
 
-    let add_edge_errors = |error_string: &mut String, edge: ([usize; 2], usize, usize)| {
+    let add_edge_errors = |error_strings: &mut Vec<String>, edge: ([usize; 2], usize, usize)| {
         let (edge, tri_idx, _) = edge;
 
         let v0 = mesh.vertices[edge[0]];
@@ -169,45 +169,46 @@ pub fn check_mesh_consistency<I: Index, R: Real>(
             let cell_center = grid.point_coordinates(&point_index)
                 + Vector3::repeat(grid.cell_size().times_f64(0.5));
 
-            *error_string += &format!("\n\tTriangle {}, boundary edge {:?} is located in cell with {:?} with center coordinates {:?} and edge length {}.", tri_idx, edge, cell_index, cell_center, grid.cell_size());
+            error_strings.push(format!("\n\tTriangle {}, boundary edge {:?} is located in cell with {:?} with center coordinates {:?} and edge length {}.", tri_idx, edge, cell_index, cell_center, grid.cell_size()));
         } else {
-            *error_string += &format!(
+            error_strings.push(format!(
                 "\n\tCannot get cell index for edge {:?} of triangle {}",
                 edge, tri_idx
-            );
+            ));
         }
     };
 
-    let mut error_string = String::new();
+    let mut error_strings = Vec::new();
 
     if check_closed && !boundary_edges.is_empty() {
-        error_string += &format!("Mesh is not closed. It has {} boundary edges (edges that are connected to only one triangle).", boundary_edges.len());
+        error_strings.push(format!("Mesh is not closed. It has {} boundary edges (edges that are connected to only one triangle).", boundary_edges.len()));
         if debug {
             for e in boundary_edges {
-                add_edge_errors(&mut error_string, e);
+                add_edge_errors(&mut error_strings, e);
             }
         }
-        error_string += "\n";
     }
 
     if check_manifold && !non_manifold_edges.is_empty() {
-        error_string += &format!("Mesh is not manifold. It has {} non-manifold edges (edges that are connected to more than twi triangles).", non_manifold_edges.len());
+        error_strings.push(format!("Mesh is not manifold. It has {} non-manifold edges (edges that are connected to more than twi triangles).", non_manifold_edges.len()));
         if debug {
             for e in non_manifold_edges {
-                add_edge_errors(&mut error_string, e);
+                add_edge_errors(&mut error_strings, e);
             }
         }
-        error_string += "\n";
     }
 
     if check_manifold && !non_manifold_vertices.is_empty() {
-        error_string += &format!("Mesh is not manifold. It has {} non-manifold vertices (vertices with more than one triangle fan).", non_manifold_vertices.len());
+        error_strings.push(format!("Mesh is not manifold. It has {} non-manifold vertices (vertices with more than one triangle fan).", non_manifold_vertices.len()));
         if debug {
-            error_string += &format!("\n\t{:?}", non_manifold_vertices);
+            error_strings.push(format!(
+                "\tNon-manifold vertices: {:?}",
+                non_manifold_vertices
+            ));
         }
-        error_string += "\n";
     }
 
+    let error_string = error_strings.join("\n");
     Err(error_string)
 }
 
