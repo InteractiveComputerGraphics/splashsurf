@@ -751,8 +751,8 @@ impl<R: Real> TriMesh3d<R> {
     /// The other mesh will be empty after this operation.
     pub fn append(&mut self, other: &mut TriMesh3d<R>) {
         let TriMesh3d {
-            vertices: ref mut new_verts,
-            triangles: ref mut new_tris,
+            vertices: new_verts,
+            triangles: new_tris,
         } = other;
 
         let vertex_offset = self.vertices.len();

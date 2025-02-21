@@ -11,8 +11,10 @@ pub struct CountingAllocator<A: GlobalAlloc> {
 // TODO: Is Ordering::AcqRel ok to use?
 
 unsafe impl<A: GlobalAlloc> GlobalAlloc for CountingAllocator<A> {
+    /// Allocates memory and counts the number of bytes allocated (current and peak allocation).
+    /// Safety: See [`GlobalAlloc::alloc`].
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        let ret = self.allocator.alloc(layout);
+        let ret = unsafe { self.allocator.alloc(layout) };
         if !ret.is_null() {
             let old_allocation = self
                 .current_allocation
@@ -24,8 +26,10 @@ unsafe impl<A: GlobalAlloc> GlobalAlloc for CountingAllocator<A> {
         ret
     }
 
+    /// Deallocates memory and counts the number of bytes deallocated.
+    /// Safety: See [`GlobalAlloc::dealloc`].
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        self.allocator.dealloc(ptr, layout);
+        unsafe { self.allocator.dealloc(ptr, layout) };
         self.current_allocation
             .fetch_sub(layout.size() as u64, Ordering::AcqRel);
     }

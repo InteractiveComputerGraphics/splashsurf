@@ -7,7 +7,7 @@ description = "Library for surface reconstruction of SPH particle data"
 keywords = ["sph", "particle", "surface", "reconstruction", "marching-cubes"]
 categories = ["graphics", "science", "simulation", "visualization", "rendering"]
 readme = "README.md"
-edition = "2021"
+edition = "2024"
 
 homepage = "https://splashsurf.physics-simulation.org"
 repository = "https://github.com/InteractiveComputerGraphics/splashsurf"
