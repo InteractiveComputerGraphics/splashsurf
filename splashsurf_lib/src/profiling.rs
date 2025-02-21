@@ -10,10 +10,10 @@ use std::sync::LazyLock;
 use std::time::{Duration, Instant};
 use thread_local::ThreadLocal;
 
-/// Thread local storage of the [`Profiler`](Profiler)s storing all [`Scope`](Scope)s of the thread
+/// Thread local storage of the [`Profiler`]s storing all `Scope`s of the thread
 pub static PROFILER: LazyLock<ThreadLocal<RwLock<Profiler>>> = LazyLock::new(ThreadLocal::new);
 
-/// `RandomState` used to obtain `Hasher`s to hash [`ScopeId`](ScopeId)s for parent/child identification
+/// `RandomState` used to obtain `Hasher`s to hash [`ScopeId`]s for parent/child identification
 pub static RANDOM_STATE: LazyLock<RandomState> = LazyLock::new(RandomState::new);
 
 /// Implementation of the profile macro, use [`profile`](crate::profile) instead
