@@ -64,6 +64,7 @@ pub fn particles_to_json<R: Real, P: AsRef<Path>>(
     let file = OpenOptions::new()
         .write(true)
         .create(true)
+        .truncate(true)
         .open(path)
         .context("Cannot open file for writing JSON")?;
     let writer = BufWriter::new(file);
