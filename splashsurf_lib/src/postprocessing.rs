@@ -4,7 +4,7 @@ use crate::halfedge_mesh::{HalfEdgeTriMesh, IllegalHalfEdgeCollapse};
 use crate::mesh::{Mesh3d, MixedTriQuadMesh3d, TriMesh3d, TriMesh3dExt, TriangleOrQuadCell};
 use crate::topology::{Axis, DirectedAxis, Direction};
 use crate::uniform_grid::UniformCartesianCubeGrid3d;
-use crate::{profile, Index, MapType, Real, SetType};
+use crate::{Index, MapType, Real, SetType, profile};
 use log::{info, warn};
 use nalgebra::Vector3;
 use rayon::prelude::*;

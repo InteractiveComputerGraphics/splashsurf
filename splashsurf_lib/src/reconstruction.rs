@@ -6,8 +6,8 @@ use crate::mesh::TriMesh3d;
 use crate::uniform_grid::UniformGrid;
 use crate::workspace::LocalReconstructionWorkspace;
 use crate::{
-    density_map, marching_cubes, neighborhood_search, profile, Index, Parameters, Real,
-    ReconstructionError, SurfaceReconstruction,
+    Index, Parameters, Real, ReconstructionError, SurfaceReconstruction, density_map,
+    marching_cubes, neighborhood_search, profile,
 };
 use anyhow::Context;
 use log::{info, trace};

@@ -2,14 +2,14 @@
 
 use anyhow::anyhow;
 use sdfu::SDF;
+use splashsurf_lib::Aabb3d;
+use splashsurf_lib::Real;
 #[cfg(feature = "io")]
 use splashsurf_lib::io;
 use splashsurf_lib::marching_cubes::marching_cubes_lut::marching_cubes_triangulation_iter;
 use splashsurf_lib::mesh::TriMesh3d;
 use splashsurf_lib::nalgebra::Vector3;
 use splashsurf_lib::uniform_grid::UniformCartesianCubeGrid3d;
-use splashsurf_lib::Aabb3d;
-use splashsurf_lib::Real;
 use std::collections::HashMap;
 use ultraviolet::vec::Vec3;
 

@@ -1,6 +1,6 @@
 use crate::reconstruction::arguments::*;
 use crate::{io, logging};
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 use clap::value_parser;
 use indicatif::{ProgressBar, ProgressStyle};
 use log::{error, info};
@@ -8,7 +8,7 @@ use rayon::prelude::*;
 use splashsurf_lib::mesh::{AttributeData, Mesh3d, MeshAttribute, MeshWithData};
 use splashsurf_lib::nalgebra::{Unit, Vector3};
 use splashsurf_lib::sph_interpolation::SphInterpolator;
-use splashsurf_lib::{profile, Aabb3d, Index, Real};
+use splashsurf_lib::{Aabb3d, Index, Real, profile};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::convert::TryFrom;
@@ -423,11 +423,11 @@ pub fn reconstruct_subcommand(cmd_args: &ReconstructSubcommandArgs) -> Result<()
 mod arguments {
     use super::ReconstructSubcommandArgs;
     use crate::io;
-    use anyhow::{anyhow, Context};
+    use anyhow::{Context, anyhow};
     use log::info;
-    use regex::{escape, Regex};
-    use splashsurf_lib::nalgebra::Vector3;
+    use regex::{Regex, escape};
     use splashsurf_lib::Aabb3d;
+    use splashsurf_lib::nalgebra::Vector3;
     use std::convert::TryFrom;
     use std::fs;
     use std::path::{Path, PathBuf};
@@ -484,7 +484,11 @@ mod arguments {
         );
 
         if !aabb.is_consistent() {
-            return Err(anyhow!("The user specified {error_str} min/max values are inconsistent! min: {:?} max: {:?}", aabb.min().as_slice(), aabb.max().as_slice()));
+            return Err(anyhow!(
+                "The user specified {error_str} min/max values are inconsistent! min: {:?} max: {:?}",
+                aabb.min().as_slice(),
+                aabb.max().as_slice()
+            ));
         }
 
         if aabb.is_degenerate() {
@@ -632,7 +636,11 @@ mod arguments {
                 // Ensure that output directory exists/create it
                 if let Some(output_dir) = output_file.parent() {
                     if !output_dir.exists() {
-                        info!("The output directory \"{}\" of the output file \"{}\" does not exist. Trying to create it now...", output_dir.display(), output_file.display());
+                        info!(
+                            "The output directory \"{}\" of the output file \"{}\" does not exist. Trying to create it now...",
+                            output_dir.display(),
+                            output_file.display()
+                        );
                         fs::create_dir_all(output_dir).with_context(|| {
                             format!(
                                 "Unable to create output directory \"{}\"",
@@ -776,7 +784,7 @@ mod arguments {
                     return Err(anyhow!(
                         "The input file path \"{}\" does not end with a filename",
                         args.input_file_or_sequence.display()
-                    ))
+                    ));
                 }
             };
 
@@ -975,7 +983,11 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
             ));
             let tris_after = mesh_with_data.mesh.triangles.len();
             let verts_after = mesh_with_data.mesh.vertices.len();
-            info!("Post-processing: Cleanup reduced number of vertices to {:.2}% and number of triangles to {:.2}% of original mesh.", (verts_after as f64 / verts_before as f64) * 100.0, (tris_after as f64 / tris_before as f64) * 100.0)
+            info!(
+                "Post-processing: Cleanup reduced number of vertices to {:.2}% and number of triangles to {:.2}% of original mesh.",
+                (verts_after as f64 / verts_before as f64) * 100.0,
+                (tris_after as f64 / tris_before as f64) * 100.0
+            )
         }
 
         // Decimate mesh if requested
@@ -1320,13 +1332,19 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
             }
             _ => unreachable!(),
         } {
-            error!("Checked mesh for problems (holes: {}, non-manifold edges/vertices: {}), problems were found!", postprocessing.check_mesh_closed, postprocessing.check_mesh_manifold);
+            error!(
+                "Checked mesh for problems (holes: {}, non-manifold edges/vertices: {}), problems were found!",
+                postprocessing.check_mesh_closed, postprocessing.check_mesh_manifold
+            );
             error!("{}", err);
             return Err(anyhow!("{}", err))
                 .context(format!("Checked mesh for problems (holes: {}, non-manifold edges/vertices: {}), problems were found!", postprocessing.check_mesh_closed, postprocessing.check_mesh_manifold))
                 .context(format!("Problem found with mesh file \"{}\"", paths.output_file.display()));
         } else {
-            info!("Checked mesh for problems (holes: {}, non-manifold edges/vertices: {}), no problems were found.", postprocessing.check_mesh_closed, postprocessing.check_mesh_manifold);
+            info!(
+                "Checked mesh for problems (holes: {}, non-manifold edges/vertices: {}), no problems were found.",
+                postprocessing.check_mesh_closed, postprocessing.check_mesh_manifold
+            );
         }
     }
 

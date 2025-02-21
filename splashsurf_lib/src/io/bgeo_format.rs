@@ -2,11 +2,11 @@
 
 use crate::mesh::{AttributeData, MeshAttribute};
 use crate::utils::IteratorExt;
-use crate::{utils, Real};
-use anyhow::{anyhow, Context};
+use crate::{Real, utils};
+use anyhow::{Context, anyhow};
+use flate2::Compression;
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
-use flate2::Compression;
 use nalgebra::Vector3;
 use nom::{Finish, Parser};
 use num_traits::{FromPrimitive, ToPrimitive};
@@ -132,10 +132,16 @@ pub fn particles_to_bgeo<R: Real, P: AsRef<Path>>(
 }
 
 fn particles_to_bgeo_impl<R: Real>(particles: &[Vector3<R>]) -> Result<BgeoFile, anyhow::Error> {
-    let particles_f32 = particles.iter().flat_map(|x| x.as_slice()).copied().map(|x| Some(x.to_f32())?)
+    let particles_f32 = particles
+        .iter()
+        .flat_map(|x| x.as_slice())
+        .copied()
+        .map(|x| Some(x.to_f32())?)
         .map(|vec| {
             vec.ok_or_else(|| {
-                anyhow!("Failed to convert coordinate from input float type to f32, value out of range?")
+                anyhow!(
+                    "Failed to convert coordinate from input float type to f32, value out of range?"
+                )
             })
         })
         .try_collect_with_capacity(particles.len())?;
@@ -361,11 +367,11 @@ mod parser {
     use nom::number::complete as number;
     use nom::{IResult, Parser};
 
-    use super::error::{bgeo_error, make_bgeo_error, BgeoParserError, BgeoParserErrorKind};
+    use super::error::{BgeoParserError, BgeoParserErrorKind, bgeo_error, make_bgeo_error};
     use super::{AttribDefinition, AttributeStorage, BgeoAttributeType, BgeoFile, BgeoHeader};
 
-    pub fn bgeo_parser<'a>(
-    ) -> impl Parser<&'a [u8], Output = BgeoFile, Error = BgeoParserError<&'a [u8]>> {
+    pub fn bgeo_parser<'a>()
+    -> impl Parser<&'a [u8], Output = BgeoFile, Error = BgeoParserError<&'a [u8]>> {
         move |input: &'a [u8]| -> IResult<&'a [u8], BgeoFile, BgeoParserError<&'a [u8]>> {
             // Parse file header and attribute definitions
             let (input, header) = parse_header(input)?;
@@ -606,9 +612,16 @@ mod parser {
         let mut named_attrib_data = Vec::new();
 
         for parser in parsers.into_iter() {
-            assert_eq!(num_points * parser.attrib.size, parser.storage.len(),
-                       "failed to read attribute \"{}\" (type {:?}): number of read attribute values ({}) does not match expected number of attribute values ({} = {} points * {} attribute components)",
-                       parser.attrib.name, parser.attrib.attr_type, parser.storage.len(), num_points * parser.attrib.size, num_points, parser.attrib.size
+            assert_eq!(
+                num_points * parser.attrib.size,
+                parser.storage.len(),
+                "failed to read attribute \"{}\" (type {:?}): number of read attribute values ({}) does not match expected number of attribute values ({} = {} points * {} attribute components)",
+                parser.attrib.name,
+                parser.attrib.attr_type,
+                parser.storage.len(),
+                num_points * parser.attrib.size,
+                num_points,
+                parser.attrib.size
             );
             if special_attrib_data.len() < special_attribs.len() {
                 special_attrib_data.push(parser.storage);

@@ -1,11 +1,11 @@
 use crate::io::vtk_format::VtkFile;
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 use log::{info, warn};
+use splashsurf_lib::Real;
 use splashsurf_lib::mesh::{
     IntoVtkUnstructuredGridPiece, Mesh3d, MeshAttribute, MeshWithData, TriMesh3d,
 };
 use splashsurf_lib::nalgebra::Vector3;
-use splashsurf_lib::Real;
 use splashsurf_lib::{io, profile};
 use std::collections::HashSet;
 use std::fs::File;

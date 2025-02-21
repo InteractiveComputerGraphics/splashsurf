@@ -1,7 +1,7 @@
 use crate::marching_cubes::marching_cubes_lut::marching_cubes_triangulation_iter;
 use crate::marching_cubes::{CellData, MarchingCubesInput};
 use crate::mesh::TriMesh3d;
-use crate::{profile, Index, Real};
+use crate::{Index, Real, profile};
 use anyhow::Context;
 use log::trace;
 use thiserror::Error as ThisError;

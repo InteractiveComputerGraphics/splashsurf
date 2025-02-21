@@ -3,7 +3,7 @@
 use crate::marching_cubes::narrow_band_extraction::construct_mc_input;
 use crate::marching_cubes::triangulation::triangulate;
 use crate::mesh::TriMesh3d;
-use crate::{new_map, profile, DensityMap, Index, MapType, Real, UniformGrid};
+use crate::{DensityMap, Index, MapType, Real, UniformGrid, new_map, profile};
 use nalgebra::Vector3;
 use thiserror::Error as ThisError;
 
@@ -232,7 +232,10 @@ fn check_mesh_with_cell_data<I: Index, R: Real>(
     }
 
     let mut error_string = String::new();
-    error_string += &format!("Mesh is not closed. It has {} boundary edges (edges that are connected to only one triangle):", boundary_edges.len());
+    error_string += &format!(
+        "Mesh is not closed. It has {} boundary edges (edges that are connected to only one triangle):",
+        boundary_edges.len()
+    );
     for (edge, tri_idx, _) in boundary_edges {
         let v0 = mesh.vertices[edge[0]];
         let v1 = mesh.vertices[edge[1]];
@@ -250,7 +253,15 @@ fn check_mesh_with_cell_data<I: Index, R: Real>(
                 .get(&grid.flatten_cell_index(&cell_index))
                 .expect("Unable to get cell data of cell");
 
-            error_string += &format!("\n\tTriangle {}, boundary edge {:?} is located in cell with {:?} with center coordinates {:?} and edge length {}. {:?}", tri_idx, edge, cell_index, cell_center, grid.cell_size(), cell_data);
+            error_string += &format!(
+                "\n\tTriangle {}, boundary edge {:?} is located in cell with {:?} with center coordinates {:?} and edge length {}. {:?}",
+                tri_idx,
+                edge,
+                cell_index,
+                cell_center,
+                grid.cell_size(),
+                cell_data
+            );
         } else {
             error_string += &format!(
                 "\n\tCannot get cell index for boundary edge {:?} of triangle {}",

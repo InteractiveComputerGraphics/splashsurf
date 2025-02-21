@@ -15,7 +15,7 @@
 //!  - [`IntoVtkUnstructuredGridPiece`] to convert basic meshes and meshes with attached attributes to the
 //!  - [`IntoVtkDataSet`] for all meshes implementing [`IntoVtkUnstructuredGridPiece`] to directly save a mesh as a VTK file
 
-use crate::{new_map, profile, Aabb3d, MapType, Real, RealConvert};
+use crate::{Aabb3d, MapType, Real, RealConvert, new_map, profile};
 use bytemuck_derive::{Pod, Zeroable};
 use nalgebra::{Unit, Vector3};
 use rayon::prelude::*;
@@ -1519,10 +1519,10 @@ impl_into_vtk!(PointCloud3d);
 #[cfg(feature = "vtk_extras")]
 #[cfg_attr(docsrs, doc(cfg(feature = "vtk_extras")))]
 pub mod vtk_helper {
+    use vtkio::IOBuffer;
     use vtkio::model::{
         Attributes, CellType, Cells, DataSet, UnstructuredGridPiece, VertexNumbers,
     };
-    use vtkio::IOBuffer;
 
     use super::{
         CellConnectivity, HexCell, Mesh3d, PointCell, Real, TriangleCell, TriangleOrQuadCell,

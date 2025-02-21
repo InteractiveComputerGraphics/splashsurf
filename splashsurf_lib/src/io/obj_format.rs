@@ -3,7 +3,7 @@
 use crate::mesh::{
     AttributeData, CellConnectivity, Mesh3d, MeshAttribute, MeshWithData, TriMesh3d,
 };
-use crate::{profile, utils, Real};
+use crate::{Real, profile, utils};
 use anyhow::Context;
 use nalgebra::Vector3;
 use std::fs;

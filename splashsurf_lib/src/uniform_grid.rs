@@ -907,9 +907,11 @@ fn test_cube_local_edge_by_axis_consistency() {
     for (i, edges_parallel_to_axis) in CELL_LOCAL_EDGES_BY_AXIS.iter().enumerate() {
         for &local_edge in edges_parallel_to_axis {
             // Ensure that each edge that is marked as parallel to axis_i is also stored as an axis in axis_i originating at some local point
-            assert!(CELL_LOCAL_EDGES_FROM_LOCAL_POINT
-                .iter()
-                .any(|edge| edge[i] == Some(local_edge)))
+            assert!(
+                CELL_LOCAL_EDGES_FROM_LOCAL_POINT
+                    .iter()
+                    .any(|edge| edge[i] == Some(local_edge))
+            )
         }
     }
 }
@@ -1142,14 +1144,17 @@ mod tests {
                 .index(),
             &[0, 0, 1]
         );
-        assert!(grid
-            .get_point_neighbor(&origin, Axis::X.with_direction(Direction::Negative))
-            .is_none());
-        assert!(grid
-            .get_point_neighbor(&origin, Axis::Y.with_direction(Direction::Negative))
-            .is_none());
-        assert!(grid
-            .get_point_neighbor(&origin, Axis::Z.with_direction(Direction::Negative))
-            .is_none());
+        assert!(
+            grid.get_point_neighbor(&origin, Axis::X.with_direction(Direction::Negative))
+                .is_none()
+        );
+        assert!(
+            grid.get_point_neighbor(&origin, Axis::Y.with_direction(Direction::Negative))
+                .is_none()
+        );
+        assert!(
+            grid.get_point_neighbor(&origin, Axis::Z.with_direction(Direction::Negative))
+                .is_none()
+        );
     }
 }

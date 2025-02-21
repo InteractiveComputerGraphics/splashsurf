@@ -1,7 +1,7 @@
-use criterion::{criterion_group, Criterion};
+use criterion::{Criterion, criterion_group};
 use nalgebra::Vector3;
 use splashsurf_lib::io;
-use splashsurf_lib::{neighborhood_search, Aabb3d};
+use splashsurf_lib::{Aabb3d, neighborhood_search};
 use std::time::Duration;
 
 static PARTICLE_RADIUS: f64 = 0.025;

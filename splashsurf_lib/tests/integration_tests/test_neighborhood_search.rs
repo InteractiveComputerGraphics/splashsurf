@@ -1,6 +1,6 @@
 use nalgebra::Vector3;
-use splashsurf_lib::neighborhood_search::*;
 use splashsurf_lib::Aabb3d;
+use splashsurf_lib::neighborhood_search::*;
 
 fn sort_neighborhood_lists(neighborhood_list: &mut Vec<Vec<usize>>) {
     for neighbors in neighborhood_list.iter_mut() {
@@ -177,8 +177,8 @@ fn test_neighborhood_search_spatial_hashing_parallel_simple() {
 #[cfg(feature = "io")]
 mod tests_from_files {
     use super::*;
-    use splashsurf_lib::io;
     use splashsurf_lib::Aabb3d;
+    use splashsurf_lib::io;
 
     #[test]
     fn test_compare_free_particles_125() {
@@ -221,9 +221,21 @@ mod tests_from_files {
         let mut nl_hashed_flat = nl_hashed_flat.to_vec_vec();
         sort_neighborhood_lists(&mut nl_hashed_flat);
 
-        assert_eq!(nl_hashed, nl_naive, "result of neighborhood_search_spatial_hashing does not match neighborhood_search_naive, file: {:?}", file);
-        assert_eq!(nl_hashed_par, nl_naive, "result of neighborhood_search_spatial_hashing_parallel does not match neighborhood_search_naive, file: {:?}", file);
-        assert_eq!(nl_hashed_flat, nl_naive, "result of neighborhood_search_spatial_hashing_flat does not match neighborhood_search_naive, file: {:?}", file);
+        assert_eq!(
+            nl_hashed, nl_naive,
+            "result of neighborhood_search_spatial_hashing does not match neighborhood_search_naive, file: {:?}",
+            file
+        );
+        assert_eq!(
+            nl_hashed_par, nl_naive,
+            "result of neighborhood_search_spatial_hashing_parallel does not match neighborhood_search_naive, file: {:?}",
+            file
+        );
+        assert_eq!(
+            nl_hashed_flat, nl_naive,
+            "result of neighborhood_search_spatial_hashing_flat does not match neighborhood_search_naive, file: {:?}",
+            file
+        );
     }
 
     #[test]
@@ -268,9 +280,21 @@ mod tests_from_files {
         let mut nl_hashed_flat = nl_hashed_flat.to_vec_vec();
         sort_neighborhood_lists(&mut nl_hashed_flat);
 
-        assert_eq!(nl_hashed, nl_naive, "result of neighborhood_search_spatial_hashing does not match neighborhood_search_naive, file: {:?}", file);
-        assert_eq!(nl_hashed_par, nl_naive, "result of neighborhood_search_spatial_hashing_parallel does not match neighborhood_search_naive, file: {:?}", file);
-        assert_eq!(nl_hashed_flat, nl_naive, "result of neighborhood_search_spatial_hashing_flat does not match neighborhood_search_naive, file: {:?}", file);
+        assert_eq!(
+            nl_hashed, nl_naive,
+            "result of neighborhood_search_spatial_hashing does not match neighborhood_search_naive, file: {:?}",
+            file
+        );
+        assert_eq!(
+            nl_hashed_par, nl_naive,
+            "result of neighborhood_search_spatial_hashing_parallel does not match neighborhood_search_naive, file: {:?}",
+            file
+        );
+        assert_eq!(
+            nl_hashed_flat, nl_naive,
+            "result of neighborhood_search_spatial_hashing_flat does not match neighborhood_search_naive, file: {:?}",
+            file
+        );
     }
 
     #[test]
@@ -315,8 +339,20 @@ mod tests_from_files {
         let mut nl_hashed_flat = nl_hashed_flat.to_vec_vec();
         sort_neighborhood_lists(&mut nl_hashed_flat);
 
-        assert_eq!(nl_hashed, nl_naive, "result of neighborhood_search_spatial_hashing does not match neighborhood_search_naive, file: {:?}", file);
-        assert_eq!(nl_hashed_par, nl_naive, "result of neighborhood_search_spatial_hashing_parallel does not match neighborhood_search_naive, file: {:?}", file);
-        assert_eq!(nl_hashed_flat, nl_naive, "result of neighborhood_search_spatial_hashing_flat does not match neighborhood_search_naive, file: {:?}", file);
+        assert_eq!(
+            nl_hashed, nl_naive,
+            "result of neighborhood_search_spatial_hashing does not match neighborhood_search_naive, file: {:?}",
+            file
+        );
+        assert_eq!(
+            nl_hashed_par, nl_naive,
+            "result of neighborhood_search_spatial_hashing_parallel does not match neighborhood_search_naive, file: {:?}",
+            file
+        );
+        assert_eq!(
+            nl_hashed_flat, nl_naive,
+            "result of neighborhood_search_spatial_hashing_flat does not match neighborhood_search_naive, file: {:?}",
+            file
+        );
     }
 }

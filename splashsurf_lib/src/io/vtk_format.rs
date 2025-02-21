@@ -2,17 +2,17 @@
 
 use crate::mesh::{AttributeData, IntoVtkDataSet, MeshAttribute, MeshWithData, TriMesh3d};
 use crate::utils::IteratorExt;
-use crate::{profile, utils, Real, RealConvert};
-use anyhow::{anyhow, Context};
+use crate::{Real, RealConvert, profile, utils};
+use anyhow::{Context, anyhow};
 use nalgebra::Vector3;
 use std::borrow::Cow;
 use std::fs::create_dir_all;
 use std::path::Path;
+use vtkio::IOBuffer;
 use vtkio::model::{
     Attribute, Attributes, CellType, Cells, PolyDataPiece, UnstructuredGridPiece, VertexNumbers,
 };
 use vtkio::model::{ByteOrder, DataSet, Version, Vtk};
-use vtkio::IOBuffer;
 
 pub struct VtkFile {
     pieces: Vec<DataPiece>,
@@ -286,7 +286,11 @@ fn surface_mesh_from_unstructured_grid<R: Real>(
         let cell_verts = &cell_verts[cell_verts.len().min(has_empty_cell as usize)..];
 
         if cell_verts.len() % 4 != 0 {
-            return Err(anyhow!("Length of cell vertex array is invalid. Expected 4 values per cell (3 for each triangle vertex index + 1 for vertex count). There are {} values for {} cells.", cell_verts.len(), num_cells));
+            return Err(anyhow!(
+                "Length of cell vertex array is invalid. Expected 4 values per cell (3 for each triangle vertex index + 1 for vertex count). There are {} values for {} cells.",
+                cell_verts.len(),
+                num_cells
+            ));
         }
 
         cell_verts

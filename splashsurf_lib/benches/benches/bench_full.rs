@@ -1,11 +1,11 @@
-use criterion::{criterion_group, Criterion};
+use criterion::{Criterion, criterion_group};
 use nalgebra::Vector3;
 use splashsurf_lib::io::particles_from_file;
 #[allow(dead_code)]
 use splashsurf_lib::io::vtk_format::write_vtk;
 use splashsurf_lib::{
-    reconstruct_surface, reconstruct_surface_inplace, GridDecompositionParameters, Parameters,
-    SpatialDecomposition, SurfaceReconstruction,
+    GridDecompositionParameters, Parameters, SpatialDecomposition, SurfaceReconstruction,
+    reconstruct_surface, reconstruct_surface_inplace,
 };
 use std::time::Duration;
 

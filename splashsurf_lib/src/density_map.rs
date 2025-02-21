@@ -24,7 +24,7 @@ use crate::mesh::{HexMesh3d, MeshAttribute, MeshWithData};
 use crate::neighborhood_search::NeighborhoodList;
 use crate::uniform_grid::UniformGrid;
 use crate::utils::{ChunkSize, ParallelPolicy};
-use crate::{new_map, profile, HashState, Index, MapType, ParallelMapType, Real};
+use crate::{HashState, Index, MapType, ParallelMapType, Real, new_map, profile};
 use dashmap::ReadOnlyView as ReadDashMap;
 use log::{info, trace, warn};
 use nalgebra::Vector3;
@@ -574,7 +574,9 @@ impl<I: Index, R: Real> SparseDensityMapGenerator<I, R> {
                 "The allowed domain of particles for a subdomain is inconsistent/degenerate: {:?}",
                 allowed_domain
             );
-            warn!("No particles can be found in this domain. Increase the domain of the surface reconstruction to avoid this.");
+            warn!(
+                "No particles can be found in this domain. Increase the domain of the surface reconstruction to avoid this."
+            );
             Err(DensityMapError::InvalidDomain {
                 margin: kernel_evaluation_radius,
                 domain: allowed_domain,

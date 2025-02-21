@@ -1,13 +1,13 @@
 //! Functions for interpolating quantities (e.g. normals, scalar fields) by evaluating SPH sums
 
+use crate::Real;
 use crate::kernel::SymmetricKernel3d;
 use crate::profile;
-use crate::Real;
-use crate::{kernel, ThreadSafe};
+use crate::{ThreadSafe, kernel};
 use nalgebra::{SVector, Unit, Vector3};
 use rayon::prelude::*;
-use rstar::primitives::GeomWithData;
 use rstar::RTree;
+use rstar::primitives::GeomWithData;
 use std::ops::AddAssign;
 
 /// Acceleration structure for interpolating field quantities of the fluid to arbitrary points using SPH interpolation

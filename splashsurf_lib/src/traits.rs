@@ -161,18 +161,18 @@ impl<T> Index for T where
 }
 
 impl<
-        T: RealField
-            + Bounded
-            + Copy
-            + FromPrimitive
-            + ToPrimitive
-            + NumCast
-            + Debug
-            + Default
-            + Pod
-            + ThreadSafe
-            + 'static,
-    > Real for T
+    T: RealField
+        + Bounded
+        + Copy
+        + FromPrimitive
+        + ToPrimitive
+        + NumCast
+        + Debug
+        + Default
+        + Pod
+        + ThreadSafe
+        + 'static,
+> Real for T
 {
 }
 

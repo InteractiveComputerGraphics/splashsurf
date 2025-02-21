@@ -1,7 +1,7 @@
-use criterion::{criterion_group, Criterion};
+use criterion::{Criterion, criterion_group};
 use nalgebra::Vector3;
-use splashsurf_lib::io::particles_from_file;
 use splashsurf_lib::Aabb3d;
+use splashsurf_lib::io::particles_from_file;
 use std::time::Duration;
 
 pub fn aabb_from_points(c: &mut Criterion) {

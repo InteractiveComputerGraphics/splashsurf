@@ -1,6 +1,6 @@
 use crate::marching_cubes::{CellData, MarchingCubesInput, RelativeToThreshold};
 use crate::uniform_grid::CellIndex;
-use crate::{profile, DensityMap, Index, MapType, Real, UniformGrid};
+use crate::{DensityMap, Index, MapType, Real, UniformGrid, profile};
 use log::trace;
 use nalgebra::Vector3;
 
@@ -56,7 +56,10 @@ fn interpolate_points_to_cell_data_generic<I: Index, R: Real>(
     marching_cubes_data: &mut MarchingCubesInput<I>,
 ) {
     profile!("interpolate_points_to_cell_data_generic");
-    trace!("Starting interpolation of cell data for marching cubes (excluding boundary layer)... (Input: {} existing vertices)", vertices.len());
+    trace!(
+        "Starting interpolation of cell data for marching cubes (excluding boundary layer)... (Input: {} existing vertices)",
+        vertices.len()
+    );
 
     // Map from flat cell index to all data that is required per cell for the marching cubes triangulation
     let cell_data: &mut MapType<I, CellData> = &mut marching_cubes_data.cell_data;

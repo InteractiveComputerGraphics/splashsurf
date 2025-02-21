@@ -1,5 +1,5 @@
-use crate::reconstruction::Switch;
 use crate::Subcommand;
+use crate::reconstruction::Switch;
 use std::path::PathBuf;
 
 #[test]

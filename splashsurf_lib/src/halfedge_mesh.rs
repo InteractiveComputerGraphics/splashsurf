@@ -3,7 +3,7 @@
 //! See [`HalfEdgeTriMesh`] for more information.
 
 use crate::mesh::{Mesh3d, TriMesh3d, TriMesh3dExt};
-use crate::{profile, Real, SetType};
+use crate::{Real, SetType, profile};
 use nalgebra::Vector3;
 use rayon::prelude::*;
 use thiserror::Error as ThisError;
@@ -78,7 +78,9 @@ pub enum IllegalHalfEdgeCollapse {
     #[error("trying to collapse an edge with boundary vertices at both ends")]
     BoundaryCollapse,
     /// Trying to collapse an edge with vertices that share incident vertices other than the vertices directly opposite to the edge
-    #[error("trying to collapse an edge with vertices that share incident vertices other than the vertices directly opposite to the edge")]
+    #[error(
+        "trying to collapse an edge with vertices that share incident vertices other than the vertices directly opposite to the edge"
+    )]
     IntersectionOfOneRing,
     /// Trying to collapse an edge without faces
     #[error("trying to collapse an edge without faces")]

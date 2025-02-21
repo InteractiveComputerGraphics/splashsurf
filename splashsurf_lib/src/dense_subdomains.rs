@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 use arrayvec::ArrayVec;
 use itertools::Itertools;
 use log::{info, trace};
@@ -16,13 +16,13 @@ use crate::kernel::{CubicSplineKernel, SymmetricKernel3d};
 use crate::marching_cubes::marching_cubes_lut::marching_cubes_triangulation_iter;
 use crate::mesh::{HexMesh3d, TriMesh3d};
 use crate::neighborhood_search::{
-    neighborhood_search_spatial_hashing_flat_filtered,
-    neighborhood_search_spatial_hashing_parallel, FlatNeighborhoodList,
+    FlatNeighborhoodList, neighborhood_search_spatial_hashing_flat_filtered,
+    neighborhood_search_spatial_hashing_parallel,
 };
 use crate::uniform_grid::{EdgeIndex, GridConstructionError, UniformCartesianCubeGrid3d};
 use crate::{
-    new_map, new_parallel_map, profile, Aabb3d, MapType, Parameters, SpatialDecomposition,
-    SurfaceReconstruction,
+    Aabb3d, MapType, Parameters, SpatialDecomposition, SurfaceReconstruction, new_map,
+    new_parallel_map, profile,
 };
 use crate::{Index, Real};
 
@@ -162,7 +162,10 @@ pub(crate) fn initialize_parameters<I: Index, R: Real>(
         );
 
         if ghost_margin_cubes > subdomain_cubes / to_index!(2) {
-            panic!("The ghost margin is {ghost_margin_cubes} cubes thick (rounded up), while the subdomain only has an extent of {subdomain_cubes} cubes. The subdomain has to have at least twice the number of cubes ({})!", ghost_margin_cubes.times(2));
+            panic!(
+                "The ghost margin is {ghost_margin_cubes} cubes thick (rounded up), while the subdomain only has an extent of {subdomain_cubes} cubes. The subdomain has to have at least twice the number of cubes ({})!",
+                ghost_margin_cubes.times(2)
+            );
         }
     }
 
@@ -1709,11 +1712,11 @@ pub(crate) mod debug {
                 .count();
 
             info!(
-            "Number of subdomains with {} or fewer particles: {} ({:.2}% of number of subdomains)",
-            n,
-            c,
-            (c as f64 / per_subdomain_particle_count.len() as f64) * 100.0
-        );
+                "Number of subdomains with {} or fewer particles: {} ({:.2}% of number of subdomains)",
+                n,
+                c,
+                (c as f64 / per_subdomain_particle_count.len() as f64) * 100.0
+            );
         }
 
         {
@@ -1739,14 +1742,14 @@ pub(crate) mod debug {
                         .sum::<usize>();
 
                     info!(
-                    "Number of subdomains with {} or more particles ({}% of largest subdomain): {} ({:.2}% of number of subdomains), in sum {} particles ({:.2}% of all particles)",
-                    (f * largest_subdomain_particle_count as f64) as usize,
-                    f * 100.0,
-                    c,
-                    (c as f64 / per_subdomain_particle_count.len() as f64) * 100.0,
-                    n,
-                    100.0 * (n as f64 / particles.len() as f64)
-                );
+                        "Number of subdomains with {} or more particles ({}% of largest subdomain): {} ({:.2}% of number of subdomains), in sum {} particles ({:.2}% of all particles)",
+                        (f * largest_subdomain_particle_count as f64) as usize,
+                        f * 100.0,
+                        c,
+                        (c as f64 / per_subdomain_particle_count.len() as f64) * 100.0,
+                        n,
+                        100.0 * (n as f64 / particles.len() as f64)
+                    );
                 }
             }
 

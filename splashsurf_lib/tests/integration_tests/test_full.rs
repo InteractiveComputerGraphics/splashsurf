@@ -3,8 +3,8 @@ use splashsurf_lib::io::particles_from_file;
 use splashsurf_lib::io::vtk_format::write_vtk;
 use splashsurf_lib::marching_cubes::check_mesh_consistency;
 use splashsurf_lib::{
-    reconstruct_surface, Aabb3d, GridDecompositionParameters, Parameters, Real,
-    SpatialDecomposition,
+    Aabb3d, GridDecompositionParameters, Parameters, Real, SpatialDecomposition,
+    reconstruct_surface,
 };
 use std::path::Path;
 

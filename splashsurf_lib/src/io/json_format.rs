@@ -2,7 +2,7 @@
 
 use crate::utils::IteratorExt;
 use crate::{Real, RealConvert};
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 use nalgebra::Vector3;
 use std::fs::{File, OpenOptions};
 use std::io::{BufReader, BufWriter};
@@ -68,18 +68,23 @@ pub fn particles_to_json<R: Real, P: AsRef<Path>>(
         .context("Cannot open file for writing JSON")?;
     let writer = BufWriter::new(file);
 
-    let particles = particles.iter().map(|particle| {
-        Some([
-            particle[0].to_f64()?,
-            particle[1].to_f64()?,
-            particle[2].to_f64()?,
-        ])})
-            .map(|vec| {
-                vec.ok_or_else(|| {
-                    anyhow!("Failed to convert coordinate from input float type to f64, value out of range?")
-                })
+    let particles = particles
+        .iter()
+        .map(|particle| {
+            Some([
+                particle[0].to_f64()?,
+                particle[1].to_f64()?,
+                particle[2].to_f64()?,
+            ])
+        })
+        .map(|vec| {
+            vec.ok_or_else(|| {
+                anyhow!(
+                    "Failed to convert coordinate from input float type to f64, value out of range?"
+                )
             })
-            .try_collect_with_capacity(particles.len())?;
+        })
+        .try_collect_with_capacity(particles.len())?;
 
     serde_json::to_writer(writer, &particles)
         .context("Failed to deserialize particles to JSON file")?;

@@ -425,11 +425,13 @@ mod test_lut {
 
     #[test]
     fn test_marching_cubes_triangulation_iter() {
-        assert!(marching_cubes_triangulation_iter(&[
-            false, false, false, false, false, false, false, false
-        ])
-        .next()
-        .is_none(),);
+        assert!(
+            marching_cubes_triangulation_iter(&[
+                false, false, false, false, false, false, false, false
+            ])
+            .next()
+            .is_none(),
+        );
 
         assert_eq!(
             marching_cubes_triangulation_iter(&[

@@ -4,8 +4,8 @@ use crate::mesh::{
     AttributeData, CellConnectivity, Mesh3d, MeshAttribute, MeshWithData, TriMesh3d,
 };
 use crate::utils::IteratorExt;
-use crate::{profile, Real};
-use anyhow::{anyhow, Context};
+use crate::{Real, profile};
+use anyhow::{Context, anyhow};
 use nalgebra::Vector3;
 use num_traits::ToPrimitive;
 use ply_rs::parser::Parser as PlyParser;
@@ -61,7 +61,7 @@ fn parse_particles_from_ply<R: Real>(
                 _ => {
                     return Err(anyhow!(
                         "Vertex properties have wrong PLY data type (expected float)"
-                    ))
+                    ));
                 }
             };
 

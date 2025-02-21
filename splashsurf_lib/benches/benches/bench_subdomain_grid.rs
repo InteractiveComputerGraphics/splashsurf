@@ -1,9 +1,9 @@
-use criterion::{criterion_group, Criterion, SamplingMode};
+use criterion::{Criterion, SamplingMode, criterion_group};
 use nalgebra::Vector3;
 use splashsurf_lib::io::particles_from_file;
 use splashsurf_lib::{
-    reconstruct_surface, GridDecompositionParameters, Parameters, SpatialDecomposition,
-    SurfaceReconstruction,
+    GridDecompositionParameters, Parameters, SpatialDecomposition, SurfaceReconstruction,
+    reconstruct_surface,
 };
 use std::time::Duration;
 

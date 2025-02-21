@@ -1,11 +1,11 @@
 use crate::io;
-use anyhow::anyhow;
 use anyhow::Context;
+use anyhow::anyhow;
 use clap::value_parser;
 use log::info;
 use splashsurf_lib::mesh::MeshWithData;
 use splashsurf_lib::nalgebra::Vector3;
-use splashsurf_lib::{nalgebra, profile, Aabb3d};
+use splashsurf_lib::{Aabb3d, nalgebra, profile};
 use std::path::PathBuf;
 
 // TODO: Support double input/output
@@ -62,8 +62,11 @@ pub fn convert_subcommand(cmd_args: &ConvertSubcommandArgs) -> Result<(), anyhow
     match (&cmd_args.input_particles, &cmd_args.input_mesh) {
         (Some(_), _) => convert_particles(cmd_args)?,
         (_, Some(_)) => convert_mesh(cmd_args)?,
-        (_, _) => return Err(anyhow!(
-                "Aborting: No input file specified, either a particle or mesh input file has to be specified."))
+        (_, _) => {
+            return Err(anyhow!(
+                "Aborting: No input file specified, either a particle or mesh input file has to be specified."
+            ));
+        }
     }
 
     Ok(())

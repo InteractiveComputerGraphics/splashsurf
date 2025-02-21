@@ -1,6 +1,6 @@
 //! Internal helper functions and types
 
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 use log::info;
 use nalgebra::{SVector, Scalar};
 use num_traits::Zero;
