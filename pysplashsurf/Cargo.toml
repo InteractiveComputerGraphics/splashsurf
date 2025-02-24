@@ -1,0 +1,24 @@
+[package]
+name = "pysplashsurf"
+version = "0.1.7"
+authors = ["Stefan Jeske <stefan.jeske@rwth-aachen.de>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+pyo3 = {version = "0.23.4"}
+numpy = "0.23.0"
+ndarray = "0.16.1"
+splashsurf_lib = "0.10.0"
+fxhash = "0.2.1"
+
+[features]
+extension-module = ["pyo3/extension-module", "pyo3/abi3-py37"]
+default = ["extension-module"]
+
+[lib]
+name = "pysplashsurf"
+crate-type = ["cdylib", "rlib"]
+
+[workspace]

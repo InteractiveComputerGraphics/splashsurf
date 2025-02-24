@@ -1,2 +1,5 @@
 dist/
 *.egg-info/
+target/
+**/__pycache__/
+*.so
