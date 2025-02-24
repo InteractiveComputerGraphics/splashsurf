@@ -482,6 +482,7 @@ dependencies = [
 name = "pysplashsurf"
 version = "0.1.7"
 dependencies = [
+ "bytemuck",
  "fxhash",
  "ndarray",
  "numpy",

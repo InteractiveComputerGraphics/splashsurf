@@ -8,7 +8,9 @@ def reconstruct_surface(
     cube_size: float,
     iso_surface_threshold: float,
     enable_multi_threading: bool,
-    global_neighborhood_list: bool
+    global_neighborhood_list: bool,
+    aabb_min: np.ndarray,
+    aabb_max: np.ndarray
 ) -> tuple[np.ndarray, np.ndarray]:
     """Reconstruct the surface from only particle positions
     
