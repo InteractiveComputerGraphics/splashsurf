@@ -7,7 +7,7 @@ use splashsurf_lib::nalgebra::Vector3;
 use splashsurf_lib::uniform_grid::UniformCartesianCubeGrid3d;
 use std::collections::HashMap;
 use splashsurf_lib::density_map::DensityMap;
-use splashsurf_lib::{nalgebra, Aabb3d, Real, SpatialDecomposition};
+use splashsurf_lib::{nalgebra, Aabb3d, GridDecompositionParameters, Real, SpatialDecomposition};
 use splashsurf_lib::marching_cubes::triangulate_density_map;
 use splashsurf_lib::{
     reconstruct_surface,
@@ -89,7 +89,9 @@ use splashsurf_lib::{
 #[pyo3(name="reconstruct_surface")]
 #[pyo3(signature = (particles, *, particle_radius=0.025, rest_density=1000.0, 
     smoothing_length=2.0, cube_size=0.5, iso_surface_threshold=0.6, enable_multi_threading=false, 
-    global_neighborhood_list=false, aabb_min = None, aabb_max = None))]
+    global_neighborhood_list=false, use_custom_grid_decomposition=false, subdomain_num_cubes_per_dim=64,
+    aabb_min = None, aabb_max = None
+))]
 fn reconstruct_surface_py<'py>(
     py: Python<'py>, 
     particles: Vec<[f64; 3]>, 
@@ -100,9 +102,10 @@ fn reconstruct_surface_py<'py>(
     iso_surface_threshold: f64,
     enable_multi_threading: bool,
     global_neighborhood_list: bool,
+    use_custom_grid_decomposition: bool,
+    subdomain_num_cubes_per_dim: u32,
     aabb_min: Option<[f64; 3]>,
-    aabb_max: Option<[f64; 3]>
-    //spatial_decomposition: Option<SpatialDecomposition<f64>>
+    aabb_max: Option<[f64; 3]>,
 ) -> (Bound<'py,PyArray2<usize>>, Bound<'py,PyArray2<f64>>, ([f64; 3], [f64; 3], f64, [i64; 3], [i64; 3])) {
     let particle_positions: Vec<Vector3<f64>> = cast_vec(particles);
 
@@ -113,6 +116,15 @@ fn reconstruct_surface_py<'py>(
         aabb = Some(Aabb3d::new(Vector3::from(aabb_min.unwrap()), Vector3::from(aabb_max.unwrap())));
     }
 
+    let spatial_decomposition;
+    if use_custom_grid_decomposition {
+        let mut grid_params = GridDecompositionParameters::default();
+        grid_params.subdomain_num_cubes_per_dim = subdomain_num_cubes_per_dim;
+        spatial_decomposition = Some(SpatialDecomposition::<f64>::UniformGrid(grid_params));
+    }else {
+        spatial_decomposition = None;
+    }
+
     let params = Parameters::<f64> {
         particle_radius,
         rest_density,
@@ -121,11 +133,11 @@ fn reconstruct_surface_py<'py>(
         iso_surface_threshold,
         particle_aabb: aabb,
         enable_multi_threading,
-        spatial_decomposition: None,
+        spatial_decomposition: spatial_decomposition,
         global_neighborhood_list,
     };
     
-    let surface = reconstruct_surface::<i64,f64>(&particle_positions, &params).expect("Surface Reconstruction");
+    let surface = reconstruct_surface::<i64,f64>(&particle_positions, &params).expect("Surface reconstruction failed");
     let grid = surface.grid();
     let aabb = grid.aabb();
 

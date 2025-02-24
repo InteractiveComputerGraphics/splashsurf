@@ -9,6 +9,8 @@ def reconstruct_surface(
     iso_surface_threshold: float,
     enable_multi_threading: bool,
     global_neighborhood_list: bool,
+    use_custom_grid_decomposition: bool,
+    subdomain_num_cubes_per_dim: int,
     aabb_min: np.ndarray,
     aabb_max: np.ndarray
 ) -> tuple[np.ndarray, np.ndarray]:

@@ -10,7 +10,7 @@ def test_reconstruct_surface():
     print(grid_info)
     meshio.write_points_cells("test.vtk", vertices, [("triangle", tris)])
     
-#test_reconstruct_surface()
+test_reconstruct_surface()
 
 def test_marching_cubes_cleanup(): 
     particles = np.array(meshio.read("./ParticleData_Fluid_5.vtk").points)
@@ -20,7 +20,7 @@ def test_marching_cubes_cleanup():
     res = pysplashsurf.marching_cubes_cleanup(tris, vertices, grid_info, max_iter=5, keep_vertices=False)
     print(res)
 
-test_marching_cubes_cleanup()
+#test_marching_cubes_cleanup()
 
 # def test_4d_array():
 #     grid_res = 50
