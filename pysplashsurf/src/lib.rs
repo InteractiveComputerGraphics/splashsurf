@@ -1,5 +1,5 @@
 use bytemuck::cast_vec;
-use ndarray::{s, Array1, Array2, Array3, ArrayView1, ArrayView3, ScalarOperand, ShapeBuilder};
+use ndarray::{s, Array1, Array2, Array3, ArrayView1, ArrayView2, ArrayView3, ScalarOperand, ShapeBuilder};
 use numpy::{IntoPyArray, PyArray2, PyReadonlyArray1, PyReadonlyArray2, PyReadonlyArray3};
 use pyo3::prelude::*;
 use splashsurf_lib::mesh::TriMesh3d;
@@ -7,7 +7,7 @@ use splashsurf_lib::nalgebra::Vector3;
 use splashsurf_lib::uniform_grid::UniformCartesianCubeGrid3d;
 use std::collections::HashMap;
 use splashsurf_lib::density_map::DensityMap;
-use splashsurf_lib::{nalgebra, Aabb3d, GridDecompositionParameters, Real, SpatialDecomposition};
+use splashsurf_lib::{nalgebra, Aabb3d, GridDecompositionParameters, Index, Real, ReconstructionError, SpatialDecomposition, SurfaceReconstruction};
 use splashsurf_lib::marching_cubes::triangulate_density_map;
 use splashsurf_lib::{
     reconstruct_surface,
@@ -85,29 +85,20 @@ use splashsurf_lib::{
 // }
 
 /// Reconstruct the surface from only particle positions
-#[pyfunction]
-#[pyo3(name="reconstruct_surface")]
-#[pyo3(signature = (particles, *, particle_radius=0.025, rest_density=1000.0, 
-    smoothing_length=2.0, cube_size=0.5, iso_surface_threshold=0.6, enable_multi_threading=false, 
-    global_neighborhood_list=false, use_custom_grid_decomposition=false, subdomain_num_cubes_per_dim=64,
-    aabb_min = None, aabb_max = None
-))]
-fn reconstruct_surface_py<'py>(
-    py: Python<'py>, 
-    particles: Vec<[f64; 3]>, 
-    particle_radius: f64,
-    rest_density: f64,
-    smoothing_length: f64,
-    cube_size: f64,
-    iso_surface_threshold: f64,
+fn reconstruct_surface_py<I: Index, R: Real>(
+    particles: Vec<Vector3<R>>, 
+    particle_radius: R,
+    rest_density: R,
+    smoothing_length: R,
+    cube_size: R,
+    iso_surface_threshold: R,
     enable_multi_threading: bool,
     global_neighborhood_list: bool,
     use_custom_grid_decomposition: bool,
     subdomain_num_cubes_per_dim: u32,
-    aabb_min: Option<[f64; 3]>,
-    aabb_max: Option<[f64; 3]>,
-) -> (Bound<'py,PyArray2<usize>>, Bound<'py,PyArray2<f64>>, ([f64; 3], [f64; 3], f64, [i64; 3], [i64; 3])) {
-    let particle_positions: Vec<Vector3<f64>> = cast_vec(particles);
+    aabb_min: Option<[R; 3]>,
+    aabb_max: Option<[R; 3]>,
+) -> (Array2<usize>, Array2<R>, ([R; 3], [R; 3], R, [I; 3], [I; 3])) {
 
     let aabb;
     if aabb_min == None || aabb_max == None {
@@ -120,15 +111,15 @@ fn reconstruct_surface_py<'py>(
     if use_custom_grid_decomposition {
         let mut grid_params = GridDecompositionParameters::default();
         grid_params.subdomain_num_cubes_per_dim = subdomain_num_cubes_per_dim;
-        spatial_decomposition = Some(SpatialDecomposition::<f64>::UniformGrid(grid_params));
+        spatial_decomposition = Some(SpatialDecomposition::UniformGrid(grid_params));
     }else {
         spatial_decomposition = None;
     }
 
-    let params = Parameters::<f64> {
+    let params = Parameters {
         particle_radius,
         rest_density,
-        compact_support_radius: smoothing_length * 2.0 * particle_radius,
+        compact_support_radius: (smoothing_length * particle_radius).times_f64(2.0),
         cube_size: cube_size * particle_radius,
         iso_surface_threshold,
         particle_aabb: aabb,
@@ -137,7 +128,8 @@ fn reconstruct_surface_py<'py>(
         global_neighborhood_list,
     };
     
-    let surface = reconstruct_surface::<i64,f64>(&particle_positions, &params).expect("Surface reconstruction failed");
+    let surface = reconstruct_surface(&particles, &params).unwrap();
+
     let grid = surface.grid();
     let aabb = grid.aabb();
 
@@ -155,10 +147,101 @@ fn reconstruct_surface_py<'py>(
 
     let mesh = surface.mesh();
 
-    let points : Vec<f64> = mesh.vertices.iter().flatten().copied().collect();
+    let points : Vec<R> = mesh.vertices.iter().flatten().copied().collect();
     let tris : Vec<usize> = mesh.triangles.iter().flatten().copied().collect();
     let triangles = ndarray::Array2::from_shape_vec((mesh.triangles.len(), 3), tris).unwrap();
     let vertices = ndarray::Array2::from_shape_vec((mesh.vertices.len(), 3), points).unwrap();
+
+    (triangles, vertices, grid_info)
+}
+
+
+
+#[pyfunction]
+#[pyo3(name="reconstruct_surface_f64")]
+#[pyo3(signature = (particles, *, particle_radius=0.025, rest_density=1000.0, 
+    smoothing_length=2.0, cube_size=0.5, iso_surface_threshold=0.6, enable_multi_threading=false, 
+    global_neighborhood_list=false, use_custom_grid_decomposition=false, subdomain_num_cubes_per_dim=64,
+    aabb_min = None, aabb_max = None
+))]
+fn reconstruct_surface_py_f64<'py>(
+    py: Python<'py>, 
+    particles: Vec<[f64; 3]>, 
+    particle_radius: f64,
+    rest_density: f64,
+    smoothing_length: f64,
+    cube_size: f64,
+    iso_surface_threshold: f64,
+    enable_multi_threading: bool,
+    global_neighborhood_list: bool,
+    use_custom_grid_decomposition: bool,
+    subdomain_num_cubes_per_dim: u32,
+    aabb_min: Option<[f64; 3]>,
+    aabb_max: Option<[f64; 3]>,
+) -> (Bound<'py,PyArray2<usize>>, Bound<'py,PyArray2<f64>>, ([f64; 3], [f64; 3], f64, [i64; 3], [i64; 3])) {
+    let particle_positions: Vec<Vector3<f64>> = cast_vec(particles);
+    
+    let (triangles, vertices, grid_info) = reconstruct_surface_py::<i64,f64>(
+        particle_positions,
+        particle_radius,
+        rest_density,
+        smoothing_length,
+        cube_size,
+        iso_surface_threshold,
+        enable_multi_threading,
+        global_neighborhood_list,
+        use_custom_grid_decomposition,
+        subdomain_num_cubes_per_dim,
+        aabb_min,
+        aabb_max,
+    );
+
+    (
+        triangles.into_pyarray(py),
+        vertices.into_pyarray(py),
+        grid_info
+    )
+}
+
+#[pyfunction]
+#[pyo3(name="reconstruct_surface_f32")]
+#[pyo3(signature = (particles, *, particle_radius=0.025, rest_density=1000.0, 
+    smoothing_length=2.0, cube_size=0.5, iso_surface_threshold=0.6, enable_multi_threading=false, 
+    global_neighborhood_list=false, use_custom_grid_decomposition=false, subdomain_num_cubes_per_dim=64,
+    aabb_min = None, aabb_max = None
+))]
+fn reconstruct_surface_py_f32<'py>(
+    py: Python<'py>, 
+    particles: Vec<[f32; 3]>, 
+    particle_radius: f32,
+    rest_density: f32,
+    smoothing_length: f32,
+    cube_size: f32,
+    iso_surface_threshold: f32,
+    enable_multi_threading: bool,
+    global_neighborhood_list: bool,
+    use_custom_grid_decomposition: bool,
+    subdomain_num_cubes_per_dim: u32,
+    aabb_min: Option<[f32; 3]>,
+    aabb_max: Option<[f32; 3]>,
+) -> (Bound<'py,PyArray2<usize>>, Bound<'py,PyArray2<f32>>, ([f32; 3], [f32; 3], f32, [i64; 3], [i64; 3])) {
+    let particle_positions: Vec<Vector3<f32>> = cast_vec(particles);
+    
+    let (triangles, vertices, grid_info) = reconstruct_surface_py::<i64,f32>(
+        particle_positions,
+        particle_radius,
+        rest_density,
+        smoothing_length,
+        cube_size,
+        iso_surface_threshold,
+        enable_multi_threading,
+        global_neighborhood_list,
+        use_custom_grid_decomposition,
+        subdomain_num_cubes_per_dim,
+        aabb_min,
+        aabb_max,
+    );
+    
     (
         triangles.into_pyarray(py),
         vertices.into_pyarray(py),
@@ -225,7 +308,8 @@ fn marching_cubes_cleanup_py<'py>(
 /// Support reconstructing Level-Set surfaces from particle clouds or from regular grids.
 #[pymodule]
 fn pysplashsurf(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    let _ = m.add_function(wrap_pyfunction!(reconstruct_surface_py, m)?);
+    let _ = m.add_function(wrap_pyfunction!(reconstruct_surface_py_f64, m)?);
+    let _ = m.add_function(wrap_pyfunction!(reconstruct_surface_py_f32, m)?);
     let _ = m.add_function(wrap_pyfunction!(marching_cubes_cleanup_py, m)?);
     Ok(())
 }

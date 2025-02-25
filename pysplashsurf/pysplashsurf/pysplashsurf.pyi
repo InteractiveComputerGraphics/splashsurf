@@ -1,6 +1,6 @@
 import numpy as np
 
-def reconstruct_surface(
+def reconstruct_surface_f64(
     particles: np.ndarray, *, 
     particle_radius: float, 
     rest_density: float,
@@ -13,7 +13,7 @@ def reconstruct_surface(
     subdomain_num_cubes_per_dim: int,
     aabb_min: np.ndarray,
     aabb_max: np.ndarray
-) -> tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, tuple]:
     """Reconstruct the surface from only particle positions
     
     Performs a marching cubes surface construction of the fluid represented by the given particle positions
@@ -25,8 +25,8 @@ def reconstruct_surface(
     
     Returns
     -------
-    tuple[np.ndarray, np.ndarray]
-        tuple of triangles and vertices of the reconstructed surface mesh
+    tuple[np.ndarray, np.ndarray, tuple]
+        tuple of triangles and vertices of the reconstructed surface mesh as well as another tuple containing information of the used grid
     
     """
     ...
