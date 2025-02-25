@@ -13,6 +13,8 @@ ndarray = "0.16.1"
 splashsurf_lib = "0.10.0"
 fxhash = "0.2.1"
 bytemuck = { version = "1.21.0", features = ["extern_crate_alloc"] }
+anyhow = "1.0.96"
+rayon = "1.10.0"
 
 [features]
 extension-module = ["pyo3/extension-module", "pyo3/abi3-py37"]

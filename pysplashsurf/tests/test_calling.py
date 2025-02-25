@@ -3,9 +3,9 @@ import numpy as np
 import meshio
 
 def test_reconstruct_surface():
-    particles = np.array(meshio.read("./ParticleData_Fluid_5.vtk").points)
+    particles = np.array(meshio.read("./ParticleData_Fluid_5.vtk").points, dtype=np.float64)
     print(particles)
-    tris, vertices, grid_info = pysplashsurf.reconstruct_surface_f32(particles, enable_multi_threading=True, particle_radius=0.025)
+    tris, vertices, grid_info = pysplashsurf.reconstruct_surface_f64(particles, enable_multi_threading=True, particle_radius=0.025)
     print(f"Number of tris {len(tris)}, number of vertices {len(vertices)}")
     print(grid_info)
     meshio.write_points_cells("test.vtk", vertices, [("triangle", tris)])
