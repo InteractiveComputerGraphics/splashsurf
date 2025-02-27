@@ -1,92 +1,21 @@
-use anyhow::{anyhow, Context};
-use bytemuck::cast_vec;
-use ndarray::{
-    s, Array1, Array2, Array3, ArrayView1, ArrayView2, ArrayView3, ScalarOperand, ShapeBuilder,
-};
-use numpy::{Element, IntoPyArray, PyArray2, PyReadonlyArray1, PyReadonlyArray2, PyReadonlyArray3};
-use pyo3::{prelude::*, IntoPyObjectExt};
+use anyhow;
+use ndarray::Array2;
+use numpy::{Element, IntoPyArray, PyArray2, PyReadonlyArray2};
 use pyo3::types::PyFloat;
+use pyo3::{prelude::*, IntoPyObjectExt};
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
-use splashsurf_lib::density_map::DensityMap;
-use splashsurf_lib::marching_cubes::triangulate_density_map;
 use splashsurf_lib::mesh::{AttributeData, Mesh3d, MeshAttribute, MeshWithData, TriMesh3d};
-use splashsurf_lib::nalgebra::{Unit, Vector3};
+use splashsurf_lib::nalgebra::Vector3;
 use splashsurf_lib::sph_interpolation::SphInterpolator;
 use splashsurf_lib::uniform_grid::UniformCartesianCubeGrid3d;
 use splashsurf_lib::{
-    nalgebra, Aabb3d, GridDecompositionParameters, Index, Real, ReconstructionError,
-    SpatialDecomposition, SurfaceReconstruction,
+    postprocessing::marching_cubes_cleanup,
+    reconstruct_surface,
 };
 use splashsurf_lib::{
-    postprocessing::{decimation, marching_cubes_cleanup, par_laplacian_smoothing_inplace},
-    reconstruct_surface, UniformGrid,
+    Aabb3d, GridDecompositionParameters, Index, Real, SpatialDecomposition, SurfaceReconstruction,
 };
 use std::borrow::Cow;
-use std::collections::HashMap;
-
-// fn reconstruct_from_uniform_grid<T: Real + ScalarOperand>(scalar_field: ArrayView3<'_, T>, base: ArrayView1<'_, T>, cell_size: T, threshold: T) -> (Array2<usize>, Array2<T>){
-//     assert_eq!(base.shape()[0], 3 as usize);
-
-//     // pad with -1s around original array
-//     let y_shape = [scalar_field.shape()[0] + 2, scalar_field.shape()[1] + 2, scalar_field.shape()[2] + 2];
-//     let mut y = Array3::<T>::ones(y_shape) * (threshold + T::one());
-//     y.slice_mut(s![1..-1, 1..-1, 1..-1]).assign(&scalar_field);
-
-//     #[cfg(debug_assertions)]
-//     println!("x: {:?}", scalar_field.dim());
-
-//     //let mut hashmap = HashMap::<i64, f64, fxhash::FxBuildHasher>::new();
-//     let mut hashmap = HashMap::<usize, T, fxhash::FxBuildHasher>::with_hasher(fxhash::FxBuildHasher::default());
-
-//     if cfg!(debug_assertions){
-//         let y = scalar_field.shape();
-//         println!("dyn dims: {:?}",y);
-//     }
-
-//     // Subtract cell size to account for the padding of the original array
-//     let base = nalgebra::Vector3::<T>::new(base[0]-cell_size, base[1]-cell_size, base[2]-cell_size);
-//     let res = [y.shape()[0], y.shape()[1], y.shape()[2]];
-//     let grid = UniformGrid::new(&base, &res, cell_size).unwrap();
-
-//     for (i, value) in y.indexed_iter(){
-//         let fixed_size_index   = &[i.0, i.1, i.2];
-//         hashmap.insert(grid.flatten_point_index_array(fixed_size_index), *value);
-//     }
-
-//     #[cfg(debug_assertions)]
-//     println!("Hashmap length: {}", hashmap.len());
-
-//     let densitymap = DensityMap::from(hashmap);
-
-//     let surface = triangulate_density_map(&grid, &densitymap, threshold).unwrap();
-
-//     let points : Vec<T> = surface.vertices.iter().flatten().copied().collect();
-//     let tris : Vec<usize> = surface.triangles.iter().flatten().copied().collect();
-//     let triangles = ndarray::Array2::from_shape_vec((surface.triangles.len(), 3), tris).unwrap();
-//     let vertices = ndarray::Array2::from_shape_vec((surface.vertices.len(), 3), points).unwrap();
-
-//     (triangles, vertices)
-// }
-
-// /// Reconstruct the surface from grid data
-// #[pyfunction]
-// #[pyo3(name="reconstruct_from_uniform_grid_f64")]
-// #[pyo3(text_signature = "(scalar_field, base, cell_size, /)")]
-// fn reconstruct_from_uniform_grid_py_f64<'py>(py: Python<'py>, scalar_field: PyReadonlyArray3<f64>, base: PyReadonlyArray1<f64>, cell_size: f64, threshold: f64) -> (Bound<'py,PyArray2<usize>>, Bound<'py,PyArray2<f64>>){
-//     let x = scalar_field.as_array();
-//     let (tris, vertices) = reconstruct_from_uniform_grid(x, base.as_array(), cell_size, threshold);
-//     (tris.into_pyarray(py), vertices.into_pyarray(py))
-// }
-
-// /// Reconstruct the surface from grid data
-// #[pyfunction]
-// #[pyo3(name="reconstruct_from_uniform_grid_f32")]
-// #[pyo3(text_signature = "(scalar_field, base, cell_size, /)")]
-// fn reconstruct_from_uniform_grid_py_f32<'py>(py: Python<'py>, scalar_field: PyReadonlyArray3<f32>, base: PyReadonlyArray1<f32>, cell_size: f32, threshold: f32) -> (Bound<'py,PyArray2<usize>>, Bound<'py,PyArray2<f32>>){
-//     let x = scalar_field.as_array();
-//     let (tris, vertices) = reconstruct_from_uniform_grid(x, base.as_array(), cell_size, threshold);
-//     (tris.into_pyarray(py), vertices.into_pyarray(py))
-// }
 
 /// Reconstruct the surface from only particle positions
 fn reconstruct_surface_py<I: Index, R: Real>(
@@ -183,13 +112,15 @@ fn reconstruct_surface_py_interface<'py, R: Real + Element>(
     Bound<'py, PyAny>,
     Bound<'py, PyAny>,
     ([R; 3], [R; 3], R, [i64; 3], [i64; 3]),
-){
+) {
     let particles: PyReadonlyArray2<R> = particles.extract().unwrap();
-    let particle_positions: Vec<Vector3<R>> = particles.as_array().outer_iter()
+    let particle_positions: Vec<Vector3<R>> = particles
+        .as_array()
+        .outer_iter()
         .map(|row| Vector3::new(row[0], row[1], row[2]))
         .collect();
 
-    let aabb_min: Option<[R;3]> = aabb_min.map(|x| {
+    let aabb_min: Option<[R; 3]> = aabb_min.map(|x| {
         let mut res = [R::zero(); 3];
         for i in 0..3 {
             res[i] = R::from_f64(x[i].extract::<f64>(py).unwrap()).unwrap();
@@ -197,7 +128,7 @@ fn reconstruct_surface_py_interface<'py, R: Real + Element>(
         res
     });
 
-    let aabb_max: Option<[R;3]> = aabb_max.map(|x| {
+    let aabb_max: Option<[R; 3]> = aabb_max.map(|x| {
         let mut res = [R::zero(); 3];
         for i in 0..3 {
             res[i] = R::from_f64(x[i].extract::<f64>(py).unwrap()).unwrap();
@@ -229,8 +160,8 @@ fn reconstruct_surface_py_interface<'py, R: Real + Element>(
 
 #[pyfunction]
 #[pyo3(name = "reconstruct_surface")]
-#[pyo3(signature = (particles, *, particle_radius, rest_density, 
-    smoothing_length, cube_size, iso_surface_threshold, enable_multi_threading=false, 
+#[pyo3(signature = (particles, *, particle_radius, rest_density,
+    smoothing_length, cube_size, iso_surface_threshold, enable_multi_threading=false,
     global_neighborhood_list=false, use_custom_grid_decomposition=false, subdomain_num_cubes_per_dim=64,
     aabb_min = None, aabb_max = None
 ))]
@@ -251,7 +182,13 @@ fn reconstruct_surface_py_dynamic<'py>(
 ) -> (
     Bound<'py, PyAny>,
     Bound<'py, PyAny>,
-    (Py<PyAny>, Py<PyAny>, Bound<'py, PyFloat>, [i64; 3], [i64; 3]),
+    (
+        Py<PyAny>,
+        Py<PyAny>,
+        Bound<'py, PyFloat>,
+        [i64; 3],
+        [i64; 3],
+    ),
 ) {
     if let Ok(particles) = particles.downcast::<PyArray2<f32>>() {
         let (triangles, vertices, grid_info) = reconstruct_surface_py_interface::<f32>(
@@ -271,15 +208,14 @@ fn reconstruct_surface_py_dynamic<'py>(
         );
 
         let grid_info = (
-            grid_info.0.into_py_any(py).unwrap(), 
+            grid_info.0.into_py_any(py).unwrap(),
             grid_info.1.into_py_any(py).unwrap(),
             grid_info.2.into_pyobject(py).unwrap(),
             grid_info.3,
-            grid_info.4
+            grid_info.4,
         );
 
         (triangles, vertices, grid_info)
-
     } else if let Ok(particles) = particles.downcast::<PyArray2<f64>>() {
         let (triangles, vertices, grid_info) = reconstruct_surface_py_interface::<f64>(
             py,
@@ -298,15 +234,14 @@ fn reconstruct_surface_py_dynamic<'py>(
         );
 
         let grid_info = (
-            grid_info.0.into_py_any(py).unwrap(), 
+            grid_info.0.into_py_any(py).unwrap(),
             grid_info.1.into_py_any(py).unwrap(),
             grid_info.2.into_pyobject(py).unwrap(),
             grid_info.3,
-            grid_info.4
+            grid_info.4,
         );
 
         (triangles, vertices, grid_info)
-
     } else {
         panic!("Couldn't convert particles to f32 or f64 array!")
     }
@@ -322,7 +257,7 @@ struct ReconstructionRunnerPostprocessingArgs {
     mesh_smoothing_iters: Option<usize>,
     mesh_smoothing_weights: bool,
     mesh_smoothing_weights_normalization: f64,
-    output_mesh_smoothing_weights: bool
+    output_mesh_smoothing_weights: bool,
 }
 
 fn post_processing_generic<I: Index, R: Real>(
@@ -366,8 +301,8 @@ fn post_processing_generic<I: Index, R: Real>(
         }
 
         // Initialize SPH interpolator if required later
-        let interpolator_required = postprocessing.mesh_smoothing_weights
-            || postprocessing.sph_normals;
+        let interpolator_required =
+            postprocessing.mesh_smoothing_weights || postprocessing.sph_normals;
         //    || !attributes.is_empty();
         let interpolator = if interpolator_required {
             //profile!("initialize interpolator");
@@ -536,8 +471,8 @@ fn post_processing_generic<I: Index, R: Real>(
 
 #[pyfunction]
 #[pyo3(name = "post_processing_f32")]
-#[pyo3(signature = (particles, *, particle_radius=0.025, rest_density=1000.0, 
-    smoothing_length=2.0, cube_size=0.5, iso_surface_threshold=0.6, enable_multi_threading=false, 
+#[pyo3(signature = (particles, *, particle_radius=0.025, rest_density=1000.0,
+    smoothing_length=2.0, cube_size=0.5, iso_surface_threshold=0.6, enable_multi_threading=false,
     global_neighborhood_list=false, use_custom_grid_decomposition=false, subdomain_num_cubes_per_dim=64,
     aabb_min = None, aabb_max = None
 ))]
@@ -556,11 +491,10 @@ fn post_processing_py_f32<'py>(
     subdomain_num_cubes_per_dim: u32,
     aabb_min: Option<[f32; 3]>,
     aabb_max: Option<[f32; 3]>,
-) -> (
-    Bound<'py, PyArray2<usize>>,
-    Bound<'py, PyArray2<f32>>
-) {
-    let particle_positions: Vec<Vector3<f32>> = particles.as_array().outer_iter()
+) -> (Bound<'py, PyArray2<usize>>, Bound<'py, PyArray2<f32>>) {
+    let particle_positions: Vec<Vector3<f32>> = particles
+        .as_array()
+        .outer_iter()
         .map(|row| Vector3::new(row[0], row[1], row[2]))
         .collect();
 
@@ -595,7 +529,7 @@ fn post_processing_py_f32<'py>(
         global_neighborhood_list,
     };
 
-    let reconstruction = reconstruct_surface::<i64,f32>(&particle_positions, &params).unwrap();
+    let reconstruction = reconstruct_surface::<i64, f32>(&particle_positions, &params).unwrap();
 
     let postprocessing_args = ReconstructionRunnerPostprocessingArgs {
         mesh_cleanup: true,
@@ -606,7 +540,7 @@ fn post_processing_py_f32<'py>(
         mesh_smoothing_iters: Some(5),
         mesh_smoothing_weights: true,
         mesh_smoothing_weights_normalization: 100.0,
-        output_mesh_smoothing_weights: true
+        output_mesh_smoothing_weights: true,
     };
 
     let mesh = post_processing_generic::<i64, f32>(
@@ -614,7 +548,8 @@ fn post_processing_py_f32<'py>(
         &reconstruction,
         &params,
         &postprocessing_args,
-    ).unwrap();
+    )
+    .unwrap();
 
     let points: Vec<f32> = mesh.vertices.iter().flatten().copied().collect();
     let tris: Vec<usize> = mesh.triangles.iter().flatten().copied().collect();
@@ -622,14 +557,12 @@ fn post_processing_py_f32<'py>(
     let vertices = ndarray::Array2::from_shape_vec((mesh.vertices.len(), 3), points).unwrap();
 
     (triangles.into_pyarray(py), vertices.into_pyarray(py))
-
 }
 
 #[pyfunction]
 #[pyo3(name = "marching_cubes_cleanup")]
 #[pyo3(signature = (triangles, vertices, grid_info, *, max_iter, keep_vertices))]
 fn marching_cubes_cleanup_py<'py>(
-    py: Python<'py>,
     triangles: PyReadonlyArray2<usize>,
     vertices: PyReadonlyArray2<f64>,
     grid_info: ([f64; 3], [f64; 3], f64, [i64; 3], [i64; 3]),
