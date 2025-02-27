@@ -269,16 +269,16 @@ fn reconstruct_surface_py_f32<'py>(
 }
 
 #[pyclass]
-pub struct ReconstructionRunnerPostprocessingArgs {
-    pub mesh_cleanup: bool,
-    pub decimate_barnacles: bool,
-    pub keep_vertices: bool,
-    pub sph_normals: bool,
-    pub normals_smoothing_iters: Option<usize>,
-    pub mesh_smoothing_iters: Option<usize>,
-    pub mesh_smoothing_weights: bool,
-    pub mesh_smoothing_weights_normalization: f64,
-    pub output_mesh_smoothing_weights: bool
+struct ReconstructionRunnerPostprocessingArgs {
+    mesh_cleanup: bool,
+    decimate_barnacles: bool,
+    keep_vertices: bool,
+    sph_normals: bool,
+    normals_smoothing_iters: Option<usize>,
+    mesh_smoothing_iters: Option<usize>,
+    mesh_smoothing_weights: bool,
+    mesh_smoothing_weights_normalization: f64,
+    output_mesh_smoothing_weights: bool
 }
 
 fn post_processing_generic<I: Index, R: Real>(
@@ -286,7 +286,7 @@ fn post_processing_generic<I: Index, R: Real>(
     reconstruction: &SurfaceReconstruction<I, R>,
     params: &splashsurf_lib::Parameters<R>,
     postprocessing: &ReconstructionRunnerPostprocessingArgs,
-) -> Result<(), anyhow::Error> {
+) -> Result<TriMesh3d<R>, anyhow::Error> {
     //profile!("surface reconstruction");
 
     let grid = reconstruction.grid();
@@ -299,16 +299,16 @@ fn post_processing_generic<I: Index, R: Real>(
 
         if postprocessing.mesh_cleanup {
             //info!("Post-processing: Performing mesh cleanup");
-            let tris_before = mesh_with_data.mesh.triangles.len();
-            let verts_before = mesh_with_data.mesh.vertices.len();
+            //let tris_before = mesh_with_data.mesh.triangles.len();
+            //let verts_before = mesh_with_data.mesh.vertices.len();
             vertex_connectivity = Some(splashsurf_lib::postprocessing::marching_cubes_cleanup(
                 mesh_with_data.mesh.to_mut(),
                 grid,
                 5,
                 postprocessing.keep_vertices,
             ));
-            let tris_after = mesh_with_data.mesh.triangles.len();
-            let verts_after = mesh_with_data.mesh.vertices.len();
+            //let tris_after = mesh_with_data.mesh.triangles.len();
+            //let verts_after = mesh_with_data.mesh.vertices.len();
             //info!("Post-processing: Cleanup reduced number of vertices to {:.2}% and number of triangles to {:.2}% of original mesh.", (verts_after as f64 / verts_before as f64) * 100.0, (tris_after as f64 / tris_before as f64) * 100.0)
         }
 
@@ -487,7 +487,98 @@ fn post_processing_generic<I: Index, R: Real>(
         }
     }
 
-    Ok(())
+    Ok(mesh_with_data.mesh.into_owned())
+}
+
+#[pyfunction]
+#[pyo3(name = "post_processing_f32")]
+#[pyo3(signature = (particles, *, particle_radius=0.025, rest_density=1000.0, 
+    smoothing_length=2.0, cube_size=0.5, iso_surface_threshold=0.6, enable_multi_threading=false, 
+    global_neighborhood_list=false, use_custom_grid_decomposition=false, subdomain_num_cubes_per_dim=64,
+    aabb_min = None, aabb_max = None
+))]
+fn post_processing_py_f32<'py>(
+    py: Python<'py>,
+    particles: PyReadonlyArray2<f32>,
+    //reconstruction: &SurfaceReconstruction<i64, f32>,
+    particle_radius: f32,
+    rest_density: f32,
+    smoothing_length: f32,
+    cube_size: f32,
+    iso_surface_threshold: f32,
+    enable_multi_threading: bool,
+    global_neighborhood_list: bool,
+    use_custom_grid_decomposition: bool,
+    subdomain_num_cubes_per_dim: u32,
+    aabb_min: Option<[f32; 3]>,
+    aabb_max: Option<[f32; 3]>,
+) -> (
+    Bound<'py, PyArray2<usize>>,
+    Bound<'py, PyArray2<f32>>
+) {
+    let particle_positions: Vec<Vector3<f32>> = particles.as_array().outer_iter()
+        .map(|row| Vector3::new(row[0], row[1], row[2]))
+        .collect();
+
+    let aabb;
+    if aabb_min == None || aabb_max == None {
+        aabb = None;
+    } else {
+        aabb = Some(Aabb3d::new(
+            Vector3::from(aabb_min.unwrap()),
+            Vector3::from(aabb_max.unwrap()),
+        ));
+    }
+
+    let spatial_decomposition;
+    if use_custom_grid_decomposition {
+        let mut grid_params = GridDecompositionParameters::default();
+        grid_params.subdomain_num_cubes_per_dim = subdomain_num_cubes_per_dim;
+        spatial_decomposition = Some(SpatialDecomposition::UniformGrid(grid_params));
+    } else {
+        spatial_decomposition = None;
+    }
+
+    let params = splashsurf_lib::Parameters {
+        particle_radius,
+        rest_density,
+        compact_support_radius: (smoothing_length * particle_radius).times_f64(2.0),
+        cube_size: cube_size * particle_radius,
+        iso_surface_threshold,
+        particle_aabb: aabb,
+        enable_multi_threading,
+        spatial_decomposition,
+        global_neighborhood_list,
+    };
+
+    let reconstruction = reconstruct_surface::<i64,f32>(&particle_positions, &params).unwrap();
+
+    let postprocessing_args = ReconstructionRunnerPostprocessingArgs {
+        mesh_cleanup: true,
+        decimate_barnacles: true,
+        keep_vertices: false,
+        sph_normals: true,
+        normals_smoothing_iters: Some(5),
+        mesh_smoothing_iters: Some(5),
+        mesh_smoothing_weights: true,
+        mesh_smoothing_weights_normalization: 100.0,
+        output_mesh_smoothing_weights: true
+    };
+
+    let mesh = post_processing_generic::<i64, f32>(
+        particle_positions,
+        &reconstruction,
+        &params,
+        &postprocessing_args,
+    ).unwrap();
+
+    let points: Vec<f32> = mesh.vertices.iter().flatten().copied().collect();
+    let tris: Vec<usize> = mesh.triangles.iter().flatten().copied().collect();
+    let triangles = ndarray::Array2::from_shape_vec((mesh.triangles.len(), 3), tris).unwrap();
+    let vertices = ndarray::Array2::from_shape_vec((mesh.vertices.len(), 3), points).unwrap();
+
+    (triangles.into_pyarray(py), vertices.into_pyarray(py))
+
 }
 
 #[pyfunction]
@@ -553,6 +644,7 @@ fn marching_cubes_cleanup_py<'py>(
 fn pysplashsurf(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let _ = m.add_function(wrap_pyfunction!(reconstruct_surface_py_f64, m)?);
     let _ = m.add_function(wrap_pyfunction!(reconstruct_surface_py_f32, m)?);
+    let _ = m.add_function(wrap_pyfunction!(post_processing_py_f32, m)?);
     let _ = m.add_function(wrap_pyfunction!(marching_cubes_cleanup_py, m)?);
     Ok(())
 }

@@ -10,7 +10,16 @@ def test_reconstruct_surface():
     print(grid_info)
     meshio.write_points_cells("test.vtk", vertices, [("triangle", tris)])
     
-test_reconstruct_surface()
+#test_reconstruct_surface()
+
+def test_post_processing():
+    particles = np.array(meshio.read("./ParticleData_Fluid_5.vtk").points, dtype=np.float32)
+    print(particles)
+    tris, vertices = pysplashsurf.post_processing_f32(particles, enable_multi_threading=True, particle_radius=0.025)
+    print(f"Number of tris {len(tris)}, number of vertices {len(vertices)}")
+    meshio.write_points_cells("test.vtk", vertices, [("triangle", tris)])
+
+test_post_processing()
 
 def test_marching_cubes_cleanup(): 
     particles = np.array(meshio.read("./ParticleData_Fluid_5.vtk").points)
