@@ -1,6 +1,6 @@
 import numpy as np
 
-def reconstruct_surface_f64(
+def reconstruct_surface(
     particles: np.ndarray, *, 
     particle_radius: float, 
     rest_density: float,
@@ -17,6 +17,8 @@ def reconstruct_surface_f64(
     """Reconstruct the surface from only particle positions
     
     Performs a marching cubes surface construction of the fluid represented by the given particle positions
+    
+    Function defers float precision based on the inputted particle positions (32bit or 64bit)
     
     Parameters
     ----------
