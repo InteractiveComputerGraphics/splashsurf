@@ -1,7 +1,9 @@
 use numpy::PyReadonlyArray2;
 use pyo3::prelude::*;
-use splashsurf_lib::{mesh::TriMesh3d, nalgebra::Vector3, postprocessing::marching_cubes_cleanup, uniform_grid::UniformCartesianCubeGrid3d};
-
+use splashsurf_lib::{
+    mesh::TriMesh3d, nalgebra::Vector3, postprocessing::marching_cubes_cleanup,
+    uniform_grid::UniformCartesianCubeGrid3d,
+};
 
 #[pyfunction]
 #[pyo3(name = "marching_cubes_cleanup")]

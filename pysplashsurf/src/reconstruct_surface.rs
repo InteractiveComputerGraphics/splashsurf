@@ -1,7 +1,11 @@
-use numpy::{Element, IntoPyArray, PyArray2, PyReadonlyArray2};
-use pyo3::{prelude::*, IntoPyObjectExt, types::PyFloat, Bound, Py, PyAny, Python};
-use splashsurf_lib::{nalgebra::Vector3, reconstruct_surface, Real, Aabb3d, SpatialDecomposition, GridDecompositionParameters, Index};
-use ndarray::Array2;
+use numpy::{Element, PyArray2, PyReadonlyArray2};
+use pyo3::{prelude::*, types::PyFloat, Bound, IntoPyObjectExt, Py, PyAny, Python};
+use splashsurf_lib::{
+    nalgebra::Vector3, reconstruct_surface, Aabb3d, GridDecompositionParameters, Index, Real,
+    SpatialDecomposition, SurfaceReconstruction,
+};
+
+use crate::structs::{PyTriMesh3dF32, PyTriMesh3dF64, PyUniformGridF32, PyUniformGridF64};
 
 /// Reconstruct the surface from only particle positions
 fn reconstruct_surface_py<I: Index, R: Real>(
@@ -17,11 +21,7 @@ fn reconstruct_surface_py<I: Index, R: Real>(
     subdomain_num_cubes_per_dim: u32,
     aabb_min: Option<[R; 3]>,
     aabb_max: Option<[R; 3]>,
-) -> (
-    Array2<usize>,
-    Array2<R>,
-    ([R; 3], [R; 3], R, [I; 3], [I; 3]),
-) {
+) -> SurfaceReconstruction<I, R> {
     let aabb;
     if aabb_min == None || aabb_max == None {
         aabb = None;
@@ -55,29 +55,7 @@ fn reconstruct_surface_py<I: Index, R: Real>(
 
     let surface = reconstruct_surface(&particles, &params).unwrap();
 
-    let grid = surface.grid();
-    let aabb = grid.aabb();
-
-    let grid_info = {
-        let min = [aabb.min()[0], aabb.min()[1], aabb.min()[2]];
-        let max = [aabb.max()[0], aabb.max()[1], aabb.max()[2]];
-        (
-            min,
-            max,
-            grid.cell_size().clone(),
-            grid.points_per_dim().clone(),
-            grid.cells_per_dim().clone(),
-        )
-    };
-
-    let mesh = surface.mesh();
-
-    let points: Vec<R> = mesh.vertices.iter().flatten().copied().collect();
-    let tris: Vec<usize> = mesh.triangles.iter().flatten().copied().collect();
-    let triangles = ndarray::Array2::from_shape_vec((mesh.triangles.len(), 3), tris).unwrap();
-    let vertices = ndarray::Array2::from_shape_vec((mesh.vertices.len(), 3), points).unwrap();
-
-    (triangles, vertices, grid_info)
+    surface
 }
 
 fn reconstruct_surface_py_interface<'py, R: Real + Element>(
@@ -94,11 +72,7 @@ fn reconstruct_surface_py_interface<'py, R: Real + Element>(
     subdomain_num_cubes_per_dim: u32,
     aabb_min: Option<[Py<PyFloat>; 3]>,
     aabb_max: Option<[Py<PyFloat>; 3]>,
-) -> (
-    Bound<'py, PyAny>,
-    Bound<'py, PyAny>,
-    ([R; 3], [R; 3], R, [i64; 3], [i64; 3]),
-) {
+) -> SurfaceReconstruction<i64, R> {
     let particles: PyReadonlyArray2<R> = particles.extract().unwrap();
     let particle_positions: Vec<Vector3<R>> = particles
         .as_array()
@@ -122,7 +96,7 @@ fn reconstruct_surface_py_interface<'py, R: Real + Element>(
         res
     });
 
-    let (triangles, vertices, grid_info) = reconstruct_surface_py::<i64, R>(
+    let reconstruction = reconstruct_surface_py::<i64, R>(
         particle_positions,
         R::from_f64(particle_radius.extract::<f64>(py).unwrap()).unwrap(),
         R::from_f64(rest_density.extract::<f64>(py).unwrap()).unwrap(),
@@ -137,11 +111,7 @@ fn reconstruct_surface_py_interface<'py, R: Real + Element>(
         aabb_max,
     );
 
-    (
-        triangles.into_pyarray(py).into_any(),
-        vertices.into_pyarray(py).into_any(),
-        grid_info,
-    )
+    reconstruction
 }
 
 #[pyfunction]
@@ -165,19 +135,9 @@ pub fn reconstruct_surface_py_dynamic<'py>(
     subdomain_num_cubes_per_dim: u32,
     aabb_min: Option<[Py<PyFloat>; 3]>,
     aabb_max: Option<[Py<PyFloat>; 3]>,
-) -> (
-    Bound<'py, PyAny>,
-    Bound<'py, PyAny>,
-    (
-        Py<PyAny>,
-        Py<PyAny>,
-        Bound<'py, PyFloat>,
-        [i64; 3],
-        [i64; 3],
-    ),
-) {
+) -> (Bound<'py, PyAny>, Bound<'py, PyAny>) {
     if let Ok(particles) = particles.downcast::<PyArray2<f32>>() {
-        let (triangles, vertices, grid_info) = reconstruct_surface_py_interface::<f32>(
+        let reconstruction = reconstruct_surface_py_interface::<f32>(
             py,
             particles,
             particle_radius,
@@ -193,17 +153,16 @@ pub fn reconstruct_surface_py_dynamic<'py>(
             aabb_max,
         );
 
-        let grid_info = (
-            grid_info.0.into_py_any(py).unwrap(),
-            grid_info.1.into_py_any(py).unwrap(),
-            grid_info.2.into_pyobject(py).unwrap(),
-            grid_info.3,
-            grid_info.4,
-        );
-
-        (triangles, vertices, grid_info)
+        (
+            PyTriMesh3dF32::new(reconstruction.mesh().clone())
+                .into_bound_py_any(py)
+                .unwrap(),
+            PyUniformGridF32::new(reconstruction.grid().clone())
+                .into_bound_py_any(py)
+                .unwrap(),
+        )
     } else if let Ok(particles) = particles.downcast::<PyArray2<f64>>() {
-        let (triangles, vertices, grid_info) = reconstruct_surface_py_interface::<f64>(
+        let reconstruction = reconstruct_surface_py_interface::<f64>(
             py,
             particles,
             particle_radius,
@@ -219,15 +178,14 @@ pub fn reconstruct_surface_py_dynamic<'py>(
             aabb_max,
         );
 
-        let grid_info = (
-            grid_info.0.into_py_any(py).unwrap(),
-            grid_info.1.into_py_any(py).unwrap(),
-            grid_info.2.into_pyobject(py).unwrap(),
-            grid_info.3,
-            grid_info.4,
-        );
-
-        (triangles, vertices, grid_info)
+        (
+            PyTriMesh3dF64::new(reconstruction.mesh().clone())
+                .into_bound_py_any(py)
+                .unwrap(),
+            PyUniformGridF64::new(reconstruction.grid().clone())
+                .into_bound_py_any(py)
+                .unwrap(),
+        )
     } else {
         panic!("Couldn't convert particles to f32 or f64 array!")
     }

@@ -1,9 +1,15 @@
 use std::borrow::Cow;
 
-use numpy::{IntoPyArray, PyReadonlyArray2, PyArray2};
+use numpy::{IntoPyArray, PyArray2, PyReadonlyArray2};
 use pyo3::{prelude::*, Bound, Python};
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
-use splashsurf_lib::{mesh::{AttributeData, Mesh3d, MeshAttribute, MeshWithData, TriMesh3d}, nalgebra::Vector3, reconstruct_surface, sph_interpolation::SphInterpolator, Aabb3d, GridDecompositionParameters, Index, Real, SpatialDecomposition, SurfaceReconstruction};
+use splashsurf_lib::{
+    mesh::{AttributeData, Mesh3d, MeshAttribute, MeshWithData, TriMesh3d},
+    nalgebra::Vector3,
+    reconstruct_surface,
+    sph_interpolation::SphInterpolator,
+    Aabb3d, GridDecompositionParameters, Index, Real, SpatialDecomposition, SurfaceReconstruction,
+};
 
 #[pyclass]
 struct ReconstructionRunnerPostprocessingArgs {
