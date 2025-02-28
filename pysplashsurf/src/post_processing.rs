@@ -4,15 +4,11 @@ use numpy::{Element, PyReadonlyArray2};
 use pyo3::{prelude::*, Bound, IntoPyObjectExt, Python, PyAny};
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use splashsurf_lib::{
-    mesh::{AttributeData, Mesh3d, MeshAttribute, MeshWithData, TriMesh3d},
-    nalgebra::Vector3,
-    sph_interpolation::SphInterpolator,
-    Aabb3d, GridDecompositionParameters, Index, Real, SpatialDecomposition, SurfaceReconstruction,
+    mesh::{AttributeData, Mesh3d, MeshAttribute, MeshWithData, TriMesh3d}, nalgebra::Vector3, sph_interpolation::SphInterpolator, Aabb3d, GridDecompositionParameters, Index, Real, SpatialDecomposition, SurfaceReconstruction
 };
 
 use crate::structs::{PySurfaceReconstructionF32, PySurfaceReconstructionF64, PyTriMesh3dF32, PyTriMesh3dF64};
 
-#[pyclass]
 struct ReconstructionRunnerPostprocessingArgs {
     mesh_cleanup: bool,
     decimate_barnacles: bool,
@@ -38,27 +34,19 @@ fn post_processing_generic<I: Index, R: Real>(
 
     // Perform post-processing
     {
-        //profile!("postprocessing");
         let mut vertex_connectivity = None;
 
         if postprocessing.mesh_cleanup {
-            //info!("Post-processing: Performing mesh cleanup");
-            //let tris_before = mesh_with_data.mesh.triangles.len();
-            //let verts_before = mesh_with_data.mesh.vertices.len();
             vertex_connectivity = Some(splashsurf_lib::postprocessing::marching_cubes_cleanup(
                 mesh_with_data.mesh.to_mut(),
                 grid,
                 5,
                 postprocessing.keep_vertices,
             ));
-            //let tris_after = mesh_with_data.mesh.triangles.len();
-            //let verts_after = mesh_with_data.mesh.vertices.len();
-            //info!("Post-processing: Cleanup reduced number of vertices to {:.2}% and number of triangles to {:.2}% of original mesh.", (verts_after as f64 / verts_before as f64) * 100.0, (tris_after as f64 / tris_before as f64) * 100.0)
         }
 
         // Decimate mesh if requested
         if postprocessing.decimate_barnacles {
-            //info!("Post-processing: Performing decimation");
             vertex_connectivity = Some(splashsurf_lib::postprocessing::decimation(
                 mesh_with_data.mesh.to_mut(),
                 postprocessing.keep_vertices,
@@ -68,15 +56,8 @@ fn post_processing_generic<I: Index, R: Real>(
         // Initialize SPH interpolator if required later
         let interpolator_required =
             postprocessing.mesh_smoothing_weights || postprocessing.sph_normals;
-        //    || !attributes.is_empty();
-        let interpolator = if interpolator_required {
-            //profile!("initialize interpolator");
-            //info!("Post-processing: Initializing interpolator...");
 
-            //info!(
-            //    "Constructing global acceleration structure for SPH interpolation to {} vertices...",
-            //    mesh_with_data.vertices().len()
-            //);
+        let interpolator = if interpolator_required {
 
             let particle_rest_density = params.rest_density;
             let particle_rest_volume = R::from_f64((4.0 / 3.0) * std::f64::consts::PI).unwrap()
@@ -112,11 +93,6 @@ fn post_processing_generic<I: Index, R: Real>(
 
         // Compute smoothing weights if requested
         let smoothing_weights = if postprocessing.mesh_smoothing_weights {
-            //profile!("compute smoothing weights");
-            //info!("Post-processing: Computing smoothing weights...");
-
-            // TODO: Switch between parallel/single threaded
-            // TODO: Re-use data from reconstruction?
 
             // Global neighborhood search
             let nl = reconstruction
@@ -160,7 +136,6 @@ fn post_processing_generic<I: Index, R: Real>(
                 .collect::<Vec<_>>();
 
             let vertex_weighted_num_neighbors = {
-                //profile!("interpolate weighted neighbor counts");
                 interpolator
                     .as_ref()
                     .expect("interpolator is required")
@@ -211,8 +186,6 @@ fn post_processing_generic<I: Index, R: Real>(
 
         // Perform smoothing if requested
         if let Some(mesh_smoothing_iters) = postprocessing.mesh_smoothing_iters {
-            //profile!("mesh smoothing");
-            //info!("Post-processing: Smoothing mesh...");
 
             // TODO: Switch between parallel/single threaded
 
@@ -235,9 +208,10 @@ fn post_processing_generic<I: Index, R: Real>(
 }
 
 
-pub fn post_processing_py_interface<'py, R: Real + Element>(
+fn post_processing_py_interface<'py, R: Real + Element>(
     particles: PyReadonlyArray2<R>,
     reconstruction: &SurfaceReconstruction<i64, R>,
+    postprocessing_args: &ReconstructionRunnerPostprocessingArgs,
     particle_radius: R,
     rest_density: R,
     smoothing_length: R,
@@ -248,7 +222,7 @@ pub fn post_processing_py_interface<'py, R: Real + Element>(
     use_custom_grid_decomposition: bool,
     subdomain_num_cubes_per_dim: u32,
     aabb_min: Option<[R; 3]>,
-    aabb_max: Option<[R; 3]>,
+    aabb_max: Option<[R; 3]>
 ) -> TriMesh3d<R> {
     let particle_positions: Vec<Vector3<R>> = particles
         .as_array()
@@ -287,18 +261,6 @@ pub fn post_processing_py_interface<'py, R: Real + Element>(
         global_neighborhood_list,
     };
 
-    let postprocessing_args = ReconstructionRunnerPostprocessingArgs {
-        mesh_cleanup: true,
-        decimate_barnacles: true,
-        keep_vertices: false,
-        sph_normals: true,
-        normals_smoothing_iters: Some(5),
-        mesh_smoothing_iters: Some(5),
-        mesh_smoothing_weights: true,
-        mesh_smoothing_weights_normalization: 100.0,
-        output_mesh_smoothing_weights: true,
-    };
-
     let mesh = post_processing_generic::<i64, R>(
         particle_positions,
         &reconstruction,
@@ -315,12 +277,15 @@ pub fn post_processing_py_interface<'py, R: Real + Element>(
 #[pyo3(signature = (particles, reconstruction, *, particle_radius, rest_density,
     smoothing_length, cube_size, iso_surface_threshold, enable_multi_threading,
     global_neighborhood_list, use_custom_grid_decomposition, subdomain_num_cubes_per_dim,
-    aabb_min, aabb_max
+    aabb_min, aabb_max, mesh_cleanup, decimate_barnacles, keep_vertices, sph_normals,
+    normals_smoothing_iters, mesh_smoothing_iters, mesh_smoothing_weights,
+    mesh_smoothing_weights_normalization, output_mesh_smoothing_weights
 ))]
 pub fn post_processing_py_f32<'py>(
     py: Python<'py>,
     particles: PyReadonlyArray2<f32>,
     reconstruction: &PySurfaceReconstructionF32,
+
     particle_radius: f32,
     rest_density: f32,
     smoothing_length: f32,
@@ -332,8 +297,30 @@ pub fn post_processing_py_f32<'py>(
     subdomain_num_cubes_per_dim: u32,
     aabb_min: Option<[f32; 3]>,
     aabb_max: Option<[f32; 3]>,
+
+    mesh_cleanup: bool,
+    decimate_barnacles: bool,
+    keep_vertices: bool,
+    sph_normals: bool,
+    normals_smoothing_iters: Option<usize>,
+    mesh_smoothing_iters: Option<usize>,
+    mesh_smoothing_weights: bool,
+    mesh_smoothing_weights_normalization: f64,
+    output_mesh_smoothing_weights: bool,
 ) -> Bound<'py, PyAny> {
-    let mesh = post_processing_py_interface::<f32>(particles, &reconstruction.inner, particle_radius, rest_density, smoothing_length, cube_size, iso_surface_threshold, enable_multi_threading, global_neighborhood_list, use_custom_grid_decomposition, subdomain_num_cubes_per_dim, aabb_min, aabb_max);
+    let postprocessing_args = ReconstructionRunnerPostprocessingArgs {
+        mesh_cleanup,
+        decimate_barnacles,
+        keep_vertices,
+        sph_normals,
+        normals_smoothing_iters,
+        mesh_smoothing_iters,
+        mesh_smoothing_weights,
+        mesh_smoothing_weights_normalization,
+        output_mesh_smoothing_weights,
+    };
+
+    let mesh = post_processing_py_interface::<f32>(particles, &reconstruction.inner, &postprocessing_args, particle_radius, rest_density, smoothing_length, cube_size, iso_surface_threshold, enable_multi_threading, global_neighborhood_list, use_custom_grid_decomposition, subdomain_num_cubes_per_dim, aabb_min, aabb_max);
     PyTriMesh3dF32::new(mesh).into_bound_py_any(py).unwrap()
 }
 
@@ -342,12 +329,15 @@ pub fn post_processing_py_f32<'py>(
 #[pyo3(signature = (particles, reconstruction, *, particle_radius, rest_density,
     smoothing_length, cube_size, iso_surface_threshold, enable_multi_threading,
     global_neighborhood_list, use_custom_grid_decomposition, subdomain_num_cubes_per_dim,
-    aabb_min, aabb_max
+    aabb_min, aabb_max, mesh_cleanup, decimate_barnacles, keep_vertices, sph_normals,
+    normals_smoothing_iters, mesh_smoothing_iters, mesh_smoothing_weights,
+    mesh_smoothing_weights_normalization, output_mesh_smoothing_weights
 ))]
 pub fn post_processing_py_f64<'py>(
     py: Python<'py>,
     particles: PyReadonlyArray2<f64>,
     reconstruction: &PySurfaceReconstructionF64,
+
     particle_radius: f64,
     rest_density: f64,
     smoothing_length: f64,
@@ -359,7 +349,29 @@ pub fn post_processing_py_f64<'py>(
     subdomain_num_cubes_per_dim: u32,
     aabb_min: Option<[f64; 3]>,
     aabb_max: Option<[f64; 3]>,
+
+    mesh_cleanup: bool,
+    decimate_barnacles: bool,
+    keep_vertices: bool,
+    sph_normals: bool,
+    normals_smoothing_iters: Option<usize>,
+    mesh_smoothing_iters: Option<usize>,
+    mesh_smoothing_weights: bool,
+    mesh_smoothing_weights_normalization: f64,
+    output_mesh_smoothing_weights: bool,
 ) -> Bound<'py, PyAny> {
-    let mesh = post_processing_py_interface::<f64>(particles, &reconstruction.inner, particle_radius, rest_density, smoothing_length, cube_size, iso_surface_threshold, enable_multi_threading, global_neighborhood_list, use_custom_grid_decomposition, subdomain_num_cubes_per_dim, aabb_min, aabb_max);
+    let postprocessing_args = ReconstructionRunnerPostprocessingArgs {
+        mesh_cleanup,
+        decimate_barnacles,
+        keep_vertices,
+        sph_normals,
+        normals_smoothing_iters,
+        mesh_smoothing_iters,
+        mesh_smoothing_weights,
+        mesh_smoothing_weights_normalization,
+        output_mesh_smoothing_weights,
+    };
+
+    let mesh = post_processing_py_interface::<f64>(particles, &reconstruction.inner, &postprocessing_args, particle_radius, rest_density, smoothing_length, cube_size, iso_surface_threshold, enable_multi_threading, global_neighborhood_list, use_custom_grid_decomposition, subdomain_num_cubes_per_dim, aabb_min, aabb_max);
     PyTriMesh3dF64::new(mesh).into_bound_py_any(py).unwrap()
 }

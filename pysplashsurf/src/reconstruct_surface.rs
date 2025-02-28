@@ -153,7 +153,7 @@ pub fn reconstruct_surface_py_dynamic<'py>(
             aabb_max,
         );
 
-        PySurfaceReconstructionF32::new(reconstruction.clone())
+        PySurfaceReconstructionF32::new(reconstruction.to_owned())
             .into_bound_py_any(py)
             .unwrap()
         
@@ -174,7 +174,7 @@ pub fn reconstruct_surface_py_dynamic<'py>(
             aabb_max,
         );
 
-        PySurfaceReconstructionF64::new(reconstruction.clone())
+        PySurfaceReconstructionF64::new(reconstruction.to_owned())
             .into_bound_py_any(py)
             .unwrap()
 

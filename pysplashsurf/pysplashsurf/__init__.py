@@ -52,7 +52,16 @@ def post_processing(
     use_custom_grid_decomposition: bool = False,
     subdomain_num_cubes_per_dim: int = 64,
     aabb_min = None,
-    aabb_max = None
+    aabb_max = None,
+    mesh_cleanup: bool = True,
+    decimate_barnacles: bool = True,
+    keep_vertices: bool = False,
+    sph_normals: bool = True,
+    normals_smoothing_iters = 5,
+    mesh_smoothing_iters = 5,
+    mesh_smoothing_weights: bool = True,
+    mesh_smoothing_weights_normalization: float = 100.0,
+    output_mesh_smoothing_weights: bool = True,
 ):
     """Post processing of a surface reconstruction
     
@@ -96,6 +105,33 @@ def post_processing(
     
     aabb_max: np.ndarray
         Largest corner of the axis-aligned bounding box
+        
+    mesh_cleanup: bool
+        Flag to enable mesh cleanup
+        
+    decimate_barnacles: bool
+        Flag to enable barnacle decimation
+        
+    keep_vertices: bool
+        Flag to keep vertices
+        
+    sph_normals: bool
+        Flag to enable sph normals
+        
+    normals_smoothing_iters: int
+        Number of iterations for normals smoothing
+        
+    mesh_smoothing_iters: int
+        Number of iterations for mesh smoothing
+        
+    mesh_smoothing_weights: bool
+        Flag to enable mesh smoothing weights
+        
+    mesh_smoothing_weights_normalization: float
+        Normalization factor for mesh smoothing weights
+        
+    output_mesh_smoothing_weights: bool
+        Flag to output mesh smoothing
     
     Returns
     -------
@@ -113,7 +149,16 @@ def post_processing(
                                    use_custom_grid_decomposition=use_custom_grid_decomposition,
                                    subdomain_num_cubes_per_dim=subdomain_num_cubes_per_dim,
                                    aabb_min=aabb_min,
-                                   aabb_max=aabb_max)
+                                   aabb_max=aabb_max,
+                                   mesh_cleanup=mesh_cleanup,
+                                   decimate_barnacles=decimate_barnacles,
+                                   keep_vertices=keep_vertices,
+                                   sph_normals=sph_normals,
+                                   normals_smoothing_iters=normals_smoothing_iters,
+                                   mesh_smoothing_iters=mesh_smoothing_iters,
+                                   mesh_smoothing_weights=mesh_smoothing_weights,
+                                   mesh_smoothing_weights_normalization=mesh_smoothing_weights_normalization,
+                                   output_mesh_smoothing_weights=output_mesh_smoothing_weights)
         
     elif type(reconstruction) is PySurfaceReconstructionF64:
         return post_processing_f64(particles, reconstruction, 
@@ -127,7 +172,16 @@ def post_processing(
                                    use_custom_grid_decomposition=use_custom_grid_decomposition,
                                    subdomain_num_cubes_per_dim=subdomain_num_cubes_per_dim,
                                    aabb_min=aabb_min,
-                                   aabb_max=aabb_max)
+                                   aabb_max=aabb_max,
+                                   mesh_cleanup=mesh_cleanup,
+                                   decimate_barnacles=decimate_barnacles,
+                                   keep_vertices=keep_vertices,
+                                   sph_normals=sph_normals,
+                                   normals_smoothing_iters=normals_smoothing_iters,
+                                   mesh_smoothing_iters=mesh_smoothing_iters,
+                                   mesh_smoothing_weights=mesh_smoothing_weights,
+                                   mesh_smoothing_weights_normalization=mesh_smoothing_weights_normalization,
+                                   output_mesh_smoothing_weights=output_mesh_smoothing_weights)
         
     else:
         raise ValueError("Invalid reconstruction type")
