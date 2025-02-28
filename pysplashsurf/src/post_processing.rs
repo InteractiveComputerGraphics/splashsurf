@@ -1,15 +1,16 @@
 use std::borrow::Cow;
 
-use numpy::{IntoPyArray, PyArray2, PyReadonlyArray2};
-use pyo3::{prelude::*, Bound, Python};
+use numpy::{PyReadonlyArray2};
+use pyo3::{prelude::*, Bound, IntoPyObjectExt, Python, PyAny};
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use splashsurf_lib::{
     mesh::{AttributeData, Mesh3d, MeshAttribute, MeshWithData, TriMesh3d},
     nalgebra::Vector3,
-    reconstruct_surface,
     sph_interpolation::SphInterpolator,
     Aabb3d, GridDecompositionParameters, Index, Real, SpatialDecomposition, SurfaceReconstruction,
 };
+
+use crate::structs::{PySurfaceReconstructionF32, PyTriMesh3dF32};
 
 #[pyclass]
 struct ReconstructionRunnerPostprocessingArgs {
@@ -235,7 +236,7 @@ fn post_processing_generic<I: Index, R: Real>(
 
 #[pyfunction]
 #[pyo3(name = "post_processing_f32")]
-#[pyo3(signature = (particles, *, particle_radius=0.025, rest_density=1000.0,
+#[pyo3(signature = (particles, reconstruction, *, particle_radius=0.025, rest_density=1000.0,
     smoothing_length=2.0, cube_size=0.5, iso_surface_threshold=0.6, enable_multi_threading=false,
     global_neighborhood_list=false, use_custom_grid_decomposition=false, subdomain_num_cubes_per_dim=64,
     aabb_min = None, aabb_max = None
@@ -243,7 +244,7 @@ fn post_processing_generic<I: Index, R: Real>(
 pub fn post_processing_py_f32<'py>(
     py: Python<'py>,
     particles: PyReadonlyArray2<f32>,
-    //reconstruction: &SurfaceReconstruction<i64, f32>,
+    reconstruction: &PySurfaceReconstructionF32,
     particle_radius: f32,
     rest_density: f32,
     smoothing_length: f32,
@@ -255,7 +256,7 @@ pub fn post_processing_py_f32<'py>(
     subdomain_num_cubes_per_dim: u32,
     aabb_min: Option<[f32; 3]>,
     aabb_max: Option<[f32; 3]>,
-) -> (Bound<'py, PyArray2<usize>>, Bound<'py, PyArray2<f32>>) {
+) -> Bound<'py, PyAny> {
     let particle_positions: Vec<Vector3<f32>> = particles
         .as_array()
         .outer_iter()
@@ -293,8 +294,6 @@ pub fn post_processing_py_f32<'py>(
         global_neighborhood_list,
     };
 
-    let reconstruction = reconstruct_surface::<i64, f32>(&particle_positions, &params).unwrap();
-
     let postprocessing_args = ReconstructionRunnerPostprocessingArgs {
         mesh_cleanup: true,
         decimate_barnacles: true,
@@ -309,16 +308,11 @@ pub fn post_processing_py_f32<'py>(
 
     let mesh = post_processing_generic::<i64, f32>(
         particle_positions,
-        &reconstruction,
+        &reconstruction.inner,
         &params,
         &postprocessing_args,
     )
     .unwrap();
 
-    let points: Vec<f32> = mesh.vertices.iter().flatten().copied().collect();
-    let tris: Vec<usize> = mesh.triangles.iter().flatten().copied().collect();
-    let triangles = ndarray::Array2::from_shape_vec((mesh.triangles.len(), 3), tris).unwrap();
-    let vertices = ndarray::Array2::from_shape_vec((mesh.vertices.len(), 3), points).unwrap();
-
-    (triangles.into_pyarray(py), vertices.into_pyarray(py))
+    PyTriMesh3dF32::new(mesh).into_bound_py_any(py).unwrap()
 }

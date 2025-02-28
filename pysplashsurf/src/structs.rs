@@ -1,12 +1,12 @@
-use numpy::{IntoPyArray, PyArray2, PyReadonlyArray2};
+use numpy::{IntoPyArray, PyArray2};
 use pyo3::prelude::*;
-use splashsurf_lib::{mesh::TriMesh3d, Aabb3d, UniformGrid};
+use splashsurf_lib::{mesh::TriMesh3d, UniformGrid, SurfaceReconstruction};
 
 macro_rules! create_mesh_interface {
     ($name: ident, $type: ident) => {
         #[pyclass]
         pub struct $name {
-            inner: TriMesh3d<$type>,
+            pub inner: TriMesh3d<$type>,
         }
 
         impl $name {
@@ -41,7 +41,7 @@ macro_rules! create_grid_interface {
     ($name: ident, $type: ident) => {
         #[pyclass]
         pub struct $name {
-            inner: UniformGrid<i64, $type>,
+            pub inner: UniformGrid<i64, $type>,
         }
 
         impl $name {
@@ -52,8 +52,39 @@ macro_rules! create_grid_interface {
     };
 }
 
+macro_rules! create_reconstruction_interface {
+    ($name: ident, $type: ident, $mesh_class: ident, $grid_class: ident) => {
+        #[pyclass]
+        pub struct $name {
+            pub inner: SurfaceReconstruction<i64, $type>,
+        }
+
+        impl $name {
+            pub fn new(data: SurfaceReconstruction<i64, $type>) -> Self {
+                Self { inner: data }
+            }
+        }
+
+        #[pymethods]
+        impl $name {
+            #[getter]
+            fn mesh(&self) -> $mesh_class {
+                $mesh_class::new(self.inner.mesh().clone())
+            }
+
+            #[getter]
+            fn grid(&self) -> $grid_class {
+                $grid_class::new(self.inner.grid().clone())
+            }
+        }
+    };
+}
+
 create_mesh_interface!(PyTriMesh3dF64, f64);
 create_mesh_interface!(PyTriMesh3dF32, f32);
 
 create_grid_interface!(PyUniformGridF64, f64);
 create_grid_interface!(PyUniformGridF32, f32);
+
+create_reconstruction_interface!(PySurfaceReconstructionF64, f64, PyTriMesh3dF64, PyUniformGridF64);
+create_reconstruction_interface!(PySurfaceReconstructionF32, f32, PyTriMesh3dF32, PyUniformGridF32);

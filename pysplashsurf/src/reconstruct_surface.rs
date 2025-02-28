@@ -5,7 +5,7 @@ use splashsurf_lib::{
     SpatialDecomposition, SurfaceReconstruction,
 };
 
-use crate::structs::{PyTriMesh3dF32, PyTriMesh3dF64, PyUniformGridF32, PyUniformGridF64};
+use crate::structs::{PySurfaceReconstructionF32, PySurfaceReconstructionF64};
 
 /// Reconstruct the surface from only particle positions
 fn reconstruct_surface_py<I: Index, R: Real>(
@@ -135,7 +135,7 @@ pub fn reconstruct_surface_py_dynamic<'py>(
     subdomain_num_cubes_per_dim: u32,
     aabb_min: Option<[Py<PyFloat>; 3]>,
     aabb_max: Option<[Py<PyFloat>; 3]>,
-) -> (Bound<'py, PyAny>, Bound<'py, PyAny>) {
+) -> Bound<'py, PyAny> {
     if let Ok(particles) = particles.downcast::<PyArray2<f32>>() {
         let reconstruction = reconstruct_surface_py_interface::<f32>(
             py,
@@ -153,14 +153,10 @@ pub fn reconstruct_surface_py_dynamic<'py>(
             aabb_max,
         );
 
-        (
-            PyTriMesh3dF32::new(reconstruction.mesh().clone())
-                .into_bound_py_any(py)
-                .unwrap(),
-            PyUniformGridF32::new(reconstruction.grid().clone())
-                .into_bound_py_any(py)
-                .unwrap(),
-        )
+        PySurfaceReconstructionF32::new(reconstruction.clone())
+            .into_bound_py_any(py)
+            .unwrap()
+        
     } else if let Ok(particles) = particles.downcast::<PyArray2<f64>>() {
         let reconstruction = reconstruct_surface_py_interface::<f64>(
             py,
@@ -178,14 +174,10 @@ pub fn reconstruct_surface_py_dynamic<'py>(
             aabb_max,
         );
 
-        (
-            PyTriMesh3dF64::new(reconstruction.mesh().clone())
-                .into_bound_py_any(py)
-                .unwrap(),
-            PyUniformGridF64::new(reconstruction.grid().clone())
-                .into_bound_py_any(py)
-                .unwrap(),
-        )
+        PySurfaceReconstructionF64::new(reconstruction.clone())
+            .into_bound_py_any(py)
+            .unwrap()
+
     } else {
         panic!("Couldn't convert particles to f32 or f64 array!")
     }
