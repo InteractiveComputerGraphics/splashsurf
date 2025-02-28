@@ -312,10 +312,10 @@ pub fn post_processing_py_interface<'py, R: Real + Element>(
 
 #[pyfunction]
 #[pyo3(name = "post_processing_f32")]
-#[pyo3(signature = (particles, reconstruction, *, particle_radius=0.025, rest_density=1000.0,
-    smoothing_length=2.0, cube_size=0.5, iso_surface_threshold=0.6, enable_multi_threading=false,
-    global_neighborhood_list=false, use_custom_grid_decomposition=false, subdomain_num_cubes_per_dim=64,
-    aabb_min = None, aabb_max = None
+#[pyo3(signature = (particles, reconstruction, *, particle_radius, rest_density,
+    smoothing_length, cube_size, iso_surface_threshold, enable_multi_threading,
+    global_neighborhood_list, use_custom_grid_decomposition, subdomain_num_cubes_per_dim,
+    aabb_min, aabb_max
 ))]
 pub fn post_processing_py_f32<'py>(
     py: Python<'py>,
@@ -339,10 +339,10 @@ pub fn post_processing_py_f32<'py>(
 
 #[pyfunction]
 #[pyo3(name = "post_processing_f64")]
-#[pyo3(signature = (particles, reconstruction, *, particle_radius=0.025, rest_density=1000.0,
-    smoothing_length=2.0, cube_size=0.5, iso_surface_threshold=0.6, enable_multi_threading=false,
-    global_neighborhood_list=false, use_custom_grid_decomposition=false, subdomain_num_cubes_per_dim=64,
-    aabb_min = None, aabb_max = None
+#[pyo3(signature = (particles, reconstruction, *, particle_radius, rest_density,
+    smoothing_length, cube_size, iso_surface_threshold, enable_multi_threading,
+    global_neighborhood_list, use_custom_grid_decomposition, subdomain_num_cubes_per_dim,
+    aabb_min, aabb_max
 ))]
 pub fn post_processing_py_f64<'py>(
     py: Python<'py>,
