@@ -18,11 +18,11 @@ def test_reconstruct_surface():
 test_reconstruct_surface()
 
 def test_post_processing():
-    particles = np.array(meshio.read("./ParticleData_Fluid_5.vtk").points, dtype=np.float32)
+    particles = np.array(meshio.read("./ParticleData_Fluid_5.vtk").points, dtype=np.float64)
     reconstruction = pysplashsurf.reconstruct_surface(particles, enable_multi_threading=True, particle_radius=0.025, 
                                                                  rest_density=1000.0, smoothing_length=2.0, cube_size=0.5, 
                                                                  iso_surface_threshold=0.6)
-    mesh = pysplashsurf.post_processing_f32(particles, reconstruction, enable_multi_threading=True, particle_radius=0.025)
+    mesh = pysplashsurf.post_processing(particles, reconstruction, enable_multi_threading=True, particle_radius=0.025)
     print(f"Number of tris {len(mesh.triangles)}, number of vertices {len(mesh.vertices)}")
     meshio.write_points_cells("test.vtk", mesh.vertices, [("triangle", mesh.triangles)])
 

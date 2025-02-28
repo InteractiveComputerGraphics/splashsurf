@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use numpy::{PyReadonlyArray2};
+use numpy::{Element, PyReadonlyArray2};
 use pyo3::{prelude::*, Bound, IntoPyObjectExt, Python, PyAny};
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use splashsurf_lib::{
@@ -10,7 +10,7 @@ use splashsurf_lib::{
     Aabb3d, GridDecompositionParameters, Index, Real, SpatialDecomposition, SurfaceReconstruction,
 };
 
-use crate::structs::{PySurfaceReconstructionF32, PyTriMesh3dF32};
+use crate::structs::{PySurfaceReconstructionF32, PySurfaceReconstructionF64, PyTriMesh3dF32, PyTriMesh3dF64};
 
 #[pyclass]
 struct ReconstructionRunnerPostprocessingArgs {
@@ -234,30 +234,23 @@ fn post_processing_generic<I: Index, R: Real>(
     Ok(mesh_with_data.mesh.into_owned())
 }
 
-#[pyfunction]
-#[pyo3(name = "post_processing_f32")]
-#[pyo3(signature = (particles, reconstruction, *, particle_radius=0.025, rest_density=1000.0,
-    smoothing_length=2.0, cube_size=0.5, iso_surface_threshold=0.6, enable_multi_threading=false,
-    global_neighborhood_list=false, use_custom_grid_decomposition=false, subdomain_num_cubes_per_dim=64,
-    aabb_min = None, aabb_max = None
-))]
-pub fn post_processing_py_f32<'py>(
-    py: Python<'py>,
-    particles: PyReadonlyArray2<f32>,
-    reconstruction: &PySurfaceReconstructionF32,
-    particle_radius: f32,
-    rest_density: f32,
-    smoothing_length: f32,
-    cube_size: f32,
-    iso_surface_threshold: f32,
+
+pub fn post_processing_py_interface<'py, R: Real + Element>(
+    particles: PyReadonlyArray2<R>,
+    reconstruction: &SurfaceReconstruction<i64, R>,
+    particle_radius: R,
+    rest_density: R,
+    smoothing_length: R,
+    cube_size: R,
+    iso_surface_threshold: R,
     enable_multi_threading: bool,
     global_neighborhood_list: bool,
     use_custom_grid_decomposition: bool,
     subdomain_num_cubes_per_dim: u32,
-    aabb_min: Option<[f32; 3]>,
-    aabb_max: Option<[f32; 3]>,
-) -> Bound<'py, PyAny> {
-    let particle_positions: Vec<Vector3<f32>> = particles
+    aabb_min: Option<[R; 3]>,
+    aabb_max: Option<[R; 3]>,
+) -> TriMesh3d<R> {
+    let particle_positions: Vec<Vector3<R>> = particles
         .as_array()
         .outer_iter()
         .map(|row| Vector3::new(row[0], row[1], row[2]))
@@ -306,13 +299,67 @@ pub fn post_processing_py_f32<'py>(
         output_mesh_smoothing_weights: true,
     };
 
-    let mesh = post_processing_generic::<i64, f32>(
+    let mesh = post_processing_generic::<i64, R>(
         particle_positions,
-        &reconstruction.inner,
+        &reconstruction,
         &params,
         &postprocessing_args,
     )
     .unwrap();
 
+    mesh
+}
+
+#[pyfunction]
+#[pyo3(name = "post_processing_f32")]
+#[pyo3(signature = (particles, reconstruction, *, particle_radius=0.025, rest_density=1000.0,
+    smoothing_length=2.0, cube_size=0.5, iso_surface_threshold=0.6, enable_multi_threading=false,
+    global_neighborhood_list=false, use_custom_grid_decomposition=false, subdomain_num_cubes_per_dim=64,
+    aabb_min = None, aabb_max = None
+))]
+pub fn post_processing_py_f32<'py>(
+    py: Python<'py>,
+    particles: PyReadonlyArray2<f32>,
+    reconstruction: &PySurfaceReconstructionF32,
+    particle_radius: f32,
+    rest_density: f32,
+    smoothing_length: f32,
+    cube_size: f32,
+    iso_surface_threshold: f32,
+    enable_multi_threading: bool,
+    global_neighborhood_list: bool,
+    use_custom_grid_decomposition: bool,
+    subdomain_num_cubes_per_dim: u32,
+    aabb_min: Option<[f32; 3]>,
+    aabb_max: Option<[f32; 3]>,
+) -> Bound<'py, PyAny> {
+    let mesh = post_processing_py_interface::<f32>(particles, &reconstruction.inner, particle_radius, rest_density, smoothing_length, cube_size, iso_surface_threshold, enable_multi_threading, global_neighborhood_list, use_custom_grid_decomposition, subdomain_num_cubes_per_dim, aabb_min, aabb_max);
     PyTriMesh3dF32::new(mesh).into_bound_py_any(py).unwrap()
+}
+
+#[pyfunction]
+#[pyo3(name = "post_processing_f64")]
+#[pyo3(signature = (particles, reconstruction, *, particle_radius=0.025, rest_density=1000.0,
+    smoothing_length=2.0, cube_size=0.5, iso_surface_threshold=0.6, enable_multi_threading=false,
+    global_neighborhood_list=false, use_custom_grid_decomposition=false, subdomain_num_cubes_per_dim=64,
+    aabb_min = None, aabb_max = None
+))]
+pub fn post_processing_py_f64<'py>(
+    py: Python<'py>,
+    particles: PyReadonlyArray2<f64>,
+    reconstruction: &PySurfaceReconstructionF64,
+    particle_radius: f64,
+    rest_density: f64,
+    smoothing_length: f64,
+    cube_size: f64,
+    iso_surface_threshold: f64,
+    enable_multi_threading: bool,
+    global_neighborhood_list: bool,
+    use_custom_grid_decomposition: bool,
+    subdomain_num_cubes_per_dim: u32,
+    aabb_min: Option<[f64; 3]>,
+    aabb_max: Option<[f64; 3]>,
+) -> Bound<'py, PyAny> {
+    let mesh = post_processing_py_interface::<f64>(particles, &reconstruction.inner, particle_radius, rest_density, smoothing_length, cube_size, iso_surface_threshold, enable_multi_threading, global_neighborhood_list, use_custom_grid_decomposition, subdomain_num_cubes_per_dim, aabb_min, aabb_max);
+    PyTriMesh3dF64::new(mesh).into_bound_py_any(py).unwrap()
 }

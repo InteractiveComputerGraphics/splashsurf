@@ -21,6 +21,7 @@ fn pysplashsurf(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     let _ = m.add_function(wrap_pyfunction!(reconstruct_surface::reconstruct_surface_py_dynamic, m)?);
     let _ = m.add_function(wrap_pyfunction!(post_processing::post_processing_py_f32, m)?);
+    let _ = m.add_function(wrap_pyfunction!(post_processing::post_processing_py_f64, m)?);
     let _ = m.add_function(wrap_pyfunction!(marching_cubes_cleanup::marching_cubes_cleanup_py_f32, m)?);
     let _ = m.add_function(wrap_pyfunction!(marching_cubes_cleanup::marching_cubes_cleanup_py_f64, m)?);
 
