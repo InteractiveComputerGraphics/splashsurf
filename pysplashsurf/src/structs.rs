@@ -1,4 +1,5 @@
-use numpy::{IntoPyArray, PyArray2};
+use numpy::{PyArray2, ToPyArray};
+use ndarray::{ArrayView, ArrayView2};
 use pyo3::prelude::*;
 use splashsurf_lib::{mesh::TriMesh3d, UniformGrid, SurfaceReconstruction};
 
@@ -19,19 +20,19 @@ macro_rules! create_mesh_interface {
         impl $name {
             #[getter]
             fn vertices<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<$type>> {
-                let points: Vec<$type> = self.inner.vertices.iter().flatten().copied().collect();
-                let vertices =
-                    ndarray::Array2::from_shape_vec((self.inner.vertices.len(), 3), points)
+                let points: &[$type] = bytemuck::cast_slice(&self.inner.vertices);
+                let vertices: ArrayView2<$type> =
+                    ArrayView::from_shape((self.inner.vertices.len(), 3), points)
                         .unwrap();
-                vertices.into_pyarray(py)
+                vertices.to_pyarray(py) // seems like at least one copy is necessary here (to_pyarray copies the data)
             }
 
             #[getter]
             fn triangles<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<usize>> {
-                let tris: Vec<usize> = self.inner.triangles.iter().flatten().copied().collect();
-                let triangles =
-                    ndarray::Array2::from_shape_vec((self.inner.triangles.len(), 3), tris).unwrap();
-                triangles.into_pyarray(py)
+                let tris: &[usize] = bytemuck::cast_slice(&self.inner.triangles);
+                let triangles: ArrayView2<usize> =
+                    ArrayView::from_shape((self.inner.triangles.len(), 3), tris).unwrap();
+                triangles.to_pyarray(py)
             }
         }
     };

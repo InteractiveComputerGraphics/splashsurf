@@ -9,7 +9,7 @@ use crate::structs::{PySurfaceReconstructionF32, PySurfaceReconstructionF64};
 
 /// Reconstruct the surface from only particle positions
 fn reconstruct_surface_py<I: Index, R: Real>(
-    particles: Vec<Vector3<R>>,
+    particles: &[Vector3<R>],
     particle_radius: R,
     rest_density: R,
     smoothing_length: R,
@@ -74,11 +74,9 @@ fn reconstruct_surface_py_interface<'py, R: Real + Element>(
     aabb_max: Option<[Py<PyFloat>; 3]>,
 ) -> SurfaceReconstruction<i64, R> {
     let particles: PyReadonlyArray2<R> = particles.extract().unwrap();
-    let particle_positions: Vec<Vector3<R>> = particles
-        .as_array()
-        .outer_iter()
-        .map(|row| Vector3::new(row[0], row[1], row[2]))
-        .collect();
+
+    let particle_positions = particles.as_slice().unwrap();
+    let particle_positions: &[Vector3<R>] = bytemuck::cast_slice(particle_positions);
 
     let aabb_min: Option<[R; 3]> = aabb_min.map(|x| {
         let mut res = [R::zero(); 3];
