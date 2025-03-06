@@ -119,6 +119,34 @@ def marching_cubes_cleanup(
     
     else:
         raise ValueError("Invalid mesh type")
+    
+def decimation(
+    mesh,
+    keep_vertices: bool = False
+):
+    """Barnacle decimation
+    
+    Parameters
+    ----------
+    mesh: PyTriMesh3dF32 | PyTriMesh3dF64
+        Mesh object to simplify
+    
+    keep_vertices: bool
+        Flag to keep vertices
+    
+    Returns
+    -------
+    list
+        vertex connectivity list of the simplified mesh
+    """
+    if type(mesh) is PyTriMesh3dF32:
+        return decimation_f32(mesh, keep_vertices=keep_vertices)
+    
+    elif type(mesh) is PyTriMesh3dF64:
+        return decimation_f64(mesh, keep_vertices=keep_vertices)
+    
+    else:
+        raise ValueError("Invalid mesh type")
 
 def post_processing(
     particles, reconstruction, *, 

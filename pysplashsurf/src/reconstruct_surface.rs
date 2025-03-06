@@ -58,60 +58,6 @@ fn reconstruct_surface_py<I: Index, R: Real>(
     surface
 }
 
-// fn reconstruct_surface_py_interface<'py, R: Real + Element>(
-//     py: Python<'py>,
-//     particles: &Bound<'py, PyArray2<R>>,
-//     particle_radius: Py<PyFloat>,
-//     rest_density: Py<PyFloat>,
-//     smoothing_length: Py<PyFloat>,
-//     cube_size: Py<PyFloat>,
-//     iso_surface_threshold: Py<PyFloat>,
-//     enable_multi_threading: bool,
-//     global_neighborhood_list: bool,
-//     use_custom_grid_decomposition: bool,
-//     subdomain_num_cubes_per_dim: u32,
-//     aabb_min: Option<[Py<PyFloat>; 3]>,
-//     aabb_max: Option<[Py<PyFloat>; 3]>,
-// ) -> SurfaceReconstruction<i64, R> {
-//     let particles: PyReadonlyArray2<R> = particles.extract().unwrap();
-
-//     let particle_positions = particles.as_slice().unwrap();
-//     let particle_positions: &[Vector3<R>] = bytemuck::cast_slice(particle_positions);
-
-//     let aabb_min: Option<[R; 3]> = aabb_min.map(|x| {
-//         let mut res = [R::zero(); 3];
-//         for i in 0..3 {
-//             res[i] = R::from_f64(x[i].extract::<f64>(py).unwrap()).unwrap();
-//         }
-//         res
-//     });
-
-//     let aabb_max: Option<[R; 3]> = aabb_max.map(|x| {
-//         let mut res = [R::zero(); 3];
-//         for i in 0..3 {
-//             res[i] = R::from_f64(x[i].extract::<f64>(py).unwrap()).unwrap();
-//         }
-//         res
-//     });
-
-//     let reconstruction = reconstruct_surface_py::<i64, R>(
-//         particle_positions,
-//         R::from_f64(particle_radius.extract::<f64>(py).unwrap()).unwrap(),
-//         R::from_f64(rest_density.extract::<f64>(py).unwrap()).unwrap(),
-//         R::from_f64(smoothing_length.extract::<f64>(py).unwrap()).unwrap(),
-//         R::from_f64(cube_size.extract::<f64>(py).unwrap()).unwrap(),
-//         R::from_f64(iso_surface_threshold.extract::<f64>(py).unwrap()).unwrap(),
-//         enable_multi_threading,
-//         global_neighborhood_list,
-//         use_custom_grid_decomposition,
-//         subdomain_num_cubes_per_dim,
-//         aabb_min,
-//         aabb_max,
-//     );
-
-//     reconstruction
-// }
-
 #[pyfunction]
 #[pyo3(name = "reconstruct_surface_f32")]
 #[pyo3(signature = (particles, *, particle_radius, rest_density,

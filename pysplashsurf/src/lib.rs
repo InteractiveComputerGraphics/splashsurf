@@ -3,6 +3,7 @@ use pyo3::prelude::*;
 mod structs;
 
 mod marching_cubes_cleanup;
+mod decimation;
 mod post_processing;
 mod reconstruct_surface;
 
@@ -21,10 +22,15 @@ fn pysplashsurf(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     let _ = m.add_function(wrap_pyfunction!(reconstruct_surface::reconstruct_surface_py_f32, m)?);
     let _ = m.add_function(wrap_pyfunction!(reconstruct_surface::reconstruct_surface_py_f64, m)?);
+
     let _ = m.add_function(wrap_pyfunction!(post_processing::post_processing_py_f32, m)?);
     let _ = m.add_function(wrap_pyfunction!(post_processing::post_processing_py_f64, m)?);
+
     let _ = m.add_function(wrap_pyfunction!(marching_cubes_cleanup::marching_cubes_cleanup_py_f32, m)?);
     let _ = m.add_function(wrap_pyfunction!(marching_cubes_cleanup::marching_cubes_cleanup_py_f64, m)?);
+
+    let _ = m.add_function(wrap_pyfunction!(decimation::decimation_py_f32, m)?);
+    let _ = m.add_function(wrap_pyfunction!(decimation::decimation_py_f64, m)?);
 
     Ok(())
 }
