@@ -148,6 +148,46 @@ def decimation(
     else:
         raise ValueError("Invalid mesh type")
 
+def par_laplacian_smoothing_inplace(
+    mesh,
+    vertex_connectivity: list[list[int]],
+    iterations: int,
+    beta: float,
+    weights: list[float]
+):
+    """Laplacian Smoothing with feature weights
+    
+    Move each vertex towards the mean position of its neighbors.
+    Factor beta in \[0;1] proportional to amount of smoothing (for beta=1 each vertex is placed at the mean position).
+    Additionally, feature weights can be specified to apply a varying amount of smoothing over the mesh.
+    
+    Parameters
+    ----------
+    mesh: PyTriMesh3dF32 | PyTriMesh3dF64
+        Mesh object to smooth
+        
+    vertex_connectivity: list[list[int]]
+        Vertex connectivity list
+        
+    iterations: int
+        Number of iterations
+    
+    beta: float
+        Smoothing factor
+    
+    weights: list[float]
+        Feature weights for the vertices
+    """
+    
+    if type(mesh) is PyTriMesh3dF32:
+        par_laplacian_smoothing_inplace_f32(mesh, vertex_connectivity, iterations, beta, weights)
+    
+    elif type(mesh) is PyTriMesh3dF64:
+        par_laplacian_smoothing_inplace_f64(mesh, vertex_connectivity, iterations, beta, weights)
+    
+    else:
+        raise ValueError("Invalid mesh type")
+
 def post_processing(
     particles, reconstruction, *, 
     particle_radius: float = 0.025, 

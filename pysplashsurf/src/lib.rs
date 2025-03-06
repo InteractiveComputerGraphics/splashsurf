@@ -4,6 +4,7 @@ mod structs;
 
 mod marching_cubes_cleanup;
 mod decimation;
+mod laplacian_smoothing;
 mod post_processing;
 mod reconstruct_surface;
 
@@ -31,6 +32,9 @@ fn pysplashsurf(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     let _ = m.add_function(wrap_pyfunction!(decimation::decimation_py_f32, m)?);
     let _ = m.add_function(wrap_pyfunction!(decimation::decimation_py_f64, m)?);
+
+    let _ = m.add_function(wrap_pyfunction!(laplacian_smoothing::par_laplacian_smoothing_inplace_py_f32, m)?);
+    let _ = m.add_function(wrap_pyfunction!(laplacian_smoothing::par_laplacian_smoothing_inplace_py_f64, m)?);
 
     Ok(())
 }
