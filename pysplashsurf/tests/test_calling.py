@@ -63,9 +63,25 @@ def test_laplacian_smoothing():
     pysplashsurf.par_laplacian_smoothing_inplace(mesh, res, 5, 1.0, [1.0 for _ in range(len(mesh.vertices))])
     print(f"Number of tris {len(mesh.triangles)}, number of vertices {len(mesh.vertices)}")
     meshio.write_points_cells("test.vtk", mesh.vertices, [("triangle", mesh.triangles)])
-   
+
+def test_mesh_with_data():
+    particles = np.array(meshio.read("./ParticleData_Fluid_5.vtk").points, dtype=np.float32)
+    reconstruction = pysplashsurf.reconstruct_surface(particles, enable_multi_threading=True, particle_radius=0.025, 
+                                                                 rest_density=1000.0, smoothing_length=2.0, cube_size=0.5, 
+                                                                 iso_surface_threshold=0.6, aabb_min=np.array([0.0, 0.0, 0.0]), aabb_max=np.array([2.0, 2.0, 2.0]))
+    mesh = reconstruction.mesh
+    grid = reconstruction.grid
+    
+    vertex_connectivity = pysplashsurf.marching_cubes_cleanup(mesh, grid, max_iter=5, keep_vertices=False)
+    
+    mesh_with_data = pysplashsurf.PyMeshWithDataF32(mesh)
+    pysplashsurf.calculate_smoothed_normals_f32(mesh_with_data, vertex_connectivity, smoothing_iters=5)
+    normals = mesh_with_data.get_point_attribute("normals")
+    print(normals)
+    
 #test_reconstruct_surface()
 #test_post_processing()
 #test_marching_cubes_cleanup() 
 #test_decimation()
-test_laplacian_smoothing()
+#test_laplacian_smoothing()
+test_mesh_with_data()

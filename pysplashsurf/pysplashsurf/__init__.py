@@ -158,7 +158,7 @@ def par_laplacian_smoothing_inplace(
     """Laplacian Smoothing with feature weights
     
     Move each vertex towards the mean position of its neighbors.
-    Factor beta in \[0;1] proportional to amount of smoothing (for beta=1 each vertex is placed at the mean position).
+    Factor beta in [0;1] proportional to amount of smoothing (for beta=1 each vertex is placed at the mean position).
     Additionally, feature weights can be specified to apply a varying amount of smoothing over the mesh.
     
     Parameters

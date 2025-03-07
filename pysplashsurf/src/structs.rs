@@ -36,6 +36,13 @@ macro_rules! create_mesh_data_interface {
 
         #[pymethods]
         impl $name {
+
+            #[new]
+            fn py_new(mesh: &$mesh_class) -> PyResult<Self> {
+                let meshdata = MeshWithData::new(mesh.inner.clone());
+                Ok($name::new(meshdata))
+            }
+
             #[getter]
             fn mesh(&self) -> $mesh_class {
                 $mesh_class::new(self.inner.mesh.clone())
