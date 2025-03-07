@@ -1,5 +1,5 @@
 use numpy::{PyArray2, PyReadonlyArray2};
-use pyo3::{prelude::*, Bound, IntoPyObjectExt, PyAny, Python};
+use pyo3::{prelude::*, Bound};
 use splashsurf_lib::{
     nalgebra::Vector3, reconstruct_surface, Aabb3d, GridDecompositionParameters, Index, Real,
     SpatialDecomposition, SurfaceReconstruction,
@@ -66,7 +66,6 @@ fn reconstruct_surface_py<I: Index, R: Real>(
     aabb_min = None, aabb_max = None
 ))]
 pub fn reconstruct_surface_py_f32<'py>(
-    py: Python<'py>,
     particles: &Bound<'py, PyArray2<f32>>,
     particle_radius: f32,
     rest_density: f32,
@@ -79,7 +78,7 @@ pub fn reconstruct_surface_py_f32<'py>(
     subdomain_num_cubes_per_dim: u32,
     aabb_min: Option<[f32; 3]>,
     aabb_max: Option<[f32; 3]>,
-) -> Bound<'py, PyAny> {
+) -> PySurfaceReconstructionF32 {
     let particles: PyReadonlyArray2<f32> = particles.extract().unwrap();
 
     let particle_positions = particles.as_slice().unwrap();
@@ -101,8 +100,6 @@ pub fn reconstruct_surface_py_f32<'py>(
     );
 
     PySurfaceReconstructionF32::new(reconstruction.to_owned())
-        .into_bound_py_any(py)
-        .unwrap()
 }
 
 #[pyfunction]
@@ -113,7 +110,6 @@ pub fn reconstruct_surface_py_f32<'py>(
     aabb_min = None, aabb_max = None
 ))]
 pub fn reconstruct_surface_py_f64<'py>(
-    py: Python<'py>,
     particles: &Bound<'py, PyArray2<f64>>,
     particle_radius: f64,
     rest_density: f64,
@@ -126,7 +122,7 @@ pub fn reconstruct_surface_py_f64<'py>(
     subdomain_num_cubes_per_dim: u32,
     aabb_min: Option<[f64; 3]>,
     aabb_max: Option<[f64; 3]>,
-) -> Bound<'py, PyAny> {
+) -> PySurfaceReconstructionF64 {
     let particles: PyReadonlyArray2<f64> = particles.extract().unwrap();
 
     let particle_positions = particles.as_slice().unwrap();
@@ -148,6 +144,4 @@ pub fn reconstruct_surface_py_f64<'py>(
     );
 
     PySurfaceReconstructionF64::new(reconstruction.to_owned())
-        .into_bound_py_any(py)
-        .unwrap()
 }
