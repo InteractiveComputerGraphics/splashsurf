@@ -4,7 +4,7 @@ use crate::io::io_utils::IteratorExt;
 use crate::mesh::{
     AttributeData, CellConnectivity, Mesh3d, MeshAttribute, MeshWithData, TriMesh3d,
 };
-use crate::{Real, profile};
+use crate::{Real, RealConvert, profile};
 use anyhow::{Context, anyhow};
 use nalgebra::Vector3;
 use num_traits::ToPrimitive;
@@ -53,11 +53,9 @@ fn parse_particles_from_ply<R: Real>(
             );
 
             let v = match vertex {
-                (Property::Float(x), Property::Float(y), Property::Float(z)) => Vector3::new(
-                    R::from_f32(*x).unwrap(),
-                    R::from_f32(*y).unwrap(),
-                    R::from_f32(*z).unwrap(),
-                ),
+                (Property::Float(x), Property::Float(y), Property::Float(z)) => {
+                    Vector3::new(*x, *y, *z).try_convert().unwrap()
+                }
                 _ => {
                     return Err(anyhow!(
                         "Vertex properties have wrong PLY data type (expected float)"
@@ -102,11 +100,9 @@ fn parse_mesh_from_ply<R: Real>(
     let mut vertices = Vec::with_capacity(vertices_normals.len());
 
     let load_vec3_property = |vertex: (&Property, &Property, &Property)| match vertex {
-        (Property::Float(x), Property::Float(y), Property::Float(z)) => Ok(Vector3::new(
-            R::from_f32(*x).unwrap(),
-            R::from_f32(*y).unwrap(),
-            R::from_f32(*z).unwrap(),
-        )),
+        (Property::Float(x), Property::Float(y), Property::Float(z)) => {
+            Ok(Vector3::new(*x, *y, *z).try_convert().unwrap())
+        }
         _ => Err(anyhow!(
             "Vertex properties have wrong PLY data type (expected float)"
         )),

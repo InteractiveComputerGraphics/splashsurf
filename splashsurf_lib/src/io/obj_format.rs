@@ -3,7 +3,7 @@
 use crate::mesh::{
     AttributeData, CellConnectivity, Mesh3d, MeshAttribute, MeshWithData, TriMesh3d,
 };
-use crate::{Real, io::io_utils, profile};
+use crate::{Real, RealConvert, io::io_utils, profile};
 use anyhow::Context;
 use nalgebra::Vector3;
 use std::fs;
@@ -82,10 +82,12 @@ pub fn surface_mesh_from_obj<R: Real, P: AsRef<Path>>(
 
     let buffer_to_vec3 = |buffer: &[&str]| -> Result<Vector3<R>, anyhow::Error> {
         Ok(Vector3::new(
-            R::from_f64(f64::from_str(buffer[0])?).unwrap(),
-            R::from_f64(f64::from_str(buffer[1])?).unwrap(),
-            R::from_f64(f64::from_str(buffer[2])?).unwrap(),
-        ))
+            f64::from_str(buffer[0])?,
+            f64::from_str(buffer[1])?,
+            f64::from_str(buffer[2])?,
+        )
+        .try_convert()
+        .unwrap())
     };
 
     let mut outer_buffer: Vec<&'static str> = Vec::new();

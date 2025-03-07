@@ -1,6 +1,6 @@
 //! Helper functions for the binary `.xyz` float coordinate format
 
-use crate::Real;
+use crate::{Real, RealConvert};
 use anyhow::Context;
 use nalgebra::Vector3;
 use std::fs::File;
@@ -30,11 +30,7 @@ pub fn particles_from_xyz<R: Real, P: AsRef<Path>>(
         let x = f32::from_ne_bytes(get_four_bytes(&buffer, 0));
         let y = f32::from_ne_bytes(get_four_bytes(&buffer, 4));
         let z = f32::from_ne_bytes(get_four_bytes(&buffer, 8));
-        particles.push(Vector3::new(
-            R::from_f32(x).unwrap(),
-            R::from_f32(y).unwrap(),
-            R::from_f32(z).unwrap(),
-        ));
+        particles.push(Vector3::new(x, y, z).try_convert().unwrap());
     }
 
     Ok(particles)

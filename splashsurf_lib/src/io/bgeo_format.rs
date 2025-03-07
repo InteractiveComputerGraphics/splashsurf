@@ -2,7 +2,7 @@
 
 use crate::io::io_utils::IteratorExt;
 use crate::mesh::{AttributeData, MeshAttribute};
-use crate::{Real, io::io_utils};
+use crate::{Real, RealConvert, io::io_utils};
 use anyhow::{Context, anyhow};
 use flate2::Compression;
 use flate2::read::GzDecoder;
@@ -47,13 +47,7 @@ pub fn particles_from_bgeo_file<R: Real>(
     // Convert the array storage into individual vectors
     let positions: Vec<_> = position_storage
         .chunks(3)
-        .map(|p| {
-            Vector3::new(
-                R::from_f32(p[0]).unwrap(),
-                R::from_f32(p[1]).unwrap(),
-                R::from_f32(p[2]).unwrap(),
-            )
-        })
+        .map(|p| Vector3::new(p[0], p[1], p[2]).try_convert().unwrap())
         .collect();
 
     Ok(positions)
