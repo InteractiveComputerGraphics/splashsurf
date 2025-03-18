@@ -76,7 +76,25 @@ def test_mesh_with_data():
     
     mesh_with_data = pysplashsurf.PyMeshWithDataF64(mesh)
     pysplashsurf.calculate_smoothed_normals(mesh_with_data, vertex_connectivity, smoothing_iters=5)
+    
+    ex_scalars = np.array([i for i in range(len(mesh.vertices))], dtype=np.uint64)
+    ex_reals = np.array([i for i in range(len(mesh.vertices))], dtype=np.float64)
+    ex_vectors = np.array([[i, i, i] for i in range(len(mesh.vertices))], dtype=np.float64)
+    
+    mesh_with_data.push_point_attribute_scalar_u64("test_scalar", ex_scalars)
+    mesh_with_data.push_point_attribute_scalar_real("test_reals", ex_reals)
+    mesh_with_data.push_point_attribute_vector_real("test_vector", ex_vectors)
+    
+    assert((mesh_with_data.get_point_attribute("test_scalar") == ex_scalars).all())
+    assert((mesh_with_data.get_point_attribute("test_reals") == ex_reals).all())
+    assert((mesh_with_data.get_point_attribute("test_vector") == ex_vectors).all())
+    
+    ex_cell_scalars = np.array([i for i in range(1000)], dtype=np.uint64)
+    mesh_with_data.push_cell_attribute_scalar_u64("test_cell_scalar", ex_cell_scalars)
+    assert((mesh_with_data.get_cell_attribute("test_cell_scalar") == ex_cell_scalars).all())
+
     normals = mesh_with_data.get_point_attribute("normals")
+    
     print(normals)
     
 #test_reconstruct_surface()

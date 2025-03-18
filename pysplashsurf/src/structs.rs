@@ -1,7 +1,7 @@
-use numpy::{Element, IntoPyArray, PyArray2, ToPyArray};
+use numpy::{Element, IntoPyArray, PyArray2, ToPyArray, PyReadonlyArray2};
 use ndarray::{ArrayView, ArrayView2, Array2};
-use pyo3::{prelude::*, PyResult, PyObject, PyErr, IntoPyObjectExt, PyAny};
-use splashsurf_lib::{mesh::{AttributeData, MeshAttribute, MeshWithData, TriMesh3d}, Real, SurfaceReconstruction, UniformGrid};
+use pyo3::{prelude::*, PyResult, PyObject, PyErr, IntoPyObjectExt, exceptions::PyValueError};
+use splashsurf_lib::{nalgebra::Vector3, mesh::{AttributeData, MeshAttribute, MeshWithData, TriMesh3d}, Real, SurfaceReconstruction, UniformGrid};
 
 fn get_attribute_with_name<'py, R: Real + Element>(py: Python<'py>, attrs: &[MeshAttribute<R>], name: &str) -> PyResult<PyObject> where R: pyo3::IntoPyObject<'py> {
     let elem = attrs.iter().filter(|x| x.name == name).next();
@@ -17,7 +17,18 @@ fn get_attribute_with_name<'py, R: Real + Element>(py: Python<'py>, attrs: &[Mes
                 Ok(res.into_pyarray(py).into_bound_py_any(py).unwrap().into())
             },
         },
-        None => Err(PyErr::new::<PyAny, _>(format!("Attribute with name {} doesn't exist", name)))
+        None => Err(PyErr::new::<PyValueError, _>(format!("Attribute with name {} doesn't exist", name)))
+    }
+}
+
+fn add_attribute_with_name<'py, R: Real + Element>(attrs: &mut Vec<MeshAttribute<R>>, attribute: MeshAttribute<R>) -> PyResult<()> {
+    let elem = attrs.iter().filter(|x| x.name == attribute.name).next();
+    match elem {
+        None => {
+            attrs.push(attribute);
+            Ok(())
+        },
+        _ => Err(PyErr::new::<PyValueError, _>(format!("Attribute with name {} already exists", attribute.name)))
     }
 }
  
@@ -46,6 +57,38 @@ macro_rules! create_mesh_data_interface {
             #[getter]
             fn mesh(&self) -> $mesh_class {
                 $mesh_class::new(self.inner.mesh.clone())
+            }
+
+            fn push_point_attribute_scalar_u64<'py>(&mut self, name: &str, data: Vec<u64>) -> PyResult<()> {
+                add_attribute_with_name::<$type>(&mut self.inner.point_attributes, MeshAttribute::new(name, AttributeData::ScalarU64(data)))
+            }
+
+            fn push_point_attribute_scalar_real<'py>(&mut self, name: &str, data: Vec<$type>) -> PyResult<()> {
+                add_attribute_with_name::<$type>(&mut self.inner.point_attributes, MeshAttribute::new(name, AttributeData::ScalarReal(data)))
+            }
+
+            fn push_point_attribute_vector_real<'py>(&mut self, name: &str, data: &Bound<'py, PyArray2<$type>>) -> PyResult<()> {
+                let data: PyReadonlyArray2<$type> = data.extract().unwrap();
+                let data = data.as_slice().unwrap();
+                let data: &[Vector3<$type>] = bytemuck::cast_slice(data);
+
+                add_attribute_with_name::<$type>(&mut self.inner.point_attributes, MeshAttribute::new(name, AttributeData::Vector3Real(data.to_vec())))
+            }
+
+            fn push_cell_attribute_scalar_u64<'py>(&mut self, name: &str, data: Vec<u64>) -> PyResult<()> {
+                add_attribute_with_name::<$type>(&mut self.inner.cell_attributes, MeshAttribute::new(name, AttributeData::ScalarU64(data)))
+            }
+
+            fn push_cell_attribute_scalar_real<'py>(&mut self, name: &str, data: Vec<$type>) -> PyResult<()> {
+                add_attribute_with_name::<$type>(&mut self.inner.cell_attributes, MeshAttribute::new(name, AttributeData::ScalarReal(data)))
+            }
+
+            fn push_cell_attribute_vector_real<'py>(&mut self, name: &str, data: &Bound<'py, PyArray2<$type>>) -> PyResult<()> {
+                let data: PyReadonlyArray2<$type> = data.extract().unwrap();
+                let data = data.as_slice().unwrap();
+                let data: &[Vector3<$type>] = bytemuck::cast_slice(data);
+
+                add_attribute_with_name::<$type>(&mut self.inner.cell_attributes, MeshAttribute::new(name, AttributeData::Vector3Real(data.to_vec())))
             }
 
             fn get_point_attribute<'py>(&self, py: Python<'py>, name: &str) -> PyResult<PyObject> {
