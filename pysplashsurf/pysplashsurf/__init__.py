@@ -187,6 +187,34 @@ def par_laplacian_smoothing_inplace(
     
     else:
         raise ValueError("Invalid mesh type")
+    
+def calculate_smoothed_normals(
+    mesh_with_data,
+    vertex_connectivity: list[list[int]], *,
+    smoothing_iters: int
+):
+    """Laplacian smoothing of a normal field
+
+    Parameters
+    ----------
+    mesh_with_data: PyMeshWithDataF32 | PyMeshWithDataF64
+        Mesh with data object to smooth
+        
+    vertex_connectivity: list[list[int]]
+        Vertex connectivity list
+        
+    smoothing_iters: int
+        Number of iterations
+    """
+    
+    if type(mesh_with_data) is PyMeshWithDataF32:
+        calculate_smoothed_normals_f32(mesh_with_data, vertex_connectivity, smoothing_iters=smoothing_iters)
+    
+    elif type(mesh_with_data) is PyMeshWithDataF64:
+        calculate_smoothed_normals_f64(mesh_with_data, vertex_connectivity, smoothing_iters=smoothing_iters)
+    
+    else:
+        raise ValueError("Invalid mesh type")
 
 def post_processing(
     particles, reconstruction, *, 
