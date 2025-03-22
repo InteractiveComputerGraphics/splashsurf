@@ -1,7 +1,7 @@
 use numpy::{Element, IntoPyArray, PyArray2, ToPyArray, PyReadonlyArray2};
 use ndarray::{ArrayView, ArrayView2, Array2};
 use pyo3::{prelude::*, PyResult, PyObject, PyErr, IntoPyObjectExt, exceptions::PyValueError};
-use splashsurf_lib::{nalgebra::Vector3, mesh::{AttributeData, MeshAttribute, MeshWithData, TriMesh3d}, Real, SurfaceReconstruction, UniformGrid};
+use splashsurf_lib::{nalgebra::Vector3, mesh::{AttributeData, MeshAttribute, MeshWithData, TriMesh3d}, Real, SurfaceReconstruction, UniformGrid, sph_interpolation::SphInterpolator};
 
 fn get_attribute_with_name<'py, R: Real + Element>(py: Python<'py>, attrs: &[MeshAttribute<R>], name: &str) -> PyResult<PyObject> where R: pyo3::IntoPyObject<'py> {
     let elem = attrs.iter().filter(|x| x.name == name).next();
@@ -102,6 +102,38 @@ macro_rules! create_mesh_data_interface {
     };
 }
 
+macro_rules! create_sph_interpolator_interface {
+    ($name: ident, $type: ident) => {
+        #[pyclass]
+        pub struct $name {
+            pub inner: SphInterpolator<$type>,
+        }
+
+        impl $name {
+            pub fn new(data: SphInterpolator<$type>) -> Self {
+                Self { inner: data }
+            }
+        }
+
+        #[pymethods]
+        impl $name {
+            #[new]
+            fn py_new<'py>(
+                particle_positions: &Bound<'py, PyArray2<$type>>,
+                particle_densities: Vec<$type>, 
+                particle_rest_mass: $type, 
+                compact_support_radius: $type
+            ) -> PyResult<Self> {
+                let particle_positions: PyReadonlyArray2<$type> = particle_positions.extract().unwrap();
+                let particle_positions = particle_positions.as_slice().unwrap();
+                let particle_positions: &[Vector3<$type>] = bytemuck::cast_slice(particle_positions);
+
+                Ok($name::new(SphInterpolator::new(particle_positions, particle_densities.as_slice(), particle_rest_mass, compact_support_radius)))
+            }
+        }
+    };
+}
+
 macro_rules! create_mesh_interface {
     ($name: ident, $type: ident) => {
         #[pyclass]
@@ -191,3 +223,6 @@ create_reconstruction_interface!(PySurfaceReconstructionF32, f32, PyTriMesh3dF32
 
 create_mesh_data_interface!(PyMeshWithDataF64, f64, PyTriMesh3dF64);
 create_mesh_data_interface!(PyMeshWithDataF32, f32, PyTriMesh3dF32);
+
+create_sph_interpolator_interface!(PySphInterpolatorF64, f64);
+create_sph_interpolator_interface!(PySphInterpolatorF32, f32);
