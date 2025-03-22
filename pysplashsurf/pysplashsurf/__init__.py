@@ -227,6 +227,34 @@ def par_laplacian_smoothing_inplace(
     else:
         raise ValueError("Invalid mesh type")
     
+def par_laplacian_smoothing_normals_inplace(
+    normals: np.ndarray,
+    vertex_connectivity: list[list[int]],
+    iterations: int
+):
+    """Laplacian Smoothing of the vertex normals
+    
+    Parameters
+    ----------
+    normals: np.ndarray
+        2D-Array of vertex normals to smooth
+        
+    vertex_connectivity: list[list[int]]
+        Vertex connectivity list
+        
+    iterations: int
+        Number of iterations
+    """
+    
+    if normals.dtype == 'float32':
+        par_laplacian_smoothing_normals_inplace_f32(normals, vertex_connectivity, iterations)
+    
+    elif normals.dtype == 'float64':
+        par_laplacian_smoothing_normals_inplace_f64(normals, vertex_connectivity, iterations)
+    
+    else:
+        raise ValueError("Invalid mesh type")
+    
 def calculate_smoothed_normals(
     mesh_with_data,
     vertex_connectivity: list[list[int]], *,

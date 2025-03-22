@@ -38,9 +38,11 @@ fn pysplashsurf(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     let _ = m.add_function(wrap_pyfunction!(laplacian_smoothing::par_laplacian_smoothing_inplace_py_f32, m)?);
     let _ = m.add_function(wrap_pyfunction!(laplacian_smoothing::par_laplacian_smoothing_inplace_py_f64, m)?);
+    let _ = m.add_function(wrap_pyfunction!(laplacian_smoothing::par_laplacian_smoothing_normals_inplace_py_f32, m)?);
+    let _ = m.add_function(wrap_pyfunction!(laplacian_smoothing::par_laplacian_smoothing_normals_inplace_py_f64, m)?);
 
-    let _ = m.add_function(wrap_pyfunction!(laplacian_smoothing::calculate_smoothed_normals_py_f32, m)?);
-    let _ = m.add_function(wrap_pyfunction!(laplacian_smoothing::calculate_smoothed_normals_py_f64, m)?);
+    // let _ = m.add_function(wrap_pyfunction!(laplacian_smoothing::calculate_smoothed_normals_py_f32, m)?);
+    // let _ = m.add_function(wrap_pyfunction!(laplacian_smoothing::calculate_smoothed_normals_py_f64, m)?);
 
     Ok(())
 }

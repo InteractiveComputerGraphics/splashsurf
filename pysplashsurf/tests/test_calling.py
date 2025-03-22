@@ -65,7 +65,7 @@ def test_laplacian_smoothing():
     meshio.write_points_cells("test.vtk", mesh.vertices, [("triangle", mesh.triangles)])
 
 def test_mesh_with_data():
-    particles = np.array(meshio.read("./ParticleData_Fluid_5.vtk").points, dtype=np.float32)
+    particles = np.array(meshio.read("./ParticleData_Fluid_5.vtk").points, dtype=np.float64)
     reconstruction = pysplashsurf.reconstruct_surface(particles, enable_multi_threading=True, particle_radius=0.025, 
                                                                  rest_density=1000.0, smoothing_length=2.0, cube_size=0.5, 
                                                                  iso_surface_threshold=0.6, aabb_min=np.array([0.0, 0.0, 0.0]), aabb_max=np.array([2.0, 2.0, 2.0]))
@@ -74,12 +74,15 @@ def test_mesh_with_data():
     
     vertex_connectivity = pysplashsurf.marching_cubes_cleanup(mesh, grid, max_iter=5, keep_vertices=False)
     
-    mesh_with_data = pysplashsurf.PyMeshWithDataF32(mesh)
-    pysplashsurf.calculate_smoothed_normals(mesh_with_data, vertex_connectivity, smoothing_iters=5)
+    normals = mesh.par_vertex_normals()
+    pysplashsurf.par_laplacian_smoothing_normals_inplace(normals, vertex_connectivity, 5)
+    
+    mesh_with_data = pysplashsurf.PyMeshWithDataF64(mesh)
+    mesh_with_data.push_point_attribute("normals", normals)
     
     ex_scalars = np.array([i for i in range(len(mesh.vertices))], dtype=np.uint64)
-    ex_reals = np.array([i for i in range(len(mesh.vertices))], dtype=np.float32)
-    ex_vectors = np.array([[i, i, i] for i in range(len(mesh.vertices))], dtype=np.float32)
+    ex_reals = np.array([i for i in range(len(mesh.vertices))], dtype=np.float64)
+    ex_vectors = np.array([[i, i, i] for i in range(len(mesh.vertices))], dtype=np.float64)
     
     mesh_with_data.push_point_attribute("test_scalar", ex_scalars)
     mesh_with_data.push_point_attribute("test_reals", ex_reals)

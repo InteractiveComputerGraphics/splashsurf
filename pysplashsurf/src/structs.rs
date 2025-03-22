@@ -1,7 +1,7 @@
 use numpy::{Element, IntoPyArray, PyArray2, ToPyArray, PyReadonlyArray2};
 use ndarray::{ArrayView, ArrayView2, Array2};
 use pyo3::{prelude::*, PyResult, PyObject, PyErr, IntoPyObjectExt, exceptions::PyValueError};
-use splashsurf_lib::{nalgebra::Vector3, mesh::{AttributeData, MeshAttribute, MeshWithData, TriMesh3d}, Real, SurfaceReconstruction, UniformGrid, sph_interpolation::SphInterpolator};
+use splashsurf_lib::{nalgebra::{Unit, Vector3}, mesh::{AttributeData, MeshAttribute, MeshWithData, TriMesh3d}, Real, SurfaceReconstruction, UniformGrid, sph_interpolation::SphInterpolator};
 
 fn get_attribute_with_name<'py, R: Real + Element>(py: Python<'py>, attrs: &[MeshAttribute<R>], name: &str) -> PyResult<PyObject> where R: pyo3::IntoPyObject<'py> {
     let elem = attrs.iter().filter(|x| x.name == name).next();
@@ -164,6 +164,19 @@ macro_rules! create_mesh_interface {
                 let triangles: ArrayView2<usize> =
                     ArrayView::from_shape((self.inner.triangles.len(), 3), tris).unwrap();
                 triangles.to_pyarray(py)
+            }
+
+            fn par_vertex_normals<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<$type>> {
+                let normals_vec = self.inner.par_vertex_normals();
+                let normals_vec = bytemuck::allocation::cast_vec::<Unit<Vector3<$type>>, $type>(normals_vec);
+                //let normals_vec: Vec<$type> = bytemuck::cas
+
+                let normals: &[$type] = normals_vec.as_slice();
+                let normals: ArrayView2<$type> =
+                    ArrayView::from_shape((normals.len() / 3, 3), normals)
+                        .unwrap();
+                
+                normals.to_pyarray(py)
             }
         }
     };
