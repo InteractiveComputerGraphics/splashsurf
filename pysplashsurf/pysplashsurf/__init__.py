@@ -1,6 +1,45 @@
 from .pysplashsurf import *
 import numpy as np
 
+def push_point_attribute(self, name: str, data: np.ndarray, real_type):
+    if data.ndim == 2:
+        return self.push_point_attribute_vector_real(name, data)
+    
+    elif data.ndim == 1:
+        if data.dtype == np.uint64:
+            return self.push_point_attribute_scalar_u64(name, data)
+        
+        elif data.dtype == real_type:
+            return self.push_point_attribute_scalar_real(name, data)
+        
+        else:
+            raise ValueError("Not a valid data type, try explicitly specifying uint64 or float64")
+        
+    else:
+        raise ValueError("Not a valid data array")
+    
+def push_cell_attribute(self, name: str, data: np.ndarray, real_type):
+    if data.ndim == 2:
+        return self.push_cell_attribute_vector_real(name, data)
+    
+    elif data.ndim == 1:
+        if data.dtype == np.uint64:
+            return self.push_cell_attribute_scalar_u64(name, data)
+        
+        elif data.dtype == real_type:
+            return self.push_cell_attribute_scalar_real(name, data)
+        
+        else:
+            raise ValueError("Not a valid data type, try explicitly specifying uint64 or float64")
+        
+    else:
+        raise ValueError("Not a valid data array")
+
+PyMeshWithDataF64.push_point_attribute = lambda self, name, data: push_point_attribute(self, name, data, np.float64)
+PyMeshWithDataF32.push_point_attribute = lambda self, name, data: push_point_attribute(self, name, data, np.float32)
+PyMeshWithDataF64.push_cell_attribute = lambda self, name, data: push_cell_attribute(self, name, data, np.float64)
+PyMeshWithDataF32.push_cell_attribute = lambda self, name, data: push_cell_attribute(self, name, data, np.float32)
+
 def reconstruct_surface(
     particles, *, 
     particle_radius: float = 0.025, 
