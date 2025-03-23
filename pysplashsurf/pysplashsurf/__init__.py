@@ -202,7 +202,7 @@ def par_laplacian_smoothing_inplace(
     
     Parameters
     ----------
-    mesh: PyTriMesh3dF32 | PyTriMesh3dF64
+    mesh: PyMeshWithDataF32 | PyMeshWithDataF64
         Mesh object to smooth
         
     vertex_connectivity: list[list[int]]
@@ -218,10 +218,10 @@ def par_laplacian_smoothing_inplace(
         Feature weights for the vertices
     """
     
-    if type(mesh) is PyTriMesh3dF32:
+    if type(mesh) is PyMeshWithDataF32:
         par_laplacian_smoothing_inplace_f32(mesh, vertex_connectivity, iterations, beta, weights)
     
-    elif type(mesh) is PyTriMesh3dF64:
+    elif type(mesh) is PyMeshWithDataF64:
         par_laplacian_smoothing_inplace_f64(mesh, vertex_connectivity, iterations, beta, weights)
     
     else:
@@ -428,3 +428,69 @@ def post_processing(
         
     else:
         raise ValueError("Invalid reconstruction type")
+
+def neighborhood_search_spatial_hashing_parallel(
+    domain,
+    particle_positions: np.ndarray,
+    search_radius: float
+):
+    """Performs a neighborhood search (multi-threaded implementation)
+    
+    Returns the indices of all neighboring particles in the given search radius per particle as a `Vec<Vec<usize>>`.
+
+    Parameters
+    ----------
+    domain: PyAabb3dF32 | PyAabb3dF64
+        Axis-aligned bounding box of the domain
+        
+    particle_positions: np.ndarray
+        2D-Array of particle positions
+        
+    search_radius: float
+        Search radius
+    """
+    
+    if type(domain) is PyAabb3dF32:
+        return neighborhood_search_spatial_hashing_parallel_f32(domain, particle_positions, search_radius)
+    
+    elif type(domain) is PyAabb3dF64:
+        return neighborhood_search_spatial_hashing_parallel_f64(domain, particle_positions, search_radius)
+    
+    else:
+        raise ValueError("Invalid domain type")
+
+def check_mesh_consistency(
+    grid,
+    mesh, *,
+    check_closed: bool,
+    check_manifold: bool,
+    debug: bool,
+):
+    """Check mesh consistency
+    
+    Parameters
+    ----------
+    grid: PyUniformGridF32 | PyUniformGridF64
+        Uniform grid object
+        
+    mesh: PyTriMesh3dF32 | PyTriMesh3dF64
+        Triangular mesh object
+        
+    check_closed: bool
+        Flag to check for closed mesh
+        
+    check_manifold: bool
+        Flag to check for manifold mesh
+        
+    debug: bool
+        Flag to enable debug output
+    """
+    
+    if type(grid) is PyUniformGridF32 and type(mesh) is PyTriMesh3dF32:
+        return check_mesh_consistency_f32(grid, mesh, check_closed=check_closed, check_manifold=check_manifold, debug=debug)
+    
+    elif type(grid) is PyUniformGridF64 and type(mesh) is PyTriMesh3dF64:
+        return check_mesh_consistency_f64(grid, mesh, check_closed=check_closed, check_manifold=check_manifold, debug=debug)
+    
+    else:
+        raise ValueError("Invalid grid or mesh type")

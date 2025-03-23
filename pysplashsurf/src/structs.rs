@@ -1,7 +1,7 @@
 use numpy::{Element, IntoPyArray, PyArray2, ToPyArray, PyReadonlyArray2};
 use ndarray::{ArrayView, ArrayView2, Array2};
 use pyo3::{prelude::*, PyResult, PyObject, PyErr, IntoPyObjectExt, exceptions::PyValueError};
-use splashsurf_lib::{nalgebra::{Unit, Vector3}, mesh::{AttributeData, MeshAttribute, MeshWithData, TriMesh3d}, Real, SurfaceReconstruction, UniformGrid, sph_interpolation::SphInterpolator};
+use splashsurf_lib::{nalgebra::{Unit, Vector3}, mesh::{AttributeData, MeshAttribute, MeshWithData, TriMesh3d, Mesh3d}, Real, SurfaceReconstruction, UniformGrid, sph_interpolation::SphInterpolator, Aabb3d};
 
 fn get_attribute_with_name<'py, R: Real + Element>(py: Python<'py>, attrs: &[MeshAttribute<R>], name: &str) -> PyResult<PyObject> where R: pyo3::IntoPyObject<'py> {
     let elem = attrs.iter().filter(|x| x.name == name).next();
@@ -33,7 +33,7 @@ fn add_attribute_with_name<'py, R: Real + Element>(attrs: &mut Vec<MeshAttribute
 }
  
 macro_rules! create_mesh_data_interface {
-    ($name: ident, $type: ident, $mesh_class: ident) => {
+    ($name: ident, $type: ident, $mesh_class: ident, $aabb_class: ident) => {
         #[pyclass]
         pub struct $name {
             pub inner: MeshWithData<$type, TriMesh3d<$type>>,
@@ -57,6 +57,10 @@ macro_rules! create_mesh_data_interface {
             #[getter]
             fn mesh(&self) -> $mesh_class {
                 $mesh_class::new(self.inner.mesh.clone())
+            }
+
+            fn par_clamp_with_aabb(&self, aabb: &$aabb_class, clamp_vertices: bool, keep_vertices: bool) -> $name {
+                $name::new(self.inner.par_clamp_with_aabb(&aabb.inner, clamp_vertices, keep_vertices))
             }
 
             fn push_point_attribute_scalar_u64<'py>(&mut self, name: &str, data: Vec<u64>) -> PyResult<()> {
@@ -130,6 +134,40 @@ macro_rules! create_sph_interpolator_interface {
 
                 Ok($name::new(SphInterpolator::new(particle_positions, particle_densities.as_slice(), particle_rest_mass, compact_support_radius)))
             }
+
+            fn interpolate_scalar_quantity<'py>(
+                &self, 
+                particle_quantity: Vec<$type>, 
+                interpolation_points: &Bound<'py, PyArray2<$type>>, 
+                first_order_correction: bool
+            ) -> Vec<$type> {
+                let interpolation_points: PyReadonlyArray2<$type> = interpolation_points.extract().unwrap();
+                let interpolation_points = interpolation_points.as_slice().unwrap();
+                let interpolation_points: &[Vector3<$type>] = bytemuck::cast_slice(interpolation_points);
+
+                self.inner.interpolate_scalar_quantity(particle_quantity.as_slice(), interpolation_points, first_order_correction)
+            }
+
+            fn interpolate_normals<'py>(
+                &self, 
+                py: Python<'py>,
+                interpolation_points: &Bound<'py, PyArray2<$type>>,
+            ) -> Bound<'py, PyArray2<$type>> {
+                let interpolation_points: PyReadonlyArray2<$type> = interpolation_points.extract().unwrap();
+                let interpolation_points = interpolation_points.as_slice().unwrap();
+                let interpolation_points: &[Vector3<$type>] = bytemuck::cast_slice(interpolation_points);
+
+                let normals_vec = self.inner.interpolate_normals(interpolation_points);
+                let normals_vec = bytemuck::allocation::cast_vec::<Unit<Vector3<$type>>, $type>(normals_vec);
+                //let normals_vec: Vec<$type> = bytemuck::cas
+
+                let normals: &[$type] = normals_vec.as_slice();
+                let normals: ArrayView2<$type> =
+                    ArrayView::from_shape((normals.len() / 3, 3), normals)
+                        .unwrap();
+                
+                normals.to_pyarray(py)
+            }
         }
     };
 }
@@ -178,6 +216,10 @@ macro_rules! create_mesh_interface {
                 
                 normals.to_pyarray(py)
             }
+
+            fn vertex_vertex_connectivity(&self) -> Vec<Vec<usize>> {
+                self.inner.vertex_vertex_connectivity()
+            }
         }
     };
 }
@@ -221,6 +263,50 @@ macro_rules! create_reconstruction_interface {
             fn grid(&self) -> $grid_class {
                 $grid_class::new(self.inner.grid().clone())
             }
+
+            fn particle_densities(&self) -> &Vec<$type> {
+                self.inner.particle_densities().ok_or_else( || anyhow::anyhow!("Surface Reconstruction did not return particle densities")).unwrap()
+            }
+
+            fn particle_neighbors(&self) -> Option<&Vec<Vec<usize>>> {
+                self.inner.particle_neighbors()
+            }
+        }
+    };
+}
+
+macro_rules! create_aabb3d_interface {
+    ($name: ident, $type: ident) => {
+        #[pyclass]
+        pub struct $name {
+            pub inner: Aabb3d<$type>
+        }
+
+        impl $name {
+            pub fn new(data: Aabb3d<$type>) -> Self {
+                Self { inner: data }
+            }
+        }
+
+        #[pymethods]
+        impl $name {
+            #[new]
+            fn py_new<'py>(min: [$type; 3], max: [$type; 3]) -> PyResult<Self> {
+                Ok($name::new(Aabb3d::<$type>::new(Vector3::from_column_slice(&min), Vector3::from_column_slice(&max))))
+            }
+
+            #[staticmethod]
+            fn from_points<'py>(points: &Bound<'py, PyArray2<$type>>) -> $name {
+                let points: PyReadonlyArray2<$type> = points.extract().unwrap();
+                let points = points.as_slice().unwrap();
+                let points: &[Vector3<$type>] = bytemuck::cast_slice(points);
+
+                $name::new(Aabb3d::from_points(points))
+            }
+
+            fn grow_uniformly(&mut self, margin: $type) {
+                self.inner.grow_uniformly(margin);
+            }
         }
     };
 }
@@ -234,8 +320,11 @@ create_grid_interface!(PyUniformGridF32, f32);
 create_reconstruction_interface!(PySurfaceReconstructionF64, f64, PyTriMesh3dF64, PyUniformGridF64);
 create_reconstruction_interface!(PySurfaceReconstructionF32, f32, PyTriMesh3dF32, PyUniformGridF32);
 
-create_mesh_data_interface!(PyMeshWithDataF64, f64, PyTriMesh3dF64);
-create_mesh_data_interface!(PyMeshWithDataF32, f32, PyTriMesh3dF32);
+create_aabb3d_interface!(PyAabb3dF64, f64);
+create_aabb3d_interface!(PyAabb3dF32, f32);
+
+create_mesh_data_interface!(PyMeshWithDataF64, f64, PyTriMesh3dF64, PyAabb3dF64);
+create_mesh_data_interface!(PyMeshWithDataF32, f32, PyTriMesh3dF32, PyAabb3dF32);
 
 create_sph_interpolator_interface!(PySphInterpolatorF64, f64);
 create_sph_interpolator_interface!(PySphInterpolatorF32, f32);

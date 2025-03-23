@@ -59,8 +59,11 @@ def test_laplacian_smoothing():
     mesh = reconstruction.mesh
     grid = reconstruction.grid
     res = pysplashsurf.marching_cubes_cleanup(mesh, grid, max_iter=5, keep_vertices=False)
+    
+    mesh_with_data = pysplashsurf.PyMeshWithDataF64(mesh)
+    
     print(f"Number of tris {len(mesh.triangles)}, number of vertices {len(mesh.vertices)}")
-    pysplashsurf.par_laplacian_smoothing_inplace(mesh, res, 5, 1.0, [1.0 for _ in range(len(mesh.vertices))])
+    pysplashsurf.par_laplacian_smoothing_inplace(mesh_with_data, res, 5, 1.0, [1.0 for _ in range(len(mesh.vertices))])
     print(f"Number of tris {len(mesh.triangles)}, number of vertices {len(mesh.vertices)}")
     meshio.write_points_cells("test.vtk", mesh.vertices, [("triangle", mesh.triangles)])
 
@@ -99,10 +102,121 @@ def test_mesh_with_data():
     normals = mesh_with_data.get_point_attribute("normals")
     
     print(normals)
+
+def reconstruction_pipeline(*, enable_multi_threading=True, particle_radius=0.025, 
+                            rest_density=1000.0, smoothing_length=2.0, cube_size=0.5, 
+                            iso_surface_threshold=0.6, mesh_smoothing_weights=True, sph_normals=True, 
+                            mesh_smoothing_weights_normalization=100.0, mesh_smoothing_iters=5, normals_smoothing_iters=5,
+                            mesh_aabb = None, mesh_cleanup=True, decimate_barnacles=True, keep_vertices=False,
+                            compute_normals=True, output_raw_normals=False, mesh_aabb_clamp_vertices=True,
+                            check_mesh_closed=True, check_mesh_manifold=True, check_mesh_debug=False):
+    compact_support_radius = 2.0 * particle_radius * smoothing_length
     
+    particles = np.array(meshio.read("./ParticleData_Fluid_5.vtk").points, dtype=np.float64)
+    reconstruction = pysplashsurf.reconstruct_surface(particles, enable_multi_threading=enable_multi_threading, particle_radius=particle_radius, 
+                                                                 rest_density=rest_density, smoothing_length=smoothing_length, cube_size=cube_size, 
+                                                                 iso_surface_threshold=iso_surface_threshold)
+    
+    grid = reconstruction.grid
+    mesh = reconstruction.mesh
+    
+    # Mesh Cleanup
+    if mesh_cleanup:
+        vertex_connectivity = pysplashsurf.marching_cubes_cleanup(mesh, grid, max_iter=5, keep_vertices=keep_vertices)
+    
+    # Decimate mesh barnacles
+    if decimate_barnacles:
+        vertex_connectivity = pysplashsurf.decimation(mesh, keep_vertices=keep_vertices)
+    
+    # Initialize SPH Interpolator if required
+    interpolator_required = mesh_smoothing_weights or sph_normals
+    if interpolator_required:
+        particle_rest_volume = 4.0/3.0 * np.pi * particle_radius**3
+        particle_rest_mass = rest_density * particle_rest_volume
+        particle_densities = reconstruction.particle_densities()
+        
+        interpolator = pysplashsurf.PySphInterpolatorF64(particles, particle_densities, particle_rest_mass, compact_support_radius)
+    
+    # Compute mesh vertex-vertex connectivity map if not done already and required
+    if vertex_connectivity is None and (mesh_smoothing_iters > 0 or normals_smoothing_iters > 0):
+        vertex_connectivity = mesh.vertex_vertex_connectivity()
+    
+    if mesh_smoothing_weights:
+        # Compute smoothing weights
+        # First do global neighborhood search
+        nl = reconstruction.particle_neighbors()
+        if nl is None:
+            search_radius = compact_support_radius
+            aabb = pysplashsurf.PyAabb3dF64.from_points(particles)
+            aabb.grow_uniformly(search_radius)
+            
+            nl = pysplashsurf.neighborhood_search_spatial_hashing_parallel(aabb, particles, search_radius)
+        
+        # Compute weighted neighbor count
+        squared_r = compact_support_radius * compact_support_radius
+        weighted_ncounts = [sum([1 - max(0, min(1, (np.dot(particles[i]-particles[j], particles[i]-particles[j]) / squared_r))) for j in nll]) for i, nll in enumerate(nl)]
+        vertex_weighted_num_neighbors = np.array(interpolator.interpolate_scalar_quantity(weighted_ncounts, mesh.vertices, True))
+        
+        # Create Mesh with Data object
+        mesh_with_data = pysplashsurf.PyMeshWithDataF64(mesh)
+        
+        # Now compute the weights
+        offset = 0
+        normalization = mesh_smoothing_weights_normalization - offset
+        
+        smoothing_weights = [max(n-offset, 0) for n in vertex_weighted_num_neighbors]
+        smoothing_weights = [min(n/normalization, 1.0) for n in smoothing_weights]
+        smoothing_weights = np.array([6*pow(x,5) - 15*pow(x,4) + 10*pow(x,3) for x in smoothing_weights])
+        
+        mesh_with_data.push_point_attribute("wnn", vertex_weighted_num_neighbors)
+        mesh_with_data.push_point_attribute("sw", smoothing_weights)
+    
+    # Perform smoothing
+    if smoothing_weights is None:
+        smoothing_weights = [1.0 for _ in range(len(mesh.vertices))]
+    
+    pysplashsurf.par_laplacian_smoothing_inplace(mesh_with_data, vertex_connectivity, mesh_smoothing_iters, 1.0, smoothing_weights)
+    
+    mesh = mesh_with_data.mesh
+    
+    # Compute normals
+    if compute_normals:
+        if sph_normals:
+            normals = interpolator.interpolate_normals(mesh.vertices)
+        else:
+            normals = mesh.par_vertex_normals()
+        
+        # Smooth normals
+        smoothed_normals = normals.copy()
+        pysplashsurf.par_laplacian_smoothing_normals_inplace(smoothed_normals, vertex_connectivity, mesh_smoothing_iters)
+        
+        # Add normals to mesh
+        mesh_with_data.push_point_attribute("normals", smoothed_normals)
+        
+        if output_raw_normals:
+            mesh_with_data.push_point_attribute("raw_normals", normals)
+    
+    # Left out: Interpolate attributes if requested 
+    
+    # Remove and clamp cells outside AABB
+    if mesh_aabb is not None:
+        mesh_with_data = mesh_with_data.par_clamp_with_aabb(mesh_aabb, mesh_aabb_clamp_vertices, keep_vertices)
+    
+    #Left out: Convert triangles to quads
+    
+    mesh = mesh_with_data.mesh
+    meshio.write_points_cells("test.vtk", mesh.vertices, [("triangle", mesh.triangles)])
+    
+    # Mesh checks
+    pysplashsurf.check_mesh_consistency(grid, mesh, check_closed=check_mesh_closed, check_manifold=check_mesh_manifold, debug=check_mesh_debug)
+    
+    # Left out: Mesh orientation check
+    
+
 #test_reconstruct_surface()
 #test_post_processing()
 #test_marching_cubes_cleanup() 
 #test_decimation()
 #test_laplacian_smoothing()
-test_mesh_with_data()
+#test_mesh_with_data()
+reconstruction_pipeline()
