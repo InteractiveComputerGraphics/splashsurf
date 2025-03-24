@@ -5,7 +5,46 @@ use splashsurf_lib::{
     SpatialDecomposition, SurfaceReconstruction,
 };
 
-use crate::structs::{PySurfaceReconstructionF32, PySurfaceReconstructionF64};
+use crate::{mesh::{PyTriMesh3dF32, PyTriMesh3dF64}, uniform_grid::{PyUniformGridF32, PyUniformGridF64}};
+
+macro_rules! create_reconstruction_interface {
+    ($name: ident, $type: ident, $mesh_class: ident, $grid_class: ident) => {
+        #[pyclass]
+        pub struct $name {
+            pub inner: SurfaceReconstruction<i64, $type>,
+        }
+
+        impl $name {
+            pub fn new(data: SurfaceReconstruction<i64, $type>) -> Self {
+                Self { inner: data }
+            }
+        }
+
+        #[pymethods]
+        impl $name {
+            #[getter]
+            fn mesh(&self) -> $mesh_class {
+                $mesh_class::new(self.inner.mesh().clone())
+            }
+
+            #[getter]
+            fn grid(&self) -> $grid_class {
+                $grid_class::new(self.inner.grid().clone())
+            }
+
+            fn particle_densities(&self) -> &Vec<$type> {
+                self.inner.particle_densities().ok_or_else( || anyhow::anyhow!("Surface Reconstruction did not return particle densities")).unwrap()
+            }
+
+            fn particle_neighbors(&self) -> Option<&Vec<Vec<usize>>> {
+                self.inner.particle_neighbors()
+            }
+        }
+    };
+}
+
+create_reconstruction_interface!(PySurfaceReconstructionF64, f64, PyTriMesh3dF64, PyUniformGridF64);
+create_reconstruction_interface!(PySurfaceReconstructionF32, f32, PyTriMesh3dF32, PyUniformGridF32);
 
 /// Reconstruct the surface from only particle positions
 fn reconstruct_surface_py<I: Index, R: Real>(

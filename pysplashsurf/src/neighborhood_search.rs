@@ -2,7 +2,7 @@ use numpy::{PyArray2, PyReadonlyArray2};
 use pyo3::prelude::*;
 use splashsurf_lib::{neighborhood_search::*, nalgebra::Vector3};
 
-use crate::structs::{PyAabb3dF32, PyAabb3dF64};
+use crate::aabb::{PyAabb3dF32, PyAabb3dF64};
 
 #[pyfunction]
 #[pyo3(name = "neighborhood_search_spatial_hashing_parallel_f64")]
