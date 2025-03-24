@@ -16,6 +16,9 @@ fn pysplashsurf(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let _ = m.add_class::<structs::PyTriMesh3dF32>()?;
     let _ = m.add_class::<structs::PyTriMesh3dF64>()?;
 
+    let _ = m.add_class::<structs::PyMixedTriQuadMesh3dF32>()?;
+    let _ = m.add_class::<structs::PyMixedTriQuadMesh3dF64>()?;
+
     let _ = m.add_class::<structs::PyUniformGridF32>()?;
     let _ = m.add_class::<structs::PyUniformGridF64>()?;
 
@@ -36,6 +39,9 @@ fn pysplashsurf(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     let _ = m.add_function(wrap_pyfunction!(post_processing::post_processing_py_f32, m)?);
     let _ = m.add_function(wrap_pyfunction!(post_processing::post_processing_py_f64, m)?);
+
+    let _ = m.add_function(wrap_pyfunction!(post_processing::convert_tris_to_quads_py_f32, m)?);
+    let _ = m.add_function(wrap_pyfunction!(post_processing::convert_tris_to_quads_py_f64, m)?);
 
     let _ = m.add_function(wrap_pyfunction!(marching_cubes::marching_cubes_cleanup_py_f32, m)?);
     let _ = m.add_function(wrap_pyfunction!(marching_cubes::marching_cubes_cleanup_py_f64, m)?);

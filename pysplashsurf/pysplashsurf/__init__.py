@@ -494,3 +494,35 @@ def check_mesh_consistency(
     
     else:
         raise ValueError("Invalid grid or mesh type")
+
+def convert_tris_to_quads(
+    mesh, *,
+    non_squareness_limit: float,
+    normal_angle_limit_rad: float,
+    max_interior_angle: float,
+):
+    """Converts triangles to quads
+    
+    Parameters
+    ----------
+    mesh: PyTriMesh3dF32 | PyTriMesh3dF64
+        Triangular mesh object
+        
+    non_squareness_limit: float
+        Non-squareness limit
+        
+    normal_angle_limit_rad: float
+        Normal angle limit in radians
+        
+    max_interior_angle: float
+        Maximum interior angle in radians
+    """
+    
+    if type(mesh) is PyTriMesh3dF32:
+        return convert_tris_to_quads_f32(mesh, non_squareness_limit=non_squareness_limit, normal_angle_limit_rad=normal_angle_limit_rad, max_interior_angle=max_interior_angle)
+    
+    elif type(mesh) is PyTriMesh3dF64:
+        return convert_tris_to_quads_f64(mesh, non_squareness_limit=non_squareness_limit, normal_angle_limit_rad=normal_angle_limit_rad, max_interior_angle=max_interior_angle)
+    
+    else:
+        raise ValueError("Invalid mesh type")

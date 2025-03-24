@@ -1,7 +1,7 @@
 use numpy::{Element, IntoPyArray, PyArray2, ToPyArray, PyReadonlyArray2};
 use ndarray::{ArrayView, ArrayView2, Array2};
 use pyo3::{prelude::*, PyResult, PyObject, PyErr, IntoPyObjectExt, exceptions::PyValueError};
-use splashsurf_lib::{nalgebra::{Unit, Vector3}, mesh::{AttributeData, MeshAttribute, MeshWithData, TriMesh3d, Mesh3d}, Real, SurfaceReconstruction, UniformGrid, sph_interpolation::SphInterpolator, Aabb3d};
+use splashsurf_lib::{nalgebra::{Unit, Vector3}, mesh::{AttributeData, MeshAttribute, MeshWithData, TriMesh3d, Mesh3d, MixedTriQuadMesh3d, TriangleOrQuadCell}, Real, SurfaceReconstruction, UniformGrid, sph_interpolation::SphInterpolator, Aabb3d};
 
 fn get_attribute_with_name<'py, R: Real + Element>(py: Python<'py>, attrs: &[MeshAttribute<R>], name: &str) -> PyResult<PyObject> where R: pyo3::IntoPyObject<'py> {
     let elem = attrs.iter().filter(|x| x.name == name).next();
@@ -224,6 +224,42 @@ macro_rules! create_mesh_interface {
     };
 }
 
+macro_rules! create_tri_quad_mesh_interface {
+    ($name: ident, $type: ident) => {
+        #[pyclass]
+        pub struct $name {
+            pub inner: MixedTriQuadMesh3d<$type>,
+        }
+
+        impl $name {
+            pub fn new(data: MixedTriQuadMesh3d<$type>) -> Self {
+                Self { inner: data }
+            }
+        }
+
+        #[pymethods]
+        impl $name {
+            #[getter]
+            fn vertices<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<$type>> {
+                let points: &[$type] = bytemuck::cast_slice(&self.inner.vertices);
+                let vertices: ArrayView2<$type> =
+                    ArrayView::from_shape((self.inner.vertices.len(), 3), points)
+                        .unwrap();
+                vertices.to_pyarray(py)
+            }
+
+            #[getter]
+            fn cells(&self) -> Vec<Vec<usize>> {
+                let cells: Vec<Vec<usize>> = self.inner.cells.iter().map(|c| match c {
+                    TriangleOrQuadCell::Tri(v) => v.to_vec(),
+                    TriangleOrQuadCell::Quad(v) => v.to_vec(),
+                }).collect();
+                cells
+            }
+        }
+    };
+}
+
 macro_rules! create_grid_interface {
     ($name: ident, $type: ident) => {
         #[pyclass]
@@ -313,6 +349,10 @@ macro_rules! create_aabb3d_interface {
 
 create_mesh_interface!(PyTriMesh3dF64, f64);
 create_mesh_interface!(PyTriMesh3dF32, f32);
+
+
+create_tri_quad_mesh_interface!(PyMixedTriQuadMesh3dF64, f64);
+create_tri_quad_mesh_interface!(PyMixedTriQuadMesh3dF32, f32);
 
 create_grid_interface!(PyUniformGridF64, f64);
 create_grid_interface!(PyUniformGridF32, f32);

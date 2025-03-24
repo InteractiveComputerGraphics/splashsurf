@@ -1,5 +1,6 @@
 import pysplashsurf
 import numpy as np
+import math
 import meshio
 
 def test_reconstruct_surface():
@@ -109,7 +110,8 @@ def reconstruction_pipeline(*, enable_multi_threading=True, particle_radius=0.02
                             mesh_smoothing_weights_normalization=100.0, mesh_smoothing_iters=5, normals_smoothing_iters=5,
                             mesh_aabb = None, mesh_cleanup=True, decimate_barnacles=True, keep_vertices=False,
                             compute_normals=True, output_raw_normals=False, mesh_aabb_clamp_vertices=True,
-                            check_mesh_closed=True, check_mesh_manifold=True, check_mesh_debug=False):
+                            check_mesh_closed=True, check_mesh_manifold=True, check_mesh_debug=False,
+                            generate_quads=True, quad_max_edge_diag_ratio=1.75, quad_max_normal_angle=10.0, quad_max_interior_angle=135.0):
     compact_support_radius = 2.0 * particle_radius * smoothing_length
     
     particles = np.array(meshio.read("./ParticleData_Fluid_5.vtk").points, dtype=np.float64)
@@ -201,14 +203,24 @@ def reconstruction_pipeline(*, enable_multi_threading=True, particle_radius=0.02
     # Remove and clamp cells outside AABB
     if mesh_aabb is not None:
         mesh_with_data = mesh_with_data.par_clamp_with_aabb(mesh_aabb, mesh_aabb_clamp_vertices, keep_vertices)
-    
-    #Left out: Convert triangles to quads
-    
+        
     mesh = mesh_with_data.mesh
-    meshio.write_points_cells("test.vtk", mesh.vertices, [("triangle", mesh.triangles)])
     
-    # Mesh checks
-    pysplashsurf.check_mesh_consistency(grid, mesh, check_closed=check_mesh_closed, check_manifold=check_mesh_manifold, debug=check_mesh_debug)
+    # Convert triangles to quads
+    if generate_quads:
+        mesh = pysplashsurf.convert_tris_to_quads(mesh, non_squareness_limit=quad_max_edge_diag_ratio, normal_angle_limit_rad=math.radians(quad_max_normal_angle), max_interior_angle=math.radians(quad_max_interior_angle))
+    
+    if type(mesh) is pysplashsurf.PyTriMesh3dF64:
+        meshio.write_points_cells("test.vtk", mesh.vertices, [("triangle", mesh.triangles)])
+        
+        # Mesh checks
+        pysplashsurf.check_mesh_consistency(grid, mesh, check_closed=check_mesh_closed, check_manifold=check_mesh_manifold, debug=check_mesh_debug)
+        
+    else:
+        cells = mesh.cells
+        cells = [("triangle", list(filter(lambda x: len(x) == 3, cells))), ("quad", list(filter(lambda x: len(x) == 4, cells)))]
+        meshio.write_points_cells("test.vtk", mesh.vertices, cells)
+    
     
     # Left out: Mesh orientation check
     

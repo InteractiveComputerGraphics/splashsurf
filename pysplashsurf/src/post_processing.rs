@@ -7,7 +7,7 @@ use splashsurf_lib::{
     mesh::{AttributeData, Mesh3d, MeshAttribute, MeshWithData, TriMesh3d}, nalgebra::Vector3, sph_interpolation::SphInterpolator, Aabb3d, GridDecompositionParameters, Index, Real, SpatialDecomposition, SurfaceReconstruction
 };
 
-use crate::structs::{PySurfaceReconstructionF32, PySurfaceReconstructionF64, PyTriMesh3dF32, PyTriMesh3dF64};
+use crate::structs::{PyMixedTriQuadMesh3dF32, PyMixedTriQuadMesh3dF64, PySurfaceReconstructionF32, PySurfaceReconstructionF64, PyTriMesh3dF32, PyTriMesh3dF64};
 
 struct ReconstructionRunnerPostprocessingArgs {
     mesh_cleanup: bool,
@@ -374,4 +374,28 @@ pub fn post_processing_py_f64<'py>(
 
     let mesh = post_processing_py_interface::<f64>(particles, &reconstruction.inner, &postprocessing_args, particle_radius, rest_density, smoothing_length, cube_size, iso_surface_threshold, enable_multi_threading, global_neighborhood_list, use_custom_grid_decomposition, subdomain_num_cubes_per_dim, aabb_min, aabb_max);
     PyTriMesh3dF64::new(mesh).into_bound_py_any(py).unwrap()
+}
+
+#[pyfunction]
+#[pyo3(name = "convert_tris_to_quads_f64")]
+#[pyo3(signature = (mesh, *, non_squareness_limit, normal_angle_limit_rad, max_interior_angle))]
+pub fn convert_tris_to_quads_py_f64<'py>(
+    mesh: &PyTriMesh3dF64,
+    non_squareness_limit: f64,
+    normal_angle_limit_rad: f64,
+    max_interior_angle: f64,
+) -> PyMixedTriQuadMesh3dF64 {
+    PyMixedTriQuadMesh3dF64::new(splashsurf_lib::postprocessing::convert_tris_to_quads(&mesh.inner, non_squareness_limit, normal_angle_limit_rad, max_interior_angle))
+}
+
+#[pyfunction]
+#[pyo3(name = "convert_tris_to_quads_f32")]
+#[pyo3(signature = (mesh, *, non_squareness_limit, normal_angle_limit_rad, max_interior_angle))]
+pub fn convert_tris_to_quads_py_f32<'py>(
+    mesh: &PyTriMesh3dF32,
+    non_squareness_limit: f32,
+    normal_angle_limit_rad: f32,
+    max_interior_angle: f32,
+) -> PyMixedTriQuadMesh3dF32 {
+    PyMixedTriQuadMesh3dF32::new(splashsurf_lib::postprocessing::convert_tris_to_quads(&mesh.inner, non_squareness_limit, normal_angle_limit_rad, max_interior_angle))
 }
