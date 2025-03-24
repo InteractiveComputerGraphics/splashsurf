@@ -5,3 +5,6 @@ target/
 *.so
 test.vtk
 env/
+
+# Sphinx
+pysplashsurf/docs/build/

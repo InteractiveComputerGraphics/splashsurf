@@ -36,6 +36,7 @@ fn add_attribute_with_name<'py, R: Real + Element>(attrs: &mut Vec<MeshAttribute
  
 macro_rules! create_mesh_data_interface {
     ($name: ident, $type: ident, $mesh_class: ident, $aabb_class: ident) => {
+        /// Mesh with data wrapper
         #[pyclass]
         pub struct $name {
             pub inner: MeshWithData<$type, TriMesh3d<$type>>,
@@ -65,6 +66,9 @@ macro_rules! create_mesh_data_interface {
                 $name::new(self.inner.par_clamp_with_aabb(&aabb.inner, clamp_vertices, keep_vertices))
             }
 
+            /// Push u64 scalar for every point
+            /// 
+            /// :meta private:
             fn push_point_attribute_scalar_u64<'py>(&mut self, name: &str, data: Vec<u64>) -> PyResult<()> {
                 add_attribute_with_name::<$type>(&mut self.inner.point_attributes, MeshAttribute::new(name, AttributeData::ScalarU64(data)))
             }
