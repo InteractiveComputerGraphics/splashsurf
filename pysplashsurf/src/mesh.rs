@@ -152,7 +152,6 @@ macro_rules! create_mesh_interface {
             fn par_vertex_normals<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<$type>> {
                 let normals_vec = self.inner.par_vertex_normals();
                 let normals_vec = bytemuck::allocation::cast_vec::<Unit<Vector3<$type>>, $type>(normals_vec);
-                //let normals_vec: Vec<$type> = bytemuck::cas
 
                 let normals: &[$type] = normals_vec.as_slice();
                 let normals: ArrayView2<$type> =

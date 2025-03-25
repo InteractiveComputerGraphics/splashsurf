@@ -2,119 +2,121 @@ import pysplashsurf
 import numpy as np
 import math
 import meshio
+import subprocess
+import time
 
-def test_reconstruct_surface():
-    particles = np.array(meshio.read("./ParticleData_Fluid_5.vtk").points, dtype=np.float64)
-    reconstruction = pysplashsurf.reconstruct_surface(particles, enable_multi_threading=True, particle_radius=0.025, 
-                                                                 rest_density=1000.0, smoothing_length=2.0, cube_size=0.5, 
-                                                                 iso_surface_threshold=0.6, aabb_min=np.array([0.0, 0.0, 0.0]), aabb_max=np.array([2.0, 2.0, 2.0]))
-    mesh = reconstruction.mesh
-    grid = reconstruction.grid
-    print(f"Mesh: {mesh}, Grid: {grid}")
-    tris = mesh.triangles
-    verts = mesh.vertices
-    print(f"Number of tris {len(tris)}, number of vertices {len(verts)}")
-    meshio.write_points_cells("test.vtk", verts, [("triangle", tris)])
+# def test_reconstruct_surface():
+#     particles = np.array(meshio.read("./ParticleData_Fluid_5.vtk").points, dtype=np.float64)
+#     reconstruction = pysplashsurf.reconstruct_surface(particles, enable_multi_threading=True, particle_radius=0.025, 
+#                                                                  rest_density=1000.0, smoothing_length=2.0, cube_size=0.5, 
+#                                                                  iso_surface_threshold=0.6, aabb_min=np.array([0.0, 0.0, 0.0]), aabb_max=np.array([2.0, 2.0, 2.0]))
+#     mesh = reconstruction.mesh
+#     grid = reconstruction.grid
+#     print(f"Mesh: {mesh}, Grid: {grid}")
+#     tris = mesh.triangles
+#     verts = mesh.vertices
+#     print(f"Number of tris {len(tris)}, number of vertices {len(verts)}")
+#     meshio.write_points_cells("test.vtk", verts, [("triangle", tris)])
     
 
-def test_post_processing():
-    particles = np.array(meshio.read("./ParticleData_Fluid_5.vtk").points, dtype=np.float32)
-    reconstruction = pysplashsurf.reconstruct_surface(particles, enable_multi_threading=True, particle_radius=0.025, 
-                                                                 rest_density=1000.0, smoothing_length=2.0, cube_size=0.5, 
-                                                                 iso_surface_threshold=0.6)
-    mesh = pysplashsurf.post_processing(particles, reconstruction, enable_multi_threading=True, particle_radius=0.025)
-    print(f"Number of tris {len(mesh.triangles)}, number of vertices {len(mesh.vertices)}")
-    meshio.write_points_cells("test.vtk", mesh.vertices, [("triangle", mesh.triangles)])
+# def test_post_processing():
+#     particles = np.array(meshio.read("./ParticleData_Fluid_5.vtk").points, dtype=np.float32)
+#     reconstruction = pysplashsurf.reconstruct_surface(particles, enable_multi_threading=True, particle_radius=0.025, 
+#                                                                  rest_density=1000.0, smoothing_length=2.0, cube_size=0.5, 
+#                                                                  iso_surface_threshold=0.6)
+#     mesh = pysplashsurf.post_processing(particles, reconstruction, enable_multi_threading=True, particle_radius=0.025)
+#     print(f"Number of tris {len(mesh.triangles)}, number of vertices {len(mesh.vertices)}")
+#     meshio.write_points_cells("test.vtk", mesh.vertices, [("triangle", mesh.triangles)])
 
 
-def test_marching_cubes_cleanup(): 
-    particles = np.array(meshio.read("./ParticleData_Fluid_5.vtk").points, dtype=np.float32)
-    reconstruction = pysplashsurf.reconstruct_surface(particles, enable_multi_threading=True, particle_radius=0.025, 
-                                                                 rest_density=1000.0, smoothing_length=2.0, cube_size=0.5, 
-                                                                 iso_surface_threshold=0.6, aabb_min=np.array([0.0, 0.0, 0.0]), aabb_max=np.array([2.0, 2.0, 2.0]))
-    mesh = reconstruction.mesh
-    grid = reconstruction.grid
-    print(f"Number of tris {len(mesh.triangles)}, number of vertices {len(mesh.vertices)}")
-    res = pysplashsurf.marching_cubes_cleanup(mesh, grid, max_iter=5, keep_vertices=False)
-    print(f"Number of tris {len(mesh.triangles)}, number of vertices {len(mesh.vertices)}")
-    print(len(res))
+# def test_marching_cubes_cleanup(): 
+#     particles = np.array(meshio.read("./ParticleData_Fluid_5.vtk").points, dtype=np.float32)
+#     reconstruction = pysplashsurf.reconstruct_surface(particles, enable_multi_threading=True, particle_radius=0.025, 
+#                                                                  rest_density=1000.0, smoothing_length=2.0, cube_size=0.5, 
+#                                                                  iso_surface_threshold=0.6, aabb_min=np.array([0.0, 0.0, 0.0]), aabb_max=np.array([2.0, 2.0, 2.0]))
+#     mesh = reconstruction.mesh
+#     grid = reconstruction.grid
+#     print(f"Number of tris {len(mesh.triangles)}, number of vertices {len(mesh.vertices)}")
+#     res = pysplashsurf.marching_cubes_cleanup(mesh, grid, max_iter=5, keep_vertices=False)
+#     print(f"Number of tris {len(mesh.triangles)}, number of vertices {len(mesh.vertices)}")
+#     print(len(res))
 
 
-def test_decimation():
-    particles = np.array(meshio.read("./ParticleData_Fluid_5.vtk").points, dtype=np.float32)
-    reconstruction = pysplashsurf.reconstruct_surface(particles, enable_multi_threading=True, particle_radius=0.025, 
-                                                                 rest_density=1000.0, smoothing_length=2.0, cube_size=0.5, 
-                                                                 iso_surface_threshold=0.6, aabb_min=np.array([0.0, 0.0, 0.0]), aabb_max=np.array([2.0, 2.0, 2.0]))
-    mesh = reconstruction.mesh
-    print(f"Number of tris {len(mesh.triangles)}, number of vertices {len(mesh.vertices)}")
-    res = pysplashsurf.decimation(mesh, keep_vertices=False)
-    print(f"Number of tris {len(mesh.triangles)}, number of vertices {len(mesh.vertices)}")
-    print(len(res))
-    meshio.write_points_cells("test.vtk", mesh.vertices, [("triangle", mesh.triangles)])
+# def test_decimation():
+#     particles = np.array(meshio.read("./ParticleData_Fluid_5.vtk").points, dtype=np.float32)
+#     reconstruction = pysplashsurf.reconstruct_surface(particles, enable_multi_threading=True, particle_radius=0.025, 
+#                                                                  rest_density=1000.0, smoothing_length=2.0, cube_size=0.5, 
+#                                                                  iso_surface_threshold=0.6, aabb_min=np.array([0.0, 0.0, 0.0]), aabb_max=np.array([2.0, 2.0, 2.0]))
+#     mesh = reconstruction.mesh
+#     print(f"Number of tris {len(mesh.triangles)}, number of vertices {len(mesh.vertices)}")
+#     res = pysplashsurf.decimation(mesh, keep_vertices=False)
+#     print(f"Number of tris {len(mesh.triangles)}, number of vertices {len(mesh.vertices)}")
+#     print(len(res))
+#     meshio.write_points_cells("test.vtk", mesh.vertices, [("triangle", mesh.triangles)])
    
-def test_laplacian_smoothing():
-    particles = np.array(meshio.read("./ParticleData_Fluid_5.vtk").points, dtype=np.float32)
-    reconstruction = pysplashsurf.reconstruct_surface(particles, enable_multi_threading=True, particle_radius=0.025, 
-                                                                 rest_density=1000.0, smoothing_length=2.0, cube_size=0.5, 
-                                                                 iso_surface_threshold=0.6, aabb_min=np.array([0.0, 0.0, 0.0]), aabb_max=np.array([2.0, 2.0, 2.0]))
-    mesh = reconstruction.mesh
-    grid = reconstruction.grid
-    res = pysplashsurf.marching_cubes_cleanup(mesh, grid, max_iter=5, keep_vertices=False)
+# def test_laplacian_smoothing():
+#     particles = np.array(meshio.read("./ParticleData_Fluid_5.vtk").points, dtype=np.float32)
+#     reconstruction = pysplashsurf.reconstruct_surface(particles, enable_multi_threading=True, particle_radius=0.025, 
+#                                                                  rest_density=1000.0, smoothing_length=2.0, cube_size=0.5, 
+#                                                                  iso_surface_threshold=0.6, aabb_min=np.array([0.0, 0.0, 0.0]), aabb_max=np.array([2.0, 2.0, 2.0]))
+#     mesh = reconstruction.mesh
+#     grid = reconstruction.grid
+#     res = pysplashsurf.marching_cubes_cleanup(mesh, grid, max_iter=5, keep_vertices=False)
     
-    mesh_with_data = pysplashsurf.PyMeshWithDataF64(mesh)
+#     mesh_with_data = pysplashsurf.PyMeshWithDataF64(mesh)
     
-    print(f"Number of tris {len(mesh.triangles)}, number of vertices {len(mesh.vertices)}")
-    pysplashsurf.par_laplacian_smoothing_inplace(mesh_with_data, res, 5, 1.0, [1.0 for _ in range(len(mesh.vertices))])
-    print(f"Number of tris {len(mesh.triangles)}, number of vertices {len(mesh.vertices)}")
-    meshio.write_points_cells("test.vtk", mesh.vertices, [("triangle", mesh.triangles)])
+#     print(f"Number of tris {len(mesh.triangles)}, number of vertices {len(mesh.vertices)}")
+#     pysplashsurf.par_laplacian_smoothing_inplace(mesh_with_data, res, 5, 1.0, [1.0 for _ in range(len(mesh.vertices))])
+#     print(f"Number of tris {len(mesh.triangles)}, number of vertices {len(mesh.vertices)}")
+#     meshio.write_points_cells("test.vtk", mesh.vertices, [("triangle", mesh.triangles)])
 
-def test_mesh_with_data():
-    particles = np.array(meshio.read("./ParticleData_Fluid_5.vtk").points, dtype=np.float64)
-    reconstruction = pysplashsurf.reconstruct_surface(particles, enable_multi_threading=True, particle_radius=0.025, 
-                                                                 rest_density=1000.0, smoothing_length=2.0, cube_size=0.5, 
-                                                                 iso_surface_threshold=0.6, aabb_min=np.array([0.0, 0.0, 0.0]), aabb_max=np.array([2.0, 2.0, 2.0]))
-    mesh = reconstruction.mesh
-    grid = reconstruction.grid
+# def test_mesh_with_data():
+#     particles = np.array(meshio.read("./ParticleData_Fluid_5.vtk").points, dtype=np.float64)
+#     reconstruction = pysplashsurf.reconstruct_surface(particles, enable_multi_threading=True, particle_radius=0.025, 
+#                                                                  rest_density=1000.0, smoothing_length=2.0, cube_size=0.5, 
+#                                                                  iso_surface_threshold=0.6, aabb_min=np.array([0.0, 0.0, 0.0]), aabb_max=np.array([2.0, 2.0, 2.0]))
+#     mesh = reconstruction.mesh
+#     grid = reconstruction.grid
     
-    vertex_connectivity = pysplashsurf.marching_cubes_cleanup(mesh, grid, max_iter=5, keep_vertices=False)
+#     vertex_connectivity = pysplashsurf.marching_cubes_cleanup(mesh, grid, max_iter=5, keep_vertices=False)
     
-    normals = mesh.par_vertex_normals()
-    pysplashsurf.par_laplacian_smoothing_normals_inplace(normals, vertex_connectivity, 5)
+#     normals = mesh.par_vertex_normals()
+#     pysplashsurf.par_laplacian_smoothing_normals_inplace(normals, vertex_connectivity, 5)
     
-    mesh_with_data = pysplashsurf.PyMeshWithDataF64(mesh)
-    mesh_with_data.push_point_attribute("normals", normals)
+#     mesh_with_data = pysplashsurf.PyMeshWithDataF64(mesh)
+#     mesh_with_data.push_point_attribute("normals", normals)
     
-    ex_scalars = np.array([i for i in range(len(mesh.vertices))], dtype=np.uint64)
-    ex_reals = np.array([i for i in range(len(mesh.vertices))], dtype=np.float64)
-    ex_vectors = np.array([[i, i, i] for i in range(len(mesh.vertices))], dtype=np.float64)
+#     ex_scalars = np.array([i for i in range(len(mesh.vertices))], dtype=np.uint64)
+#     ex_reals = np.array([i for i in range(len(mesh.vertices))], dtype=np.float64)
+#     ex_vectors = np.array([[i, i, i] for i in range(len(mesh.vertices))], dtype=np.float64)
     
-    mesh_with_data.push_point_attribute("test_scalar", ex_scalars)
-    mesh_with_data.push_point_attribute("test_reals", ex_reals)
-    mesh_with_data.push_point_attribute("test_vector", ex_vectors)
+#     mesh_with_data.push_point_attribute("test_scalar", ex_scalars)
+#     mesh_with_data.push_point_attribute("test_reals", ex_reals)
+#     mesh_with_data.push_point_attribute("test_vector", ex_vectors)
     
-    assert((mesh_with_data.get_point_attribute("test_scalar") == ex_scalars).all())
-    assert((mesh_with_data.get_point_attribute("test_reals") == ex_reals).all())
-    assert((mesh_with_data.get_point_attribute("test_vector") == ex_vectors).all())
+#     assert((mesh_with_data.get_point_attribute("test_scalar") == ex_scalars).all())
+#     assert((mesh_with_data.get_point_attribute("test_reals") == ex_reals).all())
+#     assert((mesh_with_data.get_point_attribute("test_vector") == ex_vectors).all())
     
-    ex_cell_scalars = np.array([i for i in range(1000)], dtype=np.uint64)
-    mesh_with_data.push_cell_attribute("test_cell_scalar", ex_cell_scalars)
-    assert((mesh_with_data.get_cell_attribute("test_cell_scalar") == ex_cell_scalars).all())
+#     ex_cell_scalars = np.array([i for i in range(1000)], dtype=np.uint64)
+#     mesh_with_data.push_cell_attribute("test_cell_scalar", ex_cell_scalars)
+#     assert((mesh_with_data.get_cell_attribute("test_cell_scalar") == ex_cell_scalars).all())
 
-    normals = mesh_with_data.get_point_attribute("normals")
+#     normals = mesh_with_data.get_point_attribute("normals")
     
-    print(normals)
+#     print(normals)
 
-def reconstruction_pipeline(*, enable_multi_threading=True, particle_radius=0.025, 
+def reconstruction_pipeline(input_file, output_file, *, enable_multi_threading=True, particle_radius=0.025, 
                             rest_density=1000.0, smoothing_length=2.0, cube_size=0.5, 
-                            iso_surface_threshold=0.6, mesh_smoothing_weights=True, sph_normals=True, 
-                            mesh_smoothing_weights_normalization=100.0, mesh_smoothing_iters=5, normals_smoothing_iters=5,
-                            mesh_aabb = None, mesh_cleanup=True, decimate_barnacles=True, keep_vertices=False,
-                            compute_normals=True, output_raw_normals=False, mesh_aabb_clamp_vertices=True,
+                            iso_surface_threshold=0.6, mesh_smoothing_weights=False, sph_normals=False, 
+                            mesh_smoothing_weights_normalization=13.0, mesh_smoothing_iters=5, normals_smoothing_iters=5,
+                            mesh_aabb = None, mesh_cleanup=False, decimate_barnacles=False, keep_vertices=False,
+                            compute_normals=False, output_raw_normals=False, mesh_aabb_clamp_vertices=False,
                             check_mesh_closed=True, check_mesh_manifold=True, check_mesh_debug=False,
-                            generate_quads=True, quad_max_edge_diag_ratio=1.75, quad_max_normal_angle=10.0, quad_max_interior_angle=135.0):
+                            generate_quads=False, quad_max_edge_diag_ratio=1.75, quad_max_normal_angle=10.0, quad_max_interior_angle=135.0):
     compact_support_radius = 2.0 * particle_radius * smoothing_length
     
-    particles = np.array(meshio.read("./ParticleData_Fluid_5.vtk").points, dtype=np.float64)
+    particles = np.array(meshio.read(input_file).points, dtype=np.float64)
     reconstruction = pysplashsurf.reconstruct_surface(particles, enable_multi_threading=enable_multi_threading, particle_radius=particle_radius, 
                                                                  rest_density=rest_density, smoothing_length=smoothing_length, cube_size=cube_size, 
                                                                  iso_surface_threshold=iso_surface_threshold)
@@ -122,6 +124,7 @@ def reconstruction_pipeline(*, enable_multi_threading=True, particle_radius=0.02
     grid = reconstruction.grid
     mesh = reconstruction.mesh
     
+    vertex_connectivity = None
     # Mesh Cleanup
     if mesh_cleanup:
         vertex_connectivity = pysplashsurf.marching_cubes_cleanup(mesh, grid, max_iter=5, keep_vertices=keep_vertices)
@@ -143,6 +146,10 @@ def reconstruction_pipeline(*, enable_multi_threading=True, particle_radius=0.02
     if vertex_connectivity is None and (mesh_smoothing_iters > 0 or normals_smoothing_iters > 0):
         vertex_connectivity = mesh.vertex_vertex_connectivity()
     
+    # Create Mesh with Data object
+    mesh_with_data = pysplashsurf.PyMeshWithDataF64(mesh)
+    
+    smoothing_weights = None
     if mesh_smoothing_weights:
         # Compute smoothing weights
         # First do global neighborhood search
@@ -158,9 +165,6 @@ def reconstruction_pipeline(*, enable_multi_threading=True, particle_radius=0.02
         squared_r = compact_support_radius * compact_support_radius
         weighted_ncounts = [sum([1 - max(0, min(1, (np.dot(particles[i]-particles[j], particles[i]-particles[j]) / squared_r))) for j in nll]) for i, nll in enumerate(nl)]
         vertex_weighted_num_neighbors = np.array(interpolator.interpolate_scalar_quantity(weighted_ncounts, mesh.vertices, True))
-        
-        # Create Mesh with Data object
-        mesh_with_data = pysplashsurf.PyMeshWithDataF64(mesh)
         
         # Now compute the weights
         offset = 0
@@ -211,7 +215,7 @@ def reconstruction_pipeline(*, enable_multi_threading=True, particle_radius=0.02
         mesh = pysplashsurf.convert_tris_to_quads(mesh, non_squareness_limit=quad_max_edge_diag_ratio, normal_angle_limit_rad=math.radians(quad_max_normal_angle), max_interior_angle=math.radians(quad_max_interior_angle))
     
     if type(mesh) is pysplashsurf.PyTriMesh3dF64:
-        meshio.write_points_cells("test.vtk", mesh.vertices, [("triangle", mesh.triangles)])
+        meshio.write_points_cells(output_file, mesh.vertices, [("triangle", mesh.triangles)])
         
         # Mesh checks
         pysplashsurf.check_mesh_consistency(grid, mesh, check_closed=check_mesh_closed, check_manifold=check_mesh_manifold, debug=check_mesh_debug)
@@ -219,7 +223,7 @@ def reconstruction_pipeline(*, enable_multi_threading=True, particle_radius=0.02
     else:
         cells = mesh.cells
         cells = [("triangle", list(filter(lambda x: len(x) == 3, cells))), ("quad", list(filter(lambda x: len(x) == 4, cells)))]
-        meshio.write_points_cells("test.vtk", mesh.vertices, cells)
+        meshio.write_points_cells(output_file, mesh.vertices, cells)
     
     
     # Left out: Mesh orientation check
@@ -231,4 +235,30 @@ def reconstruction_pipeline(*, enable_multi_threading=True, particle_radius=0.02
 #test_decimation()
 #test_laplacian_smoothing()
 #test_mesh_with_data()
-reconstruction_pipeline()
+#reconstruction_pipeline()
+
+BINARY_PATH = "../target/release/splashsurf"
+
+def binary_test_call():
+    start = time.time()
+    subprocess.run([BINARY_PATH, "reconstruct", "./ParticleData_Fluid_5.vtk", "-o", "test_bin.vtk", "-r=0.025", "-l=2.0", "-c=0.5", "-t=0.6", "-d=on", "--subdomain-grid=on", "--mesh-cleanup=off", "--mesh-smoothing-weights=off", "--mesh-smoothing-iters=25", "--normals=off", "--normals-smoothing-iters=10"], check=True)
+    print("Binary done in", time.time() - start)
+    
+    start = time.time()
+    reconstruction_pipeline("./ParticleData_Fluid_5.vtk", "test.vtk", particle_radius=0.025, smoothing_length=2.0, cube_size=0.5, iso_surface_threshold=0.6, mesh_smoothing_weights=False, mesh_smoothing_weights_normalization=13.0, mesh_smoothing_iters=25, normals_smoothing_iters=10, generate_quads=False, mesh_cleanup=False, compute_normals=False)
+    print("Python done in", time.time() - start)
+    
+    binary_mesh = meshio.read("test_bin.vtk")
+    python_mesh = meshio.read("test.vtk")
+    
+    binary_verts = np.array(binary_mesh.points, dtype=np.float64)
+    python_verts = np.array(python_mesh.points, dtype=np.float64)
+    
+    assert(len(binary_verts) == len(python_verts))
+    
+    binary_verts.sort(axis=0)
+    python_verts.sort(axis=0)
+    
+    assert(np.allclose(binary_verts, python_verts, atol=1e-6))
+
+binary_test_call()

@@ -4,6 +4,7 @@ target/
 **/__pycache__/
 *.so
 test.vtk
+test_bin.vtk
 env/
 
 # Sphinx
