@@ -4,6 +4,7 @@ use splashsurf_lib::{nalgebra::Vector3, Aabb3d};
 
 macro_rules! create_aabb3d_interface {
     ($name: ident, $type: ident) => {
+        /// Aabb3d wrapper
         #[pyclass]
         pub struct $name {
             pub inner: Aabb3d<$type>
@@ -22,6 +23,7 @@ macro_rules! create_aabb3d_interface {
                 Ok($name::new(Aabb3d::<$type>::new(Vector3::from_column_slice(&min), Vector3::from_column_slice(&max))))
             }
 
+            /// Constructs the smallest AABB fitting around all the given points
             #[staticmethod]
             fn from_points<'py>(points: &Bound<'py, PyArray2<$type>>) -> $name {
                 let points: PyReadonlyArray2<$type> = points.extract().unwrap();
@@ -31,6 +33,7 @@ macro_rules! create_aabb3d_interface {
                 $name::new(Aabb3d::from_points(points))
             }
 
+            /// Grows this AABB uniformly in all directions by the given scalar margin (i.e. adding the margin to min/max extents)
             fn grow_uniformly(&mut self, margin: $type) {
                 self.inner.grow_uniformly(margin);
             }

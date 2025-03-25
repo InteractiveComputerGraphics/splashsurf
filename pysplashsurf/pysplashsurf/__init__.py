@@ -2,6 +2,7 @@ from .pysplashsurf import *
 import numpy as np
 
 def push_point_attribute(self, name: str, data: np.ndarray, real_type):
+    """Add a point attribute to the mesh"""
     if data.ndim == 2:
         return self.push_point_attribute_vector_real(name, data)
     
@@ -19,6 +20,7 @@ def push_point_attribute(self, name: str, data: np.ndarray, real_type):
         raise ValueError("Not a valid data array")
     
 def push_cell_attribute(self, name: str, data: np.ndarray, real_type):
+    """Add a cell attribute to the mesh"""
     if data.ndim == 2:
         return self.push_cell_attribute_vector_real(name, data)
     
@@ -36,9 +38,14 @@ def push_cell_attribute(self, name: str, data: np.ndarray, real_type):
         raise ValueError("Not a valid data array")
 
 PyMeshWithDataF64.push_point_attribute = lambda self, name, data: push_point_attribute(self, name, data, np.float64)
+PyMeshWithDataF64.push_point_attribute.__doc__ = push_point_attribute.__doc__
 PyMeshWithDataF32.push_point_attribute = lambda self, name, data: push_point_attribute(self, name, data, np.float32)
+PyMeshWithDataF32.push_point_attribute.__doc__ = push_point_attribute.__doc__
+
 PyMeshWithDataF64.push_cell_attribute = lambda self, name, data: push_cell_attribute(self, name, data, np.float64)
+PyMeshWithDataF64.push_cell_attribute.__doc__ = push_cell_attribute.__doc__
 PyMeshWithDataF32.push_cell_attribute = lambda self, name, data: push_cell_attribute(self, name, data, np.float32)
+PyMeshWithDataF32.push_cell_attribute.__doc__ = push_cell_attribute.__doc__
 
 def reconstruct_surface(
     particles, *, 
@@ -57,8 +64,6 @@ def reconstruct_surface(
     """Reconstruct the surface from only particle positions
     
     Performs a marching cubes surface construction of the fluid represented by the given particle positions
-    
-    Function defers float precision based on the inputted particle positions (32bit or 64bit)
     
     Parameters
     ----------

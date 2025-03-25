@@ -3,6 +3,7 @@ use splashsurf_lib::UniformGrid;
 
 macro_rules! create_grid_interface {
     ($name: ident, $type: ident) => {
+        /// UniformGrid wrapper
         #[pyclass]
         pub struct $name {
             pub inner: UniformGrid<i64, $type>,

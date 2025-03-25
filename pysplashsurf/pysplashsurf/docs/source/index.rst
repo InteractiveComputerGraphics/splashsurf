@@ -7,15 +7,15 @@ Welcome to Pysplashsurf's documentation!
 ========================================
 
 .. toctree::
-   usage
+   methods
    classes
    api
 
 
 
-Indices and tables
-==================
+.. Indices and tables
+.. ==================
 
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
+.. * :ref:`genindex`
+.. * :ref:`modindex`
+.. * :ref:`search`

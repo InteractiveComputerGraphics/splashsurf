@@ -5,6 +5,7 @@ use splashsurf_lib::{nalgebra::{Unit, Vector3}, sph_interpolation::SphInterpolat
 
 macro_rules! create_sph_interpolator_interface {
     ($name: ident, $type: ident) => {
+        /// SphInterpolator wrapper
         #[pyclass]
         pub struct $name {
             pub inner: SphInterpolator<$type>,
@@ -32,6 +33,7 @@ macro_rules! create_sph_interpolator_interface {
                 Ok($name::new(SphInterpolator::new(particle_positions, particle_densities.as_slice(), particle_rest_mass, compact_support_radius)))
             }
 
+            /// Interpolates a scalar per particle quantity to the given points, panics if the there are less per-particles values than particles
             fn interpolate_scalar_quantity<'py>(
                 &self, 
                 particle_quantity: Vec<$type>, 
@@ -45,6 +47,7 @@ macro_rules! create_sph_interpolator_interface {
                 self.inner.interpolate_scalar_quantity(particle_quantity.as_slice(), interpolation_points, first_order_correction)
             }
 
+            /// Interpolates surface normals (i.e. normalized SPH gradient of the indicator function) of the fluid to the given points using SPH interpolation
             fn interpolate_normals<'py>(
                 &self, 
                 py: Python<'py>,

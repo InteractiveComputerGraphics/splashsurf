@@ -9,6 +9,7 @@ use crate::{mesh::{PyTriMesh3dF32, PyTriMesh3dF64}, uniform_grid::{PyUniformGrid
 
 macro_rules! create_reconstruction_interface {
     ($name: ident, $type: ident, $mesh_class: ident, $grid_class: ident) => {
+        /// SurfaceReconstruction wrapper
         #[pyclass]
         pub struct $name {
             pub inner: SurfaceReconstruction<i64, $type>,
@@ -22,20 +23,24 @@ macro_rules! create_reconstruction_interface {
 
         #[pymethods]
         impl $name {
+            /// PyTrimesh3d clone of the contained mesh
             #[getter]
             fn mesh(&self) -> $mesh_class {
                 $mesh_class::new(self.inner.mesh().clone())
             }
 
+            /// PyUniformGrid clone of the contained grid
             #[getter]
             fn grid(&self) -> $grid_class {
                 $grid_class::new(self.inner.grid().clone())
             }
 
+            /// Returns a reference to the global particle density vector if computed during the reconstruction (currently, all reconstruction approaches return this)
             fn particle_densities(&self) -> &Vec<$type> {
                 self.inner.particle_densities().ok_or_else( || anyhow::anyhow!("Surface Reconstruction did not return particle densities")).unwrap()
             }
 
+            /// Returns a reference to the global list of per-particle neighborhood lists if computed during the reconstruction (`None` if not specified in the parameters)
             fn particle_neighbors(&self) -> Option<&Vec<Vec<usize>>> {
                 self.inner.particle_neighbors()
             }
