@@ -7,13 +7,13 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-pyo3 = {version = "0.23.5"}
-numpy = "0.23.0"
+pyo3 = {version = "0.24"}
+numpy = "0.24.0"
 ndarray = "0.16.1"
 splashsurf_lib = "0.10.0"
 fxhash = "0.2.1"
-bytemuck = { version = "1.21.0", features = ["extern_crate_alloc"] }
-anyhow = "1.0.96"
+bytemuck = { version = "1.22.0", features = ["extern_crate_alloc"] }
+anyhow = "1.0.97"
 rayon = "1.10.0"
 
 [features]
