@@ -35,6 +35,13 @@ macro_rules! create_reconstruction_interface {
                 $grid_class::new(self.inner.grid().clone())
             }
 
+            // Doesn't work because SurfaceReconstruction.mesh() only returns an immutable reference
+            // /// Returns PyTrimesh3dF32/F64 without copying the mesh data, removes the mesh from the object
+            // fn take_mesh(&mut self) -> $mesh_class {
+            //     let mesh = std::mem::take(&mut self.inner.mesh());
+            //     $mesh_class::new(mesh)
+            // }
+
             /// Returns a reference to the global particle density vector if computed during the reconstruction (currently, all reconstruction approaches return this)
             fn particle_densities(&self) -> &Vec<$type> {
                 self.inner.particle_densities().ok_or_else( || anyhow::anyhow!("Surface Reconstruction did not return particle densities")).unwrap()

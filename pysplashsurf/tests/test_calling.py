@@ -106,6 +106,31 @@ import time
     
 #     print(normals)
 
+def test_memory_access():
+    print("\nTesting memory copy vs take")
+    
+    particles = np.array(meshio.read("./ParticleData_Fluid_5.vtk").points, dtype=np.float64)
+    reconstruction = pysplashsurf.reconstruct_surface(particles, enable_multi_threading=True, particle_radius=0.025, 
+                                                                 rest_density=1000.0, smoothing_length=2.0, cube_size=0.5, 
+                                                                 iso_surface_threshold=0.6, aabb_min=np.array([0.0, 0.0, 0.0]), aabb_max=np.array([2.0, 2.0, 2.0]))
+    mesh = reconstruction.mesh
+    
+    start = time.time()
+    triangles_copy = mesh.triangles
+    vertices_copy = mesh.vertices
+    copy_time = time.time() - start
+    print("Copy time:", copy_time)
+    
+    start = time.time()
+    vertices, triangles = mesh.take_vertices_and_triangles()
+    take_time = time.time() - start
+    print("Take time:", take_time)
+    
+    print("Copy time / Take time (Speedup):", copy_time / take_time)
+    
+    assert(np.allclose(vertices, vertices_copy))
+    assert(np.allclose(triangles, triangles_copy))
+
 def reconstruction_pipeline(input_file, output_file, *, enable_multi_threading=True, particle_radius=0.025, 
                             rest_density=1000.0, smoothing_length=2.0, cube_size=0.5, 
                             iso_surface_threshold=0.6, mesh_smoothing_weights=False, sph_normals=False, 
@@ -178,10 +203,11 @@ def reconstruction_pipeline(input_file, output_file, *, enable_multi_threading=T
         mesh_with_data.push_point_attribute("sw", smoothing_weights)
     
     # Perform smoothing
-    if smoothing_weights is None:
-        smoothing_weights = [1.0 for _ in range(len(mesh.vertices))]
-    
-    pysplashsurf.par_laplacian_smoothing_inplace(mesh_with_data, vertex_connectivity, mesh_smoothing_iters, 1.0, smoothing_weights)
+    if mesh_smoothing_iters > 0:
+        if smoothing_weights is None:
+            smoothing_weights = [1.0 for _ in range(len(mesh.vertices))]
+        
+        pysplashsurf.par_laplacian_smoothing_inplace(mesh_with_data, vertex_connectivity, mesh_smoothing_iters, 1.0, smoothing_weights)
     
     mesh = mesh_with_data.mesh
     
@@ -208,22 +234,24 @@ def reconstruction_pipeline(input_file, output_file, *, enable_multi_threading=T
     if mesh_aabb is not None:
         mesh_with_data = mesh_with_data.par_clamp_with_aabb(mesh_aabb, mesh_aabb_clamp_vertices, keep_vertices)
         
-    mesh = mesh_with_data.mesh
+    mesh = mesh_with_data.take_mesh()
     
     # Convert triangles to quads
     if generate_quads:
         mesh = pysplashsurf.convert_tris_to_quads(mesh, non_squareness_limit=quad_max_edge_diag_ratio, normal_angle_limit_rad=math.radians(quad_max_normal_angle), max_interior_angle=math.radians(quad_max_interior_angle))
     
     if type(mesh) is pysplashsurf.PyTriMesh3dF64:
-        meshio.write_points_cells(output_file, mesh.vertices, [("triangle", mesh.triangles)])
+        verts, tris = mesh.take_vertices_and_triangles()
+        meshio.write_points_cells(output_file, verts, [("triangle", tris)])
         
         # Mesh checks
-        pysplashsurf.check_mesh_consistency(grid, mesh, check_closed=check_mesh_closed, check_manifold=check_mesh_manifold, debug=check_mesh_debug)
+        if check_mesh_closed or check_mesh_manifold:
+            pysplashsurf.check_mesh_consistency(grid, mesh, check_closed=check_mesh_closed, check_manifold=check_mesh_manifold, debug=check_mesh_debug)
         
     else:
-        cells = mesh.cells
+        verts, cells = mesh.take_vertices_and_cells()
         cells = [("triangle", list(filter(lambda x: len(x) == 3, cells))), ("quad", list(filter(lambda x: len(x) == 4, cells)))]
-        meshio.write_points_cells(output_file, mesh.vertices, cells)
+        meshio.write_points_cells(output_file, verts, cells)
     
     
     # Left out: Mesh orientation check
@@ -245,7 +273,7 @@ def binary_test_call():
     print("Binary done in", time.time() - start)
     
     start = time.time()
-    reconstruction_pipeline("./ParticleData_Fluid_5.vtk", "test.vtk", particle_radius=0.025, smoothing_length=2.0, cube_size=0.5, iso_surface_threshold=0.6, mesh_smoothing_weights=False, mesh_smoothing_weights_normalization=13.0, mesh_smoothing_iters=25, normals_smoothing_iters=10, generate_quads=False, mesh_cleanup=False, compute_normals=False)
+    reconstruction_pipeline("./ParticleData_Fluid_5.vtk", "test.vtk", particle_radius=0.025, smoothing_length=2.0, cube_size=0.5, iso_surface_threshold=0.6, mesh_smoothing_weights=False, mesh_smoothing_weights_normalization=13.0, mesh_smoothing_iters=0, normals_smoothing_iters=10, generate_quads=False, mesh_cleanup=False, compute_normals=False)
     print("Python done in", time.time() - start)
     
     binary_mesh = meshio.read("test_bin.vtk")
@@ -253,6 +281,9 @@ def binary_test_call():
     
     binary_verts = np.array(binary_mesh.points, dtype=np.float64)
     python_verts = np.array(python_mesh.points, dtype=np.float64)
+    
+    print("Number of vertices binary:", len(binary_verts))
+    print("Number of vertices python:", len(python_verts))
     
     assert(len(binary_verts) == len(python_verts))
     
@@ -262,3 +293,4 @@ def binary_test_call():
     assert(np.allclose(binary_verts, python_verts, atol=1e-6))
 
 binary_test_call()
+#test_memory_access()

@@ -1,6 +1,6 @@
 use ndarray::{Array2, ArrayView2, ArrayView};
-use numpy::{Element, IntoPyArray, PyReadonlyArray2, PyArray2, ToPyArray};
-use pyo3::{exceptions::PyValueError, prelude::*, IntoPyObjectExt};
+use numpy::{Element, IntoPyArray, PyReadonlyArray2, PyArray2, ToPyArray, PyArray, PyArrayMethods};
+use pyo3::{exceptions::PyValueError, prelude::*, IntoPyObjectExt, types::PyTuple};
 use splashsurf_lib::{mesh::{AttributeData, MeshAttribute, MeshWithData, TriMesh3d, Mesh3d, MixedTriQuadMesh3d, TriangleOrQuadCell}, Real, nalgebra::{Vector3, Unit}};
 
 use crate::aabb::{PyAabb3dF32, PyAabb3dF64};
@@ -61,6 +61,12 @@ macro_rules! create_mesh_data_interface {
             #[getter]
             fn mesh(&self) -> $mesh_class {
                 $mesh_class::new(self.inner.mesh.clone())
+            }
+
+            /// Returns PyTrimesh3dF32/F64 without copying the mesh data, removes the mesh from the object
+            fn take_mesh(&mut self) -> $mesh_class {
+                let mesh = std::mem::take(&mut self.inner.mesh);
+                $mesh_class::new(mesh)
             }
 
             /// Removes all cells from the mesh that are completely outside of the given AABB and clamps the remaining cells to the boundary
@@ -129,7 +135,7 @@ macro_rules! create_mesh_interface {
 
         #[pymethods]
         impl $name {
-            /// nx3 array of vertex positions
+            /// nx3 array of vertex positions, copies the data
             #[getter]
             fn vertices<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<$type>> {
                 let points: &[$type] = bytemuck::cast_slice(&self.inner.vertices);
@@ -139,13 +145,33 @@ macro_rules! create_mesh_interface {
                 vertices.to_pyarray(py) // seems like at least one copy is necessary here (to_pyarray copies the data)
             }
 
-            /// nx3 array of the vertex indices that make up a triangle
+            /// nx3 array of the vertex indices that make up a triangle, copies the data
             #[getter]
             fn triangles<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<usize>> {
                 let tris: &[usize] = bytemuck::cast_slice(&self.inner.triangles);
                 let triangles: ArrayView2<usize> =
                     ArrayView::from_shape((self.inner.triangles.len(), 3), tris).unwrap();
                 triangles.to_pyarray(py)
+            }
+
+            /// Returns a tuple of vertices and triangles without copying the data, removes the data in the class
+            fn take_vertices_and_triangles<'py>(&mut self, py: Python<'py>) -> Bound<'py, PyTuple> {
+                let vertices = std::mem::take(&mut self.inner.vertices);
+                let triangles = std::mem::take(&mut self.inner.triangles);
+
+                let n = vertices.len();
+                let m = triangles.len();
+
+                let vertices_scalar: Vec<$type> = bytemuck::cast_vec(vertices);
+                let vertices_array =
+                    PyArray::from_vec(py, vertices_scalar).reshape([n, 3]).unwrap();
+
+                let triangles_scalar: Vec<usize> = bytemuck::cast_vec(triangles);
+                let triangles_array = PyArray::from_vec(py, triangles_scalar)
+                    .reshape([m, 3]).unwrap();
+
+                let tup = (vertices_array, triangles_array);
+                tup.into_pyobject(py).unwrap()
             }
 
             /// Computes the mesh's vertex normals using an area weighted average of the adjacent triangle faces (parallelized version)
@@ -185,7 +211,7 @@ macro_rules! create_tri_quad_mesh_interface {
 
         #[pymethods]
         impl $name {
-            /// nx3 array of vertex positions
+            /// nx3 array of vertex positions, copies data
             #[getter]
             fn vertices<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<$type>> {
                 let points: &[$type] = bytemuck::cast_slice(&self.inner.vertices);
@@ -203,6 +229,26 @@ macro_rules! create_tri_quad_mesh_interface {
                     TriangleOrQuadCell::Quad(v) => v.to_vec(),
                 }).collect();
                 cells
+            }
+
+            /// Returns a tuple of vertices and triangles without copying the data, removes the data in the class
+            fn take_vertices_and_cells<'py>(&mut self, py: Python<'py>) -> Bound<'py, PyTuple> {
+                let vertices = std::mem::take(&mut self.inner.vertices);
+                let cells = std::mem::take(&mut self.inner.cells);
+
+                let n = vertices.len();
+
+                let vertices_scalar: Vec<$type> = bytemuck::cast_vec(vertices);
+                let vertices_array =
+                    PyArray::from_vec(py, vertices_scalar).reshape([n, 3]).unwrap();
+
+                let cells_list: Vec<Vec<usize>> = cells.into_iter().map(|c| match c {
+                    TriangleOrQuadCell::Tri(v) => v.into(),
+                    TriangleOrQuadCell::Quad(v) => v.into(),
+                }).collect();
+
+                let tup = (vertices_array, cells_list);
+                tup.into_pyobject(py).unwrap()
             }
         }
     };
