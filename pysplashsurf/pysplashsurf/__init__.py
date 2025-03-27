@@ -56,7 +56,7 @@ def reconstruct_surface(
     iso_surface_threshold: float = 0.6,
     enable_multi_threading: bool = False,
     global_neighborhood_list: bool = False,
-    use_custom_grid_decomposition: bool = False,
+    subdomain_grid: bool = False,
     subdomain_num_cubes_per_dim: int = 64,
     aabb_min = None,
     aabb_max = None,
@@ -91,11 +91,11 @@ def reconstruct_surface(
     global_neighborhood_list: bool
         Global neighborhood list flag
     
-    use_custom_grid_decomposition: bool
-        Custom grid decomposition flag
-    
+    subdomain_grid: bool
+        Enable spatial decomposition using a regular grid-based approach
+        
     subdomain_num_cubes_per_dim: int
-        Number of cubes per dimension per grid cell
+        Each subdomain will be a cube consisting of this number of MC cube cells along each coordinate axis
     
     aabb_min: np.ndarray
         Smallest corner of the axis-aligned bounding box
@@ -114,13 +114,13 @@ def reconstruct_surface(
         return reconstruct_surface_f32(particles, particle_radius=particle_radius, rest_density=rest_density, 
                                 smoothing_length=smoothing_length, cube_size=cube_size, iso_surface_threshold=iso_surface_threshold, 
                                 enable_multi_threading=enable_multi_threading, global_neighborhood_list=global_neighborhood_list, 
-                                use_custom_grid_decomposition=use_custom_grid_decomposition, subdomain_num_cubes_per_dim=subdomain_num_cubes_per_dim, 
+                                use_custom_grid_decomposition=subdomain_grid, subdomain_num_cubes_per_dim=subdomain_num_cubes_per_dim, 
                                 aabb_min=aabb_min, aabb_max=aabb_max)   
     elif particles.dtype == 'float64':
         return reconstruct_surface_f64(particles, particle_radius=particle_radius, rest_density=rest_density, 
                                 smoothing_length=smoothing_length, cube_size=cube_size, iso_surface_threshold=iso_surface_threshold, 
                                 enable_multi_threading=enable_multi_threading, global_neighborhood_list=global_neighborhood_list, 
-                                use_custom_grid_decomposition=use_custom_grid_decomposition, subdomain_num_cubes_per_dim=subdomain_num_cubes_per_dim, 
+                                use_custom_grid_decomposition=subdomain_grid, subdomain_num_cubes_per_dim=subdomain_num_cubes_per_dim, 
                                 aabb_min=aabb_min, aabb_max=aabb_max)
     else:
         raise ValueError("Invalid data type (only float32 and float64 are supported, consider explicitly specifying the dtype for particles)")

@@ -5,106 +5,7 @@ import meshio
 import subprocess
 import time
 
-# def test_reconstruct_surface():
-#     particles = np.array(meshio.read("./ParticleData_Fluid_5.vtk").points, dtype=np.float64)
-#     reconstruction = pysplashsurf.reconstruct_surface(particles, enable_multi_threading=True, particle_radius=0.025, 
-#                                                                  rest_density=1000.0, smoothing_length=2.0, cube_size=0.5, 
-#                                                                  iso_surface_threshold=0.6, aabb_min=np.array([0.0, 0.0, 0.0]), aabb_max=np.array([2.0, 2.0, 2.0]))
-#     mesh = reconstruction.mesh
-#     grid = reconstruction.grid
-#     print(f"Mesh: {mesh}, Grid: {grid}")
-#     tris = mesh.triangles
-#     verts = mesh.vertices
-#     print(f"Number of tris {len(tris)}, number of vertices {len(verts)}")
-#     meshio.write_points_cells("test.vtk", verts, [("triangle", tris)])
-    
-
-# def test_post_processing():
-#     particles = np.array(meshio.read("./ParticleData_Fluid_5.vtk").points, dtype=np.float32)
-#     reconstruction = pysplashsurf.reconstruct_surface(particles, enable_multi_threading=True, particle_radius=0.025, 
-#                                                                  rest_density=1000.0, smoothing_length=2.0, cube_size=0.5, 
-#                                                                  iso_surface_threshold=0.6)
-#     mesh = pysplashsurf.post_processing(particles, reconstruction, enable_multi_threading=True, particle_radius=0.025)
-#     print(f"Number of tris {len(mesh.triangles)}, number of vertices {len(mesh.vertices)}")
-#     meshio.write_points_cells("test.vtk", mesh.vertices, [("triangle", mesh.triangles)])
-
-
-# def test_marching_cubes_cleanup(): 
-#     particles = np.array(meshio.read("./ParticleData_Fluid_5.vtk").points, dtype=np.float32)
-#     reconstruction = pysplashsurf.reconstruct_surface(particles, enable_multi_threading=True, particle_radius=0.025, 
-#                                                                  rest_density=1000.0, smoothing_length=2.0, cube_size=0.5, 
-#                                                                  iso_surface_threshold=0.6, aabb_min=np.array([0.0, 0.0, 0.0]), aabb_max=np.array([2.0, 2.0, 2.0]))
-#     mesh = reconstruction.mesh
-#     grid = reconstruction.grid
-#     print(f"Number of tris {len(mesh.triangles)}, number of vertices {len(mesh.vertices)}")
-#     res = pysplashsurf.marching_cubes_cleanup(mesh, grid, max_iter=5, keep_vertices=False)
-#     print(f"Number of tris {len(mesh.triangles)}, number of vertices {len(mesh.vertices)}")
-#     print(len(res))
-
-
-# def test_decimation():
-#     particles = np.array(meshio.read("./ParticleData_Fluid_5.vtk").points, dtype=np.float32)
-#     reconstruction = pysplashsurf.reconstruct_surface(particles, enable_multi_threading=True, particle_radius=0.025, 
-#                                                                  rest_density=1000.0, smoothing_length=2.0, cube_size=0.5, 
-#                                                                  iso_surface_threshold=0.6, aabb_min=np.array([0.0, 0.0, 0.0]), aabb_max=np.array([2.0, 2.0, 2.0]))
-#     mesh = reconstruction.mesh
-#     print(f"Number of tris {len(mesh.triangles)}, number of vertices {len(mesh.vertices)}")
-#     res = pysplashsurf.decimation(mesh, keep_vertices=False)
-#     print(f"Number of tris {len(mesh.triangles)}, number of vertices {len(mesh.vertices)}")
-#     print(len(res))
-#     meshio.write_points_cells("test.vtk", mesh.vertices, [("triangle", mesh.triangles)])
-   
-# def test_laplacian_smoothing():
-#     particles = np.array(meshio.read("./ParticleData_Fluid_5.vtk").points, dtype=np.float32)
-#     reconstruction = pysplashsurf.reconstruct_surface(particles, enable_multi_threading=True, particle_radius=0.025, 
-#                                                                  rest_density=1000.0, smoothing_length=2.0, cube_size=0.5, 
-#                                                                  iso_surface_threshold=0.6, aabb_min=np.array([0.0, 0.0, 0.0]), aabb_max=np.array([2.0, 2.0, 2.0]))
-#     mesh = reconstruction.mesh
-#     grid = reconstruction.grid
-#     res = pysplashsurf.marching_cubes_cleanup(mesh, grid, max_iter=5, keep_vertices=False)
-    
-#     mesh_with_data = pysplashsurf.PyMeshWithDataF64(mesh)
-    
-#     print(f"Number of tris {len(mesh.triangles)}, number of vertices {len(mesh.vertices)}")
-#     pysplashsurf.par_laplacian_smoothing_inplace(mesh_with_data, res, 5, 1.0, [1.0 for _ in range(len(mesh.vertices))])
-#     print(f"Number of tris {len(mesh.triangles)}, number of vertices {len(mesh.vertices)}")
-#     meshio.write_points_cells("test.vtk", mesh.vertices, [("triangle", mesh.triangles)])
-
-# def test_mesh_with_data():
-#     particles = np.array(meshio.read("./ParticleData_Fluid_5.vtk").points, dtype=np.float64)
-#     reconstruction = pysplashsurf.reconstruct_surface(particles, enable_multi_threading=True, particle_radius=0.025, 
-#                                                                  rest_density=1000.0, smoothing_length=2.0, cube_size=0.5, 
-#                                                                  iso_surface_threshold=0.6, aabb_min=np.array([0.0, 0.0, 0.0]), aabb_max=np.array([2.0, 2.0, 2.0]))
-#     mesh = reconstruction.mesh
-#     grid = reconstruction.grid
-    
-#     vertex_connectivity = pysplashsurf.marching_cubes_cleanup(mesh, grid, max_iter=5, keep_vertices=False)
-    
-#     normals = mesh.par_vertex_normals()
-#     pysplashsurf.par_laplacian_smoothing_normals_inplace(normals, vertex_connectivity, 5)
-    
-#     mesh_with_data = pysplashsurf.PyMeshWithDataF64(mesh)
-#     mesh_with_data.push_point_attribute("normals", normals)
-    
-#     ex_scalars = np.array([i for i in range(len(mesh.vertices))], dtype=np.uint64)
-#     ex_reals = np.array([i for i in range(len(mesh.vertices))], dtype=np.float64)
-#     ex_vectors = np.array([[i, i, i] for i in range(len(mesh.vertices))], dtype=np.float64)
-    
-#     mesh_with_data.push_point_attribute("test_scalar", ex_scalars)
-#     mesh_with_data.push_point_attribute("test_reals", ex_reals)
-#     mesh_with_data.push_point_attribute("test_vector", ex_vectors)
-    
-#     assert((mesh_with_data.get_point_attribute("test_scalar") == ex_scalars).all())
-#     assert((mesh_with_data.get_point_attribute("test_reals") == ex_reals).all())
-#     assert((mesh_with_data.get_point_attribute("test_vector") == ex_vectors).all())
-    
-#     ex_cell_scalars = np.array([i for i in range(1000)], dtype=np.uint64)
-#     mesh_with_data.push_cell_attribute("test_cell_scalar", ex_cell_scalars)
-#     assert((mesh_with_data.get_cell_attribute("test_cell_scalar") == ex_cell_scalars).all())
-
-#     normals = mesh_with_data.get_point_attribute("normals")
-    
-#     print(normals)
+BINARY_PATH = "splashsurf"
 
 def test_memory_access():
     print("\nTesting memory copy vs take")
@@ -138,13 +39,16 @@ def reconstruction_pipeline(input_file, output_file, *, enable_multi_threading=T
                             mesh_aabb = None, mesh_cleanup=False, decimate_barnacles=False, keep_vertices=False,
                             compute_normals=False, output_raw_normals=False, mesh_aabb_clamp_vertices=False,
                             check_mesh_closed=True, check_mesh_manifold=True, check_mesh_debug=False,
-                            generate_quads=False, quad_max_edge_diag_ratio=1.75, quad_max_normal_angle=10.0, quad_max_interior_angle=135.0):
-    compact_support_radius = 2.0 * particle_radius * smoothing_length
+                            generate_quads=False, quad_max_edge_diag_ratio=1.75, quad_max_normal_angle=10.0, quad_max_interior_angle=135.0,
+                            subdomain_grid=False, subdomain_num_cubes_per_dim=64):
+    
+    compact_support_radius = np.float64(2.0) * particle_radius * smoothing_length
     
     particles = np.array(meshio.read(input_file).points, dtype=np.float64)
     reconstruction = pysplashsurf.reconstruct_surface(particles, enable_multi_threading=enable_multi_threading, particle_radius=particle_radius, 
                                                                  rest_density=rest_density, smoothing_length=smoothing_length, cube_size=cube_size, 
-                                                                 iso_surface_threshold=iso_surface_threshold)
+                                                                 iso_surface_threshold=iso_surface_threshold, subdomain_grid=subdomain_grid,
+                                                                 subdomain_num_cubes_per_dim=subdomain_num_cubes_per_dim)
     
     grid = reconstruction.grid
     mesh = reconstruction.mesh
@@ -188,6 +92,7 @@ def reconstruction_pipeline(input_file, output_file, *, enable_multi_threading=T
         
         # Compute weighted neighbor count
         squared_r = compact_support_radius * compact_support_radius
+
         weighted_ncounts = [sum([1 - max(0, min(1, (np.dot(particles[i]-particles[j], particles[i]-particles[j]) / squared_r))) for j in nll]) for i, nll in enumerate(nl)]
         vertex_weighted_num_neighbors = np.array(interpolator.interpolate_scalar_quantity(weighted_ncounts, mesh.vertices, True))
         
@@ -209,10 +114,11 @@ def reconstruction_pipeline(input_file, output_file, *, enable_multi_threading=T
         
         pysplashsurf.par_laplacian_smoothing_inplace(mesh_with_data, vertex_connectivity, mesh_smoothing_iters, 1.0, smoothing_weights)
     
-    mesh = mesh_with_data.mesh
-    
     # Compute normals
     if compute_normals:
+        
+        mesh = mesh_with_data.mesh
+        
         if sph_normals:
             normals = interpolator.interpolate_normals(mesh.vertices)
         else:
@@ -257,23 +163,17 @@ def reconstruction_pipeline(input_file, output_file, *, enable_multi_threading=T
     # Left out: Mesh orientation check
     
 
-#test_reconstruct_surface()
-#test_post_processing()
-#test_marching_cubes_cleanup() 
-#test_decimation()
-#test_laplacian_smoothing()
-#test_mesh_with_data()
-#reconstruction_pipeline()
 
-BINARY_PATH = "../target/release/splashsurf"
-
-def binary_test_call():
+def test_no_post_processing():
     start = time.time()
-    subprocess.run([BINARY_PATH, "reconstruct", "./ParticleData_Fluid_5.vtk", "-o", "test_bin.vtk", "-r=0.025", "-l=2.0", "-c=0.5", "-t=0.6", "-d=on", "--subdomain-grid=on", "--mesh-cleanup=off", "--mesh-smoothing-weights=off", "--mesh-smoothing-iters=25", "--normals=off", "--normals-smoothing-iters=10"], check=True)
+    subprocess.run([BINARY_PATH] + "reconstruct ./ParticleData_Fluid_5.vtk -o test_bin.vtk -r=0.025 -l=2.0 -c=0.5 -t=0.6 -d=on --subdomain-grid=on --mesh-cleanup=off --mesh-smoothing-weights=off --mesh-smoothing-iters=0 --normals=off --normals-smoothing-iters=0".split(), check=True)
     print("Binary done in", time.time() - start)
     
     start = time.time()
-    reconstruction_pipeline("./ParticleData_Fluid_5.vtk", "test.vtk", particle_radius=0.025, smoothing_length=2.0, cube_size=0.5, iso_surface_threshold=0.6, mesh_smoothing_weights=False, mesh_smoothing_weights_normalization=13.0, mesh_smoothing_iters=0, normals_smoothing_iters=10, generate_quads=False, mesh_cleanup=False, compute_normals=False)
+    reconstruction_pipeline("./ParticleData_Fluid_5.vtk", "test.vtk", particle_radius=np.float64(0.025), smoothing_length=np.float64(2.0), 
+                            cube_size=np.float64(0.5), iso_surface_threshold=np.float64(0.6), mesh_smoothing_weights=False, 
+                            mesh_smoothing_weights_normalization=np.float64(13.0), mesh_smoothing_iters=0, normals_smoothing_iters=0, 
+                            generate_quads=False, mesh_cleanup=False, compute_normals=False, subdomain_grid=True)
     print("Python done in", time.time() - start)
     
     binary_mesh = meshio.read("test_bin.vtk")
@@ -282,15 +182,46 @@ def binary_test_call():
     binary_verts = np.array(binary_mesh.points, dtype=np.float64)
     python_verts = np.array(python_mesh.points, dtype=np.float64)
     
-    print("Number of vertices binary:", len(binary_verts))
-    print("Number of vertices python:", len(python_verts))
+    print("# of vertices binary:", len(binary_verts))
+    print("# of vertices python:", len(python_verts))
     
     assert(len(binary_verts) == len(python_verts))
     
     binary_verts.sort(axis=0)
     python_verts.sort(axis=0)
     
-    assert(np.allclose(binary_verts, python_verts, atol=1e-6))
+    assert(np.allclose(binary_verts, python_verts))
+    
+def test_with_post_processing():
+    start = time.time()
+    subprocess.run([BINARY_PATH] + "reconstruct ./ParticleData_Fluid_5.vtk -o test_bin.vtk -r=0.025 -l=2.0 -c=0.5 -t=0.6 -d=on --subdomain-grid=on --decimate-barnacles=on --mesh-cleanup=on --mesh-smoothing-weights=on --mesh-smoothing-iters=25 --normals=on --normals-smoothing-iters=10".split(), check=True)
+    print("Binary done in", time.time() - start)
+    
+    start = time.time()
+    reconstruction_pipeline("./ParticleData_Fluid_5.vtk", "test.vtk", particle_radius=np.float64(0.025), smoothing_length=np.float64(2.0), 
+                            cube_size=np.float64(0.5), iso_surface_threshold=np.float64(0.6), mesh_smoothing_weights=True, 
+                            mesh_smoothing_weights_normalization=np.float64(13.0), mesh_smoothing_iters=25, normals_smoothing_iters=10, 
+                            generate_quads=False, mesh_cleanup=True, compute_normals=True, subdomain_grid=True, decimate_barnacles=True)
+    print("Python done in", time.time() - start)
+    
+    binary_mesh = meshio.read("test_bin.vtk")
+    python_mesh = meshio.read("test.vtk")
+    
+    binary_verts = np.array(binary_mesh.points, dtype=np.float64)
+    python_verts = np.array(python_mesh.points, dtype=np.float64)
+    
+    print("# of vertices binary:", len(binary_verts))
+    print("# of vertices python:", len(python_verts))
+    
+    assert(len(binary_verts) == len(python_verts))
+    
+    binary_verts.sort(axis=0)
+    python_verts.sort(axis=0)
+    
+    print("Binary verts:", binary_verts)
+    print("Python verts:", python_verts)
+    
+    assert(np.allclose(binary_verts, python_verts))
 
-binary_test_call()
-#test_memory_access()
+test_with_post_processing()
+# test_memory_access()
