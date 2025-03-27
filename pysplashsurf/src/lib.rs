@@ -9,6 +9,7 @@ mod marching_cubes;
 mod post_processing;
 mod reconstruction;
 mod neighborhood_search;
+mod pipeline;
 
 /// High-Level Bindings of the splashsurf surface reconstruction implementation.
 /// Support reconstructing Level-Set surfaces from particle clouds or from regular grids.
@@ -58,6 +59,9 @@ fn pysplashsurf(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     let _ = m.add_function(wrap_pyfunction!(neighborhood_search::neighborhood_search_spatial_hashing_parallel_py_f32, m)?);
     let _ = m.add_function(wrap_pyfunction!(neighborhood_search::neighborhood_search_spatial_hashing_parallel_py_f64, m)?);
+
+    let _ = m.add_function(wrap_pyfunction!(pipeline::reconstruction_pipeline_py_f32, m)?);
+    let _ = m.add_function(wrap_pyfunction!(pipeline::reconstruction_pipeline_py_f64, m)?);
 
     Ok(())
 }

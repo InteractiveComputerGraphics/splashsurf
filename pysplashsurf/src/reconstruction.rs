@@ -59,7 +59,7 @@ create_reconstruction_interface!(PySurfaceReconstructionF64, f64, PyTriMesh3dF64
 create_reconstruction_interface!(PySurfaceReconstructionF32, f32, PyTriMesh3dF32, PyUniformGridF32);
 
 /// Reconstruct the surface from only particle positions
-fn reconstruct_surface_py<I: Index, R: Real>(
+pub fn reconstruct_surface_py<I: Index, R: Real>(
     particles: &[Vector3<R>],
     particle_radius: R,
     rest_density: R,

@@ -15,6 +15,7 @@ fxhash = "0.2.1"
 bytemuck = { version = "1.22.0", features = ["extern_crate_alloc"] }
 anyhow = "1.0.97"
 rayon = "1.10.0"
+log = "0.4.27"
 
 [features]
 extension-module = ["pyo3/extension-module", "pyo3/abi3-py37"]
