@@ -6,6 +6,7 @@ target/
 test.vtk
 test_bin.vtk
 env/
+envs/
 
 # Sphinx
 pysplashsurf/docs/build/
