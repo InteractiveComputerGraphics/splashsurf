@@ -37,15 +37,51 @@ def push_cell_attribute(self, name: str, data: np.ndarray, real_type):
     else:
         raise ValueError("Not a valid data array")
 
-PyMeshWithDataF64.push_point_attribute = lambda self, name, data: push_point_attribute(self, name, data, np.float64)
-PyMeshWithDataF64.push_point_attribute.__doc__ = push_point_attribute.__doc__
-PyMeshWithDataF32.push_point_attribute = lambda self, name, data: push_point_attribute(self, name, data, np.float32)
-PyMeshWithDataF32.push_point_attribute.__doc__ = push_point_attribute.__doc__
+PyTriMeshWithDataF64.push_point_attribute = lambda self, name, data: push_point_attribute(self, name, data, np.float64)
+PyTriMeshWithDataF64.push_point_attribute.__doc__ = push_point_attribute.__doc__
+PyTriMeshWithDataF32.push_point_attribute = lambda self, name, data: push_point_attribute(self, name, data, np.float32)
+PyTriMeshWithDataF32.push_point_attribute.__doc__ = push_point_attribute.__doc__
 
-PyMeshWithDataF64.push_cell_attribute = lambda self, name, data: push_cell_attribute(self, name, data, np.float64)
-PyMeshWithDataF64.push_cell_attribute.__doc__ = push_cell_attribute.__doc__
-PyMeshWithDataF32.push_cell_attribute = lambda self, name, data: push_cell_attribute(self, name, data, np.float32)
-PyMeshWithDataF32.push_cell_attribute.__doc__ = push_cell_attribute.__doc__
+PyTriMeshWithDataF64.push_cell_attribute = lambda self, name, data: push_cell_attribute(self, name, data, np.float64)
+PyTriMeshWithDataF64.push_cell_attribute.__doc__ = push_cell_attribute.__doc__
+PyTriMeshWithDataF32.push_cell_attribute = lambda self, name, data: push_cell_attribute(self, name, data, np.float32)
+PyTriMeshWithDataF32.push_cell_attribute.__doc__ = push_cell_attribute.__doc__
+
+PyMixedTriQuadMeshWithDataF64.push_point_attribute = lambda self, name, data: push_point_attribute(self, name, data, np.float64)
+PyMixedTriQuadMeshWithDataF64.push_point_attribute.__doc__ = push_point_attribute.__doc__
+PyMixedTriQuadMeshWithDataF32.push_point_attribute = lambda self, name, data: push_point_attribute(self, name, data, np.float32)
+PyMixedTriQuadMeshWithDataF32.push_point_attribute.__doc__ = push_point_attribute.__doc__
+
+PyMixedTriQuadMeshWithDataF64.push_cell_attribute = lambda self, name, data: push_cell_attribute(self, name, data, np.float64)
+PyMixedTriQuadMeshWithDataF64.push_cell_attribute.__doc__ = push_cell_attribute.__doc__
+PyMixedTriQuadMeshWithDataF32.push_cell_attribute = lambda self, name, data: push_cell_attribute(self, name, data, np.float32)
+PyMixedTriQuadMeshWithDataF32.push_cell_attribute.__doc__ = push_cell_attribute.__doc__
+
+
+def create_mesh_with_data_object_from(mesh):
+    """Create the corresponding mesh with data object to a mesh object
+    
+    Parameters
+    ----------
+    mesh: PyTriMesh3dF64 | PyTriMesh3dF32 | PyMixedTriQuadMesh3dF64 | PyMixedTriQuadMesh3dF32
+        Mesh object to convert
+        
+    Returns
+    -------
+    PyTriMeshWithDataF64 | PyTriMeshWithDataF32 | PyMixedTriQuadMeshWithDataF64 | PyMixedTriQuadMeshWithDataF32
+        Mesh with data object
+    """
+    
+    if type(mesh) is PyTriMesh3dF64:
+        return PyTriMeshWithDataF64(mesh)
+    elif type(mesh) is PyTriMesh3dF32:
+        return PyTriMeshWithDataF32(mesh)
+    elif type(mesh) is PyMixedTriQuadMesh3dF64:
+        return PyMixedTriQuadMeshWithDataF64(mesh)
+    elif type(mesh) is PyMixedTriQuadMesh3dF32:
+        return PyMixedTriQuadMeshWithDataF32(mesh)
+    else:
+        raise ValueError("Invalid mesh type")
 
 def reconstruct_surface(
     particles, *, 

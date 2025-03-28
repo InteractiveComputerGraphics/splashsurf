@@ -6,7 +6,7 @@ use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIter
 use splashsurf_lib::{mesh::{AttributeData, Mesh3d, MeshAttribute, MeshWithData, TriMesh3d}, nalgebra::{Unit, Vector3}, profile, sph_interpolation::SphInterpolator, Aabb3d, Index, Real};
 use pyo3::prelude::*;
 
-use crate::{mesh::{PyMeshWithDataF32, PyMeshWithDataF64}, reconstruction::reconstruct_surface_py};
+use crate::{mesh::{PyTriMeshWithDataF32, PyTriMeshWithDataF64}, reconstruction::reconstruct_surface_py};
 
 fn reconstruction_pipeline_generic<I: Index, R: Real>(
     particles: &[Vector3<R>],
@@ -430,13 +430,13 @@ pub fn reconstruction_pipeline_py_f32<'py>(
     mesh_aabb_min: Option<[f32; 3]>,
     mesh_aabb_max: Option<[f32; 3]>,
     mesh_aabb_clamp_vertices: bool,
-) -> PyMeshWithDataF32 {
+) -> PyTriMeshWithDataF32 {
     let particles: PyReadonlyArray2<f32> = particles.extract().unwrap();
 
     let particle_positions = particles.as_slice().unwrap();
     let particle_positions: &[Vector3<f32>] = bytemuck::cast_slice(particle_positions);
 
-    PyMeshWithDataF32::new(reconstruction_pipeline_generic::<i64, f32>(particle_positions, particle_radius, rest_density, smoothing_length, cube_size, 
+    PyTriMeshWithDataF32::new(reconstruction_pipeline_generic::<i64, f32>(particle_positions, particle_radius, rest_density, smoothing_length, cube_size, 
         iso_surface_threshold, aabb_min, aabb_max, enable_multi_threading, use_custom_grid_decomposition, subdomain_num_cubes_per_dim, 
         global_neighborhood_list, mesh_cleanup, decimate_barnacles, keep_vertices, compute_normals, sph_normals, normals_smoothing_iters, 
         mesh_smoothing_iters, mesh_smoothing_weights, mesh_smoothing_weights_normalization, output_mesh_smoothing_weights, output_raw_normals, 
@@ -482,13 +482,13 @@ pub fn reconstruction_pipeline_py_f64<'py>(
     mesh_aabb_min: Option<[f64; 3]>,
     mesh_aabb_max: Option<[f64; 3]>,
     mesh_aabb_clamp_vertices: bool,
-) -> PyMeshWithDataF64 {
+) -> PyTriMeshWithDataF64 {
     let particles: PyReadonlyArray2<f64> = particles.extract().unwrap();
 
     let particle_positions = particles.as_slice().unwrap();
     let particle_positions: &[Vector3<f64>] = bytemuck::cast_slice(particle_positions);
 
-    PyMeshWithDataF64::new(reconstruction_pipeline_generic::<i64, f64>(particle_positions, particle_radius, rest_density, smoothing_length, cube_size, 
+    PyTriMeshWithDataF64::new(reconstruction_pipeline_generic::<i64, f64>(particle_positions, particle_radius, rest_density, smoothing_length, cube_size, 
         iso_surface_threshold, aabb_min, aabb_max, enable_multi_threading, use_custom_grid_decomposition, subdomain_num_cubes_per_dim, 
         global_neighborhood_list, mesh_cleanup, decimate_barnacles, keep_vertices, compute_normals, sph_normals, normals_smoothing_iters, 
         mesh_smoothing_iters, mesh_smoothing_weights, mesh_smoothing_weights_normalization, output_mesh_smoothing_weights, output_raw_normals, 

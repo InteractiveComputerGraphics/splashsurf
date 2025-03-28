@@ -35,15 +35,15 @@ fn add_attribute_with_name<'py, R: Real + Element>(attrs: &mut Vec<MeshAttribute
 }
  
 macro_rules! create_mesh_data_interface {
-    ($name: ident, $type: ident, $mesh_class: ident, $aabb_class: ident) => {
+    ($name: ident, $type: ident, $mesh_class: ident, $pymesh_class: ident, $aabb_class: ident) => {
         /// MeshWithData wrapper
         #[pyclass]
         pub struct $name {
-            pub inner: MeshWithData<$type, TriMesh3d<$type>>,
+            pub inner: MeshWithData<$type, $mesh_class<$type>>,
         }
 
         impl $name {
-            pub fn new(data: MeshWithData<$type, TriMesh3d<$type>>) -> Self {
+            pub fn new(data: MeshWithData<$type, $mesh_class<$type>>) -> Self {
                 Self { inner: data }
             }
         }
@@ -52,21 +52,21 @@ macro_rules! create_mesh_data_interface {
         impl $name {
 
             #[new]
-            fn py_new(mesh: &$mesh_class) -> PyResult<Self> {
+            fn py_new(mesh: &$pymesh_class) -> PyResult<Self> {
                 let meshdata = MeshWithData::new(mesh.inner.clone());
                 Ok($name::new(meshdata))
             }
 
             /// PyTriMesh3dF32/F64 clone of the contained mesh
             #[getter]
-            fn mesh(&self) -> $mesh_class {
-                $mesh_class::new(self.inner.mesh.clone())
+            fn mesh(&self) -> $pymesh_class {
+                $pymesh_class::new(self.inner.mesh.clone())
             }
 
             /// Returns PyTrimesh3dF32/F64 without copying the mesh data, removes the mesh from the object
-            fn take_mesh(&mut self) -> $mesh_class {
+            fn take_mesh(&mut self) -> $pymesh_class {
                 let mesh = std::mem::take(&mut self.inner.mesh);
-                $mesh_class::new(mesh)
+                $pymesh_class::new(mesh)
             }
 
             /// Removes all cells from the mesh that are completely outside of the given AABB and clamps the remaining cells to the boundary
@@ -260,5 +260,8 @@ create_mesh_interface!(PyTriMesh3dF32, f32);
 create_tri_quad_mesh_interface!(PyMixedTriQuadMesh3dF64, f64);
 create_tri_quad_mesh_interface!(PyMixedTriQuadMesh3dF32, f32);
 
-create_mesh_data_interface!(PyMeshWithDataF64, f64, PyTriMesh3dF64, PyAabb3dF64);
-create_mesh_data_interface!(PyMeshWithDataF32, f32, PyTriMesh3dF32, PyAabb3dF32);
+create_mesh_data_interface!(PyTriMeshWithDataF64, f64, TriMesh3d, PyTriMesh3dF64, PyAabb3dF64);
+create_mesh_data_interface!(PyTriMeshWithDataF32, f32, TriMesh3d, PyTriMesh3dF32, PyAabb3dF32);
+
+create_mesh_data_interface!(PyMixedTriQuadMeshWithDataF64, f64, MixedTriQuadMesh3d, PyMixedTriQuadMesh3dF64, PyAabb3dF64);
+create_mesh_data_interface!(PyMixedTriQuadMeshWithDataF32, f32, MixedTriQuadMesh3d, PyMixedTriQuadMesh3dF32, PyAabb3dF32);

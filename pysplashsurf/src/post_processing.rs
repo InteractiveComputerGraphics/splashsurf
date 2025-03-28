@@ -3,7 +3,7 @@ use numpy::{PyArray2, PyArrayMethods};
 use pyo3::prelude::*;
 use splashsurf_lib::nalgebra::Vector3;
 
-use crate::{mesh::{PyMeshWithDataF32, PyMeshWithDataF64, PyMixedTriQuadMesh3dF32, PyMixedTriQuadMesh3dF64, PyTriMesh3dF32, PyTriMesh3dF64}, uniform_grid::{PyUniformGridF32, PyUniformGridF64}};
+use crate::{mesh::{PyMixedTriQuadMesh3dF32, PyMixedTriQuadMesh3dF64, PyTriMesh3dF32, PyTriMesh3dF64, PyTriMeshWithDataF32, PyTriMeshWithDataF64}, uniform_grid::{PyUniformGridF32, PyUniformGridF64}};
 
 #[pyfunction]
 #[pyo3(name = "convert_tris_to_quads_f64")]
@@ -33,7 +33,7 @@ pub fn convert_tris_to_quads_py_f32<'py>(
 #[pyo3(name = "par_laplacian_smoothing_inplace_f64")]
 #[pyo3(signature = (mesh, vertex_connectivity, iterations, beta, weights))]
 pub fn par_laplacian_smoothing_inplace_py_f64<'py>(
-    mesh: &mut PyMeshWithDataF64,
+    mesh: &mut PyTriMeshWithDataF64,
     vertex_connectivity: Vec<Vec<usize>>, // ToDo: only take reference to data here
     iterations: usize,
     beta: f64,
@@ -46,7 +46,7 @@ pub fn par_laplacian_smoothing_inplace_py_f64<'py>(
 #[pyo3(name = "par_laplacian_smoothing_inplace_f32")]
 #[pyo3(signature = (mesh, vertex_connectivity, iterations, beta, weights))]
 pub fn par_laplacian_smoothing_inplace_py_f32<'py>(
-    mesh: &mut PyMeshWithDataF32,
+    mesh: &mut PyTriMeshWithDataF32,
     vertex_connectivity: Vec<Vec<usize>>, // ToDo: only take reference to data here
     iterations: usize,
     beta: f32,
