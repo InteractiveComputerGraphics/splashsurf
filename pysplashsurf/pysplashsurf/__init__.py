@@ -58,7 +58,7 @@ PyMixedTriQuadMeshWithDataF32.push_cell_attribute = lambda self, name, data: pus
 PyMixedTriQuadMeshWithDataF32.push_cell_attribute.__doc__ = push_cell_attribute.__doc__
 
 
-def create_mesh_with_data_object_from(mesh):
+def create_mesh_with_data_object(mesh):
     """Create the corresponding mesh with data object to a mesh object
     
     Parameters
@@ -82,6 +82,81 @@ def create_mesh_with_data_object_from(mesh):
         return PyMixedTriQuadMeshWithDataF32(mesh)
     else:
         raise ValueError("Invalid mesh type")
+
+def create_sph_interpolator_object(particle_positions, particle_densities, particle_rest_mass, compact_support_radius):
+    """Create the corresponding SPH interpolator object to a set of particle data
+    
+    Parameters
+    ----------
+    particle_positions: np.ndarray
+        2-dimensional array containing all particle positions [[ax, ay, az], [bx, by, bz], ...]
+        
+    particle_densities: np.ndarray
+        1-dimensional array containing all particle densities
+        
+    particle_rest_mass: float
+        Rest mass of the particles
+        
+    compact_support_radius: float
+        Compact support radius of the SPH kernel
+        
+    Returns
+    -------
+    PySphInterpolatorF32 | PySphInterpolatorF64
+        SphInterpolator object
+    """
+    
+    if particle_positions.dtype == 'float32':
+        return PySphInterpolatorF32(particle_positions, particle_densities, particle_rest_mass, compact_support_radius) 
+    elif particle_positions.dtype == 'float64':
+        return PySphInterpolatorF64(particle_positions, particle_densities, particle_rest_mass, compact_support_radius)
+    else:
+        raise ValueError("Invalid data type (only float32 and float64 are supported, consider explicitly specifying the dtype for particle_positions)")
+
+def create_aabb_object(aabb_min, aabb_max):
+    """Create the corresponding AABB object to a set of min and max values
+    
+    Parameters
+    ----------
+    aabb_min: np.ndarray
+        Smallest corner of the axis-aligned bounding box
+        
+    aabb_max: np.ndarray
+        Largest corner of the axis-aligned bounding box
+        
+    Returns
+    -------
+    PyAabb3dF32 | PyAabb3dF64
+        Aabb object
+    """
+    
+    if aabb_min.dtype == 'float32':
+        return PyAabb3dF32(aabb_min, aabb_max) 
+    elif aabb_min.dtype == 'float64':
+        return PyAabb3dF64(aabb_min, aabb_max)
+    else:
+        raise ValueError("Invalid data type (only float32 and float64 are supported, consider explicitly specifying the dtype for aabb_min and aabb_max)")
+
+def create_aabb_object_from_points(points):
+    """Create the corresponding AABB object to a set of points
+    
+    Parameters
+    ----------
+    points: np.ndarray
+        2-dimensional array containing all point positions [[ax, ay, az], [bx, by, bz], ...]
+    
+    Returns
+    -------
+    PyAabb3dF32 | PyAabb3dF64
+        Aabb object
+    """
+    
+    if points.dtype == 'float32':
+        return PyAabb3dF32.from_points(points) 
+    elif points.dtype == 'float64':
+        return PyAabb3dF64.from_points(points)
+    else:
+        raise ValueError("Invalid data type (only float32 and float64 are supported, consider explicitly specifying the dtype for points)")
 
 def reconstruct_surface(
     particles, *, 
@@ -243,8 +318,8 @@ def par_laplacian_smoothing_inplace(
     
     Parameters
     ----------
-    mesh: PyMeshWithDataF32 | PyMeshWithDataF64
-        Mesh object to smooth
+    mesh: PyTriMeshWithDataF32 | PyTriMeshWithDataF64 | PyMixedTriQuadMeshWithDataF32 | PyMixedTriQuadMeshWithDataF64
+        Mesh with data object to smooth
         
     vertex_connectivity: list[list[int]]
         Vertex connectivity list

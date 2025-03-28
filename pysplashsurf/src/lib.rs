@@ -17,7 +17,6 @@ mod pipeline;
 fn pysplashsurf(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let _ = m.add_class::<mesh::PyTriMesh3dF32>()?;
     let _ = m.add_class::<mesh::PyTriMesh3dF64>()?;
-
     let _ = m.add_class::<mesh::PyMixedTriQuadMesh3dF32>()?;
     let _ = m.add_class::<mesh::PyMixedTriQuadMesh3dF64>()?;
 

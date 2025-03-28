@@ -9,6 +9,14 @@ All methods infer float precision based on the input (32bit or 64bit).
 
 .. autofunction:: convert_tris_to_quads
 
+.. autofunction:: create_aabb_object
+
+.. autofunction:: create_aabb_object_from_points
+
+.. autofunction:: create_mesh_with_data_object
+
+.. autofunction:: create_sph_interpolator_object
+
 .. autofunction:: decimation
 
 .. autofunction:: marching_cubes_cleanup

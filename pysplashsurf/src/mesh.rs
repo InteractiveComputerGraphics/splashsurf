@@ -57,13 +57,13 @@ macro_rules! create_mesh_data_interface {
                 Ok($name::new(meshdata))
             }
 
-            /// PyTriMesh3dF32/F64 clone of the contained mesh
+            /// Clone of the contained mesh
             #[getter]
             fn mesh(&self) -> $pymesh_class {
                 $pymesh_class::new(self.inner.mesh.clone())
             }
 
-            /// Returns PyTrimesh3dF32/F64 without copying the mesh data, removes the mesh from the object
+            /// Returns mesh without copying the mesh data, removes it from the object
             fn take_mesh(&mut self) -> $pymesh_class {
                 let mesh = std::mem::take(&mut self.inner.mesh);
                 $pymesh_class::new(mesh)
