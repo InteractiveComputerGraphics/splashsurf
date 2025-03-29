@@ -4,6 +4,7 @@ import math
 import meshio
 import subprocess
 import time
+import trimesh
 
 BINARY_PATH = "splashsurf"
 
@@ -34,7 +35,7 @@ def test_memory_access():
 
 def reconstruction_pipeline(input_file, output_file, *, enable_multi_threading=True, particle_radius=0.025, 
                             rest_density=1000.0, smoothing_length=2.0, cube_size=0.5, 
-                            iso_surface_threshold=0.6, mesh_smoothing_weights=False, sph_normals=False, 
+                            iso_surface_threshold=0.6, mesh_smoothing_weights=False, output_mesh_smoothing_weights=False, sph_normals=False, 
                             mesh_smoothing_weights_normalization=13.0, mesh_smoothing_iters=5, normals_smoothing_iters=5,
                             mesh_aabb_min=None, mesh_aabb_max=None, mesh_cleanup=False, decimate_barnacles=False, keep_vertices=False,
                             compute_normals=False, output_raw_normals=False, mesh_aabb_clamp_vertices=False,
@@ -51,17 +52,25 @@ def reconstruction_pipeline(input_file, output_file, *, enable_multi_threading=T
                                                           mesh_smoothing_iters=mesh_smoothing_iters, normals_smoothing_iters=normals_smoothing_iters,
                                                           mesh_aabb_min=mesh_aabb_min, mesh_aabb_max=mesh_aabb_max, mesh_cleanup=mesh_cleanup, decimate_barnacles=decimate_barnacles,
                                                           keep_vertices=keep_vertices, compute_normals=compute_normals, output_raw_normals=output_raw_normals,
-                                                          mesh_aabb_clamp_vertices=mesh_aabb_clamp_vertices, subdomain_grid=subdomain_grid, subdomain_num_cubes_per_dim=subdomain_num_cubes_per_dim)
+                                                          mesh_aabb_clamp_vertices=mesh_aabb_clamp_vertices, subdomain_grid=subdomain_grid, subdomain_num_cubes_per_dim=subdomain_num_cubes_per_dim, output_mesh_smoothing_weights=output_mesh_smoothing_weights)
         
     mesh = mesh_with_data.take_mesh()
+    
+    point_data = {}
+    for key in mesh_with_data.get_point_attribute_keys():
+        point_data[key] = mesh_with_data.get_point_attribute(key)
+    
+    cell_data = {}
+    for key in mesh_with_data.get_cell_attribute_keys():
+        cell_data[key] = mesh_with_data.get_cell_attribute(key)
     
     # Convert triangles to quads
     if generate_quads:
         mesh = pysplashsurf.convert_tris_to_quads(mesh, non_squareness_limit=quad_max_edge_diag_ratio, normal_angle_limit_rad=math.radians(quad_max_normal_angle), max_interior_angle=math.radians(quad_max_interior_angle))
     
-    if type(mesh) is pysplashsurf.PyTriMesh3dF64:
+    if type(mesh) is pysplashsurf.PyTriMesh3dF64 or type(mesh) is pysplashsurf.PyTriMesh3dF32:
         verts, tris = mesh.take_vertices_and_triangles()
-        meshio.write_points_cells(output_file, verts, [("triangle", tris)])
+        meshio.write_points_cells(output_file, verts, [("triangle", tris)], point_data=point_data, cell_data=cell_data)
         
         # Mesh checks
         # if check_mesh_closed or check_mesh_manifold:
@@ -70,7 +79,7 @@ def reconstruction_pipeline(input_file, output_file, *, enable_multi_threading=T
     else:
         verts, cells = mesh.take_vertices_and_cells()
         cells = [("triangle", list(filter(lambda x: len(x) == 3, cells))), ("quad", list(filter(lambda x: len(x) == 4, cells)))]
-        meshio.write_points_cells(output_file, verts, cells)
+        meshio.write_points_cells(output_file, verts, cells, point_data=point_data)
     
     
     # Left out: Mesh orientation check
@@ -84,7 +93,7 @@ def test_no_post_processing():
     
     start = time.time()
     reconstruction_pipeline("./ParticleData_Fluid_5.vtk", "test.vtk", particle_radius=np.float64(0.025), smoothing_length=np.float64(2.0), 
-                            cube_size=np.float64(0.5), iso_surface_threshold=np.float64(0.6), mesh_smoothing_weights=False, 
+                            cube_size=np.float64(0.5), iso_surface_threshold=np.float64(0.6), mesh_smoothing_weights=True, 
                             mesh_smoothing_weights_normalization=np.float64(13.0), mesh_smoothing_iters=0, normals_smoothing_iters=0, 
                             generate_quads=False, mesh_cleanup=False, compute_normals=False, subdomain_grid=True)
     print("Python done in", time.time() - start)
@@ -107,14 +116,15 @@ def test_no_post_processing():
     
 def test_with_post_processing():
     start = time.time()
-    subprocess.run([BINARY_PATH] + "reconstruct ./ParticleData_Fluid_5.vtk -o test_bin.vtk -r=0.025 -l=2.0 -c=0.5 -t=0.6 -d=on --subdomain-grid=on --decimate-barnacles=on --mesh-cleanup=on --mesh-smoothing-weights=on --mesh-smoothing-iters=25 --normals=on --normals-smoothing-iters=10".split(), check=True)
+    subprocess.run([BINARY_PATH] + "reconstruct ./ParticleData_Fluid_5.vtk -o test_bin.vtk -r=0.025 -l=2.0 -c=0.5 -t=0.6 -d=on --subdomain-grid=on --decimate-barnacles=on --mesh-cleanup=on --mesh-smoothing-weights=on --mesh-smoothing-iters=25 --normals=on --normals-smoothing-iters=10 --output-smoothing-weights=on".split(), check=True)
     print("Binary done in", time.time() - start)
     
     start = time.time()
     reconstruction_pipeline("./ParticleData_Fluid_5.vtk", "test.vtk", particle_radius=np.float64(0.025), smoothing_length=np.float64(2.0), 
                             cube_size=np.float64(0.5), iso_surface_threshold=np.float64(0.6), mesh_smoothing_weights=True, 
                             mesh_smoothing_weights_normalization=np.float64(13.0), mesh_smoothing_iters=25, normals_smoothing_iters=10, 
-                            generate_quads=False, mesh_cleanup=True, compute_normals=True, subdomain_grid=True, decimate_barnacles=True)
+                            generate_quads=False, mesh_cleanup=True, compute_normals=True, subdomain_grid=True, decimate_barnacles=True,
+                            output_mesh_smoothing_weights=True, output_raw_normals=True)
     print("Python done in", time.time() - start)
     
     binary_mesh = meshio.read("test_bin.vtk")
@@ -127,6 +137,18 @@ def test_with_post_processing():
     print("# of vertices python:", len(python_verts))
     
     assert(len(binary_verts) == len(python_verts))
+    
+    # Trimesh similarity test
+    binary_mesh = trimesh.load_mesh("test_bin.vtk", "vtk")
+    python_mesh = trimesh.load_mesh("test.vtk", "vtk")
+    
+    (_, distance_bin, _) = trimesh.proximity.closest_point(binary_mesh, python_verts)
+    (_, distance_py, _) = trimesh.proximity.closest_point(python_mesh, binary_verts)
+    distance = np.sum(distance_bin) + np.sum(distance_py)
+    print("Distance:", distance)
+    assert(distance < 1e-5)
+    
+    # Naïve similarity test
     
     binary_verts.sort(axis=0)
     python_verts.sort(axis=0)

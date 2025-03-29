@@ -1,6 +1,6 @@
 use ndarray::{Array2, ArrayView2, ArrayView};
 use numpy::{Element, IntoPyArray, PyReadonlyArray2, PyArray2, ToPyArray, PyArray, PyArrayMethods};
-use pyo3::{exceptions::PyValueError, prelude::*, IntoPyObjectExt, types::PyTuple};
+use pyo3::{exceptions::PyValueError, prelude::*, IntoPyObjectExt, types::{PyTuple, PyList}};
 use splashsurf_lib::{mesh::{AttributeData, MeshAttribute, MeshWithData, TriMesh3d, Mesh3d, MixedTriQuadMesh3d, TriangleOrQuadCell}, Real, nalgebra::{Vector3, Unit}};
 
 use crate::aabb::{PyAabb3dF32, PyAabb3dF64};
@@ -115,6 +115,28 @@ macro_rules! create_mesh_data_interface {
             fn get_cell_attribute<'py>(&self, py: Python<'py>, name: &str) -> PyResult<PyObject> {
                 get_attribute_with_name::<$type>(py, self.inner.cell_attributes.as_slice(), name)
             }
+
+            /// Get all registered point attribute names
+            fn get_point_attribute_keys<'py>(&self, py: Python<'py>) -> Bound<'py, PyList> {
+                let mut res: Vec<&str> = vec![];
+
+                for attr in self.inner.point_attributes.iter() {
+                    res.push(&attr.name);
+                }
+
+                PyList::new(py, res).unwrap()
+            } 
+
+            /// Get all registered cell attribute names
+            fn get_cell_attribute_keys<'py>(&self, py: Python<'py>) -> Bound<'py, PyList> {
+                let mut res: Vec<&str> = vec![];
+
+                for attr in self.inner.cell_attributes.iter() {
+                    res.push(&attr.name);
+                }
+
+                PyList::new(py, res).unwrap()
+            } 
         }
     };
 }

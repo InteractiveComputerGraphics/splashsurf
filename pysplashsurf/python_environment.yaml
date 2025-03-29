@@ -13,4 +13,7 @@ dependencies:
   - python_abi=3.13
   - sphinx=8.2.3
   - numpydoc=1.8.0
+  - trimesh=4.6.5
+  - rtree=1.4.0
+  - scipy=1.15.2
   - furo
