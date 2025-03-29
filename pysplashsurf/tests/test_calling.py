@@ -8,6 +8,24 @@ import trimesh
 
 BINARY_PATH = "splashsurf"
 
+def test_marching_cubes_calls():
+    print("\nTesting marching cubes calls")
+    
+    particles = np.array(meshio.read("./ParticleData_Fluid_5.vtk").points, dtype=np.float32)
+    reconstruction = pysplashsurf.reconstruct_surface(particles, enable_multi_threading=True, particle_radius=0.025,
+                                                                 rest_density=1000.0, smoothing_length=2.0, cube_size=0.5, 
+                                                                 iso_surface_threshold=0.6)
+    mesh = reconstruction.mesh
+    verts_before = len(mesh.vertices)
+    print("# of vertices before:", verts_before)
+    
+    mesh_with_data = pysplashsurf.create_mesh_with_data_object(mesh)
+    pysplashsurf.marching_cubes_cleanup(mesh_with_data, reconstruction.grid)
+    
+    verts_after = len(mesh_with_data.mesh.vertices)
+    print("# of vertices after:", verts_after)
+    assert(verts_after < verts_before)
+
 def test_memory_access():
     print("\nTesting memory copy vs take")
     
@@ -158,5 +176,6 @@ def test_with_post_processing():
     
     assert(np.allclose(binary_verts, python_verts))
 
-test_with_post_processing()
+test_marching_cubes_calls()
+# test_with_post_processing()
 # test_memory_access()

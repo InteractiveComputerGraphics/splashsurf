@@ -1,6 +1,6 @@
 use ndarray::ArrayViewMut2;
 use numpy::{PyArray2, PyArrayMethods};
-use pyo3::prelude::*;
+use pyo3::{exceptions::PyValueError, prelude::*};
 use splashsurf_lib::nalgebra::Vector3;
 
 use crate::{mesh::{PyMixedTriQuadMesh3dF32, PyMixedTriQuadMesh3dF64, PyTriMesh3dF32, PyTriMesh3dF64, PyTriMeshWithDataF32, PyTriMeshWithDataF64}, uniform_grid::{PyUniformGridF32, PyUniformGridF64}};
@@ -33,26 +33,48 @@ pub fn convert_tris_to_quads_py_f32<'py>(
 #[pyo3(name = "par_laplacian_smoothing_inplace_f64")]
 #[pyo3(signature = (mesh, vertex_connectivity, iterations, beta, weights))]
 pub fn par_laplacian_smoothing_inplace_py_f64<'py>(
-    mesh: &mut PyTriMeshWithDataF64,
+    py: Python,
+    mesh: PyObject,
     vertex_connectivity: Vec<Vec<usize>>, // ToDo: only take reference to data here
     iterations: usize,
     beta: f64,
     weights: Vec<f64> // ToDo: Same here
-) {
-    splashsurf_lib::postprocessing::par_laplacian_smoothing_inplace(&mut mesh.inner.mesh, &vertex_connectivity, iterations, beta, &weights);
+) -> PyResult<()> {
+    if mesh.downcast_bound::<PyTriMesh3dF64>(py).is_ok() {
+        let mesh = mesh.downcast_bound::<PyTriMesh3dF64>(py).unwrap();
+        splashsurf_lib::postprocessing::par_laplacian_smoothing_inplace(&mut mesh.borrow_mut().inner, &vertex_connectivity, iterations, beta, &weights);
+        Ok(())
+    } else if mesh.downcast_bound::<PyTriMeshWithDataF64>(py).is_ok() {
+        let mesh = mesh.downcast_bound::<PyTriMeshWithDataF64>(py).unwrap();
+        splashsurf_lib::postprocessing::par_laplacian_smoothing_inplace(&mut mesh.borrow_mut().inner.mesh, &vertex_connectivity, iterations, beta, &weights);
+        Ok(())
+    } else {
+        Err(PyErr::new::<PyValueError, _>("Invalid mesh type"))
+    }
 }
 
 #[pyfunction]
 #[pyo3(name = "par_laplacian_smoothing_inplace_f32")]
 #[pyo3(signature = (mesh, vertex_connectivity, iterations, beta, weights))]
 pub fn par_laplacian_smoothing_inplace_py_f32<'py>(
-    mesh: &mut PyTriMeshWithDataF32,
+    py: Python,
+    mesh: PyObject,
     vertex_connectivity: Vec<Vec<usize>>, // ToDo: only take reference to data here
     iterations: usize,
     beta: f32,
     weights: Vec<f32> // ToDo: Same here
-) {
-    splashsurf_lib::postprocessing::par_laplacian_smoothing_inplace(&mut mesh.inner.mesh, &vertex_connectivity, iterations, beta, &weights);
+) -> PyResult<()> {
+    if mesh.downcast_bound::<PyTriMesh3dF32>(py).is_ok() {
+        let mesh = mesh.downcast_bound::<PyTriMesh3dF32>(py).unwrap();
+        splashsurf_lib::postprocessing::par_laplacian_smoothing_inplace(&mut mesh.borrow_mut().inner, &vertex_connectivity, iterations, beta, &weights);
+        Ok(())
+    } else if mesh.downcast_bound::<PyTriMeshWithDataF32>(py).is_ok() {
+        let mesh = mesh.downcast_bound::<PyTriMeshWithDataF32>(py).unwrap();
+        splashsurf_lib::postprocessing::par_laplacian_smoothing_inplace(&mut mesh.borrow_mut().inner.mesh, &vertex_connectivity, iterations, beta, &weights);
+        Ok(())
+    } else {
+        Err(PyErr::new::<PyValueError, _>("Invalid mesh type"))
+    }
 }
 
 #[pyfunction]
@@ -87,42 +109,78 @@ pub fn par_laplacian_smoothing_normals_inplace_py_f64<'py>(
 #[pyo3(name = "decimation_f64")]
 #[pyo3(signature = (mesh, *, keep_vertices))]
 pub fn decimation_py_f64<'py>(
-    mesh: &mut PyTriMesh3dF64,
+    py: Python,
+    mesh: PyObject,
     keep_vertices: bool,
-) -> Vec<Vec<usize>> {
-    splashsurf_lib::postprocessing::decimation(&mut mesh.inner, keep_vertices)
+) -> PyResult<Vec<Vec<usize>>> {
+    if mesh.downcast_bound::<PyTriMesh3dF64>(py).is_ok() {
+        let mesh = mesh.downcast_bound::<PyTriMesh3dF64>(py).unwrap();
+        Ok(splashsurf_lib::postprocessing::decimation(&mut mesh.borrow_mut().inner, keep_vertices))
+    } else if mesh.downcast_bound::<PyTriMeshWithDataF64>(py).is_ok() {
+        let mesh = mesh.downcast_bound::<PyTriMeshWithDataF64>(py).unwrap();
+        Ok(splashsurf_lib::postprocessing::decimation(&mut mesh.borrow_mut().inner.mesh, keep_vertices))
+    } else {
+        Err(PyErr::new::<PyValueError, _>("Invalid mesh type"))
+    }
 }
 
 #[pyfunction]
 #[pyo3(name = "decimation_f32")]
 #[pyo3(signature = (mesh, *, keep_vertices))]
 pub fn decimation_py_f32<'py>(
-    mesh: &mut PyTriMesh3dF32,
+    py: Python,
+    mesh: PyObject,
     keep_vertices: bool,
-) -> Vec<Vec<usize>> {
-    splashsurf_lib::postprocessing::decimation(&mut mesh.inner, keep_vertices)
+) -> PyResult<Vec<Vec<usize>>> {
+    if mesh.downcast_bound::<PyTriMesh3dF32>(py).is_ok() {
+        let mesh = mesh.downcast_bound::<PyTriMesh3dF32>(py).unwrap();
+        Ok(splashsurf_lib::postprocessing::decimation(&mut mesh.borrow_mut().inner, keep_vertices))
+    } else if mesh.downcast_bound::<PyTriMeshWithDataF32>(py).is_ok() {
+        let mesh = mesh.downcast_bound::<PyTriMeshWithDataF32>(py).unwrap();
+        Ok(splashsurf_lib::postprocessing::decimation(&mut mesh.borrow_mut().inner.mesh, keep_vertices))
+    } else {
+        Err(PyErr::new::<PyValueError, _>("Invalid mesh type"))
+    }
 }
 
 #[pyfunction]
 #[pyo3(name = "marching_cubes_cleanup_f64")]
 #[pyo3(signature = (mesh, grid, *, max_iter, keep_vertices))]
 pub fn marching_cubes_cleanup_py_f64<'py>(
-    mesh: &mut PyTriMesh3dF64,
+    py: Python,
+    mesh: PyObject,
     grid: &PyUniformGridF64,
     max_iter: usize,
     keep_vertices: bool,
-) -> Vec<Vec<usize>> {
-    splashsurf_lib::postprocessing::marching_cubes_cleanup(&mut mesh.inner, &grid.inner, max_iter, keep_vertices)
+) -> PyResult<Vec<Vec<usize>>> {
+    if mesh.downcast_bound::<PyTriMesh3dF64>(py).is_ok() {
+        let mesh = mesh.downcast_bound::<PyTriMesh3dF64>(py).unwrap();
+        Ok(splashsurf_lib::postprocessing::marching_cubes_cleanup(&mut mesh.borrow_mut().inner, &grid.inner, max_iter, keep_vertices))
+    } else if mesh.downcast_bound::<PyTriMeshWithDataF64>(py).is_ok() {
+        let mesh = mesh.downcast_bound::<PyTriMeshWithDataF64>(py).unwrap();
+        Ok(splashsurf_lib::postprocessing::marching_cubes_cleanup(&mut mesh.borrow_mut().inner.mesh, &grid.inner, max_iter, keep_vertices))
+    } else {
+        Err(PyErr::new::<PyValueError, _>("Invalid mesh type"))
+    }
 }
 
 #[pyfunction]
 #[pyo3(name = "marching_cubes_cleanup_f32")]
 #[pyo3(signature = (mesh, grid, *, max_iter, keep_vertices))]
 pub fn marching_cubes_cleanup_py_f32<'py>(
-    mesh: &mut PyTriMesh3dF32,
+    py: Python,
+    mesh: PyObject,
     grid: &PyUniformGridF32,
     max_iter: usize,
     keep_vertices: bool,
-) -> Vec<Vec<usize>> {
-    splashsurf_lib::postprocessing::marching_cubes_cleanup(&mut mesh.inner, &grid.inner, max_iter, keep_vertices)
+) -> PyResult<Vec<Vec<usize>>> {
+    if mesh.downcast_bound::<PyTriMesh3dF32>(py).is_ok() {
+        let mesh = mesh.downcast_bound::<PyTriMesh3dF32>(py).unwrap();
+        Ok(splashsurf_lib::postprocessing::marching_cubes_cleanup(&mut mesh.borrow_mut().inner, &grid.inner, max_iter, keep_vertices))
+    } else if mesh.downcast_bound::<PyTriMeshWithDataF32>(py).is_ok() {
+        let mesh = mesh.downcast_bound::<PyTriMeshWithDataF32>(py).unwrap();
+        Ok(splashsurf_lib::postprocessing::marching_cubes_cleanup(&mut mesh.borrow_mut().inner.mesh, &grid.inner, max_iter, keep_vertices))
+    } else {
+        Err(PyErr::new::<PyValueError, _>("Invalid mesh type"))
+    }   
 }

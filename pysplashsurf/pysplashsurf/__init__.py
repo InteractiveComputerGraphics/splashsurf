@@ -249,7 +249,7 @@ def marching_cubes_cleanup(
     
     Parameters
     ----------
-    mesh: PyTriMesh3dF32 | PyTriMesh3dF64
+    mesh: PyTriMesh3dF32 | PyTriMesh3dF64 | PyTriMeshWithDataF32 | PyTriMeshWithDataF64
         Mesh object to simplify
     
     grid: PyUniformGridF32 | PyUniformGridF64
@@ -266,10 +266,10 @@ def marching_cubes_cleanup(
     list
         vertex connectivity list of the simplified mesh
     """
-    if type(mesh) is PyTriMesh3dF32:
+    if type(mesh) is PyTriMesh3dF32 or type(mesh) is PyTriMeshWithDataF32:
         return marching_cubes_cleanup_f32(mesh, grid, max_iter=max_iter, keep_vertices=keep_vertices)
     
-    elif type(mesh) is PyTriMesh3dF64:
+    elif type(mesh) is PyTriMesh3dF64 or type(mesh) is PyTriMeshWithDataF64:
         return marching_cubes_cleanup_f64(mesh, grid, max_iter=max_iter, keep_vertices=keep_vertices)
     
     else:
@@ -283,7 +283,7 @@ def decimation(
     
     Parameters
     ----------
-    mesh: PyTriMesh3dF32 | PyTriMesh3dF64
+    mesh: PyTriMesh3dF32 | PyTriMesh3dF64 | PyTriMeshWithDataF32 | PyTriMeshWithDataF64
         Mesh object to simplify
     
     keep_vertices: bool
@@ -294,10 +294,10 @@ def decimation(
     list
         vertex connectivity list of the simplified mesh
     """
-    if type(mesh) is PyTriMesh3dF32:
+    if type(mesh) is PyTriMesh3dF32 or type(mesh) is PyTriMeshWithDataF32:
         return decimation_f32(mesh, keep_vertices=keep_vertices)
     
-    elif type(mesh) is PyTriMesh3dF64:
+    elif type(mesh) is PyTriMesh3dF64 or type(mesh) is PyTriMeshWithDataF64:
         return decimation_f64(mesh, keep_vertices=keep_vertices)
     
     else:
@@ -318,8 +318,8 @@ def par_laplacian_smoothing_inplace(
     
     Parameters
     ----------
-    mesh: PyTriMeshWithDataF32 | PyTriMeshWithDataF64 | PyMixedTriQuadMeshWithDataF32 | PyMixedTriQuadMeshWithDataF64
-        Mesh with data object to smooth
+    mesh: PyTriMesh3dF32 | PyTriMesh3dF64 | PyTriMeshWithDataF32 | PyTriMeshWithDataF64
+        Mesh object to smooth
         
     vertex_connectivity: list[list[int]]
         Vertex connectivity list
@@ -334,10 +334,10 @@ def par_laplacian_smoothing_inplace(
         Feature weights for the vertices
     """
     
-    if type(mesh) is PyMeshWithDataF32:
+    if type(mesh) is PyTriMesh3dF32 or type(mesh) is PyTriMeshWithDataF32:
         par_laplacian_smoothing_inplace_f32(mesh, vertex_connectivity, iterations, beta, weights)
     
-    elif type(mesh) is PyMeshWithDataF64:
+    elif type(mesh) is PyTriMesh3dF64 or type(mesh) is PyTiMeshWithDataF64:
         par_laplacian_smoothing_inplace_f64(mesh, vertex_connectivity, iterations, beta, weights)
     
     else:
@@ -415,7 +415,7 @@ def check_mesh_consistency(
     grid: PyUniformGridF32 | PyUniformGridF64
         Uniform grid object
         
-    mesh: PyTriMesh3dF32 | PyTriMesh3dF64
+    mesh: PyTriMesh3dF32 | PyTriMesh3dF64 | PyTriMeshWithDataF32 | PyTriMeshWithDataF64
         Triangular mesh object
         
     check_closed: bool
@@ -428,10 +428,10 @@ def check_mesh_consistency(
         Flag to enable debug output
     """
     
-    if type(grid) is PyUniformGridF32 and type(mesh) is PyTriMesh3dF32:
+    if type(grid) is PyUniformGridF32 and (type(mesh) is PyTriMesh3dF32 or type(mesh) is PyTriMeshWithDataF32):
         return check_mesh_consistency_f32(grid, mesh, check_closed=check_closed, check_manifold=check_manifold, debug=debug)
     
-    elif type(grid) is PyUniformGridF64 and type(mesh) is PyTriMesh3dF64:
+    elif type(grid) is PyUniformGridF64 and (type(mesh) is PyTriMesh3dF64 or type(mesh) is PyTriMeshWithDataF64):
         return check_mesh_consistency_f64(grid, mesh, check_closed=check_closed, check_manifold=check_manifold, debug=debug)
     
     else:
@@ -458,6 +458,11 @@ def convert_tris_to_quads(
         
     max_interior_angle: float
         Maximum interior angle in radians
+        
+    Returns
+    -------
+    PyMixedTriQuadMesh3dF32 | PyMixedTriQuadMesh3dF64
+        Mixed triangular and quadrilateral mesh object
     """
     
     if type(mesh) is PyTriMesh3dF32:
