@@ -8,6 +8,24 @@ import trimesh
 
 BINARY_PATH = "splashsurf"
 
+def test_aabb_class():
+    print("\nTesting AABB class")
+    
+    aabb = pysplashsurf.PyAabb3dF64.par_from_points(np.array([[0.0, 0.0, 0.0], [1.0, 1.0, 1.0], [2.0, 0.5, 4.2]]))
+    
+    assert(aabb.min() == np.array([0.0, 0.0, 0.0])).all()
+    assert(aabb.max() == np.array([2.0, 1.0, 4.2])).all()
+    
+    aabb.join_with_point([3.0, 2.0, 1.0])
+    
+    assert(aabb.min() == np.array([0.0, 0.0, 0.0])).all()
+    assert(aabb.max() == np.array([3.0, 2.0, 4.2])).all()
+    
+    assert(aabb.contains_point([1.0, 1.0, 4.1]))
+    assert(aabb.contains_point([0.0, 0.0, 0.0]))
+    assert(not aabb.contains_point([4.0, 2.0, 1.0]))
+    assert(not aabb.contains_point([1.0, -1.0, 5.0]))
+
 def test_marching_cubes_calls():
     print("\nTesting marching cubes calls")
     
@@ -176,6 +194,7 @@ def test_with_post_processing():
     
     assert(np.allclose(binary_verts, python_verts))
 
+test_aabb_class()
 test_marching_cubes_calls()
 # test_with_post_processing()
 # test_memory_access()
