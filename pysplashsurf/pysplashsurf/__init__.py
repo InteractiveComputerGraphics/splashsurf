@@ -1,4 +1,5 @@
 from .pysplashsurf import *
+from . import bgeo
 import numpy as np
 
 def push_point_attribute(self, name: str, data: np.ndarray, real_type):

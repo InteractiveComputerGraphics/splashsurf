@@ -8,6 +8,11 @@ import trimesh
 
 BINARY_PATH = "splashsurf"
 
+def test_bgeo():
+    particles = np.array(meshio.read("./ParticleData_Fluid_50.bgeo").points, dtype=np.float32)
+    
+    assert(len(particles) == 4732)
+
 def test_aabb_class():
     print("\nTesting AABB class")
     
@@ -152,11 +157,11 @@ def test_no_post_processing():
     
 def test_with_post_processing():
     start = time.time()
-    subprocess.run([BINARY_PATH] + "reconstruct ./ParticleData_Fluid_5.vtk -o test_bin.vtk -r=0.025 -l=2.0 -c=0.5 -t=0.6 -d=on --subdomain-grid=on --decimate-barnacles=on --mesh-cleanup=on --mesh-smoothing-weights=on --mesh-smoothing-iters=25 --normals=on --normals-smoothing-iters=10 --output-smoothing-weights=on".split(), check=True)
+    subprocess.run([BINARY_PATH] + "reconstruct ./ParticleData_Fluid_50.bgeo -o test_bin.vtk -r=0.025 -l=2.0 -c=0.5 -t=0.6 -d=on --subdomain-grid=on --decimate-barnacles=on --mesh-cleanup=on --mesh-smoothing-weights=on --mesh-smoothing-iters=25 --normals=on --normals-smoothing-iters=10 --output-smoothing-weights=on".split(), check=True)
     print("Binary done in", time.time() - start)
     
     start = time.time()
-    reconstruction_pipeline("./ParticleData_Fluid_5.vtk", "test.vtk", particle_radius=np.float64(0.025), smoothing_length=np.float64(2.0), 
+    reconstruction_pipeline("./ParticleData_Fluid_50.bgeo", "test.vtk", particle_radius=np.float64(0.025), smoothing_length=np.float64(2.0), 
                             cube_size=np.float64(0.5), iso_surface_threshold=np.float64(0.6), mesh_smoothing_weights=True, 
                             mesh_smoothing_weights_normalization=np.float64(13.0), mesh_smoothing_iters=25, normals_smoothing_iters=10, 
                             generate_quads=False, mesh_cleanup=True, compute_normals=True, subdomain_grid=True, decimate_barnacles=True,
@@ -194,6 +199,7 @@ def test_with_post_processing():
     
     assert(np.allclose(binary_verts, python_verts))
 
+test_bgeo()
 test_aabb_class()
 test_marching_cubes_calls()
 test_memory_access()
