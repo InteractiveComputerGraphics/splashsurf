@@ -1,10 +1,12 @@
 use numpy::{PyArray, PyArray1, PyArray2, PyReadonlyArray2};
 use pyo3::{prelude::*, PyResult};
 use splashsurf_lib::{nalgebra::Vector3, Aabb3d};
+use pyo3_stub_gen::derive::*;
 
 macro_rules! create_aabb3d_interface {
     ($name: ident, $type: ident) => {
         /// Aabb3d wrapper
+        #[gen_stub_pyclass]
         #[pyclass]
         pub struct $name {
             pub inner: Aabb3d<$type>
@@ -16,6 +18,7 @@ macro_rules! create_aabb3d_interface {
             }
         }
 
+        #[gen_stub_pymethods]
         #[pymethods]
         impl $name {
             #[new]

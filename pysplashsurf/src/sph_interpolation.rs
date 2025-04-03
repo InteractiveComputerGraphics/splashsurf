@@ -2,10 +2,12 @@ use numpy::{PyArray2, ToPyArray, PyReadonlyArray2};
 use ndarray::{ArrayView, ArrayView2};
 use pyo3::{prelude::*, PyResult};
 use splashsurf_lib::{nalgebra::{Unit, Vector3}, sph_interpolation::SphInterpolator};
+use pyo3_stub_gen::derive::*;
 
 macro_rules! create_sph_interpolator_interface {
     ($name: ident, $type: ident) => {
         /// SphInterpolator wrapper
+        #[gen_stub_pyclass]
         #[pyclass]
         pub struct $name {
             pub inner: SphInterpolator<$type>,
@@ -17,6 +19,7 @@ macro_rules! create_sph_interpolator_interface {
             }
         }
 
+        #[gen_stub_pymethods]
         #[pymethods]
         impl $name {
             #[new]

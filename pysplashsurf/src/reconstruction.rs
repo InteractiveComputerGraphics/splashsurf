@@ -4,12 +4,14 @@ use splashsurf_lib::{
     nalgebra::Vector3, reconstruct_surface, Aabb3d, GridDecompositionParameters, Index, Real,
     SpatialDecomposition, SurfaceReconstruction,
 };
+use pyo3_stub_gen::derive::*;
 
 use crate::{mesh::{TriMesh3dF32, TriMesh3dF64}, uniform_grid::{UniformGridF32, UniformGridF64}};
 
 macro_rules! create_reconstruction_interface {
     ($name: ident, $type: ident, $mesh_class: ident, $grid_class: ident) => {
         /// SurfaceReconstruction wrapper
+        #[gen_stub_pyclass]
         #[pyclass]
         pub struct $name {
             pub inner: SurfaceReconstruction<i64, $type>,
@@ -21,6 +23,7 @@ macro_rules! create_reconstruction_interface {
             }
         }
 
+        #[gen_stub_pymethods]
         #[pymethods]
         impl $name {
             /// PyTrimesh3d clone of the contained mesh

@@ -1,4 +1,5 @@
 use pyo3::prelude::*;
+use pyo3_stub_gen::define_stub_info_gatherer;
 
 mod uniform_grid;
 mod mesh;
@@ -66,3 +67,5 @@ fn pysplashsurf(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     Ok(())
 }
+
+define_stub_info_gatherer!(stub_info);

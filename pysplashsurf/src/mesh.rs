@@ -2,6 +2,7 @@ use ndarray::{Array2, ArrayView2, ArrayView};
 use numpy::{Element, IntoPyArray, PyReadonlyArray2, PyArray2, ToPyArray, PyArray, PyArrayMethods};
 use pyo3::{exceptions::PyValueError, prelude::*, IntoPyObjectExt, types::{PyTuple, PyList}};
 use splashsurf_lib::{mesh::{AttributeData, MeshAttribute, MeshWithData, TriMesh3d, Mesh3d, MixedTriQuadMesh3d, TriangleOrQuadCell}, Real, nalgebra::{Vector3, Unit}};
+use pyo3_stub_gen::derive::*;
 
 use crate::aabb::{Aabb3dF32, Aabb3dF64};
 
@@ -37,6 +38,7 @@ fn add_attribute_with_name<'py, R: Real + Element>(attrs: &mut Vec<MeshAttribute
 macro_rules! create_mesh_data_interface {
     ($name: ident, $type: ident, $mesh_class: ident, $pymesh_class: ident, $aabb_class: ident) => {
         /// MeshWithData wrapper
+        #[gen_stub_pyclass]
         #[pyclass]
         pub struct $name {
             pub inner: MeshWithData<$type, $mesh_class<$type>>,
@@ -48,6 +50,7 @@ macro_rules! create_mesh_data_interface {
             }
         }
 
+        #[gen_stub_pymethods]
         #[pymethods]
         impl $name {
 
@@ -144,6 +147,7 @@ macro_rules! create_mesh_data_interface {
 macro_rules! create_mesh_interface {
     ($name: ident, $type: ident) => {
         /// TriMesh3d wrapper
+        #[gen_stub_pyclass]
         #[pyclass]
         pub struct $name {
             pub inner: TriMesh3d<$type>,
@@ -155,6 +159,7 @@ macro_rules! create_mesh_interface {
             }
         }
 
+        #[gen_stub_pymethods]
         #[pymethods]
         impl $name {
             /// nx3 array of vertex positions, copies the data
@@ -169,9 +174,9 @@ macro_rules! create_mesh_interface {
 
             /// nx3 array of the vertex indices that make up a triangle, copies the data
             #[getter]
-            fn triangles<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<usize>> {
-                let tris: &[usize] = bytemuck::cast_slice(&self.inner.triangles);
-                let triangles: ArrayView2<usize> =
+            fn triangles<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<u64>> {
+                let tris: &[u64] = bytemuck::cast_slice(&self.inner.triangles);
+                let triangles: ArrayView2<u64> =
                     ArrayView::from_shape((self.inner.triangles.len(), 3), tris).unwrap();
                 triangles.to_pyarray(py)
             }
@@ -220,6 +225,7 @@ macro_rules! create_mesh_interface {
 macro_rules! create_tri_quad_mesh_interface {
     ($name: ident, $type: ident) => {
         /// MixedTriQuadMesh3d wrapper
+        #[gen_stub_pyclass]
         #[pyclass]
         pub struct $name {
             pub inner: MixedTriQuadMesh3d<$type>,
@@ -231,6 +237,7 @@ macro_rules! create_tri_quad_mesh_interface {
             }
         }
 
+        #[gen_stub_pymethods]
         #[pymethods]
         impl $name {
             /// nx3 array of vertex positions, copies data
