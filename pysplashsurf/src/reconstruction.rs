@@ -5,7 +5,7 @@ use splashsurf_lib::{
     SpatialDecomposition, SurfaceReconstruction,
 };
 
-use crate::{mesh::{PyTriMesh3dF32, PyTriMesh3dF64}, uniform_grid::{PyUniformGridF32, PyUniformGridF64}};
+use crate::{mesh::{TriMesh3dF32, TriMesh3dF64}, uniform_grid::{UniformGridF32, UniformGridF64}};
 
 macro_rules! create_reconstruction_interface {
     ($name: ident, $type: ident, $mesh_class: ident, $grid_class: ident) => {
@@ -55,8 +55,8 @@ macro_rules! create_reconstruction_interface {
     };
 }
 
-create_reconstruction_interface!(PySurfaceReconstructionF64, f64, PyTriMesh3dF64, PyUniformGridF64);
-create_reconstruction_interface!(PySurfaceReconstructionF32, f32, PyTriMesh3dF32, PyUniformGridF32);
+create_reconstruction_interface!(SurfaceReconstructionF64, f64, TriMesh3dF64, UniformGridF64);
+create_reconstruction_interface!(SurfaceReconstructionF32, f32, TriMesh3dF32, UniformGridF32);
 
 /// Reconstruct the surface from only particle positions
 pub fn reconstruct_surface_py<I: Index, R: Real>(
@@ -129,7 +129,7 @@ pub fn reconstruct_surface_py_f32<'py>(
     subdomain_num_cubes_per_dim: u32,
     aabb_min: Option<[f32; 3]>,
     aabb_max: Option<[f32; 3]>,
-) -> PySurfaceReconstructionF32 {
+) -> SurfaceReconstructionF32 {
     let particles: PyReadonlyArray2<f32> = particles.extract().unwrap();
 
     let particle_positions = particles.as_slice().unwrap();
@@ -150,7 +150,7 @@ pub fn reconstruct_surface_py_f32<'py>(
         aabb_max,
     );
 
-    PySurfaceReconstructionF32::new(reconstruction.to_owned())
+    SurfaceReconstructionF32::new(reconstruction.to_owned())
 }
 
 #[pyfunction]
@@ -173,7 +173,7 @@ pub fn reconstruct_surface_py_f64<'py>(
     subdomain_num_cubes_per_dim: u32,
     aabb_min: Option<[f64; 3]>,
     aabb_max: Option<[f64; 3]>,
-) -> PySurfaceReconstructionF64 {
+) -> SurfaceReconstructionF64 {
     let particles: PyReadonlyArray2<f64> = particles.extract().unwrap();
 
     let particle_positions = particles.as_slice().unwrap();
@@ -194,5 +194,5 @@ pub fn reconstruct_surface_py_f64<'py>(
         aabb_max,
     );
 
-    PySurfaceReconstructionF64::new(reconstruction.to_owned())
+    SurfaceReconstructionF64::new(reconstruction.to_owned())
 }

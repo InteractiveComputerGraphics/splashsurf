@@ -11,7 +11,7 @@ BINARY_PATH = "splashsurf"
 def test_aabb_class():
     print("\nTesting AABB class")
     
-    aabb = pysplashsurf.PyAabb3dF64.par_from_points(np.array([[0.0, 0.0, 0.0], [1.0, 1.0, 1.0], [2.0, 0.5, 4.2]]))
+    aabb = pysplashsurf.Aabb3dF64.par_from_points(np.array([[0.0, 0.0, 0.0], [1.0, 1.0, 1.0], [2.0, 0.5, 4.2]]))
     
     assert(aabb.min() == np.array([0.0, 0.0, 0.0])).all()
     assert(aabb.max() == np.array([2.0, 1.0, 4.2])).all()
@@ -104,7 +104,7 @@ def reconstruction_pipeline(input_file, output_file, *, enable_multi_threading=T
     if generate_quads:
         mesh = pysplashsurf.convert_tris_to_quads(mesh, non_squareness_limit=quad_max_edge_diag_ratio, normal_angle_limit_rad=math.radians(quad_max_normal_angle), max_interior_angle=math.radians(quad_max_interior_angle))
     
-    if type(mesh) is pysplashsurf.PyTriMesh3dF64 or type(mesh) is pysplashsurf.PyTriMesh3dF32:
+    if type(mesh) is pysplashsurf.TriMesh3dF64 or type(mesh) is pysplashsurf.TriMesh3dF32:
         verts, tris = mesh.take_vertices_and_triangles()
         meshio.write_points_cells(output_file, verts, [("triangle", tris)], point_data=point_data, cell_data=cell_data)
         
@@ -196,5 +196,5 @@ def test_with_post_processing():
 
 test_aabb_class()
 test_marching_cubes_calls()
-# test_with_post_processing()
-# test_memory_access()
+test_memory_access()
+test_with_post_processing()

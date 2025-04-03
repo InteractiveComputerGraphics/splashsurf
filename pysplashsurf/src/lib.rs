@@ -15,27 +15,27 @@ mod pipeline;
 /// Support reconstructing Level-Set surfaces from particle clouds or from regular grids.
 #[pymodule]
 fn pysplashsurf(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    let _ = m.add_class::<mesh::PyTriMesh3dF32>()?;
-    let _ = m.add_class::<mesh::PyTriMesh3dF64>()?;
-    let _ = m.add_class::<mesh::PyMixedTriQuadMesh3dF32>()?;
-    let _ = m.add_class::<mesh::PyMixedTriQuadMesh3dF64>()?;
+    let _ = m.add_class::<mesh::TriMesh3dF32>()?;
+    let _ = m.add_class::<mesh::TriMesh3dF64>()?;
+    let _ = m.add_class::<mesh::MixedTriQuadMesh3dF32>()?;
+    let _ = m.add_class::<mesh::MixedTriQuadMesh3dF64>()?;
 
-    let _ = m.add_class::<mesh::PyTriMeshWithDataF32>()?;
-    let _ = m.add_class::<mesh::PyTriMeshWithDataF64>()?;
-    let _ = m.add_class::<mesh::PyMixedTriQuadMeshWithDataF32>()?;
-    let _ = m.add_class::<mesh::PyMixedTriQuadMeshWithDataF64>()?;
+    let _ = m.add_class::<mesh::TriMeshWithDataF32>()?;
+    let _ = m.add_class::<mesh::TriMeshWithDataF64>()?;
+    let _ = m.add_class::<mesh::MixedTriQuadMeshWithDataF32>()?;
+    let _ = m.add_class::<mesh::MixedTriQuadMeshWithDataF64>()?;
 
-    let _ = m.add_class::<uniform_grid::PyUniformGridF32>()?;
-    let _ = m.add_class::<uniform_grid::PyUniformGridF64>()?;
+    let _ = m.add_class::<uniform_grid::UniformGridF32>()?;
+    let _ = m.add_class::<uniform_grid::UniformGridF64>()?;
 
-    let _ = m.add_class::<reconstruction::PySurfaceReconstructionF32>()?;
-    let _ = m.add_class::<reconstruction::PySurfaceReconstructionF64>()?;
+    let _ = m.add_class::<reconstruction::SurfaceReconstructionF32>()?;
+    let _ = m.add_class::<reconstruction::SurfaceReconstructionF64>()?;
 
-    let _ = m.add_class::<sph_interpolation::PySphInterpolatorF32>()?;
-    let _ = m.add_class::<sph_interpolation::PySphInterpolatorF64>()?;
+    let _ = m.add_class::<sph_interpolation::SphInterpolatorF32>()?;
+    let _ = m.add_class::<sph_interpolation::SphInterpolatorF64>()?;
 
-    let _ = m.add_class::<aabb::PyAabb3dF32>()?;
-    let _ = m.add_class::<aabb::PyAabb3dF64>()?;
+    let _ = m.add_class::<aabb::Aabb3dF32>()?;
+    let _ = m.add_class::<aabb::Aabb3dF64>()?;
 
     let _ = m.add_function(wrap_pyfunction!(reconstruction::reconstruct_surface_py_f32, m)?);
     let _ = m.add_function(wrap_pyfunction!(reconstruction::reconstruct_surface_py_f64, m)?);

@@ -98,5 +98,5 @@ macro_rules! create_sph_interpolator_interface {
     };
 }
 
-create_sph_interpolator_interface!(PySphInterpolatorF64, f64);
-create_sph_interpolator_interface!(PySphInterpolatorF32, f32);
+create_sph_interpolator_interface!(SphInterpolatorF64, f64);
+create_sph_interpolator_interface!(SphInterpolatorF32, f32);

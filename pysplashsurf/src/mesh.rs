@@ -3,7 +3,7 @@ use numpy::{Element, IntoPyArray, PyReadonlyArray2, PyArray2, ToPyArray, PyArray
 use pyo3::{exceptions::PyValueError, prelude::*, IntoPyObjectExt, types::{PyTuple, PyList}};
 use splashsurf_lib::{mesh::{AttributeData, MeshAttribute, MeshWithData, TriMesh3d, Mesh3d, MixedTriQuadMesh3d, TriangleOrQuadCell}, Real, nalgebra::{Vector3, Unit}};
 
-use crate::aabb::{PyAabb3dF32, PyAabb3dF64};
+use crate::aabb::{Aabb3dF32, Aabb3dF64};
 
 fn get_attribute_with_name<'py, R: Real + Element>(py: Python<'py>, attrs: &[MeshAttribute<R>], name: &str) -> PyResult<PyObject> where R: pyo3::IntoPyObject<'py> {
     let elem = attrs.iter().filter(|x| x.name == name).next();
@@ -276,14 +276,14 @@ macro_rules! create_tri_quad_mesh_interface {
     };
 }
 
-create_mesh_interface!(PyTriMesh3dF64, f64);
-create_mesh_interface!(PyTriMesh3dF32, f32);
+create_mesh_interface!(TriMesh3dF64, f64);
+create_mesh_interface!(TriMesh3dF32, f32);
 
-create_tri_quad_mesh_interface!(PyMixedTriQuadMesh3dF64, f64);
-create_tri_quad_mesh_interface!(PyMixedTriQuadMesh3dF32, f32);
+create_tri_quad_mesh_interface!(MixedTriQuadMesh3dF64, f64);
+create_tri_quad_mesh_interface!(MixedTriQuadMesh3dF32, f32);
 
-create_mesh_data_interface!(PyTriMeshWithDataF64, f64, TriMesh3d, PyTriMesh3dF64, PyAabb3dF64);
-create_mesh_data_interface!(PyTriMeshWithDataF32, f32, TriMesh3d, PyTriMesh3dF32, PyAabb3dF32);
+create_mesh_data_interface!(TriMeshWithDataF64, f64, TriMesh3d, TriMesh3dF64, Aabb3dF64);
+create_mesh_data_interface!(TriMeshWithDataF32, f32, TriMesh3d, TriMesh3dF32, Aabb3dF32);
 
-create_mesh_data_interface!(PyMixedTriQuadMeshWithDataF64, f64, MixedTriQuadMesh3d, PyMixedTriQuadMesh3dF64, PyAabb3dF64);
-create_mesh_data_interface!(PyMixedTriQuadMeshWithDataF32, f32, MixedTriQuadMesh3d, PyMixedTriQuadMesh3dF32, PyAabb3dF32);
+create_mesh_data_interface!(MixedTriQuadMeshWithDataF64, f64, MixedTriQuadMesh3d, MixedTriQuadMesh3dF64, Aabb3dF64);
+create_mesh_data_interface!(MixedTriQuadMeshWithDataF32, f32, MixedTriQuadMesh3d, MixedTriQuadMesh3dF32, Aabb3dF32);

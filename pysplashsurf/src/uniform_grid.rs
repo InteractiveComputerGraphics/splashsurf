@@ -19,5 +19,5 @@ macro_rules! create_grid_interface {
 
 
 
-create_grid_interface!(PyUniformGridF64, f64);
-create_grid_interface!(PyUniformGridF32, f32);
+create_grid_interface!(UniformGridF64, f64);
+create_grid_interface!(UniformGridF32, f32);

@@ -144,5 +144,5 @@ macro_rules! create_aabb3d_interface {
     };
 }
 
-create_aabb3d_interface!(PyAabb3dF64, f64);
-create_aabb3d_interface!(PyAabb3dF32, f32);
+create_aabb3d_interface!(Aabb3dF64, f64);
+create_aabb3d_interface!(Aabb3dF32, f32);
