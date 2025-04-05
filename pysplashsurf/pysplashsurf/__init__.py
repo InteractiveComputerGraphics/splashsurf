@@ -477,7 +477,7 @@ def convert_tris_to_quads(
     
 
 def reconstruction_pipeline(
-    particles, *, particle_radius=0.025, 
+    particles, *, attributes_to_interpolate={}, particle_radius=0.025, 
     rest_density=1000.0, smoothing_length=2.0, cube_size=0.5, 
     iso_surface_threshold=0.6, enable_multi_threading=True, mesh_smoothing_weights=False, sph_normals=False, 
     mesh_smoothing_weights_normalization=13.0, mesh_smoothing_iters=5, normals_smoothing_iters=5,
@@ -486,7 +486,7 @@ def reconstruction_pipeline(
     subdomain_grid=False, subdomain_num_cubes_per_dim=64, aabb_min=None, aabb_max=None, mesh_aabb_min=None, mesh_aabb_max=None
 ):
     if particles.dtype == 'float32':
-        return reconstruction_pipeline_f32(particles, particle_radius=particle_radius, rest_density=rest_density, 
+        return reconstruction_pipeline_f32(particles, attributes_to_interpolate=attributes_to_interpolate, particle_radius=particle_radius, rest_density=rest_density, 
                                 smoothing_length=smoothing_length, cube_size=cube_size, iso_surface_threshold=iso_surface_threshold, 
                                 aabb_min=aabb_min, aabb_max=aabb_max, enable_multi_threading=enable_multi_threading, 
                                 use_custom_grid_decomposition=subdomain_grid, subdomain_num_cubes_per_dim=subdomain_num_cubes_per_dim,
@@ -495,7 +495,7 @@ def reconstruction_pipeline(
                                 mesh_smoothing_iters=mesh_smoothing_iters, mesh_smoothing_weights=mesh_smoothing_weights, mesh_smoothing_weights_normalization=mesh_smoothing_weights_normalization,
                                 output_mesh_smoothing_weights=output_mesh_smoothing_weights, output_raw_normals=output_raw_normals, mesh_aabb_min=mesh_aabb_min, mesh_aabb_max=mesh_aabb_max, mesh_aabb_clamp_vertices=mesh_aabb_clamp_vertices)   
     elif particles.dtype == 'float64':
-        return reconstruction_pipeline_f64(particles, particle_radius=particle_radius, rest_density=rest_density, 
+        return reconstruction_pipeline_f64(particles, attributes_to_interpolate=attributes_to_interpolate, particle_radius=particle_radius, rest_density=rest_density, 
                                 smoothing_length=smoothing_length, cube_size=cube_size, iso_surface_threshold=iso_surface_threshold, 
                                 aabb_min=aabb_min, aabb_max=aabb_max, enable_multi_threading=enable_multi_threading, 
                                 use_custom_grid_decomposition=subdomain_grid, subdomain_num_cubes_per_dim=subdomain_num_cubes_per_dim,

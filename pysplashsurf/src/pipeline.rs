@@ -1,15 +1,16 @@
 use std::borrow::Cow;
 use anyhow::anyhow;
 use log::info;
-use numpy::{PyArray2, PyReadonlyArray2};
+use numpy::{Element, PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2};
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use splashsurf_lib::{mesh::{AttributeData, Mesh3d, MeshAttribute, MeshWithData, TriMesh3d}, nalgebra::{Unit, Vector3}, profile, sph_interpolation::SphInterpolator, Aabb3d, Index, Real};
-use pyo3::prelude::*;
+use pyo3::{prelude::*, types::{PyDict, PyString}};
 
 use crate::{mesh::{TriMeshWithDataF32, TriMeshWithDataF64}, reconstruction::reconstruct_surface_py};
 
 fn reconstruction_pipeline_generic<I: Index, R: Real>(
     particles: &[Vector3<R>],
+    attributes: Vec<MeshAttribute<R>>,
     particle_radius: R,
     rest_density: R,
     smoothing_length: R,
@@ -31,7 +32,6 @@ fn reconstruction_pipeline_generic<I: Index, R: Real>(
     compute_normals: bool,
     sph_normals: bool,
     normals_smoothing_iters: Option<usize>,
-    // interpolate_attributes: Vec<String>,
     mesh_smoothing_iters: Option<usize>,
     mesh_smoothing_weights: bool,
     mesh_smoothing_weights_normalization: f64,
@@ -46,7 +46,7 @@ fn reconstruction_pipeline_generic<I: Index, R: Real>(
     mesh_aabb_clamp_vertices: bool,
 ) -> Result<MeshWithData<R, TriMesh3d<R>>, anyhow::Error> {
     profile!("surface reconstruction");
-
+    println!("{:?}", attributes);
     let compact_support_radius = R::from_f64(2.0).unwrap() * smoothing_length * particle_radius;
 
     // Perform the surface reconstruction
@@ -306,41 +306,41 @@ fn reconstruction_pipeline_generic<I: Index, R: Real>(
         }
 
         // Interpolate attributes if requested
-        // if !attributes.is_empty() {
-        //     profile!("interpolate attributes");
-        //     info!("Post-processing: Interpolating attributes...");
-        //     let interpolator = interpolator.as_ref().expect("interpolator is required");
+        if !attributes.is_empty() {
+            profile!("interpolate attributes");
+            info!("Post-processing: Interpolating attributes...");
+            let interpolator = interpolator.as_ref().expect("interpolator is required");
 
-        //     for attribute in attributes.into_iter() {
-        //         info!("Interpolating attribute \"{}\"...", attribute.name);
+            for attribute in attributes.into_iter() {
+                info!("Interpolating attribute \"{}\"...", attribute.name);
 
-        //         match attribute.data {
-        //             AttributeData::ScalarReal(values) => {
-        //                 let interpolated_values = interpolator.interpolate_scalar_quantity(
-        //                     values.as_slice(),
-        //                     mesh_with_data.vertices(),
-        //                     true,
-        //                 );
-        //                 mesh_with_data.point_attributes.push(MeshAttribute::new(
-        //                     attribute.name,
-        //                     AttributeData::ScalarReal(interpolated_values),
-        //                 ));
-        //             }
-        //             AttributeData::Vector3Real(values) => {
-        //                 let interpolated_values = interpolator.interpolate_vector_quantity(
-        //                     values.as_slice(),
-        //                     mesh_with_data.vertices(),
-        //                     true,
-        //                 );
-        //                 mesh_with_data.point_attributes.push(MeshAttribute::new(
-        //                     attribute.name,
-        //                     AttributeData::Vector3Real(interpolated_values),
-        //                 ));
-        //             }
-        //             _ => unimplemented!("Interpolation of this attribute type not implemented"),
-        //         }
-        //     }
-        // }
+                match attribute.data {
+                    AttributeData::ScalarReal(values) => {
+                        let interpolated_values = interpolator.interpolate_scalar_quantity(
+                            values.as_slice(),
+                            mesh_with_data.vertices(),
+                            true,
+                        );
+                        mesh_with_data.point_attributes.push(MeshAttribute::new(
+                            attribute.name,
+                            AttributeData::ScalarReal(interpolated_values),
+                        ));
+                    }
+                    AttributeData::Vector3Real(values) => {
+                        let interpolated_values = interpolator.interpolate_vector_quantity(
+                            values.as_slice(),
+                            mesh_with_data.vertices(),
+                            true,
+                        );
+                        mesh_with_data.point_attributes.push(MeshAttribute::new(
+                            attribute.name,
+                            AttributeData::Vector3Real(interpolated_values),
+                        ));
+                    }
+                    _ => unimplemented!("Interpolation of this attribute type not implemented"),
+                }
+            }
+        }
     }
 
     // Remove and clamp cells outside of AABB
@@ -391,9 +391,38 @@ fn reconstruction_pipeline_generic<I: Index, R: Real>(
     Ok(mesh_with_data)
 }
 
+fn attrs_conversion<'py, R: Real + Element>(attributes_to_interpolate: Bound<'py, PyDict>) -> Vec<MeshAttribute<R>> {
+    let mut attrs: Vec<MeshAttribute<R>> = Vec::new();
+    for (key, value) in attributes_to_interpolate.iter() {
+        let key_str: String = key.downcast::<PyString>().expect("Key wasn't a string").extract().unwrap();
+
+        if let Ok(value) = value.downcast::<PyArray1<u64>>() {
+            let value: Vec<u64> = value.extract::<PyReadonlyArray1<u64>>().unwrap().as_slice().unwrap().to_vec();
+            let mesh_attr = MeshAttribute::new(key_str, AttributeData::ScalarU64(value));
+            attrs.push(mesh_attr);
+        } else if let Ok(value) = value.downcast::<PyArray1<R>>() {
+            let value: Vec<R> = value.extract::<PyReadonlyArray1<R>>().unwrap().as_slice().unwrap().to_vec();
+            let mesh_attr = MeshAttribute::new(key_str, AttributeData::ScalarReal(value));
+            attrs.push(mesh_attr);
+        } else if let Ok(value) = value.downcast::<PyArray2<R>>() {
+            let value: PyReadonlyArray2<R> = value.extract().unwrap();
+
+            let value_slice = value.as_slice().unwrap();
+            let value_slice: &[Vector3<R>] = bytemuck::cast_slice(value_slice);
+
+            let mesh_attr = MeshAttribute::new(key_str, AttributeData::Vector3Real(value_slice.to_vec()));
+            attrs.push(mesh_attr);
+        } else{
+            println!("Couldnt downcast attribute {} to valid type", &key_str);
+        }
+    }
+    attrs
+}
+
+
 #[pyfunction]
 #[pyo3(name = "reconstruction_pipeline_f32")]
-#[pyo3(signature = (particles, *, particle_radius, rest_density,
+#[pyo3(signature = (particles, *, attributes_to_interpolate, particle_radius, rest_density,
     smoothing_length, cube_size, iso_surface_threshold,
     aabb_min = None, aabb_max = None, enable_multi_threading=false,
     use_custom_grid_decomposition=false, subdomain_num_cubes_per_dim=64, global_neighborhood_list=false,
@@ -404,6 +433,7 @@ fn reconstruction_pipeline_generic<I: Index, R: Real>(
 ))]
 pub fn reconstruction_pipeline_py_f32<'py>(
     particles: &Bound<'py, PyArray2<f32>>,
+    attributes_to_interpolate: Bound<'py, PyDict>,
     particle_radius: f32,
     rest_density: f32,
     smoothing_length: f32,
@@ -421,7 +451,6 @@ pub fn reconstruction_pipeline_py_f32<'py>(
     compute_normals: bool,
     sph_normals: bool,
     normals_smoothing_iters: Option<usize>,
-    // interpolate_attributes: Vec<String>,
     mesh_smoothing_iters: Option<usize>,
     mesh_smoothing_weights: bool,
     mesh_smoothing_weights_normalization: f64,
@@ -436,7 +465,9 @@ pub fn reconstruction_pipeline_py_f32<'py>(
     let particle_positions = particles.as_slice().unwrap();
     let particle_positions: &[Vector3<f32>] = bytemuck::cast_slice(particle_positions);
 
-    TriMeshWithDataF32::new(reconstruction_pipeline_generic::<i64, f32>(particle_positions, particle_radius, rest_density, smoothing_length, cube_size, 
+    let attrs = attrs_conversion(attributes_to_interpolate);
+
+    TriMeshWithDataF32::new(reconstruction_pipeline_generic::<i64, f32>(particle_positions, attrs, particle_radius, rest_density, smoothing_length, cube_size, 
         iso_surface_threshold, aabb_min, aabb_max, enable_multi_threading, use_custom_grid_decomposition, subdomain_num_cubes_per_dim, 
         global_neighborhood_list, mesh_cleanup, decimate_barnacles, keep_vertices, compute_normals, sph_normals, normals_smoothing_iters, 
         mesh_smoothing_iters, mesh_smoothing_weights, mesh_smoothing_weights_normalization, output_mesh_smoothing_weights, output_raw_normals, 
@@ -445,7 +476,7 @@ pub fn reconstruction_pipeline_py_f32<'py>(
 
 #[pyfunction]
 #[pyo3(name = "reconstruction_pipeline_f64")]
-#[pyo3(signature = (particles, *, particle_radius, rest_density,
+#[pyo3(signature = (particles, *, attributes_to_interpolate, particle_radius, rest_density,
     smoothing_length, cube_size, iso_surface_threshold,
     aabb_min = None, aabb_max = None, enable_multi_threading=false,
     use_custom_grid_decomposition=false, subdomain_num_cubes_per_dim=64, global_neighborhood_list=false,
@@ -456,6 +487,7 @@ pub fn reconstruction_pipeline_py_f32<'py>(
 ))]
 pub fn reconstruction_pipeline_py_f64<'py>(
     particles: &Bound<'py, PyArray2<f64>>,
+    attributes_to_interpolate: Bound<'py, PyDict>,
     particle_radius: f64,
     rest_density: f64,
     smoothing_length: f64,
@@ -473,7 +505,6 @@ pub fn reconstruction_pipeline_py_f64<'py>(
     compute_normals: bool,
     sph_normals: bool,
     normals_smoothing_iters: Option<usize>,
-    // interpolate_attributes: Vec<String>,
     mesh_smoothing_iters: Option<usize>,
     mesh_smoothing_weights: bool,
     mesh_smoothing_weights_normalization: f64,
@@ -488,7 +519,9 @@ pub fn reconstruction_pipeline_py_f64<'py>(
     let particle_positions = particles.as_slice().unwrap();
     let particle_positions: &[Vector3<f64>] = bytemuck::cast_slice(particle_positions);
 
-    TriMeshWithDataF64::new(reconstruction_pipeline_generic::<i64, f64>(particle_positions, particle_radius, rest_density, smoothing_length, cube_size, 
+    let attrs = attrs_conversion(attributes_to_interpolate);
+
+    TriMeshWithDataF64::new(reconstruction_pipeline_generic::<i64, f64>(particle_positions, attrs, particle_radius, rest_density, smoothing_length, cube_size, 
         iso_surface_threshold, aabb_min, aabb_max, enable_multi_threading, use_custom_grid_decomposition, subdomain_num_cubes_per_dim, 
         global_neighborhood_list, mesh_cleanup, decimate_barnacles, keep_vertices, compute_normals, sph_normals, normals_smoothing_iters, 
         mesh_smoothing_iters, mesh_smoothing_weights, mesh_smoothing_weights_normalization, output_mesh_smoothing_weights, output_raw_normals, 

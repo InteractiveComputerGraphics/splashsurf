@@ -74,7 +74,7 @@ def test_memory_access():
     assert(np.allclose(vertices, vertices_copy))
     assert(np.allclose(triangles, triangles_copy))
 
-def reconstruction_pipeline(input_file, output_file, *, enable_multi_threading=True, particle_radius=0.025, 
+def reconstruction_pipeline(input_file, output_file, *, attributes_to_interpolate=[], enable_multi_threading=True, particle_radius=0.025, 
                             rest_density=1000.0, smoothing_length=2.0, cube_size=0.5, 
                             iso_surface_threshold=0.6, mesh_smoothing_weights=False, output_mesh_smoothing_weights=False, sph_normals=False, 
                             mesh_smoothing_weights_normalization=13.0, mesh_smoothing_iters=5, normals_smoothing_iters=5,
@@ -84,9 +84,18 @@ def reconstruction_pipeline(input_file, output_file, *, enable_multi_threading=T
                             generate_quads=False, quad_max_edge_diag_ratio=1.75, quad_max_normal_angle=10.0, quad_max_interior_angle=135.0,
                             subdomain_grid=False, subdomain_num_cubes_per_dim=64):
     
-    particles = np.array(meshio.read(input_file).points, dtype=np.float64)
+    mesh = meshio.read(input_file)
+    particles = np.array(mesh.points, dtype=np.float64)
     
-    mesh_with_data = pysplashsurf.reconstruction_pipeline(particles, enable_multi_threading=enable_multi_threading, particle_radius=particle_radius,
+    attrs = {}
+    for attr in attributes_to_interpolate:
+        if attr in mesh.point_data:
+            if mesh.point_data[attr].dtype.kind == 'f':
+                attrs[attr] = mesh.point_data[attr].astype(np.float64)
+            else:
+                attrs[attr] = mesh.point_data[attr].astype(np.int64)
+    
+    mesh_with_data = pysplashsurf.reconstruction_pipeline(particles, attributes_to_interpolate=attrs, enable_multi_threading=enable_multi_threading, particle_radius=particle_radius,
                                                           rest_density=rest_density, smoothing_length=smoothing_length, cube_size=cube_size, iso_surface_threshold=iso_surface_threshold,
                                                           mesh_smoothing_weights=mesh_smoothing_weights, sph_normals=sph_normals,
                                                           mesh_smoothing_weights_normalization=mesh_smoothing_weights_normalization,
@@ -161,7 +170,7 @@ def test_with_post_processing():
     print("Binary done in", time.time() - start)
     
     start = time.time()
-    reconstruction_pipeline("./ParticleData_Fluid_50.bgeo", "test.vtk", particle_radius=np.float64(0.025), smoothing_length=np.float64(2.0), 
+    reconstruction_pipeline("./ParticleData_Fluid_50.bgeo", "test.vtk", attributes_to_interpolate=["velocity"], particle_radius=np.float64(0.025), smoothing_length=np.float64(2.0), 
                             cube_size=np.float64(0.5), iso_surface_threshold=np.float64(0.6), mesh_smoothing_weights=True, 
                             mesh_smoothing_weights_normalization=np.float64(13.0), mesh_smoothing_iters=25, normals_smoothing_iters=10, 
                             generate_quads=False, mesh_cleanup=True, compute_normals=True, subdomain_grid=True, decimate_barnacles=True,
@@ -199,8 +208,8 @@ def test_with_post_processing():
     
     assert(np.allclose(binary_verts, python_verts))
 
-test_bgeo()
-test_aabb_class()
-test_marching_cubes_calls()
-test_memory_access()
+# test_bgeo()
+# test_aabb_class()
+# test_marching_cubes_calls()
+# test_memory_access()
 test_with_post_processing()
