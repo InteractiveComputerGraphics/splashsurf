@@ -28,3 +28,5 @@ All methods infer float precision based on the input (32bit or 64bit).
 .. autofunction:: par_laplacian_smoothing_normals_inplace
 
 .. autofunction:: reconstruct_surface
+
+.. autofunction:: reconstruction_pipeline

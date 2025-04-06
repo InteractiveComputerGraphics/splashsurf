@@ -5,20 +5,20 @@ Additionally, there exists a F64 version for every class which is otherwise iden
 
 .. currentmodule:: pysplashsurf
 
-.. autoclass:: PyTriMesh3dF32
+.. autoclass:: TriMesh3dF32
 
-.. autoclass:: PyMixedTriQuadMesh3dF32
+.. autoclass:: MixedTriQuadMesh3dF32
 
-.. autoclass:: PyTriMeshWithDataF32
+.. autoclass:: TriMeshWithDataF32
     :exclude-members: push_point_attribute_scalar_u64, push_point_attribute_scalar_real, push_point_attribute_vector_real, push_cell_attribute_scalar_real, push_cell_attribute_scalar_u64, push_cell_attribute_vector_real
 
-.. autoclass:: PyMixedTriQuadMeshWithDataF32
+.. autoclass:: MixedTriQuadMeshWithDataF32
     :exclude-members: push_point_attribute_scalar_u64, push_point_attribute_scalar_real, push_point_attribute_vector_real, push_cell_attribute_scalar_real, push_cell_attribute_scalar_u64, push_cell_attribute_vector_real
 
-.. autoclass:: PyUniformGridF32
+.. autoclass:: UniformGridF32
 
-.. autoclass:: PySurfaceReconstructionF32
+.. autoclass:: SurfaceReconstructionF32
 
-.. autoclass:: PySphInterpolatorF32
+.. autoclass:: SphInterpolatorF32
 
-.. autoclass:: PyAabb3dF32
+.. autoclass:: Aabb3dF32

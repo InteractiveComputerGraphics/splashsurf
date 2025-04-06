@@ -485,6 +485,96 @@ def reconstruction_pipeline(
     compute_normals=False, output_raw_normals=False, output_mesh_smoothing_weights=False, mesh_aabb_clamp_vertices=False,
     subdomain_grid=False, subdomain_num_cubes_per_dim=64, aabb_min=None, aabb_max=None, mesh_aabb_min=None, mesh_aabb_max=None
 ):
+    """Surface reconstruction based on particle positions and post processing
+    
+    Parameters
+    ----------
+    particles: np.ndarray
+        2-dimensional array containing all particle positions [[ax, ay, az], [bx, by, bz], ...]
+    
+    attributes_to_interpolate: dict
+        Dictionary containing all attributes to interpolate. The keys are the attribute names and the values are the corresponding 1D/2D arrays.
+        The arrays must have the same length as the number of particles. 
+        Supported array types are 2D float32/float64 arrays for vector attributes and 1D int64/float32/float64 arrays for scalar attributes.
+        
+    particle_radius: float
+        Particle radius
+        
+    rest_density: float
+        Rest density of the fluid
+        
+    smoothing_length: float
+        Smoothing length of the fluid
+        
+    cube_size: float
+        Size of the cubes used in the uniform grid
+        
+    iso_surface_threshold: float
+        Threshold for the iso surface
+        
+    enable_multi_threading: bool
+        Multi-threading flag
+        
+    mesh_smoothing_weights: bool
+        Flag to compute mesh smoothing weights
+        
+    sph_normals: bool
+        Flag to compute normals using SPH
+        
+    mesh_smoothing_weights_normalization: float
+        Normalization factor for the mesh smoothing weights
+        
+    mesh_smoothing_iters: int
+        Number of iterations for the mesh smoothing
+    
+    normals_smoothing_iters: int
+        Number of iterations for the normals smoothing
+        
+    mesh_cleanup: bool
+        Flag to perform mesh cleanup
+        
+    decimate_barnacles: bool
+        Flag to perform barnacle decimation
+        
+    keep_vertices: bool
+        Flag to keep vertices
+        
+    compute_normals: bool
+        Flag to compute normals
+        If set to True, the normals will be computed and stored in the mesh.
+    
+    output_raw_normals: bool
+        Flag to output the raw normals
+    
+    output_mesh_smoothing_weights: bool
+        Flag to store the mesh smoothing weights
+    
+    mesh_aabb_clamp_vertices: bool
+        Flag to clamp the vertices of the mesh to the AABB
+        
+    subdomain_grid: bool
+        Enable spatial decomposition using a regular grid-based approach
+    
+    subdomain_num_cubes_per_dim: int
+        Each subdomain will be a cube consisting of this number of MC cube cells along each coordinate axis
+        
+    aabb_min: np.ndarray
+        Smallest corner of the axis-aligned bounding box
+    
+    aabb_max: np.ndarray
+        Largest corner of the axis-aligned bounding box
+        
+    mesh_aabb_min: np.ndarray
+        Smallest corner of the axis-aligned bounding box for the mesh
+        
+    mesh_aabb_max: np.ndarray
+        Largest corner of the axis-aligned bounding box for the mesh
+        
+    Returns
+    -------
+    tuple[TriMeshWithDataF32 | TriMeshWithDataF64, SurfaceReconstructionF32 | SurfaceReconstructionF64]
+        Mesh with data object and SurfaceReconstruction object containing the reconstructed mesh and used grid
+    """
     if particles.dtype == 'float32':
         return reconstruction_pipeline_f32(particles, attributes_to_interpolate=attributes_to_interpolate, particle_radius=particle_radius, rest_density=rest_density, 
                                 smoothing_length=smoothing_length, cube_size=cube_size, iso_surface_threshold=iso_surface_threshold, 

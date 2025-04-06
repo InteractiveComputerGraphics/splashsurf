@@ -19,16 +19,17 @@ Methods
     par_laplacian_smoothing_inplace
     par_laplacian_smoothing_normals_inplace
     reconstruct_surface
+    reconstruction_pipeline
 
 Classes
 -------
 
 .. autosummary::
-    PyTriMesh3dF32
-    PyMixedTriQuadMesh3dF32
-    PyTriMeshWithDataF32
-    PyMixedTriQuadMesh3dF32
-    PyUniformGridF32
-    PySurfaceReconstructionF32
-    PySphInterpolatorF32
-    PyAabb3dF32
+    TriMesh3dF32
+    MixedTriQuadMesh3dF32
+    TriMeshWithDataF32
+    MixedTriQuadMesh3dF32
+    UniformGridF32
+    SurfaceReconstructionF32
+    SphInterpolatorF32
+    Aabb3dF32
