@@ -80,7 +80,7 @@ def reconstruction_pipeline(input_file, output_file, *, attributes_to_interpolat
                             mesh_smoothing_weights_normalization=13.0, mesh_smoothing_iters=5, normals_smoothing_iters=5,
                             mesh_aabb_min=None, mesh_aabb_max=None, mesh_cleanup=False, decimate_barnacles=False, keep_vertices=False,
                             compute_normals=False, output_raw_normals=False, mesh_aabb_clamp_vertices=False,
-                            check_mesh_closed=True, check_mesh_manifold=True, check_mesh_debug=False,
+                            check_mesh_closed=False, check_mesh_manifold=False, check_mesh_debug=False,
                             generate_quads=False, quad_max_edge_diag_ratio=1.75, quad_max_normal_angle=10.0, quad_max_interior_angle=135.0,
                             subdomain_grid=False, subdomain_num_cubes_per_dim=64):
     
@@ -95,7 +95,7 @@ def reconstruction_pipeline(input_file, output_file, *, attributes_to_interpolat
             else:
                 attrs[attr] = mesh.point_data[attr].astype(np.int64)
     
-    mesh_with_data = pysplashsurf.reconstruction_pipeline(particles, attributes_to_interpolate=attrs, enable_multi_threading=enable_multi_threading, particle_radius=particle_radius,
+    mesh_with_data, reconstruction = pysplashsurf.reconstruction_pipeline(particles, attributes_to_interpolate=attrs, enable_multi_threading=enable_multi_threading, particle_radius=particle_radius,
                                                           rest_density=rest_density, smoothing_length=smoothing_length, cube_size=cube_size, iso_surface_threshold=iso_surface_threshold,
                                                           mesh_smoothing_weights=mesh_smoothing_weights, sph_normals=sph_normals,
                                                           mesh_smoothing_weights_normalization=mesh_smoothing_weights_normalization,
@@ -123,8 +123,8 @@ def reconstruction_pipeline(input_file, output_file, *, attributes_to_interpolat
         meshio.write_points_cells(output_file, verts, [("triangle", tris)], point_data=point_data, cell_data=cell_data)
         
         # Mesh checks
-        # if check_mesh_closed or check_mesh_manifold:
-        #     pysplashsurf.check_mesh_consistency(grid, mesh, check_closed=check_mesh_closed, check_manifold=check_mesh_manifold, debug=check_mesh_debug)
+        if check_mesh_closed or check_mesh_manifold:
+            pysplashsurf.check_mesh_consistency(reconstruction.grid, mesh, check_closed=check_mesh_closed, check_manifold=check_mesh_manifold, debug=check_mesh_debug)
         
     else:
         verts, cells = mesh.take_vertices_and_cells()
@@ -166,11 +166,11 @@ def test_no_post_processing():
     
 def test_with_post_processing():
     start = time.time()
-    subprocess.run([BINARY_PATH] + "reconstruct ./ParticleData_Fluid_50.bgeo -o test_bin.vtk -r=0.025 -l=2.0 -c=0.5 -t=0.6 -d=on --subdomain-grid=on --decimate-barnacles=on --mesh-cleanup=on --mesh-smoothing-weights=on --mesh-smoothing-iters=25 --normals=on --normals-smoothing-iters=10 --output-smoothing-weights=on".split(), check=True)
+    subprocess.run([BINARY_PATH] + "reconstruct ./ParticleData_Fluid_5.vtk -o test_bin.vtk -r=0.025 -l=2.0 -c=0.5 -t=0.6 -d=on --subdomain-grid=on --interpolate-attributes velocity --decimate-barnacles=on --mesh-cleanup=on --mesh-smoothing-weights=on --mesh-smoothing-iters=25 --normals=on --normals-smoothing-iters=10 --output-smoothing-weights=on".split(), check=True)
     print("Binary done in", time.time() - start)
     
     start = time.time()
-    reconstruction_pipeline("./ParticleData_Fluid_50.bgeo", "test.vtk", attributes_to_interpolate=["velocity"], particle_radius=np.float64(0.025), smoothing_length=np.float64(2.0), 
+    reconstruction_pipeline("./ParticleData_Fluid_5.vtk", "test.vtk", attributes_to_interpolate=["velocity"], particle_radius=np.float64(0.025), smoothing_length=np.float64(2.0), 
                             cube_size=np.float64(0.5), iso_surface_threshold=np.float64(0.6), mesh_smoothing_weights=True, 
                             mesh_smoothing_weights_normalization=np.float64(13.0), mesh_smoothing_iters=25, normals_smoothing_iters=10, 
                             generate_quads=False, mesh_cleanup=True, compute_normals=True, subdomain_grid=True, decimate_barnacles=True,
@@ -180,6 +180,7 @@ def test_with_post_processing():
     binary_mesh = meshio.read("test_bin.vtk")
     python_mesh = meshio.read("test.vtk")
     
+    # Compare number of vertices
     binary_verts = np.array(binary_mesh.points, dtype=np.float64)
     python_verts = np.array(python_mesh.points, dtype=np.float64)
     
@@ -187,6 +188,15 @@ def test_with_post_processing():
     print("# of vertices python:", len(python_verts))
     
     assert(len(binary_verts) == len(python_verts))
+    
+    # Compare interpolated attribute
+    binary_vels = binary_mesh.point_data["velocity"]
+    python_vels = python_mesh.point_data["velocity"]
+    
+    binary_vels.sort(axis=0)
+    python_vels.sort(axis=0)
+    
+    assert(np.allclose(binary_vels, python_vels))
     
     # Trimesh similarity test
     binary_mesh = trimesh.load_mesh("test_bin.vtk", "vtk")

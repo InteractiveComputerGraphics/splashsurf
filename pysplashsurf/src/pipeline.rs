@@ -3,10 +3,10 @@ use anyhow::anyhow;
 use log::info;
 use numpy::{Element, PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2};
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
-use splashsurf_lib::{mesh::{AttributeData, Mesh3d, MeshAttribute, MeshWithData, TriMesh3d}, nalgebra::{Unit, Vector3}, profile, sph_interpolation::SphInterpolator, Aabb3d, Index, Real};
+use splashsurf_lib::{mesh::{AttributeData, Mesh3d, MeshAttribute, MeshWithData, TriMesh3d}, nalgebra::{Unit, Vector3}, profile, sph_interpolation::SphInterpolator, Aabb3d, Index, Real, SurfaceReconstruction};
 use pyo3::{prelude::*, types::{PyDict, PyString}};
 
-use crate::{mesh::{TriMeshWithDataF32, TriMeshWithDataF64}, reconstruction::reconstruct_surface_py};
+use crate::{mesh::{TriMeshWithDataF32, TriMeshWithDataF64}, reconstruction::{reconstruct_surface_py, SurfaceReconstructionF32, SurfaceReconstructionF64}};
 
 fn reconstruction_pipeline_generic<I: Index, R: Real>(
     particles: &[Vector3<R>],
@@ -44,9 +44,9 @@ fn reconstruction_pipeline_generic<I: Index, R: Real>(
     mesh_aabb_min: Option<[R; 3]>,
     mesh_aabb_max: Option<[R; 3]>,
     mesh_aabb_clamp_vertices: bool,
-) -> Result<MeshWithData<R, TriMesh3d<R>>, anyhow::Error> {
+) -> Result<(MeshWithData<R, TriMesh3d<R>>, SurfaceReconstruction<I, R>), anyhow::Error> {
     profile!("surface reconstruction");
-    println!("{:?}", attributes);
+    
     let compact_support_radius = R::from_f64(2.0).unwrap() * smoothing_length * particle_radius;
 
     // Perform the surface reconstruction
@@ -388,7 +388,7 @@ fn reconstruction_pipeline_generic<I: Index, R: Real>(
     // } else {
     //     (Some(mesh_with_data), None)
     // };
-    Ok(mesh_with_data)
+    Ok((mesh_with_data, reconstruction))
 }
 
 fn attrs_conversion<'py, R: Real + Element>(attributes_to_interpolate: Bound<'py, PyDict>) -> Vec<MeshAttribute<R>> {
@@ -459,7 +459,7 @@ pub fn reconstruction_pipeline_py_f32<'py>(
     mesh_aabb_min: Option<[f32; 3]>,
     mesh_aabb_max: Option<[f32; 3]>,
     mesh_aabb_clamp_vertices: bool,
-) -> TriMeshWithDataF32 {
+) -> (TriMeshWithDataF32, SurfaceReconstructionF32) {
     let particles: PyReadonlyArray2<f32> = particles.extract().unwrap();
 
     let particle_positions = particles.as_slice().unwrap();
@@ -467,11 +467,13 @@ pub fn reconstruction_pipeline_py_f32<'py>(
 
     let attrs = attrs_conversion(attributes_to_interpolate);
 
-    TriMeshWithDataF32::new(reconstruction_pipeline_generic::<i64, f32>(particle_positions, attrs, particle_radius, rest_density, smoothing_length, cube_size, 
+    let (mesh, reconstruction) = reconstruction_pipeline_generic::<i64, f32>(particle_positions, attrs, particle_radius, rest_density, smoothing_length, cube_size, 
         iso_surface_threshold, aabb_min, aabb_max, enable_multi_threading, use_custom_grid_decomposition, subdomain_num_cubes_per_dim, 
         global_neighborhood_list, mesh_cleanup, decimate_barnacles, keep_vertices, compute_normals, sph_normals, normals_smoothing_iters, 
         mesh_smoothing_iters, mesh_smoothing_weights, mesh_smoothing_weights_normalization, output_mesh_smoothing_weights, output_raw_normals, 
-        mesh_aabb_min, mesh_aabb_max, mesh_aabb_clamp_vertices).unwrap())
+        mesh_aabb_min, mesh_aabb_max, mesh_aabb_clamp_vertices).unwrap();
+
+    (TriMeshWithDataF32::new(mesh), SurfaceReconstructionF32::new(reconstruction))
 }
 
 #[pyfunction]
@@ -513,7 +515,7 @@ pub fn reconstruction_pipeline_py_f64<'py>(
     mesh_aabb_min: Option<[f64; 3]>,
     mesh_aabb_max: Option<[f64; 3]>,
     mesh_aabb_clamp_vertices: bool,
-) -> TriMeshWithDataF64 {
+) -> (TriMeshWithDataF64, SurfaceReconstructionF64) {
     let particles: PyReadonlyArray2<f64> = particles.extract().unwrap();
 
     let particle_positions = particles.as_slice().unwrap();
@@ -521,9 +523,11 @@ pub fn reconstruction_pipeline_py_f64<'py>(
 
     let attrs = attrs_conversion(attributes_to_interpolate);
 
-    TriMeshWithDataF64::new(reconstruction_pipeline_generic::<i64, f64>(particle_positions, attrs, particle_radius, rest_density, smoothing_length, cube_size, 
+    let (mesh, reconstruction) = reconstruction_pipeline_generic::<i64, f64>(particle_positions, attrs, particle_radius, rest_density, smoothing_length, cube_size, 
         iso_surface_threshold, aabb_min, aabb_max, enable_multi_threading, use_custom_grid_decomposition, subdomain_num_cubes_per_dim, 
         global_neighborhood_list, mesh_cleanup, decimate_barnacles, keep_vertices, compute_normals, sph_normals, normals_smoothing_iters, 
         mesh_smoothing_iters, mesh_smoothing_weights, mesh_smoothing_weights_normalization, output_mesh_smoothing_weights, output_raw_normals, 
-        mesh_aabb_min, mesh_aabb_max, mesh_aabb_clamp_vertices).unwrap())
+        mesh_aabb_min, mesh_aabb_max, mesh_aabb_clamp_vertices).unwrap();
+
+    (TriMeshWithDataF64::new(mesh), SurfaceReconstructionF64::new(reconstruction))
 }
