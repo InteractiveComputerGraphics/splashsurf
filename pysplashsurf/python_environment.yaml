@@ -17,3 +17,4 @@ dependencies:
   - rtree=1.4.0
   - scipy=1.15.2
   - furo
+  - myst-parser=4.0.1

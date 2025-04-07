@@ -31,7 +31,10 @@ extensions = [
    'sphinx.ext.autodoc',
    'sphinx.ext.autosummary',
    'numpydoc',
+   'myst_parser',
 ]
+
+source_suffix = ['.rst', '.md']
 
 numpydoc_class_members_toctree = False
 

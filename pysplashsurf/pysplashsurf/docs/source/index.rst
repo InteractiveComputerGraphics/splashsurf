@@ -7,6 +7,7 @@ Welcome to Pysplashsurf's documentation!
 ========================================
 
 .. toctree::
+   introduction
    methods
    classes
    api
