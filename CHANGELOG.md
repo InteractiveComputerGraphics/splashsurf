@@ -2,12 +2,17 @@
 
 The following changes are present in the `main` branch of the repository and are not yet part of a release:
 
+ - N/A
+
+## Version 0.11.0
+
  - CLI: Add a switch `--check_mesh_orientation` to check if the mesh orientation is consistent (i.e. vertex normals have the same orientation as all adjacent face normals)
  - CLI: Support for reading point/particle attributes (integers, floats and vectors of floats) from BGEO files
  - Lib: Remove octree-based domain decomposition (superseded by regular grid subdivision approach `--subdomain-grid`)
  - CLI: Set `--subdomain-grid=on` by default
  - CLI: Remove all arguments for octree-based domain decomposition
  - CLI: Remove options to output some debug files (octree grid, density map, etc.)
+ - Lib: Fixed a rare bug where the "density map" did not always contain a full zero one-ring around the function values (See https://github.com/InteractiveComputerGraphics/splashsurf/issues/215)
 
 ## Version 0.10.0
 

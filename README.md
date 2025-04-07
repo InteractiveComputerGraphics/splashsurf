@@ -80,35 +80,27 @@ Required parameters to perform a reconstruction are the kernel radius and partic
 A naive dense marching cubes reconstruction allocating a full 3D array over the entire fulid domain quickly becomes infeasible for larger simulations.
 Instead, one could use a global hashmap where only cubes that contain non-zero fluid density values are allocated.
 This approach is used in `splashsurf` if domain decomposition is disabled completely.
-However, the global hashmap approach does not lead to good cache locality and is not well suited for parallelization (even specialized parallel map implementations like [`dashmap`](https://github.com/xacrimon/dashmap) have their performance limitations).
-To improve on this situation `splashsurf` currently implements two domain decomposition approaches.
-
-### Octree-based decomposition
-The octree-based decomposition is currently the default approach if no other option is specified but will probably be replaced by the grid-based approach described below.
-For the octree-based decomposition an octree is built over all particles with an automatically determined target number of particles per leaf node.
-For each leaf node, a hashmap is used like outlined above.
-As each hashmap is smaller, cache locality is improved and due to the decomposition, each thread can work on its own local hashmap.
-Finally, all surface patches are stitched together by walking the octree back up, resulting in a closed surface.
-
-Downsides of this approach are that the octree construction starting from the root and stitching back towards the root limit the amount of paralleism during some stages.
+However, a global hashmap does not lead to good cache locality and is not well suited for parallelization (even specialized parallel map implementations like [`dashmap`](https://github.com/xacrimon/dashmap) have their performance limitations).
+To improve on this situation `splashsurf` utilizes a domain decomposition approach.
 
 ### Subdomain grid-based decomposition
 
-Since version 0.10.0, `splashsurf` implements a new domain decomposition approach called the "subdomain grid" approach, toggeled with the `--subdomain-grid=on` flag.
+Since version 0.10.0, `splashsurf` implements a domain decomposition approach called the "subdomain grid" approach, toggled with the `--subdomain-grid=on` flag (default since version 0.11.0).
 Here, the goal is to divide the fluid domain into subdomains with a fixed number of marching cubes cells, by default `64x64x64` cubes.
-For each subdomain a dense 3D array is allocated for the marching cubes cells.
+For each subdomain, a dense 3D array is allocated for the marching cubes cells.
 Of course, only subdomains that contain fluid particles are actually allocated.
-For subdomains that contain only a very small number of fluid particles (less th 5% of the largest subdomain) a hashmap is used instead to not waste too much storage.
-As most domains are dense however, the marching cubes triangulation per subdomain is very fast as it can make full use of cache locality and the entire procedure is trivially parallelizable.
-For the stitching we ensure that we perform floating point operations in the same order at the subdomain boundaries (this can be ensured without synchronization).
-If the field values on the subdomain boundaries are identical from both sides, the marching cubes triangulations will be topologically compatible and can be merged in a post-processing step that is also parallelizable.
-Overall, this approach should almost always be faster than the previous octree-based aproach.
+For subdomains that contain only a very small number of fluid particles (less than 5% of the largest subdomain) a hashmap is used instead to not waste too much storage.
+As most domains are dense however, the marching cubes triangulation per subdomain is very fast as it can make full use of cache locality.
+The triangulation per subdomain can be performed in parallel.
+To stitch the resulting meshes together, we ensure that we perform floating point operations in the same order at the subdomain boundaries thus guaranteeing identical values (this is possible without additional synchronization).
+If the field values on the subdomain boundaries are identical from both sides, the marching cubes triangulations will be topologically compatible and can be merged in a post-processing step that can also run in parallel.
+Overall, this approach should almost always be faster than the octree-based approach that was used before version 0.10.0.
 
 ## Notes
 
-For small numbers of fluid particles (i.e. in the low thousands or less) the domain decomposition implementation may have worse performance due to the task based parallelism and the additional overhead of domain decomposition and stitching.
+For small numbers of fluid particles (i.e. in the low thousands or less) the domain decomposition may have worse performance due to the task-based parallelism and the additional overhead of domain decomposition and stitching.
 In this case, you can try to disable the domain decomposition. The reconstruction will then use a global approach that is parallelized using thread-local hashmaps.
-For larger quantities of particles the decomposition approach is expected to be always faster.
+For larger quantities of particles the decomposition approach is always expected to be faster.
 
 Due to the use of hash maps and multi-threading (if enabled), the output of this implementation is not deterministic.
 
@@ -127,11 +119,21 @@ cargo install splashsurf
 ## Usage
 
 ### Recommended settings
-Good settings for the surface reconstruction depend on the original simulation and can be influenced by different conventions of different simulators. The following settings appear to work well with [SPlisHSPlasH](https://github.com/InteractiveComputerGraphics/SPlisHSPlasH):
- - `particle-radius`: should be a bit larger than the particle radius used for the actual simulation. A radius around 1.4 to 1.6 times larger than the original SPH particle radius seems to be appropriate.
- - `smoothing-length`: should be set around `1.2`. Larger values smooth out the iso-surface more but also artificially increase the fluid volume.
+"Good" settings for the surface reconstruction depend on the original simulation and can be influenced by different conventions of different simulators.
+The following parameters appear to work well with simulations performed with [SPlisHSPlasH](https://github.com/InteractiveComputerGraphics/SPlisHSPlasH).
+A typical set of parameters for the reconstruction is:
+ - `particle-radius`: the actual radius of the fluid particles in the simulation
+ - `smoothing-length`: the smoothing length used for the SPH kernel, usually set to `2.0` times the particle radius (this will use a cubic kernel with a compact support radius of `4.0` times the particle radius)
+ - `surface-threshold`: typically a value between `0.6` and `0.7` works well
+ - `cube-size`: usually should not be chosen larger than `1.0` to avoid artifacts (e.g. single particles reconstructed a rhomboids), start with a value in the range of `0.75` to `0.5` and decrease/increase it if the result is too coarse or the reconstruction takes too long.
+
+Without further post-processing these parameters usually leads to quite "bumpy" surfaces.
+To obtain smoother surfaces, the parameters can be adjusted as follows:
+ - `particle-radius`: can be chosen a bit larger than the particle radius of the actual simulation. A radius around 1.4 to 1.6 times larger than the original SPH particle radius seems to be appropriate.
+ - `smoothing-length`: can be set around `1.2`. Larger values smooth out the surface more but also artificially increase the fluid volume.
  - `surface-threshold`: a good value depends on the selected `particle-radius` and `smoothing-length` and can be used to counteract a fluid volume increase e.g. due to a larger particle radius. In combination with the other recommended values a threshold of `0.6` seemed to work well.
- - `cube-size` usually should not be chosen larger than `1.0` to avoid artifacts (e.g. single particles decaying into rhomboids), start with a value in the range of `0.75` to `0.5` and decrease/increase it if the result is too coarse or the reconstruction takes too long.
+
+However, a much more effective way is to perform surface smoothing as described below.
 
 ### Weighted surface smoothing
 The CLI implements the paper ["Weighted Laplacian Smoothing for Surface Reconstruction of Particle-based Fluids" (Löschner, Böttcher, Jeske, Bender; 2023)](https://animation.rwth-aachen.de/publication/0583/) which proposes a fast smoothing approach to avoid typical bumpy surfaces while preventing loss of volume that typically occurs with simple smoothing methods.
@@ -305,7 +307,7 @@ The file format is inferred from the extension of output filename.
 
 ### The `reconstruct` command
 ```
-splashsurf-reconstruct (v0.10.0) - Reconstruct a surface from particle data
+splashsurf-reconstruct (v0.11.0) - Reconstruct a surface from particle data
 
 Usage: splashsurf reconstruct [OPTIONS] --particle-radius <PARTICLE_RADIUS> --smoothing-length <SMOOTHING_LENGTH> --cube-size <CUBE_SIZE> <INPUT_FILE_OR_SEQUENCE>
 
@@ -320,7 +322,7 @@ Input/output:
       --output-dir <OUTPUT_DIR>    Optional base directory for all output files (default: current working directory)
   -s, --start-index <START_INDEX>  Index of the first input file to process when processing a sequence of files (default: lowest index of the sequence)
   -e, --end-index <END_INDEX>      Index of the last input file to process when processing a sequence of files (default: highest index of the sequence)
-  <INPUT_FILE_OR_SEQUENCE>     Path to the input file where the particle positions are stored (supported formats: VTK 4.2, VTU, binary f32 XYZ, PLY, BGEO), use "{}" in the filename to indicate a placeholder for a sequence
+  <INPUT_FILE_OR_SEQUENCE>         Path to the input file where the particle positions are stored (supported formats: VTK 4.2, VTU, binary f32 XYZ, PLY, BGEO), use "{}" in the filename to indicate a placeholder for a sequence
 
 Numerical reconstruction parameters:
   -r, --particle-radius <PARTICLE_RADIUS>
@@ -345,22 +347,8 @@ Advanced parameters:
   -n, --num-threads <NUM_THREADS>  Set the number of threads for the worker thread pool
 
 Domain decomposition (octree or grid) parameters:
-      --subdomain-grid=<off|on>
-          Enable spatial decomposition using a regular grid-based approach [default: off] [possible values: off, on]
-      --subdomain-cubes <SUBDOMAIN_CUBES>
-          Each subdomain will be a cube consisting of this number of MC cube cells along each coordinate axis [default: 64]
-      --octree-decomposition=<off|on>
-          Enable spatial decomposition using an octree (faster) instead of a global approach [default: on] [possible values: off, on]
-      --octree-stitch-subdomains=<off|on>
-          Enable stitching of the disconnected local meshes resulting from the reconstruction when spatial decomposition is enabled (slower, but without stitching meshes will not be closed) [default: on] [possible values: off, on]
-      --octree-max-particles <OCTREE_MAX_PARTICLES>
-          The maximum number of particles for leaf nodes of the octree, default is to compute it based on the number of threads and particles
-      --octree-ghost-margin-factor <OCTREE_GHOST_MARGIN_FACTOR>
-          Safety factor applied to the kernel compact support radius when it's used as a margin to collect ghost particles in the leaf nodes when performing the spatial decomposition
-      --octree-global-density=<off|on>
-          Enable computing particle densities in a global step before domain decomposition (slower) [default: off] [possible values: off, on]
-      --octree-sync-local-density=<off|on>
-          Enable computing particle densities per subdomain but synchronize densities for ghost-particles (faster, recommended). Note: if both this and global particle density computation is disabled the ghost particle margin has to be increased to at least 2.0 to compute correct density values for ghost particles [default: on] [possible values: off, on]
+  --subdomain-grid=<off|on>            Enable spatial decomposition using a regular grid-based approach [default: on] [possible values: off, on]
+  --subdomain-cubes <SUBDOMAIN_CUBES>  Each subdomain will be a cube consisting of this number of MC cube cells along each coordinate axis [default: 64]
 
 Interpolation & normals:
       --normals=<off|on>
@@ -371,56 +359,47 @@ Interpolation & normals:
           Number of smoothing iterations to run on the normal field if normal interpolation is enabled (disabled by default)
       --output-raw-normals=<off|on>
           Enable writing raw normals without smoothing to the output mesh if normal smoothing is enabled [default: off] [possible values: off, on]
-      --interpolate-attributes <INTERPOLATE_ATTRIBUTES>
-          List of point attribute field names from the input file that should be interpolated to the reconstructed surface. Currently this is only supported for VTK and VTU input files
+  -a, --interpolate_attribute <ATTRIBUTE_NAME>
+          Interpolate a point attribute field with the given name from the input file to the reconstructed surface. Currently, this is only supported for BGEO, VTK and VTU input files. Specify the argument multiple times for each attribute that should be interpolated
 
 Postprocessing:
-      --mesh-cleanup=<off|on>
+  --mesh-cleanup=<off|on>
           Enable MC specific mesh decimation/simplification which removes bad quality triangles typically generated by MC [default: off] [possible values: off, on]
-      --decimate-barnacles=<off|on>
+  --decimate-barnacles=<off|on>
           Enable decimation of some typical bad marching cubes triangle configurations (resulting in "barnacles" after Laplacian smoothing) [default: off] [possible values: off, on]
-      --keep-verts=<off|on>
+  --keep-verts=<off|on>
           Enable keeping vertices without connectivity during decimation instead of filtering them out (faster and helps with debugging) [default: off] [possible values: off, on]
-      --mesh-smoothing-iters <MESH_SMOOTHING_ITERS>
+  --mesh-smoothing-iters <MESH_SMOOTHING_ITERS>
           Number of smoothing iterations to run on the reconstructed mesh
-      --mesh-smoothing-weights=<off|on>
+  --mesh-smoothing-weights=<off|on>
           Enable feature weights for mesh smoothing if mesh smoothing enabled. Preserves isolated particles even under strong smoothing [default: off] [possible values: off, on]
-      --mesh-smoothing-weights-normalization <MESH_SMOOTHING_WEIGHTS_NORMALIZATION>
+  --mesh-smoothing-weights-normalization <MESH_SMOOTHING_WEIGHTS_NORMALIZATION>
           Normalization value from weighted number of neighbors to mesh smoothing weights [default: 13.0]
-      --output-smoothing-weights=<off|on>
+  --output-smoothing-weights=<off|on>
           Enable writing the smoothing weights as a vertex attribute to the output mesh file [default: off] [possible values: off, on]
-      --generate-quads=<off|on>
+  --generate-quads=<off|on>
           Enable trying to convert triangles to quads if they meet quality criteria [default: off] [possible values: off, on]
-      --quad-max-edge-diag-ratio <QUAD_MAX_EDGE_DIAG_RATIO>
+  --quad-max-edge-diag-ratio <QUAD_MAX_EDGE_DIAG_RATIO>
           Maximum allowed ratio of quad edge lengths to its diagonals to merge two triangles to a quad (inverse is used for minimum) [default: 1.75]
-      --quad-max-normal-angle <QUAD_MAX_NORMAL_ANGLE>
+  --quad-max-normal-angle <QUAD_MAX_NORMAL_ANGLE>
           Maximum allowed angle (in degrees) between triangle normals to merge them to a quad [default: 10]
-      --quad-max-interior-angle <QUAD_MAX_INTERIOR_ANGLE>
-          Maximum allowed vertex interior angle (in degrees) inside of a quad to merge two triangles to a quad [default: 135]
-      --mesh-aabb-min <X_MIN> <Y_MIN> <Z_MIN>
+  --quad-max-interior-angle <QUAD_MAX_INTERIOR_ANGLE>
+          Maximum allowed vertex interior angle (in degrees) inside a quad to merge two triangles to a quad [default: 135]
+  --mesh-aabb-min <X_MIN> <Y_MIN> <Z_MIN>
           Lower corner of the bounding-box for the surface mesh, triangles completely outside are removed (requires mesh-aabb-max to be specified)
-      --mesh-aabb-max <X_MIN> <Y_MIN> <Z_MIN>
+  --mesh-aabb-max <X_MIN> <Y_MIN> <Z_MIN>
           Upper corner of the bounding-box for the surface mesh, triangles completely outside are removed (requires mesh-aabb-min to be specified)
-      --mesh-aabb-clamp-verts=<off|on>
-          Enable clamping of vertices outside of the specified mesh AABB to the AABB (only has an effect if mesh-aabb-min/max are specified) [default: off] [possible values: off, on]
-      --output-raw-mesh=<off|on>
+  --mesh-aabb-clamp-verts=<off|on>
+          Enable clamping of vertices outside the specified mesh AABB to the AABB (only has an effect if mesh-aabb-min/max are specified) [default: off] [possible values: off, on]
+  --output-raw-mesh=<off|on>
           Enable writing the raw reconstructed mesh before applying any post-processing steps [default: off] [possible values: off, on]
 
 Debug options:
-      --output-dm-points <OUTPUT_DM_POINTS>
-          Optional filename for writing the point cloud representation of the intermediate density map to disk
-      --output-dm-grid <OUTPUT_DM_GRID>
-          Optional filename for writing the grid representation of the intermediate density map to disk
-      --output-octree <OUTPUT_OCTREE>
-          Optional filename for writing the octree used to partition the particles to disk
-      --check-mesh=<off|on>
-          Enable checking the final mesh for holes and non-manifold edges and vertices [default: off] [possible values: off, on]
-      --check-mesh-closed=<off|on>
-          Enable checking the final mesh for holes [default: off] [possible values: off, on]
-      --check-mesh-manifold=<off|on>
-          Enable checking the final mesh for non-manifold edges and vertices [default: off] [possible values: off, on]
-      --check-mesh-debug=<off|on>
-          Enable debug output for the check-mesh operations (has no effect if no other check-mesh option is enabled) [default: off] [possible values: off, on]
+  --check-mesh=<off|on>              Enable checking the final mesh for holes and non-manifold edges and vertices [default: off] [possible values: off, on]
+  --check-mesh-closed=<off|on>       Enable checking the final mesh for holes [default: off] [possible values: off, on]
+  --check-mesh-manifold=<off|on>     Enable checking the final mesh for non-manifold edges and vertices [default: off] [possible values: off, on]
+  --check-mesh-orientation=<off|on>  Enable checking the final mesh for inverted triangles (compares angle between vertex normals and adjacent face normals) [default: off] [possible values: off, on]
+  --check-mesh-debug=<off|on>        Enable additional debug output for the check-mesh operations (has no effect if no other check-mesh option is enabled) [default: off] [possible values: off, on]
 ```
 
 ### The `convert` subcommand
@@ -429,15 +408,19 @@ Allows conversion between particle file formats and between mesh file formats. F
 is supported. For meshes only `VTK, PLY -> VTK, OBJ` is supported.
 
 ```
-splashsurf-convert (v0.9.0) - Convert particle or mesh files between different file formats
+splashsurf-convert (v0.11.0) - Convert particle or mesh files between different file formats
 
-Usage: splashsurf.exe convert [OPTIONS] -o <OUTPUT_FILE>
+Usage: splashsurf convert [OPTIONS] -o <OUTPUT_FILE>
 
 Options:
       --particles <INPUT_PARTICLES>
           Path to the input file with particles to read (supported formats: .vtk, .vtu, .bgeo, .ply, .xyz, .json)
+  -q, --quiet
+          Enable quiet mode (no output except for severe panic messages), overrides verbosity level
       --mesh <INPUT_MESH>
           Path to the input file with a surface to read (supported formats: .vtk, .ply)
+  -v...
+          Print more verbose output, use multiple "v"s for even more verbose output (-v, -vv)
   -o <OUTPUT_FILE>
           Path to the output file (supported formats for particles: .vtk, .bgeo, .json, for meshes: .obj, .vtk)
       --overwrite
@@ -450,6 +433,7 @@ Options:
           Print help
   -V, --version
           Print version
+
 ```
 
 ## Citation 
