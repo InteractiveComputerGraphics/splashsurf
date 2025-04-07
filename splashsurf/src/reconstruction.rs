@@ -3,7 +3,7 @@ use crate::{io, logging};
 use anyhow::{Context, anyhow};
 use clap::value_parser;
 use indicatif::{ProgressBar, ProgressStyle};
-use log::{error, info};
+use log::{error, info, warn};
 use rayon::prelude::*;
 use splashsurf_lib::mesh::{AttributeData, Mesh3d, MeshAttribute, MeshWithData};
 use splashsurf_lib::nalgebra::{Unit, Vector3};
@@ -1256,7 +1256,7 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
         }
     }
 
-    // Remove and clamp cells outside of AABB
+    // Remove and clamp cells outside AABB
     let mesh_with_data = if let Some(mesh_aabb) = &postprocessing.mesh_aabb {
         profile!("clamp mesh to aabb");
         info!("Post-processing: Clamping mesh to AABB...");
@@ -1287,6 +1287,21 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
             normal_angle_limit_rad,
             max_interior_angle,
         );
+
+        let mut mesh_with_data = mesh_with_data;
+        // Remove any cell attributes if present (they would have to be interpolated/merged)
+        if !mesh_with_data.cell_attributes.is_empty() {
+            warn!(
+                "Post-processing: Cell attributes are not supported when converting triangle meshes to quad meshes. The following cell attribute(s) will be discarded: {}.",
+                mesh_with_data
+                    .cell_attributes
+                    .iter()
+                    .map(|a| a.name.clone())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+        }
+        mesh_with_data.cell_attributes.clear();
 
         (None, Some(mesh_with_data.with_mesh(tri_quad_mesh)))
     } else {
