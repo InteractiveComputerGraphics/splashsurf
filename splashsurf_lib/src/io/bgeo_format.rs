@@ -1,8 +1,8 @@
 //! Helper functions for the BGEO file format
 
+use crate::io::io_utils::IteratorExt;
 use crate::mesh::{AttributeData, MeshAttribute};
-use crate::utils::IteratorExt;
-use crate::{Real, utils};
+use crate::{Real, io::io_utils};
 use anyhow::{Context, anyhow};
 use flate2::Compression;
 use flate2::read::GzDecoder;
@@ -340,15 +340,15 @@ impl AttributeStorage {
     /// Tries to convert this BGEO attribute storage into a mesh [`AttributeData`] storage
     fn try_into_attribute_data<R: Real>(&self) -> Result<AttributeData<R>, anyhow::Error> {
         match self {
-            AttributeStorage::Int(data) => utils::try_convert_scalar_slice(data, u64::from_i32)
+            AttributeStorage::Int(data) => io_utils::try_convert_scalar_slice(data, u64::from_i32)
                 .map(|v| AttributeData::ScalarU64(v))
                 .context(anyhow!("failed to convert integer attribute")),
-            AttributeStorage::Float(data) => utils::try_convert_scalar_slice(data, R::from_f32)
+            AttributeStorage::Float(data) => io_utils::try_convert_scalar_slice(data, R::from_f32)
                 .map(|v| AttributeData::ScalarReal(v))
                 .context(anyhow!("failed to convert float attribute")),
             AttributeStorage::Vector(n, data) => {
                 if *n == 3 {
-                    utils::try_convert_scalar_slice_to_vectors(data, R::from_f32)
+                    io_utils::try_convert_scalar_slice_to_vectors(data, R::from_f32)
                         .map(|v| AttributeData::Vector3Real(v))
                         .context(anyhow!("failed to convert vector attribute"))
                 } else {

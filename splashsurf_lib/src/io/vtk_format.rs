@@ -1,8 +1,8 @@
 //! Helper functions for the VTK file format
 
+use crate::io::io_utils::IteratorExt;
 use crate::mesh::{AttributeData, IntoVtkDataSet, MeshAttribute, MeshWithData, TriMesh3d};
-use crate::utils::IteratorExt;
-use crate::{Real, RealConvert, profile, utils};
+use crate::{Real, RealConvert, io::io_utils, profile};
 use anyhow::{Context, anyhow};
 use nalgebra::Vector3;
 use std::borrow::Cow;
@@ -318,11 +318,11 @@ fn try_convert_io_buffer_to_attribute<R: Real>(
 ) -> Result<AttributeData<R>, anyhow::Error> {
     match num_comp {
         1 => match &io_buffer {
-            IOBuffer::U32(vec) => utils::try_convert_scalar_slice(vec, R::from_u32)
+            IOBuffer::U32(vec) => io_utils::try_convert_scalar_slice(vec, R::from_u32)
                 .map(|v| AttributeData::ScalarReal(v)),
-            IOBuffer::F32(vec) => utils::try_convert_scalar_slice(vec, R::from_f32)
+            IOBuffer::F32(vec) => io_utils::try_convert_scalar_slice(vec, R::from_f32)
                 .map(|v| AttributeData::ScalarReal(v)),
-            IOBuffer::F64(vec) => utils::try_convert_scalar_slice(vec, R::from_f64)
+            IOBuffer::F64(vec) => io_utils::try_convert_scalar_slice(vec, R::from_f64)
                 .map(|v| AttributeData::ScalarReal(v)),
             _ => Err(anyhow!("Unsupported IOBuffer scalar data type")),
         },
@@ -346,7 +346,7 @@ fn try_convert_io_buffer_to_attribute<R: Real>(
 fn particles_from_coords<RealOut: Real, RealIn: Real>(
     coords: &[RealIn],
 ) -> Result<Vec<Vector3<RealOut>>, anyhow::Error> {
-    utils::try_convert_scalar_slice_to_vectors(coords, |v| v.try_convert())
+    io_utils::try_convert_scalar_slice_to_vectors(coords, |v| v.try_convert())
         .context(anyhow!("failed to convert particle coordinates"))
 }
 

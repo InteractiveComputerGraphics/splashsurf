@@ -1,9 +1,9 @@
 //! Helper functions for the PLY file format
 
+use crate::io::io_utils::IteratorExt;
 use crate::mesh::{
     AttributeData, CellConnectivity, Mesh3d, MeshAttribute, MeshWithData, TriMesh3d,
 };
-use crate::utils::IteratorExt;
 use crate::{Real, profile};
 use anyhow::{Context, anyhow};
 use nalgebra::Vector3;

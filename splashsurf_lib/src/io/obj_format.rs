@@ -3,7 +3,7 @@
 use crate::mesh::{
     AttributeData, CellConnectivity, Mesh3d, MeshAttribute, MeshWithData, TriMesh3d,
 };
-use crate::{Real, profile, utils};
+use crate::{Real, io::io_utils, profile};
 use anyhow::Context;
 use nalgebra::Vector3;
 use std::fs;
@@ -92,7 +92,7 @@ pub fn surface_mesh_from_obj<R: Real, P: AsRef<Path>>(
     let mut buffer_string = String::new();
 
     loop {
-        let mut buffer = utils::recycle(outer_buffer);
+        let mut buffer = io_utils::recycle(outer_buffer);
 
         let read = reader.read_line(&mut buffer_string)?;
         if read == 0 {
@@ -134,7 +134,7 @@ pub fn surface_mesh_from_obj<R: Real, P: AsRef<Path>>(
             normals.push(buffer_to_vec3(&buffer)?);
         }
 
-        outer_buffer = utils::recycle(buffer);
+        outer_buffer = io_utils::recycle(buffer);
         buffer_string.clear();
     }
 

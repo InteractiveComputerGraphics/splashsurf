@@ -1,6 +1,6 @@
 //! Helper functions for the JSON file format
 
-use crate::utils::IteratorExt;
+use crate::io::io_utils::IteratorExt;
 use crate::{Real, RealConvert};
 use anyhow::{Context, anyhow};
 use nalgebra::Vector3;

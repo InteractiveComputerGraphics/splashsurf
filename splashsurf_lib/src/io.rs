@@ -6,6 +6,7 @@ use nalgebra::Vector3;
 use std::path::Path;
 
 pub mod bgeo_format;
+mod io_utils;
 pub mod json_format;
 pub mod obj_format;
 pub mod ply_format;
