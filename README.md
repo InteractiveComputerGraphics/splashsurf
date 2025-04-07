@@ -39,7 +39,6 @@ Note: This animation does not show the recently added smoothing features of the 
 - [The `splashsurf` CLI](#the-splashsurf-cli)
   - [Introduction](#introduction)
   - [Domain decomposition](#domain-decomposition)
-    - [Octree-based decomposition](#octree-based-decomposition)
     - [Subdomain grid-based decomposition](#subdomain-grid-based-decomposition)
   - [Notes](#notes)
   - [Installation](#installation)
