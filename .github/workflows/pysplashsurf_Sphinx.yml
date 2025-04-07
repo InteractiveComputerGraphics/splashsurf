@@ -1,0 +1,25 @@
+name: "Pysplashsurf Docs"
+on: 
+- workflow_dispatch
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: 3.x
+    - name: Build wheels
+      uses: PyO3/maturin-action@v1
+      with:
+        target: x86_64
+        args: --release --out dist -m pysplashsurf/Cargo.toml
+        manylinux: auto
+    - uses: ammaraskar/sphinx-action@8.2.3
+      with:
+        docs-folder: "pysplashsurf/pysplashsurf/docs/"
+    - uses: actions/upload-artifact@v4
+      with:
+        name: DocumentationHTML
+        path: pysplashsurf/pysplashsurf/docs/build/html/
