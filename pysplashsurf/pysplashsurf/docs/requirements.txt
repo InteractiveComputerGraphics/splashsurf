@@ -1,7 +1,6 @@
 pip==25.0.1
 numpy==2.2.3
 meshio==5.3.5
-./dist/pysplashsurf-0.0.0-cp37-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
 furo
 numpydoc==1.8.0
 myst-parser==4.0.1

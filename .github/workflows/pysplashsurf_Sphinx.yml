@@ -16,6 +16,15 @@ jobs:
         target: x86_64
         args: --release --out dist -m pysplashsurf/Cargo.toml
         manylinux: auto
+    - name: Get wheel name
+      id: get_filename
+      run: |
+        FILE_NAME=$(ls dist)
+        echo "Found file: $FILE_NAME"
+        echo "file_name=$FILE_NAME" >> $GITHUB_OUTPUT
+    - name: Append output to file
+      run: |
+        echo "./dist/${{ steps.get_filename.outputs.file_name }}" >> pysplashsurf/pysplashsurf/docs/requirements.txt
     - uses: ammaraskar/sphinx-action@8.2.3
       with:
         docs-folder: "pysplashsurf/pysplashsurf/docs/"

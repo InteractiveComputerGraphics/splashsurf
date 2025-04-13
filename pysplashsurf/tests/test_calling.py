@@ -5,11 +5,16 @@ import meshio
 import subprocess
 import time
 import trimesh
+import pathlib
 
 BINARY_PATH = "splashsurf"
+DIR = pathlib.Path(__file__).parent.resolve()
+BGEO_PATH = DIR.joinpath("../ParticleData_Fluid_50.bgeo")
+VTK_PATH = DIR.joinpath("../ParticleData_Fluid_5.vtk")
+
 
 def test_bgeo():
-    particles = np.array(meshio.read("./ParticleData_Fluid_50.bgeo").points, dtype=np.float32)
+    particles = np.array(meshio.read(BGEO_PATH).points, dtype=np.float32)
     
     assert(len(particles) == 4732)
 
@@ -34,7 +39,7 @@ def test_aabb_class():
 def test_marching_cubes_calls():
     print("\nTesting marching cubes calls")
     
-    particles = np.array(meshio.read("./ParticleData_Fluid_5.vtk").points, dtype=np.float32)
+    particles = np.array(meshio.read(VTK_PATH).points, dtype=np.float32)
     reconstruction = pysplashsurf.reconstruct_surface(particles, enable_multi_threading=True, particle_radius=0.025,
                                                                  rest_density=1000.0, smoothing_length=2.0, cube_size=0.5, 
                                                                  iso_surface_threshold=0.6)
@@ -52,7 +57,7 @@ def test_marching_cubes_calls():
 def test_memory_access():
     print("\nTesting memory copy vs take")
     
-    particles = np.array(meshio.read("./ParticleData_Fluid_5.vtk").points, dtype=np.float64)
+    particles = np.array(meshio.read(VTK_PATH).points, dtype=np.float64)
     reconstruction = pysplashsurf.reconstruct_surface(particles, enable_multi_threading=True, particle_radius=0.025, 
                                                                  rest_density=1000.0, smoothing_length=2.0, cube_size=0.5, 
                                                                  iso_surface_threshold=0.6, aabb_min=np.array([0.0, 0.0, 0.0]), aabb_max=np.array([2.0, 2.0, 2.0]))
@@ -138,18 +143,18 @@ def reconstruction_pipeline(input_file, output_file, *, attributes_to_interpolat
 
 def test_no_post_processing():
     start = time.time()
-    subprocess.run([BINARY_PATH] + "reconstruct ./ParticleData_Fluid_5.vtk -o test_bin.vtk -r=0.025 -l=2.0 -c=0.5 -t=0.6 -d=on --subdomain-grid=on --mesh-cleanup=off --mesh-smoothing-weights=off --mesh-smoothing-iters=0 --normals=off --normals-smoothing-iters=0".split(), check=True)
+    subprocess.run([BINARY_PATH] + f"reconstruct {VTK_PATH} -o {DIR.joinpath("test_bin.vtk")} -r=0.025 -l=2.0 -c=0.5 -t=0.6 -d=on --subdomain-grid=on --mesh-cleanup=off --mesh-smoothing-weights=off --mesh-smoothing-iters=0 --normals=off --normals-smoothing-iters=0".split(), check=True)
     print("Binary done in", time.time() - start)
     
     start = time.time()
-    reconstruction_pipeline("./ParticleData_Fluid_5.vtk", "test.vtk", particle_radius=np.float64(0.025), smoothing_length=np.float64(2.0), 
+    reconstruction_pipeline(VTK_PATH, DIR.joinpath("test.vtk"), particle_radius=np.float64(0.025), smoothing_length=np.float64(2.0), 
                             cube_size=np.float64(0.5), iso_surface_threshold=np.float64(0.6), mesh_smoothing_weights=True, 
                             mesh_smoothing_weights_normalization=np.float64(13.0), mesh_smoothing_iters=0, normals_smoothing_iters=0, 
                             generate_quads=False, mesh_cleanup=False, compute_normals=False, subdomain_grid=True)
     print("Python done in", time.time() - start)
     
-    binary_mesh = meshio.read("test_bin.vtk")
-    python_mesh = meshio.read("test.vtk")
+    binary_mesh = meshio.read(DIR.joinpath("test_bin.vtk"))
+    python_mesh = meshio.read(DIR.joinpath("test.vtk"))
     
     binary_verts = np.array(binary_mesh.points, dtype=np.float64)
     python_verts = np.array(python_mesh.points, dtype=np.float64)
@@ -166,19 +171,19 @@ def test_no_post_processing():
     
 def test_with_post_processing():
     start = time.time()
-    subprocess.run([BINARY_PATH] + "reconstruct ./ParticleData_Fluid_5.vtk -o test_bin.vtk -r=0.025 -l=2.0 -c=0.5 -t=0.6 -d=on --subdomain-grid=on --interpolate-attributes velocity --decimate-barnacles=on --mesh-cleanup=on --mesh-smoothing-weights=on --mesh-smoothing-iters=25 --normals=on --normals-smoothing-iters=10 --output-smoothing-weights=on".split(), check=True)
+    subprocess.run([BINARY_PATH] + f"reconstruct {VTK_PATH} -o {DIR.joinpath("test_bin.vtk")} -r=0.025 -l=2.0 -c=0.5 -t=0.6 -d=on --subdomain-grid=on --interpolate_attribute velocity --decimate-barnacles=on --mesh-cleanup=on --mesh-smoothing-weights=on --mesh-smoothing-iters=25 --normals=on --normals-smoothing-iters=10 --output-smoothing-weights=on".split(), check=True)
     print("Binary done in", time.time() - start)
     
     start = time.time()
-    reconstruction_pipeline("./ParticleData_Fluid_5.vtk", "test.vtk", attributes_to_interpolate=["velocity"], particle_radius=np.float64(0.025), smoothing_length=np.float64(2.0), 
+    reconstruction_pipeline(VTK_PATH, DIR.joinpath("test.vtk"), attributes_to_interpolate=["velocity"], particle_radius=np.float64(0.025), smoothing_length=np.float64(2.0), 
                             cube_size=np.float64(0.5), iso_surface_threshold=np.float64(0.6), mesh_smoothing_weights=True, 
                             mesh_smoothing_weights_normalization=np.float64(13.0), mesh_smoothing_iters=25, normals_smoothing_iters=10, 
                             generate_quads=False, mesh_cleanup=True, compute_normals=True, subdomain_grid=True, decimate_barnacles=True,
                             output_mesh_smoothing_weights=True, output_raw_normals=True)
     print("Python done in", time.time() - start)
     
-    binary_mesh = meshio.read("test_bin.vtk")
-    python_mesh = meshio.read("test.vtk")
+    binary_mesh = meshio.read(DIR.joinpath("test_bin.vtk"))
+    python_mesh = meshio.read(DIR.joinpath("test.vtk"))
     
     # Compare number of vertices
     binary_verts = np.array(binary_mesh.points, dtype=np.float64)
@@ -199,8 +204,8 @@ def test_with_post_processing():
     assert(np.allclose(binary_vels, python_vels))
     
     # Trimesh similarity test
-    binary_mesh = trimesh.load_mesh("test_bin.vtk", "vtk")
-    python_mesh = trimesh.load_mesh("test.vtk", "vtk")
+    binary_mesh = trimesh.load_mesh(DIR.joinpath("test_bin.vtk"), "vtk")
+    python_mesh = trimesh.load_mesh(DIR.joinpath("test.vtk"), "vtk")
     
     (_, distance_bin, _) = trimesh.proximity.closest_point(binary_mesh, python_verts)
     (_, distance_py, _) = trimesh.proximity.closest_point(python_mesh, binary_verts)
@@ -222,4 +227,4 @@ def test_with_post_processing():
 # test_aabb_class()
 # test_marching_cubes_calls()
 # test_memory_access()
-test_with_post_processing()
+# test_with_post_processing()
