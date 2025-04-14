@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "pysplashsurf"
-version = "0.0.0"
+version = "0.1.0"
 description = "Coming soon"
 readme = "README.md"
 requires-python = ">=3.7"
@@ -13,7 +13,7 @@ classifiers = [
     "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Python :: Implementation :: PyPy",
 ]
-requires-dist = ["numpy", "meshio"]
+requires-dist = ["numpy"]
 
 [project.urls]
 homepage = "https://splashsurf.physics-simulation.org/"

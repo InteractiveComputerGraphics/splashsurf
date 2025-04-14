@@ -1,7 +1,6 @@
 from .pysplashsurf import *
 from . import bgeo
 import numpy as np
-import meshio
 
 def push_point_attribute(self, name: str, data: np.ndarray, real_type):
     """Add a point attribute to the mesh"""
@@ -77,6 +76,11 @@ def write_to_file(mesh_with_data, filename, file_format=None, consume_object=Fal
         Flag for specifying whether the MeshWithData object should be consumed for a faster execution.
         Only consumes the mesh field.
     """
+    try:
+        import meshio
+    except ImportError:
+        raise ImportError("meshio is not installed, please install it with with `pip install meshio` to use this function")
+    
     mesh = mesh_with_data.take_mesh() if consume_object else mesh_with_data.mesh
 
     point_data = mesh_with_data.get_point_attributes()
