@@ -1,19 +1,18 @@
 [package]
 name = "pysplashsurf"
-version = "0.1.7"
-authors = ["Stefan Jeske <stefan.jeske@rwth-aachen.de>"]
+version = "0.1.0"
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-pyo3 = {version = "0.24"}
+pyo3 = {version = "0.24.1"}
 numpy = "0.24.0"
 ndarray = "0.16.1"
 splashsurf_lib = { path = "../splashsurf_lib" }
 fxhash = "0.2.1"
 bytemuck = { version = "1.22.0", features = ["extern_crate_alloc"] }
-anyhow = "1.0.97"
+anyhow = "1.0.98"
 rayon = "1.10.0"
 log = "0.4.27"
 pyo3-stub-gen = "0.7.0"
