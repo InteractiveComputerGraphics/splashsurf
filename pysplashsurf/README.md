@@ -36,8 +36,8 @@ You can also manually build the package from the source code:
     - Maturin automatically installs the resulting binary in your python environment
     - Set the release flag `-r` or `--release` to build a more performant binary, however compilation time will be slightly longer
 
-### Manual Documentation Build
+### Documentation Build
 To generate the Sphinx documentation, make sure that the package is installed through e.g. maturin, and then run `make html` in the `pysplashsurf/pysplashsurf/docs` directory. The resulting html files will be in `pysplashsurf/pysplashsurf/docs/build/html`.
 
-### Manual Stub File Generation
+### Stub File Generation
 To automatically generate a stub file for the package, run `cargo run --bin stub_gen` from the root project folder (from `pysplashsurf/`).

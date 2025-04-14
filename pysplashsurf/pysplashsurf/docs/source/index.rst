@@ -6,6 +6,10 @@
 Welcome to Pysplashsurf's documentation!
 ========================================
 
+.. image:: https://raw.githubusercontent.com/InteractiveComputerGraphics/splashsurf/main/logos/logo_small.svg
+
+Check out the :doc:`Readme <./introduction>` for a brief overview of the package.
+
 .. toctree::
    introduction
    methods
