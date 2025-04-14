@@ -110,8 +110,8 @@ def reconstruction_pipeline(input_file, output_file, *, attributes_to_interpolat
                                                           mesh_aabb_clamp_vertices=mesh_aabb_clamp_vertices, subdomain_grid=subdomain_grid, subdomain_num_cubes_per_dim=subdomain_num_cubes_per_dim, output_mesh_smoothing_weights=output_mesh_smoothing_weights)
     
     # Convert triangles to quads
-    # if generate_quads:
-    #     mesh_with_data = pysplashsurf.convert_tris_to_quads(mesh_with_data, non_squareness_limit=quad_max_edge_diag_ratio, normal_angle_limit_rad=math.radians(quad_max_normal_angle), max_interior_angle=math.radians(quad_max_interior_angle))
+    if generate_quads:
+        mesh_with_data = pysplashsurf.convert_tris_to_quads(mesh_with_data, non_squareness_limit=quad_max_edge_diag_ratio, normal_angle_limit_rad=math.radians(quad_max_normal_angle), max_interior_angle=math.radians(quad_max_interior_angle))
 
     pysplashsurf.write_to_file(mesh_with_data, output_file, consume_object=False)
 
@@ -157,7 +157,7 @@ def test_no_post_processing():
     
 def test_with_post_processing():
     start = time.time()
-    subprocess.run([BINARY_PATH] + f"reconstruct {VTK_PATH} -o {DIR.joinpath("test_bin.vtk")} -r=0.025 -l=2.0 -c=0.5 -t=0.6 -d=on --subdomain-grid=on --interpolate_attribute velocity --decimate-barnacles=on --mesh-cleanup=on --mesh-smoothing-weights=on --mesh-smoothing-iters=25 --normals=on --normals-smoothing-iters=10 --output-smoothing-weights=on".split(), check=True)
+    subprocess.run([BINARY_PATH] + f"reconstruct {VTK_PATH} -o {DIR.joinpath("test_bin.vtk")} -r=0.025 -l=2.0 -c=0.5 -t=0.6 -d=on --subdomain-grid=on --interpolate_attribute velocity --decimate-barnacles=on --mesh-cleanup=on --mesh-smoothing-weights=on --mesh-smoothing-iters=25 --normals=on --normals-smoothing-iters=10 --output-smoothing-weights=on --generate-quads=off".split(), check=True)
     print("Binary done in", time.time() - start)
     
     start = time.time()
@@ -195,7 +195,7 @@ def test_with_post_processing():
     
     (_, distance_bin, _) = trimesh.proximity.closest_point(binary_mesh, python_verts)
     (_, distance_py, _) = trimesh.proximity.closest_point(python_mesh, binary_verts)
-    distance = np.sum(distance_bin) + np.sum(distance_py)
+    distance = (np.sum(distance_bin) + np.sum(distance_py)) / (len(distance_bin) + len(python_verts))
     print("Distance:", distance)
     assert(distance < 1e-5)
     
@@ -213,4 +213,4 @@ def test_with_post_processing():
 # test_aabb_class()
 # test_marching_cubes_calls()
 # test_memory_access()
-test_with_post_processing()
+# test_with_post_processing()

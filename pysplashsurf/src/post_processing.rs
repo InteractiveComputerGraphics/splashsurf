@@ -3,30 +3,58 @@ use numpy::{PyArray2, PyArrayMethods};
 use pyo3::{exceptions::PyValueError, prelude::*};
 use splashsurf_lib::nalgebra::Vector3;
 
-use crate::{mesh::{MixedTriQuadMesh3dF32, MixedTriQuadMesh3dF64, TriMesh3dF32, TriMesh3dF64, TriMeshWithDataF32, TriMeshWithDataF64}, uniform_grid::{UniformGridF32, UniformGridF64}};
+use crate::{mesh::{MixedTriQuadMesh3dF32, MixedTriQuadMesh3dF64, MixedTriQuadMeshWithDataF32, MixedTriQuadMeshWithDataF64, TriMesh3dF32, TriMesh3dF64, TriMeshWithDataF32, TriMeshWithDataF64}, uniform_grid::{UniformGridF32, UniformGridF64}};
 
 #[pyfunction]
 #[pyo3(name = "convert_tris_to_quads_f64")]
 #[pyo3(signature = (mesh, *, non_squareness_limit, normal_angle_limit_rad, max_interior_angle))]
 pub fn convert_tris_to_quads_py_f64<'py>(
-    mesh: &TriMesh3dF64,
+    mesh: PyObject,
+    py: Python<'py>,
     non_squareness_limit: f64,
     normal_angle_limit_rad: f64,
     max_interior_angle: f64,
-) -> MixedTriQuadMesh3dF64 {
-    MixedTriQuadMesh3dF64::new(splashsurf_lib::postprocessing::convert_tris_to_quads(&mesh.inner, non_squareness_limit, normal_angle_limit_rad, max_interior_angle))
+) -> PyResult<PyObject> {
+    if mesh.downcast_bound::<TriMesh3dF64>(py).is_ok() {
+        let mesh = mesh.downcast_bound::<TriMesh3dF64>(py).unwrap();
+        let quad_mesh = MixedTriQuadMesh3dF64::new(splashsurf_lib::postprocessing::convert_tris_to_quads(&mesh.borrow().inner, non_squareness_limit, normal_angle_limit_rad, max_interior_angle));
+        Ok(quad_mesh.into_pyobject(py).unwrap().into())
+    } else if mesh.downcast_bound::<TriMeshWithDataF64>(py).is_ok() {
+        let mesh = mesh.downcast_bound::<TriMeshWithDataF64>(py).unwrap();
+        let mut quad_mesh = MixedTriQuadMeshWithDataF64::new(splashsurf_lib::mesh::MeshWithData::new(splashsurf_lib::postprocessing::convert_tris_to_quads(&mesh.borrow().inner.mesh, non_squareness_limit, normal_angle_limit_rad, max_interior_angle)));
+
+        quad_mesh.inner.point_attributes = mesh.borrow().inner.point_attributes.clone();
+
+        Ok(quad_mesh.into_pyobject(py).unwrap().into())
+    } else {
+        Err(PyErr::new::<PyValueError, _>("Invalid mesh type"))
+    }
 }
 
 #[pyfunction]
 #[pyo3(name = "convert_tris_to_quads_f32")]
 #[pyo3(signature = (mesh, *, non_squareness_limit, normal_angle_limit_rad, max_interior_angle))]
 pub fn convert_tris_to_quads_py_f32<'py>(
-    mesh: &TriMesh3dF32,
+    py: Python<'py>,
+    mesh: PyObject,
     non_squareness_limit: f32,
     normal_angle_limit_rad: f32,
     max_interior_angle: f32,
-) -> MixedTriQuadMesh3dF32 {
-    MixedTriQuadMesh3dF32::new(splashsurf_lib::postprocessing::convert_tris_to_quads(&mesh.inner, non_squareness_limit, normal_angle_limit_rad, max_interior_angle))
+) -> PyResult<PyObject> {
+    if mesh.downcast_bound::<TriMesh3dF32>(py).is_ok() {
+        let mesh = mesh.downcast_bound::<TriMesh3dF32>(py).unwrap();
+        let quad_mesh = MixedTriQuadMesh3dF32::new(splashsurf_lib::postprocessing::convert_tris_to_quads(&mesh.borrow().inner, non_squareness_limit, normal_angle_limit_rad, max_interior_angle));
+        Ok(quad_mesh.into_pyobject(py).unwrap().into())
+    } else if mesh.downcast_bound::<TriMeshWithDataF32>(py).is_ok() {
+        let mesh = mesh.downcast_bound::<TriMeshWithDataF32>(py).unwrap();
+        let mut quad_mesh = MixedTriQuadMeshWithDataF32::new(splashsurf_lib::mesh::MeshWithData::new(splashsurf_lib::postprocessing::convert_tris_to_quads(&mesh.borrow().inner.mesh, non_squareness_limit, normal_angle_limit_rad, max_interior_angle)));
+
+        quad_mesh.inner.point_attributes = mesh.borrow().inner.point_attributes.clone();
+
+        Ok(quad_mesh.into_pyobject(py).unwrap().into())
+    } else {
+        Err(PyErr::new::<PyValueError, _>("Invalid mesh type"))
+    }
 }
 
 #[pyfunction]

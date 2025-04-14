@@ -481,8 +481,9 @@ def convert_tris_to_quads(
     
     Parameters
     ----------
-    mesh: TriMesh3dF32 | TriMesh3dF64
+    mesh: TriMesh3dF32 | TriMesh3dF64 | TriMeshWithDataF32 | TriMeshWithDataF64
         Triangular mesh object
+        When called with a MeshWithData Object, the resulting MixedTriQuadMeshWithData won't inherit the cell attributes from the input.
         
     non_squareness_limit: float
         Non-squareness limit
@@ -495,14 +496,14 @@ def convert_tris_to_quads(
         
     Returns
     -------
-    MixedTriQuadMesh3dF32 | MixedTriQuadMesh3dF64
+    MixedTriQuadMesh3dF32 | MixedTriQuadMesh3dF64 | MixedTriQuadMeshWithDataF32 | MixedTriQuadMeshWithDataF64
         Mixed triangular and quadrilateral mesh object
     """
     
-    if type(mesh) is TriMesh3dF32:
+    if type(mesh) is TriMesh3dF32 or type(mesh) is TriMeshWithDataF32:
         return convert_tris_to_quads_f32(mesh, non_squareness_limit=non_squareness_limit, normal_angle_limit_rad=normal_angle_limit_rad, max_interior_angle=max_interior_angle)
     
-    elif type(mesh) is TriMesh3dF64:
+    elif type(mesh) is TriMesh3dF64 or type(mesh) is TriMeshWithDataF64:
         return convert_tris_to_quads_f64(mesh, non_squareness_limit=non_squareness_limit, normal_angle_limit_rad=normal_angle_limit_rad, max_interior_angle=max_interior_angle)
     
     else:
