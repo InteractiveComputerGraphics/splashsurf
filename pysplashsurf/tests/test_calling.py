@@ -108,28 +108,19 @@ def reconstruction_pipeline(input_file, output_file, *, attributes_to_interpolat
                                                           mesh_aabb_min=mesh_aabb_min, mesh_aabb_max=mesh_aabb_max, mesh_cleanup=mesh_cleanup, decimate_barnacles=decimate_barnacles,
                                                           keep_vertices=keep_vertices, compute_normals=compute_normals, output_raw_normals=output_raw_normals,
                                                           mesh_aabb_clamp_vertices=mesh_aabb_clamp_vertices, subdomain_grid=subdomain_grid, subdomain_num_cubes_per_dim=subdomain_num_cubes_per_dim, output_mesh_smoothing_weights=output_mesh_smoothing_weights)
-        
-    mesh = mesh_with_data.take_mesh()
-    
-    point_data = mesh_with_data.get_point_attributes()
-    cell_data = mesh_with_data.get_cell_attributes()
     
     # Convert triangles to quads
-    if generate_quads:
-        mesh = pysplashsurf.convert_tris_to_quads(mesh, non_squareness_limit=quad_max_edge_diag_ratio, normal_angle_limit_rad=math.radians(quad_max_normal_angle), max_interior_angle=math.radians(quad_max_interior_angle))
+    # if generate_quads:
+    #     mesh_with_data = pysplashsurf.convert_tris_to_quads(mesh_with_data, non_squareness_limit=quad_max_edge_diag_ratio, normal_angle_limit_rad=math.radians(quad_max_normal_angle), max_interior_angle=math.radians(quad_max_interior_angle))
+
+    pysplashsurf.write_to_file(mesh_with_data, output_file, consume_object=False)
+
+    mesh = mesh_with_data.take_mesh()
     
     if type(mesh) is pysplashsurf.TriMesh3dF64 or type(mesh) is pysplashsurf.TriMesh3dF32:
-        verts, tris = mesh.take_vertices_and_triangles()
-        meshio.write_points_cells(output_file, verts, [("triangle", tris)], point_data=point_data, cell_data=cell_data)
-        
         # Mesh checks
         if check_mesh_closed or check_mesh_manifold:
             pysplashsurf.check_mesh_consistency(reconstruction.grid, mesh, check_closed=check_mesh_closed, check_manifold=check_mesh_manifold, debug=check_mesh_debug)
-        
-    else:
-        verts, cells = mesh.take_vertices_and_cells()
-        cells = [("triangle", list(filter(lambda x: len(x) == 3, cells))), ("quad", list(filter(lambda x: len(x) == 4, cells)))]
-        meshio.write_points_cells(output_file, verts, cells, point_data=point_data)
     
     
     # Left out: Mesh orientation check

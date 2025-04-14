@@ -1,6 +1,7 @@
 from .pysplashsurf import *
 from . import bgeo
 import numpy as np
+import meshio
 
 def push_point_attribute(self, name: str, data: np.ndarray, real_type):
     """Add a point attribute to the mesh"""
@@ -57,6 +58,38 @@ MixedTriQuadMeshWithDataF64.push_cell_attribute = lambda self, name, data: push_
 MixedTriQuadMeshWithDataF64.push_cell_attribute.__doc__ = push_cell_attribute.__doc__
 MixedTriQuadMeshWithDataF32.push_cell_attribute = lambda self, name, data: push_cell_attribute(self, name, data, np.float32)
 MixedTriQuadMeshWithDataF32.push_cell_attribute.__doc__ = push_cell_attribute.__doc__
+
+def write_to_file(mesh_with_data, filename, file_format=None, consume_object=False):
+    """Write the mesh and its attributes to a file using meshio
+    
+    Parameters
+    ----------
+    mesh: TriMeshWithDataF64 | TriMeshWithDataF32 | MixedTriQuadMeshWithDataF64 | MixedTriQuadMeshWithDataF32
+        Mesh with data object to write
+    
+    filename: Any
+        File path for the output file
+    
+    file_format: str | None
+        File format for the output file, generally also derived from filename
+        
+    consume_object: bool
+        Flag for specifying whether the MeshWithData object should be consumed for a faster execution.
+        Only consumes the mesh field.
+    """
+    mesh = mesh_with_data.take_mesh() if consume_object else mesh_with_data.mesh
+
+    point_data = mesh_with_data.get_point_attributes()
+    cell_data = mesh_with_data.get_cell_attributes()
+
+    if type(mesh) is pysplashsurf.TriMesh3dF64 or type(mesh) is pysplashsurf.TriMesh3dF32:
+        verts, tris = mesh.take_vertices_and_triangles() if consume_object else (mesh.vertices, mesh.triangles)
+        meshio.write_points_cells(filename, verts, [("triangle", tris)], point_data=point_data, cell_data=cell_data, file_format=file_format)
+            
+    else:
+        verts, cells = mesh.take_vertices_and_cells() if consume_object else (mesh.vertices, mesh.cells)
+        cells = [("triangle", list(filter(lambda x: len(x) == 3, cells))), ("quad", list(filter(lambda x: len(x) == 4, cells)))]
+        meshio.write_points_cells(filename, verts, cells, point_data=point_data, cell_data=cell_data, file_format=file_format)
 
 
 def create_mesh_with_data_object(mesh):
