@@ -40,9 +40,15 @@ class Aabb3dF32:
         ...
 
     def min(self) -> numpy.typing.NDArray[numpy.float32]:
+        r"""
+        Returns the min coordinate of the bounding box
+        """
         ...
 
     def max(self) -> numpy.typing.NDArray[numpy.float32]:
+        r"""
+        Returns the max coordinate of the bounding box
+        """
         ...
 
     def is_consistent(self) -> builtins.bool:
@@ -76,6 +82,9 @@ class Aabb3dF32:
         ...
 
     def centroid(self) -> numpy.typing.NDArray[numpy.float32]:
+        r"""
+        Returns the geometric centroid of the AABB (mean of the corner points)
+        """
         ...
 
     def contains_aabb(self, other:Aabb3dF32) -> builtins.bool:
@@ -167,9 +176,15 @@ class Aabb3dF64:
         ...
 
     def min(self) -> numpy.typing.NDArray[numpy.float64]:
+        r"""
+        Returns the min coordinate of the bounding box
+        """
         ...
 
     def max(self) -> numpy.typing.NDArray[numpy.float64]:
+        r"""
+        Returns the max coordinate of the bounding box
+        """
         ...
 
     def is_consistent(self) -> builtins.bool:
@@ -203,6 +218,9 @@ class Aabb3dF64:
         ...
 
     def centroid(self) -> numpy.typing.NDArray[numpy.float64]:
+        r"""
+        Returns the geometric centroid of the AABB (mean of the corner points)
+        """
         ...
 
     def contains_aabb(self, other:Aabb3dF64) -> builtins.bool:
@@ -334,6 +352,18 @@ class MixedTriQuadMeshWithDataF32:
         """
         ...
 
+    def get_point_attributes(self) -> dict:
+        r"""
+        Get all point attributes in a python dictionary
+        """
+        ...
+
+    def get_cell_attributes(self) -> dict:
+        r"""
+        Get all cell attributes in a python dictionary
+        """
+        ...
+
     def get_point_attribute_keys(self) -> list:
         r"""
         Get all registered point attribute names
@@ -392,6 +422,18 @@ class MixedTriQuadMeshWithDataF64:
     def get_cell_attribute(self, name:builtins.str) -> typing.Any:
         r"""
         Get mesh cell attribute by name
+        """
+        ...
+
+    def get_point_attributes(self) -> dict:
+        r"""
+        Get all point attributes in a python dictionary
+        """
+        ...
+
+    def get_cell_attributes(self) -> dict:
+        r"""
+        Get all cell attributes in a python dictionary
         """
         ...
 
@@ -592,6 +634,18 @@ class TriMeshWithDataF32:
         """
         ...
 
+    def get_point_attributes(self) -> dict:
+        r"""
+        Get all point attributes in a python dictionary
+        """
+        ...
+
+    def get_cell_attributes(self) -> dict:
+        r"""
+        Get all cell attributes in a python dictionary
+        """
+        ...
+
     def get_point_attribute_keys(self) -> list:
         r"""
         Get all registered point attribute names
@@ -650,6 +704,18 @@ class TriMeshWithDataF64:
     def get_cell_attribute(self, name:builtins.str) -> typing.Any:
         r"""
         Get mesh cell attribute by name
+        """
+        ...
+
+    def get_point_attributes(self) -> dict:
+        r"""
+        Get all point attributes in a python dictionary
+        """
+        ...
+
+    def get_cell_attributes(self) -> dict:
+        r"""
+        Get all cell attributes in a python dictionary
         """
         ...
 
