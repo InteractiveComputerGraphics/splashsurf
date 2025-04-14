@@ -58,11 +58,13 @@ macro_rules! create_aabb3d_interface {
                 $name::new(Aabb3d::from_point(Vector3::from_column_slice(&point)))
             }
 
+            /// Returns the min coordinate of the bounding box
             fn min<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray1<$type>> {
                 let min: &[$type] = self.inner.min().as_slice();
                 PyArray::from_slice(py, min)
             }
 
+            /// Returns the max coordinate of the bounding box
             fn max<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray1<$type>> {
                 let max: &[$type] = self.inner.max().as_slice();
                 PyArray::from_slice(py, max)
@@ -94,6 +96,7 @@ macro_rules! create_aabb3d_interface {
                 self.inner.max_extent()
             }
 
+            /// Returns the geometric centroid of the AABB (mean of the corner points)
             fn centroid<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray1<$type>> {
                 let centroid = self.inner.centroid();
                 PyArray::from_slice(py, centroid.as_slice())

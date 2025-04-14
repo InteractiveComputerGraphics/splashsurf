@@ -1,6 +1,6 @@
 use ndarray::{Array2, ArrayView2, ArrayView};
 use numpy::{Element, IntoPyArray, PyReadonlyArray2, PyArray2, ToPyArray, PyArray, PyArrayMethods};
-use pyo3::{exceptions::PyValueError, prelude::*, IntoPyObjectExt, types::{PyTuple, PyList}};
+use pyo3::{exceptions::PyValueError, prelude::*, IntoPyObjectExt, types::{PyTuple, PyList, PyDict}};
 use splashsurf_lib::{mesh::{AttributeData, MeshAttribute, MeshWithData, TriMesh3d, Mesh3d, MixedTriQuadMesh3d, TriangleOrQuadCell}, Real, nalgebra::{Vector3, Unit}};
 use pyo3_stub_gen::derive::*;
 
@@ -117,6 +117,36 @@ macro_rules! create_mesh_data_interface {
             /// Get mesh cell attribute by name
             fn get_cell_attribute<'py>(&self, py: Python<'py>, name: &str) -> PyResult<PyObject> {
                 get_attribute_with_name::<$type>(py, self.inner.cell_attributes.as_slice(), name)
+            }
+
+            /// Get all point attributes in a python dictionary
+            fn get_point_attributes<'py>(&self, py: Python<'py>) -> Bound<'py, PyDict> {
+                let res = PyDict::new(py);
+
+                for attr in self.inner.point_attributes.iter() {
+                    let data = get_attribute_with_name::<$type>(py, self.inner.point_attributes.as_slice(), &attr.name);
+                    match data {
+                        Ok(data) => res.set_item(&attr.name, data).unwrap(),
+                        Err(_) => println!("Couldn't embed attribute {} in PyDict", &attr.name)
+                    }
+                }
+
+                res
+            }
+
+            /// Get all cell attributes in a python dictionary
+            fn get_cell_attributes<'py>(&self, py: Python<'py>) -> Bound<'py, PyDict> {
+                let res = PyDict::new(py);
+
+                for attr in self.inner.cell_attributes.iter() {
+                    let data = get_attribute_with_name::<$type>(py, self.inner.cell_attributes.as_slice(), &attr.name);
+                    match data {
+                        Ok(data) => res.set_item(&attr.name, data).unwrap(),
+                        Err(_) => println!("Couldn't embed attribute {} in PyDict", &attr.name)
+                    }
+                }
+
+                res
             }
 
             /// Get all registered point attribute names

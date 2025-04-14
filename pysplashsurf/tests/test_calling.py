@@ -111,13 +111,8 @@ def reconstruction_pipeline(input_file, output_file, *, attributes_to_interpolat
         
     mesh = mesh_with_data.take_mesh()
     
-    point_data = {}
-    for key in mesh_with_data.get_point_attribute_keys():
-        point_data[key] = mesh_with_data.get_point_attribute(key)
-    
-    cell_data = {}
-    for key in mesh_with_data.get_cell_attribute_keys():
-        cell_data[key] = mesh_with_data.get_cell_attribute(key)
+    point_data = mesh_with_data.get_point_attributes()
+    cell_data = mesh_with_data.get_cell_attributes()
     
     # Convert triangles to quads
     if generate_quads:
@@ -227,4 +222,4 @@ def test_with_post_processing():
 # test_aabb_class()
 # test_marching_cubes_calls()
 # test_memory_access()
-# test_with_post_processing()
+test_with_post_processing()
