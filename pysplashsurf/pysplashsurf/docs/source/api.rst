@@ -25,11 +25,11 @@ Classes
 -------
 
 .. autosummary::
-    TriMesh3dF32
-    MixedTriQuadMesh3dF32
-    TriMeshWithDataF32
-    MixedTriQuadMesh3dF32
-    UniformGridF32
-    SurfaceReconstructionF32
-    SphInterpolatorF32
     Aabb3dF32
+    MixedTriQuadMesh3dF32
+    MixedTriQuadMeshWithDataF32
+    SphInterpolatorF32
+    SurfaceReconstructionF32
+    TriMesh3dF32
+    TriMeshWithDataF32
+    UniformGridF32

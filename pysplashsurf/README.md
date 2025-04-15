@@ -2,15 +2,16 @@
 
 ![splashsurf logo](https://raw.githubusercontent.com/InteractiveComputerGraphics/splashsurf/main/logos/logo_small.svg "splashsurf")
 
-Pysplashsurf is a Python binding to splashsurf, an open source surface reconstruction library for particle data from SPH simulations. Detailed information on how the library works can be found on the [project website (splashsurf.physics-simulation.org)](https://splashsurf.physics-simulation.org/) or the [main repository](https://github.com/InteractiveComputerGraphics/splashsurf).
+Pysplashsurf is a Python binding for splashsurf, an open source surface reconstruction library for particle data from SPH simulations. Detailed information on how the library works can be found on the [project website (splashsurf.physics-simulation.org)](https://splashsurf.physics-simulation.org/) or the [main repository](https://github.com/InteractiveComputerGraphics/splashsurf).
 
 ## Installation
 ```
 pip install pysplashsurf
 ```
+Requires Python version 3.7+
 
 ## Usage
-Example to reconstruct the surface from an input file, apply some post processing methods and write the data back to a file
+Example to reconstruct the surface from an input file, apply some post processing methods and write the data back to a file:
 ```python
 import meshio
 import numpy as np
@@ -23,6 +24,7 @@ mesh_with_data, reconstruction = pysplashsurf.reconstruction_pipeline(particles,
     
 pysplashsurf.write_to_file(mesh_with_data, "output.vtk")
 ```
+It may be necessary to specify the dtype of a function input (as done for `particles` in the example) so that Rust knows what data type to use internally. The extension supports single (`np.float32`) and double precision floats (`np.float64`).
 
 ## Build instructions
 You can also manually build the package from the source code:

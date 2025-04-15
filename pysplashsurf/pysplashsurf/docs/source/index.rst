@@ -11,6 +11,8 @@ Welcome to Pysplashsurf's documentation!
 Check out the :doc:`Readme <./introduction>` for a brief overview of the package.
 
 .. toctree::
+   :caption: Table of Contents
+
    introduction
    methods
    classes

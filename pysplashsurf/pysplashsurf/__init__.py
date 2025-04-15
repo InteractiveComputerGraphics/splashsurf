@@ -533,7 +533,7 @@ def reconstruction_pipeline(
     attributes_to_interpolate: dict
         Dictionary containing all attributes to interpolate. The keys are the attribute names and the values are the corresponding 1D/2D arrays.
         The arrays must have the same length as the number of particles. 
-        Supported array types are 2D float32/float64 arrays for vector attributes and 1D int64/float32/float64 arrays for scalar attributes.
+        Supported array types are 2D float32/float64 arrays for vector attributes and 1D uint64/float32/float64 arrays for scalar attributes.
         
     particle_radius: float
         Particle radius

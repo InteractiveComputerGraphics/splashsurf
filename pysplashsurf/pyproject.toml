@@ -5,7 +5,7 @@ build-backend = "maturin"
 [project]
 name = "pysplashsurf"
 version = "0.1.0"
-description = "Coming soon"
+description = "A Python binding for splashsurf, a surface reconstruction library for SPH simulations."
 readme = "README.md"
 requires-python = ">=3.7"
 classifiers = [
@@ -13,7 +13,10 @@ classifiers = [
     "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Python :: Implementation :: PyPy",
 ]
-requires-dist = ["numpy"]
+dependencies = ["numpy"]
+
+[project.optional-dependencies]
+meshio = ["meshio"]
 
 [project.urls]
 homepage = "https://splashsurf.physics-simulation.org/"
