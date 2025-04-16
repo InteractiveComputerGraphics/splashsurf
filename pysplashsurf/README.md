@@ -10,6 +10,12 @@ pip install pysplashsurf
 ```
 Requires Python version 3.7+
 
+To install pysplashsurf directly with meshio (which allows some additional functionality), do
+```
+pip install pysplashsurf[meshio]
+```
+When meshio is installed, support for the `.bgeo` extension will be added to it, so that particle data from the `BGEOV` format can be read using meshio. Meshio is also required for the `write_to_file` method to work. The rest of the package will still work even if meshio is not installed.
+
 ## Usage
 Example to reconstruct the surface from an input file, apply some post processing methods and write the data back to a file:
 ```python

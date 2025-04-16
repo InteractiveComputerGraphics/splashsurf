@@ -30,3 +30,5 @@ All methods infer float precision based on the input (32bit or 64bit).
 .. autofunction:: reconstruct_surface
 
 .. autofunction:: reconstruction_pipeline
+
+.. autofunction:: write_to_file

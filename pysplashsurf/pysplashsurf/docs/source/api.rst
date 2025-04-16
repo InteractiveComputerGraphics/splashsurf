@@ -20,6 +20,7 @@ Methods
     par_laplacian_smoothing_normals_inplace
     reconstruct_surface
     reconstruction_pipeline
+    write_to_file
 
 Classes
 -------
