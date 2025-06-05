@@ -515,15 +515,15 @@ def convert_tris_to_quads(
     
 
 def reconstruction_pipeline(
-    particles, *, attributes_to_interpolate={}, particle_radius=0.025, 
-    rest_density=1000.0, smoothing_length=2.0, cube_size=0.5, 
+    particles, *, attributes_to_interpolate={}, particle_radius,
+    rest_density=1000.0, smoothing_length=2.0, cube_size,
     iso_surface_threshold=0.6, enable_multi_threading=True, mesh_smoothing_weights=False, sph_normals=False, 
-    mesh_smoothing_weights_normalization=13.0, mesh_smoothing_iters=5, normals_smoothing_iters=5,
+    mesh_smoothing_weights_normalization=13.0, mesh_smoothing_iters=None, normals_smoothing_iters=None,
     mesh_cleanup=False, decimate_barnacles=False, keep_vertices=False,
     compute_normals=False, output_raw_normals=False, output_mesh_smoothing_weights=False, mesh_aabb_clamp_vertices=False,
-    subdomain_grid=False, subdomain_num_cubes_per_dim=64, aabb_min=None, aabb_max=None, mesh_aabb_min=None, mesh_aabb_max=None
+    subdomain_grid=True, subdomain_num_cubes_per_dim=64, aabb_min=None, aabb_max=None, mesh_aabb_min=None, mesh_aabb_max=None
 ):
-    """Surface reconstruction based on particle positions and post processing
+    """Surface reconstruction based on particle positions and post-processing
     
     Parameters
     ----------
@@ -542,10 +542,10 @@ def reconstruction_pipeline(
         Rest density of the fluid
         
     smoothing_length: float
-        Smoothing length of the fluid
+        Smoothing length of the fluid in multiples of the particle radius (compact support radius of SPH kernel will be twice the smoothing length)
         
     cube_size: float
-        Size of the cubes used in the uniform grid
+        Size of the cubes used for the marching cubes grid in multiples of the particle radius
         
     iso_surface_threshold: float
         Threshold for the iso surface
@@ -566,7 +566,7 @@ def reconstruction_pipeline(
         Number of iterations for the mesh smoothing
     
     normals_smoothing_iters: int
-        Number of iterations for the normals smoothing
+        Number of iterations for the normal smoothing
         
     mesh_cleanup: bool
         Flag to perform mesh cleanup
