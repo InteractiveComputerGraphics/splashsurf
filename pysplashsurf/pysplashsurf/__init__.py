@@ -552,12 +552,13 @@ def reconstruction_pipeline(
         
     enable_multi_threading: bool
         Multi-threading flag
+
+    sph_normals: bool
+        Flag to compute normals using SPH interpolation instead of geometry-based normals.
         
     mesh_smoothing_weights: bool
         Flag to compute mesh smoothing weights
-        
-    sph_normals: bool
-        Flag to compute normals using SPH
+        This implements the method from “Weighted Laplacian Smoothing for Surface Reconstruction of Particle-based Fluids” (Löschner, Böttcher, Jeske, Bender; 2023).
         
     mesh_smoothing_weights_normalization: float
         Normalization factor for the mesh smoothing weights
@@ -570,28 +571,30 @@ def reconstruction_pipeline(
         
     mesh_cleanup: bool
         Flag to perform mesh cleanup
+        This implements the method from “Compact isocontours from sampled data” (Moore, Warren; 1992)
         
     decimate_barnacles: bool
         Flag to perform barnacle decimation
+        For details see “Weighted Laplacian Smoothing for Surface Reconstruction of Particle-based Fluids” (Löschner, Böttcher, Jeske, Bender; 2023).
         
     keep_vertices: bool
-        Flag to keep vertices
+        Flag to keep any vertices without connectivity resulting from mesh cleanup or decimation step
         
     compute_normals: bool
         Flag to compute normals
         If set to True, the normals will be computed and stored in the mesh.
     
     output_raw_normals: bool
-        Flag to output the raw normals
+        Flag to output the raw normals in addition to smoothed normals if smoothing of normals is enabled
     
     output_mesh_smoothing_weights: bool
-        Flag to store the mesh smoothing weights
+        Flag to store the mesh smoothing weights if smoothing weights are computed.
     
     mesh_aabb_clamp_vertices: bool
         Flag to clamp the vertices of the mesh to the AABB
         
     subdomain_grid: bool
-        Enable spatial decomposition using a regular grid-based approach
+        Enables spatial decomposition using a regular grid-based approach
     
     subdomain_num_cubes_per_dim: int
         Each subdomain will be a cube consisting of this number of MC cube cells along each coordinate axis
