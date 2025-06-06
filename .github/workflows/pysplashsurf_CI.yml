@@ -6,7 +6,7 @@
 name: PySplashsurf CI
 
 on:
-  #push:
+  push:
   workflow_dispatch:
   release:
     types: [published]
