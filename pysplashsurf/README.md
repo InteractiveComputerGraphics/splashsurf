@@ -63,7 +63,7 @@ You can also manually build the package from the source code:
     - Then activate it using `conda activate ./envs`
 4. Now, to build the project, use maturin: `maturin develop`
     - Maturin automatically installs the resulting binary in your python environment
-    - Set the release flag `-r` or `--release` to build a more performant binary, however, compilation time will be slightly longer
+    - Set the release flag `-r` or `--release` to build an optimized binary, however, compilation time will be slightly longer
 
 ### Documentation Build
 To generate the Sphinx documentation, make sure that the package is installed through, e.g., maturin, and then run `make html` in the `pysplashsurf/pysplashsurf/docs` directory.
