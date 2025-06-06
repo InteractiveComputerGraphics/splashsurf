@@ -62,24 +62,24 @@ try:
                 particle_size += size
 
                 byte = file.read(4)
-                houdni_type = int.from_bytes(byte, byteorder="big")
-                if houdni_type == 0:
+                input_dtype = int.from_bytes(byte, byteorder="big")
+                if input_dtype == 0:
                     point_attributes_types.append('FLOAT')
                     # read default value
                     # not going to do anything about it
                     byte = file.read(size * 4)
-                elif houdni_type == 1:
+                elif input_dtype == 1:
                     point_attributes_types.append('INT')
                     # read default value
                     # not going to do anything about it
                     byte = file.read(size * 4)
-                elif houdni_type == 5:
+                elif input_dtype == 5:
                     point_attributes_types.append('VECTOR')
                     # read default value
                     # not going to do anything about it
                     byte = file.read(size * 4)
                 else:
-                    raise Exception('houdni_type unknown/ unsupported')
+                    raise Exception('input_dtype unknown/unsupported')
             byte = file.read(particle_size * header['nPoints'] * 4)
             # > means big endian
             attribute_data = np.frombuffer(byte, dtype='>f')
