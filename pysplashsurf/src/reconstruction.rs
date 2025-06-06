@@ -1,12 +1,15 @@
 use numpy::{PyArray2, PyReadonlyArray2};
 use pyo3::{prelude::*, Bound};
+use pyo3_stub_gen::derive::*;
 use splashsurf_lib::{
     nalgebra::Vector3, reconstruct_surface, Aabb3d, GridDecompositionParameters, Index, Real,
     SpatialDecomposition, SurfaceReconstruction,
 };
-use pyo3_stub_gen::derive::*;
 
-use crate::{mesh::{TriMesh3dF32, TriMesh3dF64}, uniform_grid::{UniformGridF32, UniformGridF64}};
+use crate::{
+    mesh::{TriMesh3dF32, TriMesh3dF64},
+    uniform_grid::{UniformGridF32, UniformGridF64},
+};
 
 macro_rules! create_reconstruction_interface {
     ($name: ident, $type: ident, $mesh_class: ident, $grid_class: ident) => {
@@ -47,7 +50,12 @@ macro_rules! create_reconstruction_interface {
 
             /// Returns a reference to the global particle density vector if computed during the reconstruction (currently, all reconstruction approaches return this)
             fn particle_densities(&self) -> &Vec<$type> {
-                self.inner.particle_densities().ok_or_else( || anyhow::anyhow!("Surface Reconstruction did not return particle densities")).unwrap()
+                self.inner
+                    .particle_densities()
+                    .ok_or_else(|| {
+                        anyhow::anyhow!("Surface Reconstruction did not return particle densities")
+                    })
+                    .unwrap()
             }
 
             /// Returns a reference to the global list of per-particle neighborhood lists if computed during the reconstruction (`None` if not specified in the parameters)

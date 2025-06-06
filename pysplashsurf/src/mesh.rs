@@ -1,12 +1,31 @@
-use ndarray::{Array2, ArrayView2, ArrayView};
-use numpy::{Element, IntoPyArray, PyReadonlyArray2, PyArray2, ToPyArray, PyArray, PyArrayMethods};
-use pyo3::{exceptions::PyValueError, prelude::*, IntoPyObjectExt, types::{PyTuple, PyList, PyDict}};
-use splashsurf_lib::{mesh::{AttributeData, MeshAttribute, MeshWithData, TriMesh3d, Mesh3d, MixedTriQuadMesh3d, TriangleOrQuadCell}, Real, nalgebra::{Vector3, Unit}};
+use ndarray::{Array2, ArrayView, ArrayView2};
+use numpy::{Element, IntoPyArray, PyArray, PyArray2, PyArrayMethods, PyReadonlyArray2, ToPyArray};
+use pyo3::{
+    exceptions::PyValueError,
+    prelude::*,
+    types::{PyDict, PyList, PyTuple},
+    IntoPyObjectExt,
+};
 use pyo3_stub_gen::derive::*;
+use splashsurf_lib::{
+    mesh::{
+        AttributeData, Mesh3d, MeshAttribute, MeshWithData, MixedTriQuadMesh3d, TriMesh3d,
+        TriangleOrQuadCell,
+    },
+    nalgebra::{Unit, Vector3},
+    Real,
+};
 
 use crate::aabb::{Aabb3dF32, Aabb3dF64};
 
-fn get_attribute_with_name<'py, R: Real + Element>(py: Python<'py>, attrs: &[MeshAttribute<R>], name: &str) -> PyResult<PyObject> where R: pyo3::IntoPyObject<'py> {
+fn get_attribute_with_name<'py, R: Real + Element>(
+    py: Python<'py>,
+    attrs: &[MeshAttribute<R>],
+    name: &str,
+) -> PyResult<PyObject>
+where
+    R: pyo3::IntoPyObject<'py>,
+{
     let elem = attrs.iter().filter(|x| x.name == name).next();
     match elem {
         Some(attr) => match attr.data.clone() {
@@ -15,26 +34,34 @@ fn get_attribute_with_name<'py, R: Real + Element>(py: Python<'py>, attrs: &[Mes
             AttributeData::Vector3Real(res) => {
                 let flattened: Vec<R> = bytemuck::cast_vec(res);
                 let res: Array2<R> =
-                    Array2::from_shape_vec((flattened.len()/3, 3), flattened)
-                        .unwrap();
+                    Array2::from_shape_vec((flattened.len() / 3, 3), flattened).unwrap();
                 Ok(res.into_pyarray(py).into_bound_py_any(py).unwrap().into())
-            },
+            }
         },
-        None => Err(PyErr::new::<PyValueError, _>(format!("Attribute with name {} doesn't exist", name)))
+        None => Err(PyErr::new::<PyValueError, _>(format!(
+            "Attribute with name {} doesn't exist",
+            name
+        ))),
     }
 }
 
-fn add_attribute_with_name<'py, R: Real + Element>(attrs: &mut Vec<MeshAttribute<R>>, attribute: MeshAttribute<R>) -> PyResult<()> {
+fn add_attribute_with_name<'py, R: Real + Element>(
+    attrs: &mut Vec<MeshAttribute<R>>,
+    attribute: MeshAttribute<R>,
+) -> PyResult<()> {
     let elem = attrs.iter().filter(|x| x.name == attribute.name).next();
     match elem {
         None => {
             attrs.push(attribute);
             Ok(())
-        },
-        _ => Err(PyErr::new::<PyValueError, _>(format!("Attribute with name {} already exists", attribute.name)))
+        }
+        _ => Err(PyErr::new::<PyValueError, _>(format!(
+            "Attribute with name {} already exists",
+            attribute.name
+        ))),
     }
 }
- 
+
 macro_rules! create_mesh_data_interface {
     ($name: ident, $type: ident, $mesh_class: ident, $pymesh_class: ident, $aabb_class: ident) => {
         /// MeshWithData wrapper
@@ -53,7 +80,6 @@ macro_rules! create_mesh_data_interface {
         #[gen_stub_pymethods]
         #[pymethods]
         impl $name {
-
             #[new]
             fn py_new(mesh: &$pymesh_class) -> PyResult<Self> {
                 let meshdata = MeshWithData::new(mesh.inner.clone());
@@ -73,40 +99,91 @@ macro_rules! create_mesh_data_interface {
             }
 
             /// Removes all cells from the mesh that are completely outside of the given AABB and clamps the remaining cells to the boundary
-            fn par_clamp_with_aabb(&self, aabb: &$aabb_class, clamp_vertices: bool, keep_vertices: bool) -> $name {
-                $name::new(self.inner.par_clamp_with_aabb(&aabb.inner, clamp_vertices, keep_vertices))
+            fn par_clamp_with_aabb(
+                &self,
+                aabb: &$aabb_class,
+                clamp_vertices: bool,
+                keep_vertices: bool,
+            ) -> $name {
+                $name::new(self.inner.par_clamp_with_aabb(
+                    &aabb.inner,
+                    clamp_vertices,
+                    keep_vertices,
+                ))
             }
 
-            fn push_point_attribute_scalar_u64<'py>(&mut self, name: &str, data: Vec<u64>) -> PyResult<()> {
-                add_attribute_with_name::<$type>(&mut self.inner.point_attributes, MeshAttribute::new(name, AttributeData::ScalarU64(data)))
+            fn push_point_attribute_scalar_u64<'py>(
+                &mut self,
+                name: &str,
+                data: Vec<u64>,
+            ) -> PyResult<()> {
+                add_attribute_with_name::<$type>(
+                    &mut self.inner.point_attributes,
+                    MeshAttribute::new(name, AttributeData::ScalarU64(data)),
+                )
             }
 
-            fn push_point_attribute_scalar_real<'py>(&mut self, name: &str, data: Vec<$type>) -> PyResult<()> {
-                add_attribute_with_name::<$type>(&mut self.inner.point_attributes, MeshAttribute::new(name, AttributeData::ScalarReal(data)))
+            fn push_point_attribute_scalar_real<'py>(
+                &mut self,
+                name: &str,
+                data: Vec<$type>,
+            ) -> PyResult<()> {
+                add_attribute_with_name::<$type>(
+                    &mut self.inner.point_attributes,
+                    MeshAttribute::new(name, AttributeData::ScalarReal(data)),
+                )
             }
 
-            fn push_point_attribute_vector_real<'py>(&mut self, name: &str, data: &Bound<'py, PyArray2<$type>>) -> PyResult<()> {
+            fn push_point_attribute_vector_real<'py>(
+                &mut self,
+                name: &str,
+                data: &Bound<'py, PyArray2<$type>>,
+            ) -> PyResult<()> {
                 let data: PyReadonlyArray2<$type> = data.extract().unwrap();
                 let data = data.as_slice().unwrap();
                 let data: &[Vector3<$type>] = bytemuck::cast_slice(data);
 
-                add_attribute_with_name::<$type>(&mut self.inner.point_attributes, MeshAttribute::new(name, AttributeData::Vector3Real(data.to_vec())))
+                add_attribute_with_name::<$type>(
+                    &mut self.inner.point_attributes,
+                    MeshAttribute::new(name, AttributeData::Vector3Real(data.to_vec())),
+                )
             }
 
-            fn push_cell_attribute_scalar_u64<'py>(&mut self, name: &str, data: Vec<u64>) -> PyResult<()> {
-                add_attribute_with_name::<$type>(&mut self.inner.cell_attributes, MeshAttribute::new(name, AttributeData::ScalarU64(data)))
+            fn push_cell_attribute_scalar_u64<'py>(
+                &mut self,
+                name: &str,
+                data: Vec<u64>,
+            ) -> PyResult<()> {
+                add_attribute_with_name::<$type>(
+                    &mut self.inner.cell_attributes,
+                    MeshAttribute::new(name, AttributeData::ScalarU64(data)),
+                )
             }
 
-            fn push_cell_attribute_scalar_real<'py>(&mut self, name: &str, data: Vec<$type>) -> PyResult<()> {
-                add_attribute_with_name::<$type>(&mut self.inner.cell_attributes, MeshAttribute::new(name, AttributeData::ScalarReal(data)))
+            fn push_cell_attribute_scalar_real<'py>(
+                &mut self,
+                name: &str,
+                data: Vec<$type>,
+            ) -> PyResult<()> {
+                add_attribute_with_name::<$type>(
+                    &mut self.inner.cell_attributes,
+                    MeshAttribute::new(name, AttributeData::ScalarReal(data)),
+                )
             }
 
-            fn push_cell_attribute_vector_real<'py>(&mut self, name: &str, data: &Bound<'py, PyArray2<$type>>) -> PyResult<()> {
+            fn push_cell_attribute_vector_real<'py>(
+                &mut self,
+                name: &str,
+                data: &Bound<'py, PyArray2<$type>>,
+            ) -> PyResult<()> {
                 let data: PyReadonlyArray2<$type> = data.extract().unwrap();
                 let data = data.as_slice().unwrap();
                 let data: &[Vector3<$type>] = bytemuck::cast_slice(data);
 
-                add_attribute_with_name::<$type>(&mut self.inner.cell_attributes, MeshAttribute::new(name, AttributeData::Vector3Real(data.to_vec())))
+                add_attribute_with_name::<$type>(
+                    &mut self.inner.cell_attributes,
+                    MeshAttribute::new(name, AttributeData::Vector3Real(data.to_vec())),
+                )
             }
 
             /// Get mesh vertex attribute by name
@@ -124,10 +201,14 @@ macro_rules! create_mesh_data_interface {
                 let res = PyDict::new(py);
 
                 for attr in self.inner.point_attributes.iter() {
-                    let data = get_attribute_with_name::<$type>(py, self.inner.point_attributes.as_slice(), &attr.name);
+                    let data = get_attribute_with_name::<$type>(
+                        py,
+                        self.inner.point_attributes.as_slice(),
+                        &attr.name,
+                    );
                     match data {
                         Ok(data) => res.set_item(&attr.name, data).unwrap(),
-                        Err(_) => println!("Couldn't embed attribute {} in PyDict", &attr.name)
+                        Err(_) => println!("Couldn't embed attribute {} in PyDict", &attr.name),
                     }
                 }
 
@@ -139,10 +220,14 @@ macro_rules! create_mesh_data_interface {
                 let res = PyDict::new(py);
 
                 for attr in self.inner.cell_attributes.iter() {
-                    let data = get_attribute_with_name::<$type>(py, self.inner.cell_attributes.as_slice(), &attr.name);
+                    let data = get_attribute_with_name::<$type>(
+                        py,
+                        self.inner.cell_attributes.as_slice(),
+                        &attr.name,
+                    );
                     match data {
                         Ok(data) => res.set_item(&attr.name, data).unwrap(),
-                        Err(_) => println!("Couldn't embed attribute {} in PyDict", &attr.name)
+                        Err(_) => println!("Couldn't embed attribute {} in PyDict", &attr.name),
                     }
                 }
 
@@ -158,7 +243,7 @@ macro_rules! create_mesh_data_interface {
                 }
 
                 PyList::new(py, res).unwrap()
-            } 
+            }
 
             /// Get all registered cell attribute names
             fn get_cell_attribute_keys<'py>(&self, py: Python<'py>) -> Bound<'py, PyList> {
@@ -169,7 +254,7 @@ macro_rules! create_mesh_data_interface {
                 }
 
                 PyList::new(py, res).unwrap()
-            } 
+            }
         }
     };
 }
@@ -197,8 +282,7 @@ macro_rules! create_mesh_interface {
             fn vertices<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<$type>> {
                 let points: &[$type] = bytemuck::cast_slice(&self.inner.vertices);
                 let vertices: ArrayView2<$type> =
-                    ArrayView::from_shape((self.inner.vertices.len(), 3), points)
-                        .unwrap();
+                    ArrayView::from_shape((self.inner.vertices.len(), 3), points).unwrap();
                 vertices.to_pyarray(py) // seems like at least one copy is necessary here (to_pyarray copies the data)
             }
 
@@ -220,12 +304,14 @@ macro_rules! create_mesh_interface {
                 let m = triangles.len();
 
                 let vertices_scalar: Vec<$type> = bytemuck::cast_vec(vertices);
-                let vertices_array =
-                    PyArray::from_vec(py, vertices_scalar).reshape([n, 3]).unwrap();
+                let vertices_array = PyArray::from_vec(py, vertices_scalar)
+                    .reshape([n, 3])
+                    .unwrap();
 
                 let triangles_scalar: Vec<usize> = bytemuck::cast_vec(triangles);
                 let triangles_array = PyArray::from_vec(py, triangles_scalar)
-                    .reshape([m, 3]).unwrap();
+                    .reshape([m, 3])
+                    .unwrap();
 
                 let tup = (vertices_array, triangles_array);
                 tup.into_pyobject(py).unwrap()
@@ -234,13 +320,13 @@ macro_rules! create_mesh_interface {
             /// Computes the mesh's vertex normals using an area weighted average of the adjacent triangle faces (parallelized version)
             fn par_vertex_normals<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<$type>> {
                 let normals_vec = self.inner.par_vertex_normals();
-                let normals_vec = bytemuck::allocation::cast_vec::<Unit<Vector3<$type>>, $type>(normals_vec);
+                let normals_vec =
+                    bytemuck::allocation::cast_vec::<Unit<Vector3<$type>>, $type>(normals_vec);
 
                 let normals: &[$type] = normals_vec.as_slice();
                 let normals: ArrayView2<$type> =
-                    ArrayView::from_shape((normals.len() / 3, 3), normals)
-                        .unwrap();
-                
+                    ArrayView::from_shape((normals.len() / 3, 3), normals).unwrap();
+
                 normals.to_pyarray(py)
             }
 
@@ -275,18 +361,22 @@ macro_rules! create_tri_quad_mesh_interface {
             fn vertices<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<$type>> {
                 let points: &[$type] = bytemuck::cast_slice(&self.inner.vertices);
                 let vertices: ArrayView2<$type> =
-                    ArrayView::from_shape((self.inner.vertices.len(), 3), points)
-                        .unwrap();
+                    ArrayView::from_shape((self.inner.vertices.len(), 3), points).unwrap();
                 vertices.to_pyarray(py)
             }
 
             /// 2D list specifying the vertex indices either for a triangle or a quad
             #[getter]
             fn cells(&self) -> Vec<Vec<usize>> {
-                let cells: Vec<Vec<usize>> = self.inner.cells.iter().map(|c| match c {
-                    TriangleOrQuadCell::Tri(v) => v.to_vec(),
-                    TriangleOrQuadCell::Quad(v) => v.to_vec(),
-                }).collect();
+                let cells: Vec<Vec<usize>> = self
+                    .inner
+                    .cells
+                    .iter()
+                    .map(|c| match c {
+                        TriangleOrQuadCell::Tri(v) => v.to_vec(),
+                        TriangleOrQuadCell::Quad(v) => v.to_vec(),
+                    })
+                    .collect();
                 cells
             }
 
@@ -298,13 +388,17 @@ macro_rules! create_tri_quad_mesh_interface {
                 let n = vertices.len();
 
                 let vertices_scalar: Vec<$type> = bytemuck::cast_vec(vertices);
-                let vertices_array =
-                    PyArray::from_vec(py, vertices_scalar).reshape([n, 3]).unwrap();
+                let vertices_array = PyArray::from_vec(py, vertices_scalar)
+                    .reshape([n, 3])
+                    .unwrap();
 
-                let cells_list: Vec<Vec<usize>> = cells.into_iter().map(|c| match c {
-                    TriangleOrQuadCell::Tri(v) => v.into(),
-                    TriangleOrQuadCell::Quad(v) => v.into(),
-                }).collect();
+                let cells_list: Vec<Vec<usize>> = cells
+                    .into_iter()
+                    .map(|c| match c {
+                        TriangleOrQuadCell::Tri(v) => v.into(),
+                        TriangleOrQuadCell::Quad(v) => v.into(),
+                    })
+                    .collect();
 
                 let tup = (vertices_array, cells_list);
                 tup.into_pyobject(py).unwrap()
@@ -322,5 +416,17 @@ create_tri_quad_mesh_interface!(MixedTriQuadMesh3dF32, f32);
 create_mesh_data_interface!(TriMeshWithDataF64, f64, TriMesh3d, TriMesh3dF64, Aabb3dF64);
 create_mesh_data_interface!(TriMeshWithDataF32, f32, TriMesh3d, TriMesh3dF32, Aabb3dF32);
 
-create_mesh_data_interface!(MixedTriQuadMeshWithDataF64, f64, MixedTriQuadMesh3d, MixedTriQuadMesh3dF64, Aabb3dF64);
-create_mesh_data_interface!(MixedTriQuadMeshWithDataF32, f32, MixedTriQuadMesh3d, MixedTriQuadMesh3dF32, Aabb3dF32);
+create_mesh_data_interface!(
+    MixedTriQuadMeshWithDataF64,
+    f64,
+    MixedTriQuadMesh3d,
+    MixedTriQuadMesh3dF64,
+    Aabb3dF64
+);
+create_mesh_data_interface!(
+    MixedTriQuadMeshWithDataF32,
+    f32,
+    MixedTriQuadMesh3d,
+    MixedTriQuadMesh3dF32,
+    Aabb3dF32
+);

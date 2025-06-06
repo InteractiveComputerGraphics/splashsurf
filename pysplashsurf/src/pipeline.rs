@@ -1,12 +1,24 @@
-use std::borrow::Cow;
 use anyhow::anyhow;
 use log::info;
 use numpy::{Element, PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2};
+use pyo3::{
+    prelude::*,
+    types::{PyDict, PyString},
+};
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
-use splashsurf_lib::{mesh::{AttributeData, Mesh3d, MeshAttribute, MeshWithData, TriMesh3d}, nalgebra::{Unit, Vector3}, profile, sph_interpolation::SphInterpolator, Aabb3d, Index, Real, SurfaceReconstruction};
-use pyo3::{prelude::*, types::{PyDict, PyString}};
+use splashsurf_lib::{
+    mesh::{AttributeData, Mesh3d, MeshAttribute, MeshWithData, TriMesh3d},
+    nalgebra::{Unit, Vector3},
+    profile,
+    sph_interpolation::SphInterpolator,
+    Aabb3d, Index, Real, SurfaceReconstruction,
+};
+use std::borrow::Cow;
 
-use crate::{mesh::{TriMeshWithDataF32, TriMeshWithDataF64}, reconstruction::{reconstruct_surface_py, SurfaceReconstructionF32, SurfaceReconstructionF64}};
+use crate::{
+    mesh::{TriMeshWithDataF32, TriMeshWithDataF64},
+    reconstruction::{reconstruct_surface_py, SurfaceReconstructionF32, SurfaceReconstructionF64},
+};
 
 fn reconstruction_pipeline_generic<I: Index, R: Real>(
     particles: &[Vector3<R>],
@@ -46,16 +58,28 @@ fn reconstruction_pipeline_generic<I: Index, R: Real>(
     mesh_aabb_clamp_vertices: bool,
 ) -> Result<(MeshWithData<R, TriMesh3d<R>>, SurfaceReconstruction<I, R>), anyhow::Error> {
     profile!("surface reconstruction");
-    
+
     let compact_support_radius = R::from_f64(2.0).unwrap() * smoothing_length * particle_radius;
 
     // Perform the surface reconstruction
-    let reconstruction = reconstruct_surface_py::<I,R>(particles, particle_radius, rest_density, 
-        smoothing_length, cube_size, iso_surface_threshold, enable_multi_threading, global_neighborhood_list, 
-        use_custom_grid_decomposition, subdomain_num_cubes_per_dim, aabb_min, aabb_max);
+    let reconstruction = reconstruct_surface_py::<I, R>(
+        particles,
+        particle_radius,
+        rest_density,
+        smoothing_length,
+        cube_size,
+        iso_surface_threshold,
+        enable_multi_threading,
+        global_neighborhood_list,
+        use_custom_grid_decomposition,
+        subdomain_num_cubes_per_dim,
+        aabb_min,
+        aabb_max,
+    );
 
     // let grid = reconstruction.grid();
-    let mut mesh_with_data: MeshWithData<R, TriMesh3d<R>> = MeshWithData::new(reconstruction.mesh().clone());
+    let mut mesh_with_data: MeshWithData<R, TriMesh3d<R>> =
+        MeshWithData::new(reconstruction.mesh().clone());
 
     // Perform post-processing
     {
@@ -87,9 +111,8 @@ fn reconstruction_pipeline_generic<I: Index, R: Real>(
         }
 
         // Initialize SPH interpolator if required later
-        let interpolator_required = mesh_smoothing_weights
-            || sph_normals;
-            
+        let interpolator_required = mesh_smoothing_weights || sph_normals;
+
         let interpolator = if interpolator_required {
             profile!("initialize interpolator");
             info!("Post-processing: Initializing interpolator...");
@@ -100,8 +123,8 @@ fn reconstruction_pipeline_generic<I: Index, R: Real>(
             );
 
             let particle_rest_density = rest_density;
-            let particle_rest_volume = R::from_f64((4.0 / 3.0) * std::f64::consts::PI).unwrap()
-                * particle_radius.powi(3);
+            let particle_rest_volume =
+                R::from_f64((4.0 / 3.0) * std::f64::consts::PI).unwrap() * particle_radius.powi(3);
             let particle_rest_mass = particle_rest_volume * particle_rest_density;
 
             let particle_densities = reconstruction
@@ -125,8 +148,8 @@ fn reconstruction_pipeline_generic<I: Index, R: Real>(
         };
 
         // Compute mesh vertex-vertex connectivity map if required later
-        let vertex_connectivity_required = normals_smoothing_iters.is_some()
-            || mesh_smoothing_iters.is_some();
+        let vertex_connectivity_required =
+            normals_smoothing_iters.is_some() || mesh_smoothing_iters.is_some();
         if vertex_connectivity.is_none() && vertex_connectivity_required {
             vertex_connectivity = Some(mesh_with_data.mesh.vertex_vertex_connectivity());
         }
@@ -171,8 +194,7 @@ fn reconstruction_pipeline_generic<I: Index, R: Real>(
                     nl.iter()
                         .copied()
                         .map(|j| {
-                            let dist =
-                                (particles[i] - particles[j]).norm_squared();
+                            let dist = (particles[i] - particles[j]).norm_squared();
 
                             R::one() - (dist / squared_r).clamp(R::zero(), R::one())
                         })
@@ -194,10 +216,9 @@ fn reconstruction_pipeline_generic<I: Index, R: Real>(
 
             let smoothing_weights = {
                 let offset = R::zero();
-                let normalization =
-                    R::from_f64(mesh_smoothing_weights_normalization).expect(
-                        "smoothing weight normalization value cannot be represented as Real type",
-                    ) - offset;
+                let normalization = R::from_f64(mesh_smoothing_weights_normalization).expect(
+                    "smoothing weight normalization value cannot be represented as Real type",
+                ) - offset;
 
                 // Normalize number of neighbors
                 let smoothing_weights = vertex_weighted_num_neighbors
@@ -352,7 +373,7 @@ fn reconstruction_pipeline_generic<I: Index, R: Real>(
     } else {
         None
     };
-    
+
     let mesh_with_data = if let Some(mesh_aabb) = &mesh_aabb {
         profile!("clamp mesh to aabb");
         info!("Post-processing: Clamping mesh to AABB...");
@@ -391,17 +412,33 @@ fn reconstruction_pipeline_generic<I: Index, R: Real>(
     Ok((mesh_with_data, reconstruction))
 }
 
-fn attrs_conversion<'py, R: Real + Element>(attributes_to_interpolate: Bound<'py, PyDict>) -> Vec<MeshAttribute<R>> {
+fn attrs_conversion<'py, R: Real + Element>(
+    attributes_to_interpolate: Bound<'py, PyDict>,
+) -> Vec<MeshAttribute<R>> {
     let mut attrs: Vec<MeshAttribute<R>> = Vec::new();
     for (key, value) in attributes_to_interpolate.iter() {
-        let key_str: String = key.downcast::<PyString>().expect("Key wasn't a string").extract().unwrap();
+        let key_str: String = key
+            .downcast::<PyString>()
+            .expect("Key wasn't a string")
+            .extract()
+            .unwrap();
 
         if let Ok(value) = value.downcast::<PyArray1<u64>>() {
-            let value: Vec<u64> = value.extract::<PyReadonlyArray1<u64>>().unwrap().as_slice().unwrap().to_vec();
+            let value: Vec<u64> = value
+                .extract::<PyReadonlyArray1<u64>>()
+                .unwrap()
+                .as_slice()
+                .unwrap()
+                .to_vec();
             let mesh_attr = MeshAttribute::new(key_str, AttributeData::ScalarU64(value));
             attrs.push(mesh_attr);
         } else if let Ok(value) = value.downcast::<PyArray1<R>>() {
-            let value: Vec<R> = value.extract::<PyReadonlyArray1<R>>().unwrap().as_slice().unwrap().to_vec();
+            let value: Vec<R> = value
+                .extract::<PyReadonlyArray1<R>>()
+                .unwrap()
+                .as_slice()
+                .unwrap()
+                .to_vec();
             let mesh_attr = MeshAttribute::new(key_str, AttributeData::ScalarReal(value));
             attrs.push(mesh_attr);
         } else if let Ok(value) = value.downcast::<PyArray2<R>>() {
@@ -410,15 +447,15 @@ fn attrs_conversion<'py, R: Real + Element>(attributes_to_interpolate: Bound<'py
             let value_slice = value.as_slice().unwrap();
             let value_slice: &[Vector3<R>] = bytemuck::cast_slice(value_slice);
 
-            let mesh_attr = MeshAttribute::new(key_str, AttributeData::Vector3Real(value_slice.to_vec()));
+            let mesh_attr =
+                MeshAttribute::new(key_str, AttributeData::Vector3Real(value_slice.to_vec()));
             attrs.push(mesh_attr);
-        } else{
+        } else {
             println!("Couldnt downcast attribute {} to valid type", &key_str);
         }
     }
     attrs
 }
-
 
 #[pyfunction]
 #[pyo3(name = "reconstruction_pipeline_f32")]
@@ -467,13 +504,41 @@ pub fn reconstruction_pipeline_py_f32<'py>(
 
     let attrs = attrs_conversion(attributes_to_interpolate);
 
-    let (mesh, reconstruction) = reconstruction_pipeline_generic::<i64, f32>(particle_positions, attrs, particle_radius, rest_density, smoothing_length, cube_size, 
-        iso_surface_threshold, aabb_min, aabb_max, enable_multi_threading, use_custom_grid_decomposition, subdomain_num_cubes_per_dim, 
-        global_neighborhood_list, mesh_cleanup, decimate_barnacles, keep_vertices, compute_normals, sph_normals, normals_smoothing_iters, 
-        mesh_smoothing_iters, mesh_smoothing_weights, mesh_smoothing_weights_normalization, output_mesh_smoothing_weights, output_raw_normals, 
-        mesh_aabb_min, mesh_aabb_max, mesh_aabb_clamp_vertices).unwrap();
+    let (mesh, reconstruction) = reconstruction_pipeline_generic::<i64, f32>(
+        particle_positions,
+        attrs,
+        particle_radius,
+        rest_density,
+        smoothing_length,
+        cube_size,
+        iso_surface_threshold,
+        aabb_min,
+        aabb_max,
+        enable_multi_threading,
+        use_custom_grid_decomposition,
+        subdomain_num_cubes_per_dim,
+        global_neighborhood_list,
+        mesh_cleanup,
+        decimate_barnacles,
+        keep_vertices,
+        compute_normals,
+        sph_normals,
+        normals_smoothing_iters,
+        mesh_smoothing_iters,
+        mesh_smoothing_weights,
+        mesh_smoothing_weights_normalization,
+        output_mesh_smoothing_weights,
+        output_raw_normals,
+        mesh_aabb_min,
+        mesh_aabb_max,
+        mesh_aabb_clamp_vertices,
+    )
+    .unwrap();
 
-    (TriMeshWithDataF32::new(mesh), SurfaceReconstructionF32::new(reconstruction))
+    (
+        TriMeshWithDataF32::new(mesh),
+        SurfaceReconstructionF32::new(reconstruction),
+    )
 }
 
 #[pyfunction]
@@ -523,11 +588,39 @@ pub fn reconstruction_pipeline_py_f64<'py>(
 
     let attrs = attrs_conversion(attributes_to_interpolate);
 
-    let (mesh, reconstruction) = reconstruction_pipeline_generic::<i64, f64>(particle_positions, attrs, particle_radius, rest_density, smoothing_length, cube_size, 
-        iso_surface_threshold, aabb_min, aabb_max, enable_multi_threading, use_custom_grid_decomposition, subdomain_num_cubes_per_dim, 
-        global_neighborhood_list, mesh_cleanup, decimate_barnacles, keep_vertices, compute_normals, sph_normals, normals_smoothing_iters, 
-        mesh_smoothing_iters, mesh_smoothing_weights, mesh_smoothing_weights_normalization, output_mesh_smoothing_weights, output_raw_normals, 
-        mesh_aabb_min, mesh_aabb_max, mesh_aabb_clamp_vertices).unwrap();
+    let (mesh, reconstruction) = reconstruction_pipeline_generic::<i64, f64>(
+        particle_positions,
+        attrs,
+        particle_radius,
+        rest_density,
+        smoothing_length,
+        cube_size,
+        iso_surface_threshold,
+        aabb_min,
+        aabb_max,
+        enable_multi_threading,
+        use_custom_grid_decomposition,
+        subdomain_num_cubes_per_dim,
+        global_neighborhood_list,
+        mesh_cleanup,
+        decimate_barnacles,
+        keep_vertices,
+        compute_normals,
+        sph_normals,
+        normals_smoothing_iters,
+        mesh_smoothing_iters,
+        mesh_smoothing_weights,
+        mesh_smoothing_weights_normalization,
+        output_mesh_smoothing_weights,
+        output_raw_normals,
+        mesh_aabb_min,
+        mesh_aabb_max,
+        mesh_aabb_clamp_vertices,
+    )
+    .unwrap();
 
-    (TriMeshWithDataF64::new(mesh), SurfaceReconstructionF64::new(reconstruction))
+    (
+        TriMeshWithDataF64::new(mesh),
+        SurfaceReconstructionF64::new(reconstruction),
+    )
 }

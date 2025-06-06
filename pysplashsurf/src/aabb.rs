@@ -1,7 +1,7 @@
 use numpy::{PyArray, PyArray1, PyArray2, PyReadonlyArray2};
 use pyo3::{prelude::*, PyResult};
-use splashsurf_lib::{nalgebra::Vector3, Aabb3d};
 use pyo3_stub_gen::derive::*;
+use splashsurf_lib::{nalgebra::Vector3, Aabb3d};
 
 macro_rules! create_aabb3d_interface {
     ($name: ident, $type: ident) => {
@@ -9,7 +9,7 @@ macro_rules! create_aabb3d_interface {
         #[gen_stub_pyclass]
         #[pyclass]
         pub struct $name {
-            pub inner: Aabb3d<$type>
+            pub inner: Aabb3d<$type>,
         }
 
         impl $name {
@@ -23,7 +23,10 @@ macro_rules! create_aabb3d_interface {
         impl $name {
             #[new]
             fn py_new<'py>(min: [$type; 3], max: [$type; 3]) -> PyResult<Self> {
-                Ok($name::new(Aabb3d::<$type>::new(Vector3::from_column_slice(&min), Vector3::from_column_slice(&max))))
+                Ok($name::new(Aabb3d::<$type>::new(
+                    Vector3::from_column_slice(&min),
+                    Vector3::from_column_slice(&max),
+                )))
             }
 
             /// Constructs the smallest AABB fitting around all the given points
@@ -109,7 +112,8 @@ macro_rules! create_aabb3d_interface {
 
             /// Checks if the given point is inside of the AABB, the AABB is considered to be half-open to its max coordinate
             fn contains_point(&self, point: [$type; 3]) -> bool {
-                self.inner.contains_point(&Vector3::from_column_slice(&point))
+                self.inner
+                    .contains_point(&Vector3::from_column_slice(&point))
             }
 
             /// Translates the AABB by the given vector
@@ -134,7 +138,8 @@ macro_rules! create_aabb3d_interface {
 
             /// Enlarges this AABB to the smallest AABB enclosing both itself and another point
             fn join_with_point(&mut self, point: [$type; 3]) {
-                self.inner.join_with_point(&Vector3::from_column_slice(&point));
+                self.inner
+                    .join_with_point(&Vector3::from_column_slice(&point));
             }
 
             /// Grows this AABB uniformly in all directions by the given scalar margin (i.e. adding the margin to min/max extents)

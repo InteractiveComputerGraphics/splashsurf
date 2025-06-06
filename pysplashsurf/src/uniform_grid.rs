@@ -1,6 +1,6 @@
 use pyo3::prelude::*;
-use splashsurf_lib::UniformGrid;
 use pyo3_stub_gen::derive::*;
+use splashsurf_lib::UniformGrid;
 
 macro_rules! create_grid_interface {
     ($name: ident, $type: ident) => {
@@ -18,8 +18,6 @@ macro_rules! create_grid_interface {
         }
     };
 }
-
-
 
 create_grid_interface!(UniformGridF64, f64);
 create_grid_interface!(UniformGridF32, f32);

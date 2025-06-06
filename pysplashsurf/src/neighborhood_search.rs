@@ -1,6 +1,6 @@
 use numpy::{PyArray2, PyReadonlyArray2};
 use pyo3::prelude::*;
-use splashsurf_lib::{neighborhood_search::*, nalgebra::Vector3};
+use splashsurf_lib::{nalgebra::Vector3, neighborhood_search::*};
 
 use crate::aabb::{Aabb3dF32, Aabb3dF64};
 
@@ -10,7 +10,7 @@ use crate::aabb::{Aabb3dF32, Aabb3dF64};
 pub fn neighborhood_search_spatial_hashing_parallel_py_f64<'py>(
     domain: &Aabb3dF64,
     particle_positions: &Bound<'py, PyArray2<f64>>,
-    search_radius: f64
+    search_radius: f64,
 ) -> Vec<Vec<usize>> {
     let mut nl: Vec<Vec<usize>> = Vec::new();
 
@@ -18,7 +18,12 @@ pub fn neighborhood_search_spatial_hashing_parallel_py_f64<'py>(
     let particle_positions = particle_positions.as_slice().unwrap();
     let particle_positions: &[Vector3<f64>] = bytemuck::cast_slice(particle_positions);
 
-    neighborhood_search_spatial_hashing_parallel::<i64, f64>(&domain.inner, particle_positions, search_radius, &mut nl);
+    neighborhood_search_spatial_hashing_parallel::<i64, f64>(
+        &domain.inner,
+        particle_positions,
+        search_radius,
+        &mut nl,
+    );
 
     nl
 }
@@ -29,7 +34,7 @@ pub fn neighborhood_search_spatial_hashing_parallel_py_f64<'py>(
 pub fn neighborhood_search_spatial_hashing_parallel_py_f32<'py>(
     domain: &Aabb3dF32,
     particle_positions: &Bound<'py, PyArray2<f32>>,
-    search_radius: f32
+    search_radius: f32,
 ) -> Vec<Vec<usize>> {
     let mut nl: Vec<Vec<usize>> = Vec::new();
 
@@ -37,7 +42,12 @@ pub fn neighborhood_search_spatial_hashing_parallel_py_f32<'py>(
     let particle_positions = particle_positions.as_slice().unwrap();
     let particle_positions: &[Vector3<f32>] = bytemuck::cast_slice(particle_positions);
 
-    neighborhood_search_spatial_hashing_parallel::<i64, f32>(&domain.inner, particle_positions, search_radius, &mut nl);
+    neighborhood_search_spatial_hashing_parallel::<i64, f32>(
+        &domain.inner,
+        particle_positions,
+        search_radius,
+        &mut nl,
+    );
 
     nl
 }
