@@ -31,22 +31,22 @@ macro_rules! create_aabb3d_interface {
 
             /// Constructs the smallest AABB fitting around all the given points
             #[staticmethod]
-            fn from_points<'py>(points: &Bound<'py, PyArray2<$type>>) -> $name {
-                let points: PyReadonlyArray2<$type> = points.extract().unwrap();
-                let points = points.as_slice().unwrap();
+            fn from_points<'py>(points: &Bound<'py, PyArray2<$type>>) -> PyResult<$name> {
+                let points: PyReadonlyArray2<$type> = points.extract()?;
+                let points = points.as_slice()?;
                 let points: &[Vector3<$type>] = bytemuck::cast_slice(points);
 
-                $name::new(Aabb3d::from_points(points))
+                Ok($name::new(Aabb3d::from_points(points)))
             }
 
             /// Constructs the smallest AABB fitting around all the given points, parallel version
             #[staticmethod]
-            fn par_from_points<'py>(points: &Bound<'py, PyArray2<$type>>) -> $name {
-                let points: PyReadonlyArray2<$type> = points.extract().unwrap();
-                let points = points.as_slice().unwrap();
+            fn par_from_points<'py>(points: &Bound<'py, PyArray2<$type>>) -> PyResult<$name> {
+                let points: PyReadonlyArray2<$type> = points.extract()?;
+                let points = points.as_slice()?;
                 let points: &[Vector3<$type>] = bytemuck::cast_slice(points);
 
-                $name::new(Aabb3d::par_from_points(points))
+                Ok($name::new(Aabb3d::par_from_points(points)))
             }
 
             /// Constructs a degenerate AABB with min and max set to zero

@@ -85,13 +85,14 @@ pub fn reconstruct_surface_py<I: Index, R: Real>(
     aabb_max: Option<[R; 3]>,
 ) -> SurfaceReconstruction<I, R> {
     let aabb;
-    if aabb_min == None || aabb_max == None {
-        aabb = None;
-    } else {
+    if let (Some(aabb_min), Some(aabb_max)) = (aabb_min, aabb_max) {
+        // Convert the min and max arrays to Vector3
         aabb = Some(Aabb3d::new(
-            Vector3::from(aabb_min.unwrap()),
-            Vector3::from(aabb_max.unwrap()),
+            Vector3::from(aabb_min),
+            Vector3::from(aabb_max),
         ));
+    } else {
+        aabb = None;
     }
 
     let spatial_decomposition;
@@ -140,10 +141,10 @@ pub fn reconstruct_surface_py_f32<'py>(
     subdomain_num_cubes_per_dim: u32,
     aabb_min: Option<[f32; 3]>,
     aabb_max: Option<[f32; 3]>,
-) -> SurfaceReconstructionF32 {
-    let particles: PyReadonlyArray2<f32> = particles.extract().unwrap();
+) -> PyResult<SurfaceReconstructionF32> {
+    let particles: PyReadonlyArray2<f32> = particles.extract()?;
 
-    let particle_positions = particles.as_slice().unwrap();
+    let particle_positions = particles.as_slice()?;
     let particle_positions: &[Vector3<f32>] = bytemuck::cast_slice(particle_positions);
 
     let reconstruction = reconstruct_surface_py::<i64, f32>(
@@ -161,7 +162,7 @@ pub fn reconstruct_surface_py_f32<'py>(
         aabb_max,
     );
 
-    SurfaceReconstructionF32::new(reconstruction.to_owned())
+    Ok(SurfaceReconstructionF32::new(reconstruction.to_owned()))
 }
 
 #[pyfunction]
@@ -184,10 +185,10 @@ pub fn reconstruct_surface_py_f64<'py>(
     subdomain_num_cubes_per_dim: u32,
     aabb_min: Option<[f64; 3]>,
     aabb_max: Option<[f64; 3]>,
-) -> SurfaceReconstructionF64 {
-    let particles: PyReadonlyArray2<f64> = particles.extract().unwrap();
+) -> PyResult<SurfaceReconstructionF64> {
+    let particles: PyReadonlyArray2<f64> = particles.extract()?;
 
-    let particle_positions = particles.as_slice().unwrap();
+    let particle_positions = particles.as_slice()?;
     let particle_positions: &[Vector3<f64>] = bytemuck::cast_slice(particle_positions);
 
     let reconstruction = reconstruct_surface_py::<i64, f64>(
@@ -205,5 +206,5 @@ pub fn reconstruct_surface_py_f64<'py>(
         aabb_max,
     );
 
-    SurfaceReconstructionF64::new(reconstruction.to_owned())
+    Ok(SurfaceReconstructionF64::new(reconstruction.to_owned()))
 }

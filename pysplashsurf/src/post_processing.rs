@@ -268,16 +268,14 @@ pub fn marching_cubes_cleanup_py_f64<'py>(
     max_iter: usize,
     keep_vertices: bool,
 ) -> PyResult<Vec<Vec<usize>>> {
-    if mesh.downcast_bound::<TriMesh3dF64>(py).is_ok() {
-        let mesh = mesh.downcast_bound::<TriMesh3dF64>(py).unwrap();
+    if let Ok(mesh) = mesh.downcast_bound::<TriMesh3dF64>(py) {
         Ok(splashsurf_lib::postprocessing::marching_cubes_cleanup(
             &mut mesh.borrow_mut().inner,
             &grid.inner,
             max_iter,
             keep_vertices,
         ))
-    } else if mesh.downcast_bound::<TriMeshWithDataF64>(py).is_ok() {
-        let mesh = mesh.downcast_bound::<TriMeshWithDataF64>(py).unwrap();
+    } else if let Ok(mesh) = mesh.downcast_bound::<TriMeshWithDataF64>(py) {
         Ok(splashsurf_lib::postprocessing::marching_cubes_cleanup(
             &mut mesh.borrow_mut().inner.mesh,
             &grid.inner,
@@ -299,16 +297,14 @@ pub fn marching_cubes_cleanup_py_f32<'py>(
     max_iter: usize,
     keep_vertices: bool,
 ) -> PyResult<Vec<Vec<usize>>> {
-    if mesh.downcast_bound::<TriMesh3dF32>(py).is_ok() {
-        let mesh = mesh.downcast_bound::<TriMesh3dF32>(py).unwrap();
+    if let Ok(mesh) = mesh.downcast_bound::<TriMesh3dF32>(py) {
         Ok(splashsurf_lib::postprocessing::marching_cubes_cleanup(
             &mut mesh.borrow_mut().inner,
             &grid.inner,
             max_iter,
             keep_vertices,
         ))
-    } else if mesh.downcast_bound::<TriMeshWithDataF32>(py).is_ok() {
-        let mesh = mesh.downcast_bound::<TriMeshWithDataF32>(py).unwrap();
+    } else if let Ok(mesh) = mesh.downcast_bound::<TriMeshWithDataF32>(py) {
         Ok(splashsurf_lib::postprocessing::marching_cubes_cleanup(
             &mut mesh.borrow_mut().inner.mesh,
             &grid.inner,

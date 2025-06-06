@@ -19,8 +19,7 @@ pub fn check_mesh_consistency_py_f32<'py>(
     check_manifold: bool,
     debug: bool,
 ) -> PyResult<()> {
-    if mesh.downcast_bound::<TriMesh3dF32>(py).is_ok() {
-        let mesh = mesh.downcast_bound::<TriMesh3dF32>(py).unwrap();
+    if let Ok(mesh) = mesh.downcast_bound::<TriMesh3dF32>(py) {
         splashsurf_lib::marching_cubes::check_mesh_consistency(
             &grid.inner,
             &mesh.borrow().inner,
@@ -29,8 +28,7 @@ pub fn check_mesh_consistency_py_f32<'py>(
             debug,
         )
         .map_err(|x| PyErr::new::<PyRuntimeError, _>(x))
-    } else if mesh.downcast_bound::<TriMeshWithDataF32>(py).is_ok() {
-        let mesh = mesh.downcast_bound::<TriMeshWithDataF32>(py).unwrap();
+    } else if let Ok(mesh) = mesh.downcast_bound::<TriMeshWithDataF32>(py) {
         splashsurf_lib::marching_cubes::check_mesh_consistency(
             &grid.inner,
             &mesh.borrow().inner.mesh,
@@ -55,8 +53,7 @@ pub fn check_mesh_consistency_py_f64<'py>(
     check_manifold: bool,
     debug: bool,
 ) -> PyResult<()> {
-    if mesh.downcast_bound::<TriMesh3dF64>(py).is_ok() {
-        let mesh = mesh.downcast_bound::<TriMesh3dF64>(py).unwrap();
+    if let Ok(mesh) = mesh.downcast_bound::<TriMesh3dF64>(py) {
         splashsurf_lib::marching_cubes::check_mesh_consistency(
             &grid.inner,
             &mesh.borrow().inner,
@@ -65,8 +62,7 @@ pub fn check_mesh_consistency_py_f64<'py>(
             debug,
         )
         .map_err(|x| PyErr::new::<PyRuntimeError, _>(x))
-    } else if mesh.downcast_bound::<TriMeshWithDataF64>(py).is_ok() {
-        let mesh = mesh.downcast_bound::<TriMeshWithDataF64>(py).unwrap();
+    } else if let Ok(mesh) = mesh.downcast_bound::<TriMeshWithDataF64>(py) {
         splashsurf_lib::marching_cubes::check_mesh_consistency(
             &grid.inner,
             &mesh.borrow().inner.mesh,

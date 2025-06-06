@@ -11,11 +11,11 @@ pub fn neighborhood_search_spatial_hashing_parallel_py_f64<'py>(
     domain: &Aabb3dF64,
     particle_positions: &Bound<'py, PyArray2<f64>>,
     search_radius: f64,
-) -> Vec<Vec<usize>> {
+) -> PyResult<Vec<Vec<usize>>> {
     let mut nl: Vec<Vec<usize>> = Vec::new();
 
-    let particle_positions: PyReadonlyArray2<f64> = particle_positions.extract().unwrap();
-    let particle_positions = particle_positions.as_slice().unwrap();
+    let particle_positions: PyReadonlyArray2<f64> = particle_positions.extract()?;
+    let particle_positions = particle_positions.as_slice()?;
     let particle_positions: &[Vector3<f64>] = bytemuck::cast_slice(particle_positions);
 
     neighborhood_search_spatial_hashing_parallel::<i64, f64>(
@@ -25,7 +25,7 @@ pub fn neighborhood_search_spatial_hashing_parallel_py_f64<'py>(
         &mut nl,
     );
 
-    nl
+    Ok(nl)
 }
 
 #[pyfunction]
@@ -35,11 +35,11 @@ pub fn neighborhood_search_spatial_hashing_parallel_py_f32<'py>(
     domain: &Aabb3dF32,
     particle_positions: &Bound<'py, PyArray2<f32>>,
     search_radius: f32,
-) -> Vec<Vec<usize>> {
+) -> PyResult<Vec<Vec<usize>>> {
     let mut nl: Vec<Vec<usize>> = Vec::new();
 
-    let particle_positions: PyReadonlyArray2<f32> = particle_positions.extract().unwrap();
-    let particle_positions = particle_positions.as_slice().unwrap();
+    let particle_positions: PyReadonlyArray2<f32> = particle_positions.extract()?;
+    let particle_positions = particle_positions.as_slice()?;
     let particle_positions: &[Vector3<f32>] = bytemuck::cast_slice(particle_positions);
 
     neighborhood_search_spatial_hashing_parallel::<i64, f32>(
@@ -49,5 +49,5 @@ pub fn neighborhood_search_spatial_hashing_parallel_py_f32<'py>(
         &mut nl,
     );
 
-    nl
+    Ok(nl)
 }

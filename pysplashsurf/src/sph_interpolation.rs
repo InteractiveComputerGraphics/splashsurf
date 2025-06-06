@@ -52,18 +52,18 @@ macro_rules! create_sph_interpolator_interface {
                 particle_quantity: Vec<$type>,
                 interpolation_points: &Bound<'py, PyArray2<$type>>,
                 first_order_correction: bool,
-            ) -> Vec<$type> {
+            ) -> PyResult<Vec<$type>> {
                 let interpolation_points: PyReadonlyArray2<$type> =
-                    interpolation_points.extract().unwrap();
-                let interpolation_points = interpolation_points.as_slice().unwrap();
+                    interpolation_points.extract()?;
+                let interpolation_points = interpolation_points.as_slice()?;
                 let interpolation_points: &[Vector3<$type>] =
                     bytemuck::cast_slice(interpolation_points);
 
-                self.inner.interpolate_scalar_quantity(
+                Ok(self.inner.interpolate_scalar_quantity(
                     particle_quantity.as_slice(),
                     interpolation_points,
                     first_order_correction,
-                )
+                ))
             }
 
             /// Interpolates surface normals (i.e. normalized SPH gradient of the indicator function) of the fluid to the given points using SPH interpolation
@@ -71,10 +71,10 @@ macro_rules! create_sph_interpolator_interface {
                 &self,
                 py: Python<'py>,
                 interpolation_points: &Bound<'py, PyArray2<$type>>,
-            ) -> Bound<'py, PyArray2<$type>> {
+            ) -> PyResult<Bound<'py, PyArray2<$type>>> {
                 let interpolation_points: PyReadonlyArray2<$type> =
-                    interpolation_points.extract().unwrap();
-                let interpolation_points = interpolation_points.as_slice().unwrap();
+                    interpolation_points.extract()?;
+                let interpolation_points = interpolation_points.as_slice()?;
                 let interpolation_points: &[Vector3<$type>] =
                     bytemuck::cast_slice(interpolation_points);
 
@@ -86,7 +86,7 @@ macro_rules! create_sph_interpolator_interface {
                 let normals: ArrayView2<$type> =
                     ArrayView::from_shape((normals.len() / 3, 3), normals).unwrap();
 
-                normals.to_pyarray(py)
+                Ok(normals.to_pyarray(py))
             }
 
             /// Interpolates a vectorial per particle quantity to the given points, panics if the there are less per-particles values than particles
@@ -96,16 +96,15 @@ macro_rules! create_sph_interpolator_interface {
                 particle_quantity: &Bound<'py, PyArray2<$type>>,
                 interpolation_points: &Bound<'py, PyArray2<$type>>,
                 first_order_correction: bool,
-            ) -> Bound<'py, PyArray2<$type>> {
+            ) -> PyResult<Bound<'py, PyArray2<$type>>> {
                 let interpolation_points: PyReadonlyArray2<$type> =
-                    interpolation_points.extract().unwrap();
-                let interpolation_points = interpolation_points.as_slice().unwrap();
+                    interpolation_points.extract()?;
+                let interpolation_points = interpolation_points.as_slice()?;
                 let interpolation_points: &[Vector3<$type>] =
                     bytemuck::cast_slice(interpolation_points);
 
-                let particle_quantity: PyReadonlyArray2<$type> =
-                    particle_quantity.extract().unwrap();
-                let particle_quantity = particle_quantity.as_slice().unwrap();
+                let particle_quantity: PyReadonlyArray2<$type> = particle_quantity.extract()?;
+                let particle_quantity = particle_quantity.as_slice()?;
                 let particle_quantity: &[Vector3<$type>] = bytemuck::cast_slice(particle_quantity);
 
                 let res_vec = self.inner.interpolate_vector_quantity(
@@ -119,7 +118,7 @@ macro_rules! create_sph_interpolator_interface {
                 let res: ArrayView2<$type> =
                     ArrayView::from_shape((res.len() / 3, 3), res).unwrap();
 
-                res.to_pyarray(py)
+                Ok(res.to_pyarray(py))
             }
         }
     };
