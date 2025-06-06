@@ -1,0 +1,22 @@
+# I recommend installing as a subdirectory:
+# conda env create --prefix ./envs -f python_environment.yaml
+# Then activate using: conda activate ./envs
+name: pysplashsurf
+channels:
+  - conda-forge
+dependencies:
+  - maturin=1.8.2
+  - meshio=5.3.5
+  - numpy=2.2.3
+  - pip=25.0.1
+  - python=3.13.2
+  - python_abi=3.13
+  - sphinx=8.2.3
+  - numpydoc=1.8.0
+  - trimesh=4.6.5
+  - rtree=1.4.0
+  - scipy=1.15.2
+  - furo
+  - myst-parser=4.0.1
+  - pytest=8.3.5
+  - pytest-md=0.2.0

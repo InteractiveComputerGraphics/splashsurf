@@ -1,0 +1,12 @@
+dist/
+*.egg-info/
+target/
+**/__pycache__/
+*.so
+test.vtk
+test_bin.vtk
+env/
+envs/
+
+# Sphinx
+pysplashsurf/docs/build/

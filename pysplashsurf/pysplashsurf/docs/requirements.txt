@@ -1,0 +1,6 @@
+pip==25.0.1
+numpy==2.2.3
+meshio==5.3.5
+furo
+numpydoc==1.8.0
+myst-parser==4.0.1
