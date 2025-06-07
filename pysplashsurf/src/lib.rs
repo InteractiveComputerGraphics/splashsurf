@@ -1,5 +1,8 @@
 use pyo3::prelude::*;
+use pyo3::types::{PyList, PyString};
 use pyo3_stub_gen::define_stub_info_gatherer;
+
+use splashsurf::cli;
 
 mod aabb;
 mod mesh;
@@ -113,6 +116,26 @@ fn pysplashsurf(m: &Bound<'_, PyModule>) -> PyResult<()> {
         m
     )?);
 
+    let _ = m.add_function(wrap_pyfunction!(run_splashsurf_py, m)?);
+
+    Ok(())
+}
+
+#[pyfunction]
+#[pyo3(name = "run_splashsurf")]
+fn run_splashsurf_py<'py>(args: Bound<'py, PyList>) -> PyResult<()> {
+    let args = args
+        .iter()
+        .map(|arg| {
+            arg.downcast::<PyString>()
+                .expect("Argument wasn't a string")
+                .extract()
+                .unwrap()
+        })
+        .map(|s: String| s.into())
+        .collect::<Vec<std::ffi::OsString>>();
+    // TODO: Change interface such that OsString is not needed
+    cli::run_splashsurf(&args)?;
     Ok(())
 }
 

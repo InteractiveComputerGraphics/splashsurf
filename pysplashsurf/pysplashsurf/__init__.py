@@ -1,6 +1,10 @@
 from .pysplashsurf import *
 from . import bgeo
 import numpy as np
+import sys
+
+def run_pysplashsurf():
+    run_splashsurf(sys.argv)
 
 def push_point_attribute(self, name: str, data: np.ndarray, real_type):
     """Add a point attribute to the mesh"""

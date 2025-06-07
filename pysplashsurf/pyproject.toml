@@ -31,6 +31,9 @@ dependencies = ["numpy"]
 [project.optional-dependencies]
 meshio = ["meshio"]
 
+[project.scripts]
+pysplashsurf = "pysplashsurf:run_pysplashsurf"
+
 [project.urls]
 homepage = "https://splashsurf.physics-simulation.org/"
 repository = "https://github.com/InteractiveComputerGraphics/splashsurf.git"
