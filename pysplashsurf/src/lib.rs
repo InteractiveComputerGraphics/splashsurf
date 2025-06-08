@@ -124,18 +124,12 @@ fn pysplashsurf(m: &Bound<'_, PyModule>) -> PyResult<()> {
 #[pyfunction]
 #[pyo3(name = "run_splashsurf")]
 fn run_splashsurf_py<'py>(args: Bound<'py, PyList>) -> PyResult<()> {
-    let args = args
-        .iter()
-        .map(|arg| {
-            arg.downcast::<PyString>()
-                .expect("Argument wasn't a string")
-                .extract()
-                .unwrap()
-        })
-        .map(|s: String| s.into())
-        .collect::<Vec<std::ffi::OsString>>();
-    // TODO: Change interface such that OsString is not needed
-    cli::run_splashsurf(&args)?;
+    cli::run_splashsurf(args.iter().map(|arg| {
+        arg.downcast::<PyString>()
+            .expect("Argument wasn't a string")
+            .extract::<String>()
+            .unwrap()
+    }))?;
     Ok(())
 }
 

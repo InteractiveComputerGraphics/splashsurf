@@ -1,3 +1,4 @@
+use crate::cli::Switch;
 use crate::reconstruction::arguments::*;
 use crate::{io, logging};
 use anyhow::{Context, anyhow};
@@ -338,21 +339,6 @@ pub struct ReconstructSubcommandArgs {
         require_equals = true
     )]
     pub check_mesh_debug: Switch,
-}
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq, clap::ValueEnum)]
-pub enum Switch {
-    Off,
-    On,
-}
-
-impl Switch {
-    fn into_bool(self) -> bool {
-        match self {
-            Switch::Off => false,
-            Switch::On => true,
-        }
-    }
 }
 
 /// Executes the `reconstruct` subcommand

@@ -50,11 +50,61 @@ enum Subcommand {
     Convert(convert::ConvertSubcommandArgs),
 }
 
-pub fn run_splashsurf(args: &[std::ffi::OsString]) -> Result<(), anyhow::Error> {
+/// A simple on/off switch for command line arguments.
+///
+/// For example an argument defined as:
+/// ```rust ignore
+/// /// Enable the use of double precision for all computations
+/// #[arg(
+///     long,
+///     default_value = "off",
+///     value_name = "off|on",
+///     ignore_case = true,
+///     require_equals = true
+/// )]
+/// pub double_precision: Switch,
+/// ```
+/// can be used in the CLI as `--double-precision=on` or `--double-precision=off`.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, clap::ValueEnum)]
+pub(crate) enum Switch {
+    Off,
+    On,
+}
+
+impl Switch {
+    pub(crate) fn into_bool(self) -> bool {
+        match self {
+            Switch::Off => false,
+            Switch::On => true,
+        }
+    }
+}
+
+/// Runs the splashsurf CLI with the provided command line arguments.
+///
+/// This function behaves like the binary `splashsurf` command line tool including output to stdout and stderr.
+/// Note that the first argument is always ignored as it is the binary name when called using `std::env::args()`
+/// from the command line:
+/// ```
+/// splashsurf::cli::run_splashsurf([".", "--version"]);
+/// ```
+/// If no placeholder for the binary name is provided it will return an error (and print a help message):
+/// ```should_panic
+/// splashsurf::cli::run_splashsurf(["--version"]);
+/// ```
+pub fn run_splashsurf<I, T>(args: I) -> Result<(), anyhow::Error>
+where
+    I: IntoIterator<Item = T>,
+    T: Into<std::ffi::OsString> + Clone,
+{
     run_splashsurf_impl(args).inspect_err(logging::log_error)
 }
 
-fn run_splashsurf_impl(args: &[std::ffi::OsString]) -> Result<(), anyhow::Error> {
+fn run_splashsurf_impl<I, T>(args: I) -> Result<(), anyhow::Error>
+where
+    I: IntoIterator<Item = T>,
+    T: Into<std::ffi::OsString> + Clone,
+{
     let cmd_args = CommandlineArgs::parse_from(args);
 
     let verbosity = VerbosityLevel::from(cmd_args.verbosity);
@@ -123,5 +173,154 @@ impl VerbosityLevel {
             VerbosityLevel::VeryVerbose => Some(log::LevelFilter::Debug),
             VerbosityLevel::VeryVeryVerbose => Some(log::LevelFilter::Trace),
         }
+    }
+}
+
+#[cfg(test)]
+mod cli_args_tests {
+    use super::*;
+
+    #[test]
+    fn verify_main_cli() {
+        use clap::CommandFactory;
+        CommandlineArgs::command().debug_assert()
+    }
+
+    #[test]
+    fn verify_reconstruct_cli() {
+        use clap::CommandFactory;
+        crate::reconstruction::ReconstructSubcommandArgs::command().debug_assert()
+    }
+
+    #[test]
+    fn verify_convert_cli() {
+        use clap::CommandFactory;
+        crate::convert::ConvertSubcommandArgs::command().debug_assert()
+    }
+
+    #[test]
+    fn test_main_cli() {
+        use clap::Parser;
+
+        // Display help
+        assert_eq!(
+            CommandlineArgs::try_parse_from(["splashsurf", "--help",])
+                .expect_err("this command is supposed to fail")
+                .kind(),
+            clap::error::ErrorKind::DisplayHelp
+        );
+
+        // Display help, reconstruct
+        assert_eq!(
+            CommandlineArgs::try_parse_from(["splashsurf", "reconstruct", "--help",])
+                .expect_err("this command is supposed to fail")
+                .kind(),
+            clap::error::ErrorKind::DisplayHelp
+        );
+
+        // Display help, convert
+        assert_eq!(
+            CommandlineArgs::try_parse_from(["splashsurf", "convert", "--help",])
+                .expect_err("this command is supposed to fail")
+                .kind(),
+            clap::error::ErrorKind::DisplayHelp
+        );
+
+        // Minimum arguments: input file
+        if let Subcommand::Reconstruct(rec_args) = CommandlineArgs::try_parse_from([
+            "splashsurf",
+            "reconstruct",
+            "test.vtk",
+            "--particle-radius=0.05",
+            "--smoothing-length=3.0",
+            "--cube-size=0.75",
+        ])
+        .expect("this command is supposed to work")
+        .subcommand
+        {
+            assert_eq!(
+                rec_args.input_file_or_sequence,
+                std::path::PathBuf::from("test.vtk")
+            );
+        };
+
+        // Test on/off switch
+        if let Subcommand::Reconstruct(rec_args) = CommandlineArgs::try_parse_from([
+            "splashsurf",
+            "reconstruct",
+            "test.vtk",
+            "--particle-radius=0.05",
+            "--smoothing-length=3.0",
+            "--cube-size=0.75",
+            "--normals=on",
+        ])
+        .expect("this command is supposed to work")
+        .subcommand
+        {
+            assert_eq!(rec_args.normals, Switch::On);
+        };
+
+        if let Subcommand::Reconstruct(rec_args) = CommandlineArgs::try_parse_from([
+            "splashsurf",
+            "reconstruct",
+            "test.vtk",
+            "--particle-radius=0.05",
+            "--smoothing-length=3.0",
+            "--cube-size=0.75",
+            "--normals=off",
+        ])
+        .expect("this command is supposed to work")
+        .subcommand
+        {
+            assert_eq!(rec_args.normals, Switch::Off);
+        };
+
+        // Test domain min/max: correct values
+        if let Subcommand::Reconstruct(rec_args) = CommandlineArgs::try_parse_from([
+            "splashsurf",
+            "reconstruct",
+            "test.vtk",
+            "--particle-radius=0.05",
+            "--smoothing-length=3.0",
+            "--cube-size=0.75",
+            "--particle-aabb-min",
+            "-1.0",
+            "1.0",
+            "-1.0",
+            "--particle-aabb-max",
+            "-2.0",
+            "2.0",
+            "-2.0",
+        ])
+        .expect("this command is supposed to work")
+        .subcommand
+        {
+            assert_eq!(rec_args.particle_aabb_min, Some(vec![-1.0, 1.0, -1.0]));
+            assert_eq!(rec_args.particle_aabb_max, Some(vec![-2.0, 2.0, -2.0]));
+        };
+
+        // Test domain min/max: too many values
+        assert_eq!(
+            CommandlineArgs::try_parse_from([
+                "splashsurf",
+                "reconstruct",
+                "test.vtk",
+                "--particle-radius=0.05",
+                "--smoothing-length=3.0",
+                "--cube-size=0.75",
+                "--particle-aabb-min",
+                "-1.0",
+                "1.0",
+                "-1.0",
+                "2.0",
+                "--particle-aabb-max",
+                "-2.0",
+                "2.0",
+                "-2.0",
+            ])
+            .expect_err("this command is supposed to fail")
+            .kind(),
+            clap::error::ErrorKind::UnknownArgument
+        );
     }
 }
