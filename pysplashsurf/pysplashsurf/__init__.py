@@ -323,6 +323,8 @@ def decimation(
 ):
     """Barnacle decimation
     
+    For details see “Weighted Laplacian Smoothing for Surface Reconstruction of Particle-based Fluids” (Löschner, Böttcher, Jeske, Bender; 2023).
+    
     Parameters
     ----------
     mesh: TriMesh3dF32 | TriMesh3dF64 | TriMeshWithDataF32 | TriMeshWithDataF64
@@ -354,8 +356,8 @@ def par_laplacian_smoothing_inplace(
 ):
     """Laplacian Smoothing with feature weights
     
-    Move each vertex towards the mean position of its neighbors.
-    Factor beta in [0;1] proportional to amount of smoothing (for beta=1 each vertex is placed at the mean position).
+    Move each vertex towards the mean position of its neighbors.\n
+    Factor beta in [0;1] proportional to amount of smoothing (for beta=1 each vertex is placed at the mean position).\n
     Additionally, feature weights can be specified to apply a varying amount of smoothing over the mesh.
     
     Parameters
@@ -390,7 +392,7 @@ def par_laplacian_smoothing_normals_inplace(
     vertex_connectivity: list[list[int]],
     iterations: int
 ):
-    """Laplacian Smoothing of the vertex normals
+    """Laplacian smoothing of a normal field
     
     Parameters
     ----------
@@ -420,7 +422,7 @@ def neighborhood_search_spatial_hashing_parallel(
 ):
     """Performs a neighborhood search (multi-threaded implementation)
     
-    Returns the indices of all neighboring particles in the given search radius per particle as a `Vec<Vec<usize>>`.
+    Returns the indices of all neighboring particles in the given search radius per particle as a `list[list[int]]`.
 
     Parameters
     ----------
@@ -450,7 +452,7 @@ def check_mesh_consistency(
     check_manifold: bool,
     debug: bool,
 ):
-    """Check mesh consistency
+    """Checks the consistency of the mesh (currently checks for holes, non-manifold edges and vertices) and returns a string with debug information in case of problems
     
     Parameters
     ----------
@@ -485,12 +487,12 @@ def convert_tris_to_quads(
     normal_angle_limit_rad: float,
     max_interior_angle: float,
 ):
-    """Converts triangles to quads
+    """Merges triangles sharing an edge to quads if they fulfill the given criteria
     
     Parameters
     ----------
     mesh: TriMesh3dF32 | TriMesh3dF64 | TriMeshWithDataF32 | TriMeshWithDataF64
-        Triangular mesh object
+        Triangular mesh object\n
         When called with a MeshWithData Object, the resulting MixedTriQuadMeshWithData won't inherit the cell attributes from the input.
         
     non_squareness_limit: float
@@ -527,7 +529,7 @@ def reconstruction_pipeline(
     compute_normals=False, output_raw_normals=False, output_mesh_smoothing_weights=False, mesh_aabb_clamp_vertices=False,
     subdomain_grid=True, subdomain_num_cubes_per_dim=64, aabb_min=None, aabb_max=None, mesh_aabb_min=None, mesh_aabb_max=None
 ):
-    """Surface reconstruction based on particle positions and post-processing
+    """Surface reconstruction based on particle positions with subsequent post-processing
     
     Parameters
     ----------
@@ -535,8 +537,8 @@ def reconstruction_pipeline(
         2-dimensional array containing all particle positions [[ax, ay, az], [bx, by, bz], ...]
     
     attributes_to_interpolate: dict
-        Dictionary containing all attributes to interpolate. The keys are the attribute names and the values are the corresponding 1D/2D arrays.
-        The arrays must have the same length as the number of particles. 
+        Dictionary containing all attributes to interpolate. The keys are the attribute names and the values are the corresponding 1D/2D arrays.\n
+        The arrays must have the same length as the number of particles. \n
         Supported array types are 2D float32/float64 arrays for vector attributes and 1D uint64/float32/float64 arrays for scalar attributes.
         
     particle_radius: float
@@ -561,7 +563,7 @@ def reconstruction_pipeline(
         Flag to compute normals using SPH interpolation instead of geometry-based normals.
         
     mesh_smoothing_weights: bool
-        Flag to compute mesh smoothing weights
+        Flag to compute mesh smoothing weights\n
         This implements the method from “Weighted Laplacian Smoothing for Surface Reconstruction of Particle-based Fluids” (Löschner, Böttcher, Jeske, Bender; 2023).
         
     mesh_smoothing_weights_normalization: float
@@ -574,18 +576,18 @@ def reconstruction_pipeline(
         Number of iterations for the normal smoothing
         
     mesh_cleanup: bool
-        Flag to perform mesh cleanup
+        Flag to perform mesh cleanup\n
         This implements the method from “Compact isocontours from sampled data” (Moore, Warren; 1992)
         
     decimate_barnacles: bool
-        Flag to perform barnacle decimation
+        Flag to perform barnacle decimation\n
         For details see “Weighted Laplacian Smoothing for Surface Reconstruction of Particle-based Fluids” (Löschner, Böttcher, Jeske, Bender; 2023).
         
     keep_vertices: bool
         Flag to keep any vertices without connectivity resulting from mesh cleanup or decimation step
         
     compute_normals: bool
-        Flag to compute normals
+        Flag to compute normals\n
         If set to True, the normals will be computed and stored in the mesh.
     
     output_raw_normals: bool
