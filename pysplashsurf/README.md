@@ -1,4 +1,4 @@
-# Pysplashsurf
+# PySplashsurf
 
 ![splashsurf logo](https://raw.githubusercontent.com/InteractiveComputerGraphics/splashsurf/main/logos/logo_small.svg "splashsurf")
 
