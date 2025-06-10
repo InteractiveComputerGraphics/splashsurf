@@ -83,10 +83,10 @@ impl Switch {
 /// Runs the splashsurf CLI with the provided command line arguments.
 ///
 /// This function behaves like the binary `splashsurf` command line tool including output to stdout and stderr.
-/// Note that the first argument is always ignored as it is the binary name when called using `std::env::args()`
-/// from the command line:
+/// Note that the first argument is always ignored - this is typically the binary name when called using 
+/// `std::env::args()` from the terminal:
 /// ```
-/// splashsurf::cli::run_splashsurf([".", "--version"]);
+/// splashsurf::cli::run_splashsurf(["splashsurf", "--version"]);
 /// ```
 /// If no placeholder for the binary name is provided it will return an error (and print a help message):
 /// ```should_panic
