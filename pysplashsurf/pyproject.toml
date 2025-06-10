@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "pysplashsurf"
-version = "0.11.0.0rc1"
+version = "0.11.0.0rc2"
 description = "Python bindings for splashsurf, a surface reconstruction library for SPH simulations."
 keywords = ["surface reconstruction", "marching cubes", "sph", "fluid", "particles", "mesh", "splashsurf", "splishsplash"]
 readme = "README.md"
