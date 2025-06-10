@@ -1,13 +1,14 @@
-use anyhow::anyhow;
 use std::env;
 use std::io::Write;
 
-use crate::VerbosityLevel;
+use anyhow::anyhow;
 use fern::Output;
 use indicatif::{ProgressBar, WeakProgressBar};
 use log::{error, info};
 use once_cell::sync::Lazy;
 use parking_lot::RwLock;
+
+use crate::cli::VerbosityLevel;
 
 #[derive(Debug)]
 pub struct ProgressHandler<T: Write + Send>(T);
@@ -152,7 +153,10 @@ where
 pub(crate) fn log_program_info() {
     info!(
         "{} v{} ({})",
-        env!("CARGO_BIN_NAME"),
+        //env!("CARGO_BIN_NAME"),
+        std::env::args()
+            .next()
+            .unwrap_or_else(|| "splashsurf".to_string()),
         env!("CARGO_PKG_VERSION"),
         env!("CARGO_PKG_NAME")
     );
