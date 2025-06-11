@@ -7,6 +7,8 @@ use splashsurf_lib::{
 };
 use std::time::Duration;
 
+static CANYON_PATH: &str = "C:\\canyon.xyz";
+
 fn parameters_canyon() -> Parameters<f32> {
     let particle_radius = 0.011;
     let compact_support_radius = 4.0 * particle_radius;
@@ -31,7 +33,7 @@ fn parameters_canyon() -> Parameters<f32> {
 }
 
 pub fn grid_canyon(c: &mut Criterion) {
-    let particle_positions: &Vec<Vector3<f32>> = &particles_from_file("C:\\canyon.xyz").unwrap();
+    let particle_positions: &Vec<Vector3<f32>> = &particles_from_file(CANYON_PATH).unwrap();
     let parameters = parameters_canyon();
 
     let mut group = c.benchmark_group("grid_canyon");
@@ -89,7 +91,7 @@ pub fn grid_canyon(c: &mut Criterion) {
 }
 
 pub fn grid_optimal_num_cubes_canyon(c: &mut Criterion) {
-    let particle_positions: &Vec<Vector3<f32>> = &particles_from_file("C:\\canyon.xyz").unwrap();
+    let particle_positions: &Vec<Vector3<f32>> = &particles_from_file(CANYON_PATH).unwrap();
     let mut parameters = parameters_canyon();
 
     let mut with_cube_factor = |cube_factor: f32, num_cubes: &[u32]| {

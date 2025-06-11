@@ -45,7 +45,7 @@ pub fn mesh_vertex_normals(c: &mut Criterion) {
     group.bench_function("mesh_vertex_normals", |b| {
         b.iter(|| {
             let normals = mesh.vertex_normals();
-            criterion::black_box(normals)
+            std::hint::black_box(normals)
         })
     });
 
@@ -65,7 +65,7 @@ pub fn mesh_vertex_normals_parallel(c: &mut Criterion) {
     group.bench_function("mesh_vertex_normals_parallel", |b| {
         b.iter(|| {
             let normals = mesh.par_vertex_normals();
-            criterion::black_box(normals)
+            std::hint::black_box(normals)
         })
     });
 

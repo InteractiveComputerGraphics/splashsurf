@@ -62,7 +62,7 @@ fern = "0.7"
 chrono = "0.4"
 
 [dev-dependencies]
-criterion = "0.5.1"
+criterion = "0.6"
 ultraviolet = "0.10"
 sdfu = { git = "https://github.com/w1th0utnam3/sdfu", features = [
   "ultraviolet",
