@@ -238,7 +238,7 @@ jobs:
         path: pysplashsurf/pysplashsurf/docs/build/html/
 
   read_the_docs:
-    needs: docs
+    needs: [docs, release]
     runs-on: ubuntu-latest
     steps:
     - name: Trigger Read the Docs build
