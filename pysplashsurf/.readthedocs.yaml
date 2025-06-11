@@ -10,8 +10,8 @@ build:
     python: "3.12"
 
 sphinx:
-  configuration: pysplashsurf/docs/source/conf.py
+  configuration: pysplashsurf/pysplashsurf/docs/source/conf.py
 
 python:
   install:
-    - requirements: pysplashsurf/docs/requirements.txt
+    - requirements: pysplashsurf/pysplashsurf/docs/requirements.txt
