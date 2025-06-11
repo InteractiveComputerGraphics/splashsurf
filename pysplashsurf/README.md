@@ -1,8 +1,8 @@
-# PySplashsurf
+# pySplashsurf
 
 ![splashsurf logo](https://raw.githubusercontent.com/InteractiveComputerGraphics/splashsurf/main/logos/logo_small.svg "splashsurf")
 
-PySplashsurf provides Python bindings for `splashsurf`, an open source surface reconstruction library for particle data from SPH simulations.
+pySplashsurf provides Python bindings for `splashsurf`, an open source surface reconstruction library for particle data from SPH simulations.
 Detailed information on the surface reconstruction and library itself and its API can be found on the [project website (splashsurf.physics-simulation.org)](https://splashsurf.physics-simulation.org/) or the [main repository](https://github.com/InteractiveComputerGraphics/splashsurf).
 
 ## Installation

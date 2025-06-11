@@ -3,7 +3,7 @@
 #
 #    maturin generate-ci github
 #
-name: PySplashsurf CI
+name: pySplashsurf CI
 
 on:
   push:
@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Check formatting of PySplashsurf
+      - name: Check formatting of pySplashsurf crate
         run: cargo fmt -- --check
         working-directory: pysplashsurf
 

@@ -17,7 +17,7 @@ import pysplashsurf
 
 # -- Project information -----------------------------------------------------
 
-project = 'PySplashsurf'
+project = 'pySplashsurf'
 copyright = '2025, Interactive Computer Graphics'
 author = 'Interactive Computer Graphics'
 
