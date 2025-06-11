@@ -453,9 +453,9 @@ To cite `splashsurf` you can use this BibTeX entry:
 ## Acknowledgements
 
 This project contains notable contributions from the following people:
- - [Timna Böttcher](https://animation.rwth-aachen.de/person/80/) (@timnaboettcher): co-developed the [weighted smoothing approach](https://diglib.eg.org/handle/10.2312/vmv20231245)
- - [Felix Kern](https://github.com/Fek04) (@Fek04): implemented the Python bindings for `splashsurf`
- - [Fabian Löschner](https://www.floeschner.de/) (@w1th0utnam3): implemented most of the surface reconstruction library and CLI with the domain decomposition
+ - [Timna Böttcher](https://animation.rwth-aachen.de/person/80/) ([@timnaboettcher](https://github.com/timnaboettcher)): co-developed the [weighted smoothing approach](https://diglib.eg.org/handle/10.2312/vmv20231245)
+ - [Felix Kern](https://github.com/Fek04) ([@Fek04](https://github.com/Fek04)): implemented the Python bindings for `splashsurf`
+ - [Fabian Löschner](https://www.floeschner.de/) ([@w1th0utnam3](https://github.com/w1th0utnam3)): implemented most of the surface reconstruction library and CLI with the domain decomposition
 
 # License
 
