@@ -68,7 +68,18 @@ sdfu = { git = "https://github.com/w1th0utnam3/sdfu", features = [
   "ultraviolet",
 ], rev = "74856c41aaace7cf12e21b41bd0007f1363fea45" }
 
+[[example]]
+name = "minimal_levelset"
+path = "examples/minimal_levelset.rs"
+required-features = ["io"]
+
+[[example]]
+name = "minimal_sph_levelset"
+path = "examples/minimal_sph_levelset.rs"
+required-features = ["profiling", "io"]
+
 [[bench]]
 name = "splashsurf_lib_benches"
 path = "benches/splashsurf_lib_benches.rs"
 harness = false
+required-features = ["io"]

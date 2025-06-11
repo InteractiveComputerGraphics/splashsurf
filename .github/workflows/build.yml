@@ -48,7 +48,7 @@ jobs:
           lfs: true
       - name: Build
         run: |
-          cargo build --manifest-path="splashsurf_lib/Cargo.toml" --all-features --verbose
+          cargo build --manifest-path="splashsurf_lib/Cargo.toml" --all-targets --all-features --verbose
       - name: Run tests
         run: |
           cargo test --manifest-path="splashsurf_lib/Cargo.toml" --all-features --verbose
@@ -66,7 +66,7 @@ jobs:
           lfs: true
       - name: Build
         run: |
-          cargo build --manifest-path="splashsurf_lib/Cargo.toml" --no-default-features --verbose
+          cargo build --manifest-path="splashsurf_lib/Cargo.toml" --all-targets --no-default-features --verbose
       - name: Run tests
         run: |
           cargo test --manifest-path="splashsurf_lib/Cargo.toml" --no-default-features --verbose

@@ -4,7 +4,6 @@ use anyhow::anyhow;
 use sdfu::SDF;
 use splashsurf_lib::Aabb3d;
 use splashsurf_lib::Real;
-#[cfg(feature = "io")]
 use splashsurf_lib::io;
 use splashsurf_lib::marching_cubes::marching_cubes_lut::marching_cubes_triangulation_iter;
 use splashsurf_lib::mesh::TriMesh3d;
