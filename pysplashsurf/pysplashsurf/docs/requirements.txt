@@ -5,4 +5,4 @@ meshio==5.3.5
 sphinx_rtd_theme==3.0.1
 numpydoc==1.8.0
 myst-parser==4.0.1
-pysplashsurf
+pysplashsurf==0.11.0.0rc2
