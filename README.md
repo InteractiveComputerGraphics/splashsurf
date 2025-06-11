@@ -154,13 +154,13 @@ That means selecting the same particle radius as in the simulation, a correspond
 
 A full invocation of the tool might look like this:
 ```
-splashsurf reconstruct particles.vtk -r=0.025 -l=2.0 -c=0.5 -t=0.6 --subdomain-grid=on --mesh-cleanup=on --mesh-smoothing-weights=on --mesh-smoothing-iters=25 --normals=on --normals-smoothing-iters=10
+splashsurf reconstruct particles.vtk -r=0.025 -l=2.0 -c=0.5 -t=0.6 --mesh-smoothing-weights=on --mesh-smoothing-iters=15 --normals=on --normals-smoothing-iters=10
 ```
 
 ### Benchmark example
 For example:
 ```
-splashsurf reconstruct canyon_13353401_particles.xyz -r=0.011 -c=1.5 -l=2.0 -t=0.6 --subdomain-grid=on
+splashsurf reconstruct canyon_13353401_particles.xyz -r=0.011 -c=1.5 -l=2.0 -t=0.6
 ```
 With these parameters, a scene with 13353401 particles is reconstructed in less than 3 seconds on a Ryzen 9 5950X. The output is a mesh with 6069576 triangles.
 ```

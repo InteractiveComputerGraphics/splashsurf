@@ -6,10 +6,10 @@ pySplashsurf provides Python bindings for `splashsurf`, an open source surface r
 Detailed information on the surface reconstruction and library itself and its API can be found on the [project website (splashsurf.physics-simulation.org)](https://splashsurf.physics-simulation.org/) or the [main repository](https://github.com/InteractiveComputerGraphics/splashsurf).
 
 ## Installation
+Requires Python version 3.7+
 ```
 pip install pysplashsurf
 ```
-Requires Python version 3.7+
 
 To install pysplashsurf with meshio support (which adds some additional IO functionality), use
 ```
@@ -17,9 +17,24 @@ pip install pysplashsurf[meshio]
 ```
 This will add support for the `.bgeo` file extension to meshio, so that particle data in the `BGEOV` format can be read using meshio.
 Meshio is also required for the `write_to_file` method from the bindings to work.
-The rest of the package will still work even if meshio is not installed.
+The rest of the package, including the CLI, will still work even if meshio is not installed.
 
 ## Usage
+pySplashsurf can either be used as a library in Python scripts or as a command line tool that provides the same interface as the original Rust [`splashsurf`](https://github.com/InteractiveComputerGraphics/splashsurf) CLI itself.
+
+### CLI
+To use the CLI, you can use the `pysplashsurf` command after installing the package:
+```bash
+pysplashsurf --help
+```
+For example, to reconstruct a surface from particle data in a VTK file with some smoothing:
+```bash
+splashsurf reconstruct particles.vtk -r=0.025 -l=2.0 -c=0.5 -t=0.6 --mesh-smoothing-weights=on --mesh-smoothing-iters=15 --normals=on --normals-smoothing-iters=10
+```
+
+For more information on the CLI and its arguments, refer to the [splashsurf documentation](https://github.com/InteractiveComputerGraphics/splashsurf).
+
+### Library
 Example to reconstruct the surface from an input file, apply some post-processing methods and write the data back to a file:
 ```python
 import meshio
