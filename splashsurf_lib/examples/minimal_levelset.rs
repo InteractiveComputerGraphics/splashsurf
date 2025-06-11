@@ -68,7 +68,7 @@ pub fn marching_cubes<R: Real, L: MarchingCubesLevelSet<R>>(
                 for local_point_index in 0..8 {
                     let point = cell
                         .global_point_index_of(local_point_index)
-                        .ok_or(anyhow!("Missing point!"))?;
+                        .ok_or_else(|| anyhow!("Missing point!"))?;
                     let coords = grid.point_coordinates(&point);
 
                     match level_set.evaluate_sign(&coords) {
@@ -84,7 +84,7 @@ pub fn marching_cubes<R: Real, L: MarchingCubesLevelSet<R>>(
                     for (v_idx, local_edge_index) in triangle.iter().copied().enumerate() {
                         let edge = cell
                             .global_edge_index_of(local_edge_index as usize)
-                            .ok_or(anyhow!("Missing edge!"))?;
+                            .ok_or_else(|| anyhow!("Missing edge!"))?;
                         let vertex_index = *edge_to_vertex.entry(edge).or_insert_with(|| {
                             let vertex_index = vertices.len();
 
@@ -117,7 +117,7 @@ pub fn marching_cubes<R: Real, L: MarchingCubesLevelSet<R>>(
 }
 
 /// Wrapper for an SDF from sdfu
-pub struct SdfuLevelSet<S: sdfu::SDF<f32, Vec3>> {
+pub struct SdfuLevelSet<S: SDF<f32, Vec3>> {
     sdf: S,
 }
 
@@ -128,7 +128,7 @@ fn vec_na_to_uv(vec: &Vector3<f32>) -> Vec3 {
 
 impl<S> MarchingCubesLevelSet<f32> for SdfuLevelSet<S>
 where
-    S: sdfu::SDF<f32, Vec3>,
+    S: SDF<f32, Vec3>,
 {
     fn is_region_supported(&self, aabb: &Aabb3d<f32>) -> bool {
         let min = aabb.min();
@@ -160,7 +160,7 @@ where
 }
 
 /// Builds an example level set function to reconstruct
-fn example_level_set() -> SdfuLevelSet<impl sdfu::SDF<f32, Vec3>> {
+fn example_level_set() -> SdfuLevelSet<impl SDF<f32, Vec3>> {
     let sdf = sdfu::Sphere::new(0.5f32)
         .union_smooth(
             sdfu::Sphere::new(0.3).translate(Vec3::new(-0.3, 0.3, 0.0)),
