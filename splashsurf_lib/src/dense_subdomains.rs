@@ -152,18 +152,18 @@ pub(crate) fn initialize_parameters<I: Index, R: Real>(
             - vol_subdomain;
 
         info!(
-            "The ghost margin volume is {:.2}% of the subdomain volume",
+            "The ghost margin volume per subdomain is {:.2}% of the subdomain volume",
             (to_real!(vol_margin) / to_real!(vol_subdomain)) * to_real!(100.0)
         );
         info!(
-            "The ghost margin is {:.2} MC cells or {:.2} subdomains thick",
+            "The ghost margin per subdomain is {:.2} MC cells or {:.2} subdomains wide",
             ghost_particle_margin / cube_size,
             ghost_particle_margin / (cube_size * subdomain_cubes.to_real_unchecked())
         );
 
         if ghost_margin_cubes > subdomain_cubes / to_index!(2) {
             panic!(
-                "The ghost margin is {ghost_margin_cubes} cubes thick (rounded up), while the subdomain only has an extent of {subdomain_cubes} cubes. The subdomain has to have at least twice the number of cubes ({})!",
+                "The ghost margin is {ghost_margin_cubes} cubes wide (rounded up), while the subdomain only has an extent of {subdomain_cubes} cubes. The subdomain has to have at least twice the number of cubes ({})!",
                 ghost_margin_cubes.times(2)
             );
         }
@@ -1351,7 +1351,7 @@ pub(crate) fn stitching<I: Index, R: Real>(
     surface_patches: Vec<SurfacePatch<I, R>>,
 ) -> TriMesh3d<R> {
     profile!("stitching");
-    info!("Starting stitching of subdomains to global mesh.");
+    info!("Starting stitching of subdomain meshes to global mesh.");
 
     // Calculate offsets of interior vertices and triangles
     let vert_and_tri_offsets = {

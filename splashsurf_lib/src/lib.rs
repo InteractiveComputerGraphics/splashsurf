@@ -418,8 +418,9 @@ pub fn grid_for_reconstruction<I: Index, R: Real>(
         };
 
         info!(
-            "Minimal enclosing bounding box of particles was computed as: {:?}",
-            particle_aabb
+            "Bounding box of particles with margin for levelset evaluation: {:?} to {:?}",
+            particle_aabb.min().as_slice(),
+            particle_aabb.max().as_slice()
         );
 
         particle_aabb
