@@ -371,7 +371,7 @@ pub fn neighborhood_search_spatial_hashing_flat_filtered<I: Index, R: Real>(
         .expect("Failed to construct grid for neighborhood search!");
     // Map for spatially hashed storage of all particles (map from cell -> enclosed particles)
     let particles_per_cell =
-        sequential_generate_cell_to_particle_map::<I, R>(&grid, particle_positions);
+        sequential_generate_cell_to_particle_map_with_positions::<I, R>(&grid, particle_positions);
 
     {
         neighborhood_list.neighbor_ptr.clear();
@@ -382,11 +382,12 @@ pub fn neighborhood_search_spatial_hashing_flat_filtered<I: Index, R: Real>(
     }
 
     {
-        profile!("write particle neighbors");
-        let mut counter = 0;
+        profile!("collect particle neighbors");
+        let mut cell_buffer = Vec::with_capacity(27);
+        let mut candidate_buffer = Vec::with_capacity(1000);
         for (particle_i, pos_i) in particle_positions.iter().enumerate() {
-            // Store start of current particle neighbor list
-            neighborhood_list.neighbor_ptr[particle_i] = counter;
+            // Store start index of the current particle neighbor list
+            neighborhood_list.neighbor_ptr[particle_i] = neighborhood_list.neighbors.len();
 
             if !filter(particle_i) {
                 continue;
@@ -395,45 +396,48 @@ pub fn neighborhood_search_spatial_hashing_flat_filtered<I: Index, R: Real>(
             // Cell of the current particle
             let current_cell = grid.get_cell(grid.enclosing_cell(pos_i)).unwrap();
 
-            let mut neighbor_test = |particle_j| {
-                let pos_j: &Vector3<R> = &particle_positions[particle_j];
-                if (pos_j - pos_i).norm_squared() < search_radius_squared {
-                    // A neighbor was found
-                    neighborhood_list.neighbors.push(particle_j);
-                    counter += 1;
-                }
-            };
+            // Collect indices of cells to check
+            cell_buffer.clear();
+            cell_buffer.extend(
+                grid.cells_adjacent_to_cell(&current_cell)
+                    .chain(std::iter::once(current_cell))
+                    .map(|c| grid.flatten_cell_index(&c)),
+            );
 
-            // Loop over adjacent cells
-            grid.cells_adjacent_to_cell(&current_cell)
-                .filter_map(|c| {
-                    let flat_cell_index = grid.flatten_cell_index(&c);
-                    particles_per_cell.get(&flat_cell_index)
-                })
-                .flatten()
-                .copied()
-                .for_each(&mut neighbor_test);
+            // Compute the total number of particles that are neighbor candidates
+            let num_candidates: usize = cell_buffer
+                .iter()
+                .filter_map(|c| particles_per_cell.get(&c))
+                .map(|(indices, _)| indices.len())
+                .sum();
+            candidate_buffer.resize(num_candidates, (0, R::zero()));
 
-            // Loop over current cell
-            std::iter::once(current_cell)
-                .filter_map(|c| {
-                    let flat_cell_index = grid.flatten_cell_index(&c);
-                    particles_per_cell.get(&flat_cell_index)
-                })
-                .flatten()
-                .copied()
-                .for_each(|particle_j| {
-                    if particle_i != particle_j {
-                        neighbor_test(particle_j);
+            // Compute distances to all neighbor candidates
+            let mut counter = 0;
+            cell_buffer
+                .iter()
+                .filter_map(|c| particles_per_cell.get(&c))
+                .for_each(|(indices, positions)| {
+                    for (&particle_j, pos_j) in indices.iter().zip(positions.iter()) {
+                        candidate_buffer[counter] = (particle_j, (pos_j - pos_i).norm_squared());
+                        counter += 1;
                     }
                 });
+
+            // Filter for particles that are actually neighbors
+            neighborhood_list.neighbors.extend(
+                candidate_buffer
+                    .iter()
+                    .filter(|(idx, dist)| *idx != particle_i && *dist < search_radius_squared)
+                    .map(|(idx, _)| idx),
+            );
         }
         // Store end of the last neighbor list
-        *neighborhood_list.neighbor_ptr.last_mut().unwrap() = counter;
+        *neighborhood_list.neighbor_ptr.last_mut().unwrap() = neighborhood_list.neighbors.len();
     }
 }
 
-/// Performs a neighborhood search (multi-threaded implementation)
+/// Performs a neighborhood search (multithreaded implementation)
 ///
 /// Returns the indices of all neighboring particles in the given search radius per particle as a `Vec<Vec<usize>>`.
 #[inline(never)]
@@ -641,7 +645,7 @@ pub fn compute_neigborhood_stats(neighborhood_list: &Vec<Vec<usize>>) -> Neighbo
     }
 }
 
-// Generates a map for spatially hashed indices of all particles (map from cell -> enclosed particles)
+/// Generates a map for spatially hashed indices of all particles (map from cell -> enclosed particles)
 #[inline(never)]
 fn sequential_generate_cell_to_particle_map<I: Index, R: Real>(
     grid: &UniformGrid<I, R>,
@@ -665,6 +669,41 @@ fn sequential_generate_cell_to_particle_map<I: Index, R: Real>(
             .entry(flat_cell_index)
             .or_insert_with(|| Vec::with_capacity(avg_density))
             .push(particle_i);
+    }
+
+    particles_per_cell
+}
+
+/// Generates a map for spatially hashed indices and positions of all particles (map from cell -> enclosed particles)
+#[inline(never)]
+fn sequential_generate_cell_to_particle_map_with_positions<I: Index, R: Real>(
+    grid: &UniformGrid<I, R>,
+    particle_positions: &[Vector3<R>],
+) -> MapType<I, (Vec<usize>, Vec<Vector3<R>>)> {
+    profile!("sequential_generate_cell_to_particle_map_with_positions");
+    let mut particles_per_cell = new_map();
+
+    // Compute average particle density for initial cell capacity
+    let cell_dims = grid.cells_per_dim();
+    let n_cells = cell_dims[0] * cell_dims[1] * cell_dims[2];
+    let avg_density = particle_positions.len() / n_cells.to_usize().unwrap_or(1);
+
+    // Assign all particles to enclosing cells
+    for (particle_i, particle) in particle_positions.iter().enumerate() {
+        let cell_ijk = grid.enclosing_cell(particle);
+        let cell = grid.get_cell(cell_ijk).unwrap();
+        let flat_cell_index = grid.flatten_cell_index(&cell);
+
+        let (cell_indices, cell_positions) = particles_per_cell
+            .entry(flat_cell_index)
+            .or_insert_with(|| {
+                (
+                    Vec::with_capacity(avg_density),
+                    Vec::with_capacity(avg_density),
+                )
+            });
+        cell_indices.push(particle_i);
+        cell_positions.push(particle.clone());
     }
 
     particles_per_cell
