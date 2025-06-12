@@ -107,7 +107,8 @@ pub fn reconstruct_surface_py<I: Index, R: Real>(
     let params = splashsurf_lib::Parameters {
         particle_radius,
         rest_density,
-        compact_support_radius: (smoothing_length * particle_radius).times_f64(2.0),
+        // Compact support is twice the smoothing length
+        compact_support_radius: (smoothing_length * particle_radius) * R::from_float(2.0),
         cube_size: cube_size * particle_radius,
         iso_surface_threshold,
         particle_aabb: aabb,
