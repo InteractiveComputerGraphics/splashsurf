@@ -4,6 +4,7 @@ resolver = "2"
 members = [
     "splashsurf_lib",
     "splashsurf",
+    "pysplashsurf",
 ]
 
 [profile.release]

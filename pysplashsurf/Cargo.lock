@@ -1437,6 +1437,7 @@ dependencies = [
  "rayon",
  "rstar",
  "serde_json",
+ "simba",
  "thiserror",
  "thread_local",
  "vtkio",

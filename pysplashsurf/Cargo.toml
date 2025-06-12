@@ -25,5 +25,3 @@ default = ["extension-module"]
 [lib]
 name = "pysplashsurf"
 crate-type = ["cdylib", "rlib"]
-
-[workspace]
