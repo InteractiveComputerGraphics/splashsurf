@@ -21,7 +21,7 @@ use crate::neighborhood_search::{
 };
 use crate::uniform_grid::{EdgeIndex, GridConstructionError, UniformCartesianCubeGrid3d};
 use crate::{
-    Aabb3d, MapType, Parameters, SpatialDecomposition, SurfaceReconstruction, new_map,
+    Aabb3d, MapType, Parameters, RealConvert, SpatialDecomposition, SurfaceReconstruction, new_map,
     new_parallel_map, profile,
 };
 use crate::{Index, Real};
@@ -29,26 +29,6 @@ use crate::{Index, Real};
 // TODO: Implement single-threaded processing
 
 type GlobalIndex = u64;
-
-/// Converts any literal or expression to the Index type I (panics if value does not fit)
-macro_rules! to_index {
-    ($value:literal) => {
-        <I as NumCast>::from($value).expect("literal has to fit in index type")
-    };
-    ($value:expr) => {
-        <I as NumCast>::from($value).expect("value has to fit in index type")
-    };
-}
-
-/// Converts any literal or expression to the Real type R (panics if value does not fit)
-macro_rules! to_real {
-    ($value:literal) => {
-        <R as NumCast>::from($value).expect("literal has to fit in real type")
-    };
-    ($value:expr) => {
-        <R as NumCast>::from($value).expect("value has to fit in real type")
-    };
-}
 
 pub(crate) struct ParametersSubdomainGrid<I: Index, R: Real> {
     /// SPH particle radius (in simulation units)
@@ -134,7 +114,7 @@ pub(crate) fn initialize_parameters<I: Index, R: Real>(
     let particle_rest_mass = particle_rest_volume * particle_rest_density;
 
     let ghost_particle_margin =
-        (compact_support_radius / cube_size).ceil() * cube_size * to_real!(1.01);
+        (compact_support_radius / cube_size).ceil() * cube_size * 1.01.convert();
 
     // Compute information of ghost margin volume for debugging
     {
@@ -144,7 +124,7 @@ pub(crate) fn initialize_parameters<I: Index, R: Real>(
         let vol_subdomain = subdomain_cubes
             .checked_cubed()
             .expect("number of cubes per subdomain has to be representable in index type");
-        let vol_margin = (ghost_margin_cubes * to_index!(2) + subdomain_cubes)
+        let vol_margin = (ghost_margin_cubes * I::two() + subdomain_cubes)
             .checked_cubed()
             .expect(
                 "number of cubes per subdomain with margin has to be representable in index type",
@@ -153,7 +133,9 @@ pub(crate) fn initialize_parameters<I: Index, R: Real>(
 
         info!(
             "The ghost margin volume per subdomain is {:.2}% of the subdomain volume",
-            (to_real!(vol_margin) / to_real!(vol_subdomain)) * to_real!(100.0)
+            (vol_margin.to_real().unwrap_or(R::one())
+                / vol_subdomain.to_real().unwrap_or(R::one()))
+                * 100.0.convert()
         );
         info!(
             "The ghost margin per subdomain is {:.2} MC cells or {:.2} subdomains wide",
@@ -161,7 +143,7 @@ pub(crate) fn initialize_parameters<I: Index, R: Real>(
             ghost_particle_margin / (cube_size * subdomain_cubes.to_real_unchecked())
         );
 
-        if ghost_margin_cubes > subdomain_cubes / to_index!(2) {
+        if ghost_margin_cubes > subdomain_cubes / I::two() {
             panic!(
                 "The ghost margin is {ghost_margin_cubes} cubes wide (rounded up), while the subdomain only has an extent of {subdomain_cubes} cubes. The subdomain has to have at least twice the number of cubes ({})!",
                 ghost_margin_cubes.times(2)
@@ -274,7 +256,7 @@ pub(crate) fn extract_narrow_band<I: Index, R: Real>(
     let compact_support_radius = parameters.compact_support_radius;
     let ghost_particle_margin = (compact_support_radius / parameters.cube_size).ceil()
         * parameters.cube_size
-        * to_real!(1.01);
+        * 1.01.convert();
 
     // AABB of the particles
     let aabb = {
@@ -580,7 +562,7 @@ pub(crate) fn compute_global_densities_and_neighbors<I: Index, R: Real>(
             let margin_aabb = {
                 let mut margin_aabb = subdomain_aabb.clone();
                 // TODO: Verify if we can omit this extra margin?
-                margin_aabb.grow_uniformly(parameters.ghost_particle_margin * to_real!(1.5));
+                margin_aabb.grow_uniformly(parameters.ghost_particle_margin * 1.5.convert());
                 margin_aabb
             };
 
@@ -686,7 +668,7 @@ pub(crate) fn reconstruction<I: Index, R: Real>(
 
     let squared_support = parameters.compact_support_radius * parameters.compact_support_radius;
     // Add 1% so that we don't exclude grid points that are just on the kernel boundary
-    let squared_support_with_margin = squared_support * to_real!(1.01);
+    let squared_support_with_margin = squared_support * 1.01.convert();
     // Compute radial distance in terms of grid points we have to evaluate for each particle
     let cube_radius = I::from((parameters.compact_support_radius / parameters.cube_size).ceil())
         .expect("kernel radius in cubes has to fit in index type");
@@ -710,12 +692,8 @@ pub(crate) fn reconstruction<I: Index, R: Real>(
         .unwrap_or(0);
     info!("Largest subdomain has {} particles.", max_particles);
 
-    // Maximum number of particles such that a subdomain will be considered "sparse"
-    let sparse_limit = (to_real!(max_particles) * to_real!(0.05))
-        .ceil()
-        .to_usize()
-        .unwrap()
-        .max(100);
+    // Maximum number of particles such that a subdomain will be considered "sparse" (5% of max)
+    let sparse_limit = (max_particles / (100 / 5)).max(100);
     info!(
         "Subdomains with {} or less particles will be considered sparse.",
         sparse_limit
@@ -1640,9 +1618,9 @@ pub(crate) mod subdomain_classification {
 
                     if in_ghost_margin {
                         let neighbor_subdomain_ijk = [
-                            subdomain_ijk[0] + to_index!(i),
-                            subdomain_ijk[1] + to_index!(j),
-                            subdomain_ijk[2] + to_index!(k),
+                            subdomain_ijk[0] + I::from(i).unwrap(),
+                            subdomain_ijk[1] + I::from(j).unwrap(),
+                            subdomain_ijk[2] + I::from(k).unwrap(),
                         ];
                         // The potential neighbor subdomain might not even be part of our computation domain
                         if let Some(cell) = subdomain_grid.get_cell(neighbor_subdomain_ijk) {
@@ -1786,24 +1764,29 @@ pub(crate) mod debug {
             let vertex_offset = hexmesh.vertices.len();
 
             {
-                let mut push_vertex = |a: i32, b: i32, c: i32| {
+                let mut push_vertex = |abc: [i8; 3]| {
+                    let [a, b, c] = abc;
                     hexmesh.vertices.push(
                         subdomain_grid.point_coordinates(
                             &subdomain_grid
-                                .get_point([i + to_index!(a), j + to_index!(b), k + to_index!(c)])
+                                .get_point([
+                                    i + I::from(a).unwrap(),
+                                    j + I::from(b).unwrap(),
+                                    k + I::from(c).unwrap(),
+                                ])
                                 .unwrap(),
                         ),
                     );
                 };
 
-                push_vertex(0, 0, 0);
-                push_vertex(1, 0, 0);
-                push_vertex(1, 1, 0);
-                push_vertex(0, 1, 0);
-                push_vertex(0, 0, 1);
-                push_vertex(1, 0, 1);
-                push_vertex(1, 1, 1);
-                push_vertex(0, 1, 1);
+                push_vertex([0, 0, 0]);
+                push_vertex([1, 0, 0]);
+                push_vertex([1, 1, 0]);
+                push_vertex([0, 1, 0]);
+                push_vertex([0, 0, 1]);
+                push_vertex([1, 0, 1]);
+                push_vertex([1, 1, 1]);
+                push_vertex([0, 1, 1]);
             }
 
             hexmesh.cells.push([
