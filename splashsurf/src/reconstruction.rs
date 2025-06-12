@@ -20,10 +20,12 @@ use std::path::PathBuf;
 static ARGS_IO: &str = "Input/output";
 static ARGS_BASIC: &str = "Numerical reconstruction parameters";
 static ARGS_ADV: &str = "Advanced parameters";
-static ARGS_OCTREE: &str = "Domain decomposition (octree or grid) parameters";
+static ARGS_OCTREE: &str = "Domain decomposition parameters";
 static ARGS_DEBUG: &str = "Debug options";
 static ARGS_INTERP: &str = "Interpolation & normals";
-static ARGS_POSTPROC: &str = "Postprocessing";
+static ARGS_DECIMATE: &str = "Mesh decimation and cleanup";
+static ARGS_SMOOTHING: &str = "Mesh smoothing";
+static ARGS_POSTPROC: &str = "General postprocessing";
 static ARGS_OTHER: &str = "Remaining options";
 
 /// Command line arguments for the `reconstruct` subcommand
@@ -53,13 +55,13 @@ pub struct ReconstructSubcommandArgs {
     /// The rest density of the fluid
     #[arg(help_heading = ARGS_BASIC, long, default_value = "1000.0")]
     pub rest_density: f64,
-    /// The smoothing length radius used for the SPH kernel, the kernel compact support radius will be twice the smoothing length (in multiplies of the particle radius)
+    /// The smoothing length radius used for the SPH kernel, the kernel compact support radius will be twice the smoothing length (in multiples of the particle radius)
     #[arg(help_heading = ARGS_BASIC, short = 'l', long)]
     pub smoothing_length: f64,
-    /// The cube edge length used for marching cubes in multiplies of the particle radius, corresponds to the cell size of the implicit background grid
+    /// The cube edge length used for marching cubes in multiples of the particle radius, corresponds to the cell size of the implicit background grid
     #[arg(help_heading = ARGS_BASIC, short = 'c', long)]
     pub cube_size: f64,
-    /// The iso-surface threshold for the density, i.e. the normalized value of the reconstructed density level that indicates the fluid surface (in multiplies of the rest density)
+    /// The iso-surface threshold used for the marching cubes algorithm, this is the value of the implicit surface function (here the color field) at which the surface is reconstructed
     #[arg(help_heading = ARGS_BASIC, short = 't', long, default_value = "0.6")]
     pub surface_threshold: f64,
 
@@ -95,7 +97,7 @@ pub struct ReconstructSubcommandArgs {
     )]
     pub particle_aabb_max: Option<Vec<f64>>,
 
-    /// Enable multi-threading to process multiple input files in parallel (NOTE: Currently, the subdomain-grid domain decomposition approach and some post-processing functions including interpolation do not have sequential versions and therefore do not work well with this option enabled)
+    /// Enable multithreading to process multiple input files in parallel (NOTE: Currently, the subdomain-grid domain decomposition approach and some post-processing functions including interpolation do not have sequential versions and therefore do not work well with this option enabled)
     #[arg(
         help_heading = ARGS_ADV,
         long = "mt-files",
@@ -105,7 +107,7 @@ pub struct ReconstructSubcommandArgs {
         require_equals = true
     )]
     pub parallelize_over_files: Switch,
-    /// Enable multi-threading for a single input file by processing chunks of particles in parallel
+    /// Enable multithreading for a single input file by processing chunks of particles in parallel
     #[arg(
         help_heading = ARGS_ADV,
         long = "mt-particles",
@@ -119,7 +121,7 @@ pub struct ReconstructSubcommandArgs {
     #[arg(help_heading = ARGS_ADV, long, short = 'n')]
     pub num_threads: Option<usize>,
 
-    /// Enable spatial decomposition using a regular grid-based approach
+    /// Enable spatial decomposition using a regular grid-based approach (for efficient multithreading)
     #[arg(
         help_heading = ARGS_OCTREE,
         long,
@@ -129,11 +131,11 @@ pub struct ReconstructSubcommandArgs {
         require_equals = true
     )]
     pub subdomain_grid: Switch,
-    /// Each subdomain will be a cube consisting of this number of MC cube cells along each coordinate axis
+    /// Each subdomain will be a cube consisting of this number of MC grid cells along each coordinate axis
     #[arg(help_heading = ARGS_OCTREE, long, default_value="64")]
     pub subdomain_cubes: u32,
 
-    /// Enable omputing surface normals at the mesh vertices and write them to the output file
+    /// Enable computing surface normals at the mesh vertices and write them to the output file
     #[arg(
         help_heading = ARGS_INTERP,
         long,
@@ -153,7 +155,7 @@ pub struct ReconstructSubcommandArgs {
         require_equals = true
     )]
     pub sph_normals: Switch,
-    /// Number of smoothing iterations to run on the normal field if normal interpolation is enabled (disabled by default)
+    /// Number of smoothing iterations to apply to normals if normal interpolation is enabled (disabled by default)
     #[arg(help_heading = ARGS_INTERP, long)]
     pub normals_smoothing_iters: Option<usize>,
     /// Enable writing raw normals without smoothing to the output mesh if normal smoothing is enabled
@@ -170,11 +172,15 @@ pub struct ReconstructSubcommandArgs {
     #[arg(help_heading = ARGS_INTERP, long = "interpolate_attribute", short = 'a', value_name = "ATTRIBUTE_NAME")]
     pub interpolate_attributes: Vec<String>,
 
-    /// Enable MC specific mesh decimation/simplification which removes bad quality triangles typically generated by MC
+    /// Enable MC specific mesh decimation/simplification which removes bad quality triangles typically generated by MC by snapping (enabled by default if smoothing is enabled)
     #[arg(
-        help_heading = ARGS_POSTPROC,
+        help_heading = ARGS_DECIMATE,
         long,
         default_value = "off",
+        default_value_ifs([
+            ("mesh_smoothing_iters", clap::builder::ArgPredicate::Equals("0".into()), "off"),
+            ("mesh_smoothing_iters", clap::builder::ArgPredicate::IsPresent, "on")
+        ]),
         value_name = "off|on",
         ignore_case = true,
         require_equals = true
@@ -182,7 +188,7 @@ pub struct ReconstructSubcommandArgs {
     pub mesh_cleanup: Switch,
     /// Enable decimation of some typical bad marching cubes triangle configurations (resulting in "barnacles" after Laplacian smoothing)
     #[arg(
-        help_heading = ARGS_POSTPROC,
+        help_heading = ARGS_DECIMATE,
         long,
         default_value = "off",
         value_name = "off|on",
@@ -190,9 +196,9 @@ pub struct ReconstructSubcommandArgs {
         require_equals = true
     )]
     pub decimate_barnacles: Switch,
-    /// Enable keeping vertices without connectivity during decimation instead of filtering them out (faster and helps with debugging)
+    /// Enable preserving vertices without connectivity during decimation instead of filtering them out (faster and helps with debugging)
     #[arg(
-        help_heading = ARGS_POSTPROC,
+        help_heading = ARGS_DECIMATE,
         long,
         default_value = "off",
         value_name = "off|on",
@@ -200,12 +206,13 @@ pub struct ReconstructSubcommandArgs {
         require_equals = true
     )]
     pub keep_verts: Switch,
+
     /// Number of smoothing iterations to run on the reconstructed mesh
-    #[arg(help_heading = ARGS_POSTPROC, long)]
+    #[arg(help_heading = ARGS_SMOOTHING, long)]
     pub mesh_smoothing_iters: Option<usize>,
     /// Enable feature weights for mesh smoothing if mesh smoothing enabled. Preserves isolated particles even under strong smoothing.
     #[arg(
-        help_heading = ARGS_POSTPROC,
+        help_heading = ARGS_SMOOTHING,
         long,
         default_value = "off",
         value_name = "off|on",
@@ -213,12 +220,12 @@ pub struct ReconstructSubcommandArgs {
         require_equals = true
     )]
     pub mesh_smoothing_weights: Switch,
-    /// Normalization value from weighted number of neighbors to mesh smoothing weights
-    #[arg(help_heading = ARGS_POSTPROC, long, default_value = "13.0")]
+    /// Override a manual normalization value from weighted number of neighbors to mesh smoothing weights
+    #[arg(help_heading = ARGS_SMOOTHING, long, default_value = "13.0")]
     pub mesh_smoothing_weights_normalization: f64,
     /// Enable writing the smoothing weights as a vertex attribute to the output mesh file
     #[arg(
-        help_heading = ARGS_POSTPROC,
+        help_heading = ARGS_SMOOTHING,
         long,
         default_value = "off",
         value_name = "off|on",
@@ -227,7 +234,7 @@ pub struct ReconstructSubcommandArgs {
     )]
     pub output_smoothing_weights: Switch,
 
-    /// Enable trying to convert triangles to quads if they meet quality criteria
+    /// Enable conversion of triangles to quads if they meet quality criteria
     #[arg(
         help_heading = ARGS_POSTPROC,
         long,
@@ -278,7 +285,7 @@ pub struct ReconstructSubcommandArgs {
     )]
     pub mesh_aabb_clamp_verts: Switch,
 
-    /// Enable writing the raw reconstructed mesh before applying any post-processing steps
+    /// Enable writing the raw reconstructed mesh before applying any post-processing steps (like smoothing or decimation)
     #[arg(
         help_heading = ARGS_POSTPROC,
         long,
