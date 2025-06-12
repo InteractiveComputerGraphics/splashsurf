@@ -186,6 +186,12 @@ pub struct ReconstructSubcommandArgs {
         require_equals = true
     )]
     pub mesh_cleanup: Switch,
+    /// If MC mesh cleanup is enabled, vertex snapping can be limited to this distance relative to the MC edge length (should be in range of [0.0,0.5])
+    #[arg(
+        help_heading = ARGS_DECIMATE,
+        long,
+    )]
+    pub mesh_cleanup_snap_dist: Option<f64>,
     /// Enable decimation of some typical bad marching cubes triangle configurations (resulting in "barnacles" after Laplacian smoothing)
     #[arg(
         help_heading = ARGS_DECIMATE,
@@ -433,6 +439,7 @@ mod arguments {
         pub check_mesh_orientation: bool,
         pub check_mesh_debug: bool,
         pub mesh_cleanup: bool,
+        pub mesh_cleanup_snap_dist: Option<f64>,
         pub decimate_barnacles: bool,
         pub keep_vertices: bool,
         pub compute_normals: bool,
@@ -564,6 +571,7 @@ mod arguments {
                     || args.check_mesh_orientation.into_bool(),
                 check_mesh_debug: args.check_mesh_debug.into_bool(),
                 mesh_cleanup: args.mesh_cleanup.into_bool(),
+                mesh_cleanup_snap_dist: args.mesh_cleanup_snap_dist,
                 decimate_barnacles: args.decimate_barnacles.into_bool(),
                 keep_vertices: args.keep_verts.into_bool(),
                 compute_normals: args.normals.into_bool(),
@@ -971,6 +979,9 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
             vertex_connectivity = Some(splashsurf_lib::postprocessing::marching_cubes_cleanup(
                 mesh_with_data.mesh.to_mut(),
                 reconstruction.grid(),
+                postprocessing
+                    .mesh_cleanup_snap_dist
+                    .map(|d| R::from_float(d)),
                 5,
                 postprocessing.keep_vertices,
             ));

@@ -87,12 +87,15 @@ pub fn par_laplacian_smoothing_normals_inplace<R: Real>(
 pub fn marching_cubes_cleanup<I: Index, R: Real>(
     mesh: &mut TriMesh3d<R>,
     grid: &UniformCartesianCubeGrid3d<I, R>,
+    max_rel_snap_distance: Option<R>,
     max_iter: usize,
     keep_vertices: bool,
 ) -> Vec<Vec<usize>> {
     profile!("marching_cubes_cleanup");
 
     let half_dx = grid.cell_size() / (R::one() + R::one());
+    let max_snap_distance_sq =
+        max_rel_snap_distance.map(|factor| (factor * grid.cell_size()).powi(2));
 
     let nearest_grid_point = {
         profile!("determine nearest grid points");
@@ -154,10 +157,35 @@ pub fn marching_cubes_cleanup<I: Index, R: Real>(
                     continue;
                 }
 
-                for he in mesh.outgoing_half_edges(v0) {
-                    let v1 = he.to;
-                    if nearest_grid_point[v0] == nearest_grid_point[v1] {
-                        vertex_buffer.push(v1);
+                let grid_point = grid
+                    .try_unflatten_point_index(nearest_grid_point[v0])
+                    .map(|p| grid.point_coordinates(&p));
+
+                if let Some(max_snap_distance_sq) = max_snap_distance_sq {
+                    if let Some(grid_point) = grid_point {
+                        // Check if this vertex is close enough to the grid vertex
+                        if (mesh.vertices[v0] - grid_point).norm_squared() <= max_snap_distance_sq {
+                            // Check for collapse with all neighbors
+                            for he in mesh.outgoing_half_edges(v0) {
+                                let v1 = he.to;
+                                if nearest_grid_point[v0] == nearest_grid_point[v1] {
+                                    // Ensure that other vertex is close enough to grid vertex
+                                    if (mesh.vertices[v1] - grid_point).norm_squared()
+                                        <= max_snap_distance_sq
+                                    {
+                                        vertex_buffer.push(v1);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // Check for collapse with all neighbors
+                    for he in mesh.outgoing_half_edges(v0) {
+                        let v1 = he.to;
+                        if nearest_grid_point[v0] == nearest_grid_point[v1] {
+                            vertex_buffer.push(v1);
+                        }
                     }
                 }
 
