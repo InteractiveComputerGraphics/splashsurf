@@ -1,7 +1,7 @@
 [package]
 name = "pysplashsurf"
 version = "0.11.0"
-edition = "2018"
+edition = "2024"
 
 authors.workspace = true
 license.workspace = true
@@ -9,12 +9,11 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
+splashsurf = { path = "../splashsurf" }
+splashsurf_lib = { path = "../splashsurf_lib" }
 pyo3 = {version = "0.25.0", features = ["anyhow"]}
 numpy = "0.25.0"
 ndarray = "0.16.1"
-splashsurf = { path = "../splashsurf" }
-splashsurf_lib = { path = "../splashsurf_lib" }
-fxhash = "0.2.1"
 bytemuck = { version = "1.23.0", features = ["extern_crate_alloc"] }
 anyhow = "1.0.98"
 rayon = "1.10.0"

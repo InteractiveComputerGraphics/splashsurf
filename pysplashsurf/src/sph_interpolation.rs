@@ -1,6 +1,6 @@
 use ndarray::{ArrayView, ArrayView2};
 use numpy::{PyArray2, PyReadonlyArray2, ToPyArray};
-use pyo3::{prelude::*, PyResult};
+use pyo3::{PyResult, prelude::*};
 use pyo3_stub_gen::derive::*;
 use splashsurf_lib::{
     nalgebra::{Unit, Vector3},

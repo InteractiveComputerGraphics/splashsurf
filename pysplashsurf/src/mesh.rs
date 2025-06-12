@@ -1,19 +1,19 @@
 use ndarray::{Array2, ArrayView, ArrayView2};
 use numpy::{Element, IntoPyArray, PyArray, PyArray2, PyArrayMethods, PyReadonlyArray2, ToPyArray};
 use pyo3::{
+    IntoPyObjectExt,
     exceptions::PyValueError,
     prelude::*,
     types::{PyDict, PyList, PyTuple},
-    IntoPyObjectExt,
 };
 use pyo3_stub_gen::derive::*;
 use splashsurf_lib::{
+    Real,
     mesh::{
         AttributeData, Mesh3d, MeshAttribute, MeshWithData, MixedTriQuadMesh3d, TriMesh3d,
         TriangleOrQuadCell,
     },
     nalgebra::{Unit, Vector3},
-    Real,
 };
 
 use crate::aabb::{Aabb3dF32, Aabb3dF64};

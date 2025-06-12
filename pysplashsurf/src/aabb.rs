@@ -1,7 +1,7 @@
 use numpy::{PyArray, PyArray1, PyArray2, PyReadonlyArray2};
-use pyo3::{prelude::*, PyResult};
+use pyo3::{PyResult, prelude::*};
 use pyo3_stub_gen::derive::*;
-use splashsurf_lib::{nalgebra::Vector3, Aabb3d};
+use splashsurf_lib::{Aabb3d, nalgebra::Vector3};
 
 macro_rules! create_aabb3d_interface {
     ($name: ident, $type: ident) => {

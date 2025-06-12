@@ -7,17 +7,17 @@ use pyo3::{
 };
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use splashsurf_lib::{
+    Aabb3d, Index, Real, SurfaceReconstruction,
     mesh::{AttributeData, Mesh3d, MeshAttribute, MeshWithData, TriMesh3d},
     nalgebra::{Unit, Vector3},
     profile,
     sph_interpolation::SphInterpolator,
-    Aabb3d, Index, Real, SurfaceReconstruction,
 };
 use std::borrow::Cow;
 
 use crate::{
     mesh::{TriMeshWithDataF32, TriMeshWithDataF64},
-    reconstruction::{reconstruct_surface_py, SurfaceReconstructionF32, SurfaceReconstructionF64},
+    reconstruction::{SurfaceReconstructionF32, SurfaceReconstructionF64, reconstruct_surface_py},
 };
 
 fn reconstruction_pipeline_generic<I: Index, R: Real>(
@@ -100,7 +100,11 @@ fn reconstruction_pipeline_generic<I: Index, R: Real>(
             ));
             let tris_after = mesh_with_data.mesh.triangles.len();
             let verts_after = mesh_with_data.mesh.vertices.len();
-            info!("Post-processing: Cleanup reduced number of vertices to {:.2}% and number of triangles to {:.2}% of original mesh.", (verts_after as f64 / verts_before as f64) * 100.0, (tris_after as f64 / tris_before as f64) * 100.0)
+            info!(
+                "Post-processing: Cleanup reduced number of vertices to {:.2}% and number of triangles to {:.2}% of original mesh.",
+                (verts_after as f64 / verts_before as f64) * 100.0,
+                (tris_after as f64 / tris_before as f64) * 100.0
+            )
         }
 
         // Decimate mesh if requested

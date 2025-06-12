@@ -1,9 +1,9 @@
 use numpy::{PyArray2, PyReadonlyArray2};
-use pyo3::{prelude::*, Bound};
+use pyo3::{Bound, prelude::*};
 use pyo3_stub_gen::derive::*;
 use splashsurf_lib::{
-    nalgebra::Vector3, reconstruct_surface, Aabb3d, GridDecompositionParameters, Index, Real,
-    SpatialDecomposition, SurfaceReconstruction,
+    Aabb3d, GridDecompositionParameters, Index, Real, SpatialDecomposition, SurfaceReconstruction,
+    nalgebra::Vector3, reconstruct_surface,
 };
 
 use crate::{
