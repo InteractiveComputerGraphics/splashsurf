@@ -3,7 +3,7 @@
 #
 #    maturin generate-ci github
 #
-name: pySplashsurf CI
+name: Python bindings
 
 on:
   push:

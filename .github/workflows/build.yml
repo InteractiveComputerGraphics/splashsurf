@@ -1,4 +1,4 @@
-name: Build and test
+name: Rust library & CLI
 
 on:
   push:
@@ -34,8 +34,8 @@ jobs:
       run: cargo check --examples
     - name: Check workspace (including pySplashsurf)
       run: cargo check --workspace --all-targets
-    - name: Build
-      run: cargo build (excluding pySplashsurf)
+    - name: Build (excluding pySplashsurf)
+      run: cargo build
     - name: Run tests
       run: cargo test
     - name: Build (release)
@@ -50,13 +50,13 @@ jobs:
           lfs: true
       - name: Build
         run: |
-          cargo build --manifest-path="splashsurf_lib/Cargo.toml" --all-targets --all-features --verbose
+          cargo build --manifest-path="splashsurf_lib/Cargo.toml" --all-targets --all-features
       - name: Run tests
         run: |
-          cargo test --manifest-path="splashsurf_lib/Cargo.toml" --all-features --verbose
+          cargo test --manifest-path="splashsurf_lib/Cargo.toml" --all-features
       - name: Run tests release mode
         run: |
-          cargo test --manifest-path="splashsurf_lib/Cargo.toml" --release --all-features --verbose
+          cargo test --manifest-path="splashsurf_lib/Cargo.toml" --release --all-features
 
   build_lib_no_default_features:
     name: Build splashsurf_lib with no default features
@@ -67,10 +67,10 @@ jobs:
           lfs: true
       - name: Build
         run: |
-          cargo build --manifest-path="splashsurf_lib/Cargo.toml" --all-targets --no-default-features --verbose
+          cargo build --manifest-path="splashsurf_lib/Cargo.toml" --all-targets --no-default-features
       - name: Run tests
         run: |
-          cargo test --manifest-path="splashsurf_lib/Cargo.toml" --no-default-features --verbose
+          cargo test --manifest-path="splashsurf_lib/Cargo.toml" --no-default-features
 
   publish:
     name: Publish to crates.io
