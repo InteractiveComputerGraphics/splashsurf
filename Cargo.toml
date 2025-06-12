@@ -7,6 +7,11 @@ members = [
     "pysplashsurf",
 ]
 
+default-members = [
+    "splashsurf_lib",
+    "splashsurf"
+]
+
 [profile.release]
 lto = true
 codegen-units = 1

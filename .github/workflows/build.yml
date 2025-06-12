@@ -11,37 +11,33 @@ env:
 
 jobs:
   check_format:
-
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
       - name: Check format
         run: cargo fmt -- --check
 
   build_workspace:
-
     runs-on: ubuntu-latest
-
     steps:
     - uses: actions/checkout@v4
       with:
         lfs: true
-    - name: Check
-      run: cargo check --verbose
+    - name: Check (default members)
+      run: cargo check
     - name: Check with examples
-      run: cargo check --examples --verbose
+      run: cargo check --examples
+    - name: Check workspace (including pySplashsurf)
+      run: cargo check --workspace --all-targets
     - name: Build
-      run: cargo build --verbose
+      run: cargo build
     - name: Run tests
-      run: cargo test --verbose
+      run: cargo test
     - name: Build (release)
-      run: cargo build --release --verbose
+      run: cargo build --release
 
   build_lib_all_features:
-
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
         with:
