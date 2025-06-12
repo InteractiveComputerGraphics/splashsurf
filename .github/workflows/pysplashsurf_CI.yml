@@ -16,6 +16,7 @@ permissions:
 
 jobs:
   check_format:
+    name: Check formatting of pySplashsurf crate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -24,6 +25,7 @@ jobs:
         working-directory: pysplashsurf
 
   generate-stub:
+    name: Run stub generator
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -38,6 +40,7 @@ jobs:
           path: pysplashsurf/pysplashsurf/
   
   linux:
+    name: Build wheels for Linux
     needs: generate-stub
     runs-on: ${{ matrix.platform.runner }}
     strategy:
@@ -75,6 +78,7 @@ jobs:
           path: dist
 
   windows:
+    name: Build wheels for Windows
     needs: generate-stub
     runs-on: ${{ matrix.platform.runner }}
     strategy:
@@ -108,6 +112,7 @@ jobs:
           path: dist
 
   macos:
+    name: Build wheels for macOS
     needs: generate-stub
     runs-on: ${{ matrix.platform.runner }}
     strategy:
@@ -140,6 +145,7 @@ jobs:
           path: dist
 
   sdist:
+    name: Build source distribution
     needs: generate-stub
     runs-on: ubuntu-latest
     steps:
@@ -160,8 +166,8 @@ jobs:
           name: wheels-sdist
           path: dist
 
-  release:
-    name: Release
+  publish:
+    name: Publish to PyPI
     runs-on: ubuntu-latest
     if: ${{ startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' }}
     needs: [linux, windows, macos, sdist, tests]
@@ -188,6 +194,7 @@ jobs:
           args: --non-interactive --skip-existing wheels-*/*
   
   build_wheel:
+    name: Build wheel for documentation and tests
     runs-on: ubuntu-latest
     outputs:
       filename: ${{ steps.get_filename.outputs.file_name }}
@@ -214,6 +221,7 @@ jobs:
         path: dist
 
   docs:
+    name: Build documentation
     needs: build_wheel
     runs-on: ubuntu-latest
     steps:
@@ -238,7 +246,8 @@ jobs:
         path: pysplashsurf/pysplashsurf/docs/build/html/
 
   read_the_docs:
-    needs: [docs, release]
+    name: Read the Docs trigger
+    needs: [docs, publish]
     runs-on: ubuntu-latest
     steps:
     - name: Trigger Read the Docs build
@@ -246,6 +255,7 @@ jobs:
         curl -X POST -d "branches=main" -d "token=${{ secrets.READTHEDOCS_TOKEN }}" https://app.readthedocs.org/api/v2/webhook/pysplashsurf/299116/
 
   tests:
+    name: Run pytest
     needs: build_wheel
     defaults:
       run:

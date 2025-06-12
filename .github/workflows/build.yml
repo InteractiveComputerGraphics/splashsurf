@@ -5,12 +5,16 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+  workflow_dispatch:
+  release:
+    types: [ published ]
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
   check_format:
+    name: Run cargo fmt
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -18,6 +22,7 @@ jobs:
         run: cargo fmt -- --check
 
   build_workspace:
+    name: Check and build entire workspace
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
@@ -30,13 +35,14 @@ jobs:
     - name: Check workspace (including pySplashsurf)
       run: cargo check --workspace --all-targets
     - name: Build
-      run: cargo build
+      run: cargo build (excluding pySplashsurf)
     - name: Run tests
       run: cargo test
     - name: Build (release)
       run: cargo build --release
 
   build_lib_all_features:
+    name: Build splashsurf_lib with all features
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -53,9 +59,8 @@ jobs:
           cargo test --manifest-path="splashsurf_lib/Cargo.toml" --release --all-features --verbose
 
   build_lib_no_default_features:
-
+    name: Build splashsurf_lib with no default features
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
         with:
@@ -66,3 +71,21 @@ jobs:
       - name: Run tests
         run: |
           cargo test --manifest-path="splashsurf_lib/Cargo.toml" --no-default-features --verbose
+
+  publish:
+    name: Publish to crates.io
+    runs-on: ubuntu-latest
+    if: ${{ startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' }}
+    needs: [check_format, build_workspace, build_lib_all_features, build_lib_no_default_features]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publish splashsurf_lib
+        run: |
+          cargo publish --package splashsurf_lib --dry-run
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+      - name: Publish splashsurf
+        run: |
+          cargo publish --package splashsurf --dry-run
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
