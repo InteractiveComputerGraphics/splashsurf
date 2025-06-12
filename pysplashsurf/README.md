@@ -74,8 +74,8 @@ You can also manually build the package from the source code:
 2. cd to the `pysplashsurf` directory
 3. Create an environment from `python_environment.yaml` and activate it
     - I recommend creating it in a subfolder, e.g.
-    ```conda env create --prefix ./envs -f python_environment.yaml```
-    - Then activate it using `conda activate ./envs`
+    ```conda env create --prefix ./env -f python_environment.yaml```
+    - Then activate it using `conda activate ./env`
 4. Now, to build the project, use maturin: `maturin develop`
     - Maturin automatically installs the resulting binary in your python environment
     - Set the release flag `-r` or `--release` to build an optimized binary, however, compilation time will be slightly longer
