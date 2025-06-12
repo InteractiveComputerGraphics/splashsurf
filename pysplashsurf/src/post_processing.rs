@@ -260,11 +260,12 @@ pub fn decimation_py_f32<'py>(
 
 #[pyfunction]
 #[pyo3(name = "marching_cubes_cleanup_f64")]
-#[pyo3(signature = (mesh, grid, *, max_iter, keep_vertices))]
+#[pyo3(signature = (mesh, grid, *, max_rel_snap_dist = None, max_iter = 5, keep_vertices = false))]
 pub fn marching_cubes_cleanup_py_f64<'py>(
     py: Python,
     mesh: PyObject,
     grid: &UniformGridF64,
+    max_rel_snap_dist: Option<f64>,
     max_iter: usize,
     keep_vertices: bool,
 ) -> PyResult<Vec<Vec<usize>>> {
@@ -272,6 +273,7 @@ pub fn marching_cubes_cleanup_py_f64<'py>(
         Ok(splashsurf_lib::postprocessing::marching_cubes_cleanup(
             &mut mesh.borrow_mut().inner,
             &grid.inner,
+            max_rel_snap_dist,
             max_iter,
             keep_vertices,
         ))
@@ -279,6 +281,7 @@ pub fn marching_cubes_cleanup_py_f64<'py>(
         Ok(splashsurf_lib::postprocessing::marching_cubes_cleanup(
             &mut mesh.borrow_mut().inner.mesh,
             &grid.inner,
+            max_rel_snap_dist,
             max_iter,
             keep_vertices,
         ))
@@ -289,11 +292,12 @@ pub fn marching_cubes_cleanup_py_f64<'py>(
 
 #[pyfunction]
 #[pyo3(name = "marching_cubes_cleanup_f32")]
-#[pyo3(signature = (mesh, grid, *, max_iter, keep_vertices))]
+#[pyo3(signature = (mesh, grid, *, max_rel_snap_dist = None, max_iter = 5, keep_vertices = false))]
 pub fn marching_cubes_cleanup_py_f32<'py>(
     py: Python,
     mesh: PyObject,
     grid: &UniformGridF32,
+    max_rel_snap_dist: Option<f32>,
     max_iter: usize,
     keep_vertices: bool,
 ) -> PyResult<Vec<Vec<usize>>> {
@@ -301,6 +305,7 @@ pub fn marching_cubes_cleanup_py_f32<'py>(
         Ok(splashsurf_lib::postprocessing::marching_cubes_cleanup(
             &mut mesh.borrow_mut().inner,
             &grid.inner,
+            max_rel_snap_dist,
             max_iter,
             keep_vertices,
         ))
@@ -308,6 +313,7 @@ pub fn marching_cubes_cleanup_py_f32<'py>(
         Ok(splashsurf_lib::postprocessing::marching_cubes_cleanup(
             &mut mesh.borrow_mut().inner.mesh,
             &grid.inner,
+            max_rel_snap_dist,
             max_iter,
             keep_vertices,
         ))

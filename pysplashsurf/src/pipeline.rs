@@ -39,6 +39,7 @@ fn reconstruction_pipeline_generic<I: Index, R: Real>(
     // check_mesh_orientation: bool,
     // check_mesh_debug: bool,
     mesh_cleanup: bool,
+    max_rel_snap_dist: Option<R>,
     decimate_barnacles: bool,
     keep_vertices: bool,
     compute_normals: bool,
@@ -93,6 +94,7 @@ fn reconstruction_pipeline_generic<I: Index, R: Real>(
             vertex_connectivity = Some(splashsurf_lib::postprocessing::marching_cubes_cleanup(
                 &mut mesh_with_data.mesh,
                 reconstruction.grid(),
+                max_rel_snap_dist,
                 5,
                 keep_vertices,
             ));
@@ -461,9 +463,9 @@ fn attrs_conversion<'py, R: Real + Element>(
 #[pyo3(name = "reconstruction_pipeline_f32")]
 #[pyo3(signature = (particles, *, attributes_to_interpolate, particle_radius, rest_density,
     smoothing_length, cube_size, iso_surface_threshold,
-    aabb_min = None, aabb_max = None, enable_multi_threading=false,
-    use_custom_grid_decomposition=false, subdomain_num_cubes_per_dim=64, global_neighborhood_list=false,
-    mesh_cleanup, decimate_barnacles, keep_vertices, compute_normals, sph_normals,
+    aabb_min = None, aabb_max = None, enable_multi_threading = false,
+    use_custom_grid_decomposition = false, subdomain_num_cubes_per_dim = 64, global_neighborhood_list = false,
+    mesh_cleanup, max_rel_snap_dist = None, decimate_barnacles, keep_vertices, compute_normals, sph_normals,
     normals_smoothing_iters, mesh_smoothing_iters, mesh_smoothing_weights,
     mesh_smoothing_weights_normalization, output_mesh_smoothing_weights,
     output_raw_normals, mesh_aabb_min, mesh_aabb_max, mesh_aabb_clamp_vertices
@@ -483,6 +485,7 @@ pub fn reconstruction_pipeline_py_f32<'py>(
     subdomain_num_cubes_per_dim: u32,
     global_neighborhood_list: bool,
     mesh_cleanup: bool,
+    max_rel_snap_dist: Option<f32>,
     decimate_barnacles: bool,
     keep_vertices: bool,
     compute_normals: bool,
@@ -519,6 +522,7 @@ pub fn reconstruction_pipeline_py_f32<'py>(
         subdomain_num_cubes_per_dim,
         global_neighborhood_list,
         mesh_cleanup,
+        max_rel_snap_dist,
         decimate_barnacles,
         keep_vertices,
         compute_normals,
@@ -545,9 +549,9 @@ pub fn reconstruction_pipeline_py_f32<'py>(
 #[pyo3(name = "reconstruction_pipeline_f64")]
 #[pyo3(signature = (particles, *, attributes_to_interpolate, particle_radius, rest_density,
     smoothing_length, cube_size, iso_surface_threshold,
-    aabb_min = None, aabb_max = None, enable_multi_threading=false,
-    use_custom_grid_decomposition=false, subdomain_num_cubes_per_dim=64, global_neighborhood_list=false,
-    mesh_cleanup, decimate_barnacles, keep_vertices, compute_normals, sph_normals,
+    aabb_min = None, aabb_max = None, enable_multi_threading = false,
+    use_custom_grid_decomposition = false, subdomain_num_cubes_per_dim = 64, global_neighborhood_list = false,
+    mesh_cleanup, max_rel_snap_dist = None, decimate_barnacles, keep_vertices, compute_normals, sph_normals,
     normals_smoothing_iters, mesh_smoothing_iters, mesh_smoothing_weights,
     mesh_smoothing_weights_normalization, output_mesh_smoothing_weights,
     output_raw_normals, mesh_aabb_min, mesh_aabb_max, mesh_aabb_clamp_vertices
@@ -567,6 +571,7 @@ pub fn reconstruction_pipeline_py_f64<'py>(
     subdomain_num_cubes_per_dim: u32,
     global_neighborhood_list: bool,
     mesh_cleanup: bool,
+    max_rel_snap_dist: Option<f64>,
     decimate_barnacles: bool,
     keep_vertices: bool,
     compute_normals: bool,
@@ -603,6 +608,7 @@ pub fn reconstruction_pipeline_py_f64<'py>(
         subdomain_num_cubes_per_dim,
         global_neighborhood_list,
         mesh_cleanup,
+        max_rel_snap_dist,
         decimate_barnacles,
         keep_vertices,
         compute_normals,
