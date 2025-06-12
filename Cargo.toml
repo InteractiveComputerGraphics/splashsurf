@@ -7,10 +7,17 @@ members = [
     "pysplashsurf",
 ]
 
+# Exclude the python bindings to avoid building it by default with cargo run/build
 default-members = [
     "splashsurf_lib",
     "splashsurf"
 ]
+
+[workspace.package]
+authors = ["Fabian Löschner <fabian.loeschner@rwth-aachen.de>"]
+license = "MIT"
+homepage = "https://splashsurf.physics-simulation.org"
+repository = "https://github.com/InteractiveComputerGraphics/splashsurf"
 
 [profile.release]
 lto = true

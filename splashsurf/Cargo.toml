@@ -1,16 +1,16 @@
 [package]
 name = "splashsurf"
 version = "0.11.0"
-authors = ["Fabian Löschner <loeschner@cs.rwth-aachen.de>"]
-license = "MIT"
 description = "Command-line tool for surface reconstruction of SPH particle data"
 keywords = ["sph", "particle", "surface", "reconstruction", "marching-cubes"]
 categories = ["command-line-utilities", "graphics", "science", "simulation", "visualization"]
 readme = "README.md"
 edition = "2024"
 
-homepage = "https://splashsurf.physics-simulation.org"
-repository = "https://github.com/InteractiveComputerGraphics/splashsurf"
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
 
 [dependencies]
 splashsurf_lib = { path = "../splashsurf_lib", version = "0.11.0", features = ["vtk_extras", "profiling", "io"] }
