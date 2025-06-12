@@ -62,35 +62,42 @@ pub trait Index:
     + ThreadSafe
     + 'static
 {
+    #[inline]
     fn range(start: Self, end: Self) -> IndexRange<Self> {
         IndexRange::new(start, end)
     }
 
+    #[inline(always)]
     fn two() -> Self {
         Self::one() + Self::one()
     }
 
     /// Converts this value to the specified [`Real`] type `T` by converting first to `f64` followed by `T::from_f64`. If the value cannot be represented by the target type, `None` is returned.
+    #[inline]
     fn to_real<R: Real>(self) -> Option<R> {
         R::from_f64(self.to_f64()?)
     }
 
     /// Converts this value to the specified [`Real`] type, panics if the value cannot be represented by the target type.
+    #[inline]
     fn to_real_unchecked<R: Real>(self) -> R {
         R::from_f64(self.to_f64().unwrap()).unwrap()
     }
 
     /// Multiplies this value by the specified `i32` coefficient. Panics if the coefficient cannot be converted into the target type.
+    #[inline]
     fn times(self, n: i32) -> Self {
         self.mul(Self::from_i32(n).unwrap())
     }
 
     /// Returns the squared value of this value.
+    #[inline]
     fn squared(self) -> Self {
         self * self
     }
 
     /// Returns the cubed value of this value.
+    #[inline]
     fn cubed(self) -> Self {
         self * self * self
     }
@@ -117,19 +124,21 @@ pub trait Real:
     + ThreadSafe
 {
     /// Converts the given float value to this Real type
-    #[inline]
+    #[inline(always)]
     fn from_float<T>(value: T) -> Self
-    where Self: SupersetOf<T> 
+    where Self: SupersetOf<T>
     {
         Self::from_subset(&value)
     }
-    
+
     /// Converts this value to the specified [`Index`] type. If the value cannot be represented by the target type, `None` is returned.
+    #[inline]
     fn to_index<I: Index>(self) -> Option<I> {
         I::from_f64(self.to_f64()?)
     }
 
     /// Converts this value to the specified [`Index`] type, panics if the value cannot be represented by the target type.
+    #[inline]
     fn to_index_unchecked<I: Index>(self) -> I {
         I::from_f64(self.to_f64().unwrap()).unwrap()
     }
@@ -206,6 +215,42 @@ impl<From: Real> RealConvert for &From {
     }
 }
 
+impl RealConvert for f32 {
+    type Out<To>
+        = To
+    where
+        To: Real;
+
+    /// Converts this `f32` value to the target `Real` type. Never returns `None`.
+    #[inline(always)]
+    fn try_convert<To: Real>(self) -> Option<To> {
+        Some(To::from_float(self))
+    }
+    /// Converts this `f32` value to the target `Real` type. Never panics.
+    #[inline(always)]
+    fn convert<To: Real>(self) -> To {
+        To::from_float(self)
+    }
+}
+
+impl RealConvert for f64 {
+    type Out<To>
+        = To
+    where
+        To: Real;
+
+    /// Converts this `f64` value to the target `Real` type. Never returns `None`.
+    #[inline(always)]
+    fn try_convert<To: Real>(self) -> Option<To> {
+        Some(To::from_float(self))
+    }
+    /// Converts this `f64` value to the target `Real` type. Never panics.
+    #[inline(always)]
+    fn convert<To: Real>(self) -> To {
+        To::from_float(self)
+    }
+}
+
 impl<From: Real, const R: usize, const C: usize> RealConvert for SMatrix<From, R, C> {
     type Out<To>
         = SMatrix<To, R, C>
@@ -219,7 +264,7 @@ impl<From: Real, const R: usize, const C: usize> RealConvert for SMatrix<From, R
             .iter_mut()
             .zip(self.iter())
             .try_for_each(|(x_out, x_in)| {
-                *x_out = <To as NumCast>::from(*x_in)?;
+                *x_out = (*x_in).try_convert()?;
                 Some(())
             })?;
         Some(m_out)
