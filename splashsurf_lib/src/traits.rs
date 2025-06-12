@@ -4,6 +4,7 @@ use num_integer::Integer;
 use num_traits::{
     Bounded, CheckedAdd, CheckedMul, CheckedSub, FromPrimitive, NumCast, SaturatingSub, ToPrimitive,
 };
+use simba::scalar::SupersetOf;
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
 use std::ops::{AddAssign, MulAssign, SubAssign};
@@ -102,19 +103,27 @@ pub trait Index:
 
 /// Trait that has to be implemented for types to be used as floating points values in the context of the library (e.g. for coordinates, density values)
 pub trait Real:
-RealField
-// Required by RStar and not part of RealFied anymore
-+ Bounded
-// Not part of RealField anymore
-+ Copy
-+ FromPrimitive
-+ ToPrimitive
-+ NumCast
-+ Debug
-+ Default
-+ Pod
-+ ThreadSafe
+    RealField
+    // Required by RStar and not part of RealFied anymore
+    + Bounded
+    // Not part of RealField anymore
+    + Copy
+    + FromPrimitive
+    + ToPrimitive
+    + NumCast
+    + Debug
+    + Default
+    + Pod
+    + ThreadSafe
 {
+    /// Converts the given float value to this Real type
+    #[inline]
+    fn from_float<T>(value: T) -> Self
+    where Self: SupersetOf<T> 
+    {
+        Self::from_subset(&value)
+    }
+    
     /// Converts this value to the specified [`Index`] type. If the value cannot be represented by the target type, `None` is returned.
     fn to_index<I: Index>(self) -> Option<I> {
         I::from_f64(self.to_f64()?)
@@ -129,15 +138,10 @@ RealField
     fn times(self, n: i32) -> Self {
         self.mul(Self::from_i32(n).unwrap())
     }
-
-    /// Multiplies this value by the specified `f64` coefficient. Panics if the coefficient cannot be converted into the target type.
-    fn times_f64(self, x: f64) -> Self {
-        self.mul(Self::from_f64(x).unwrap())
-    }
 }
 
-impl<T> Index for T where
-    T: Copy
+impl<I> Index for I where
+    I: Copy
         + Hash
         + Integer
         + Bounded
@@ -160,8 +164,8 @@ impl<T> Index for T where
 {
 }
 
-impl<
-    T: RealField
+impl<R> Real for R where
+    R: RealField
         + Bounded
         + Copy
         + FromPrimitive
@@ -171,8 +175,7 @@ impl<
         + Default
         + Pod
         + ThreadSafe
-        + 'static,
-> Real for T
+        + 'static
 {
 }
 
@@ -185,6 +188,7 @@ pub trait RealConvert: Sized {
     /// Tries to convert this value to the target type, returns `None` if value cannot be represented by the target type
     fn try_convert<To: Real>(self) -> Option<Self::Out<To>>;
     /// Converts this value to the target type, panics if value cannot be represented by the target type
+    #[inline]
     fn convert<To: Real>(self) -> Self::Out<To> {
         self.try_convert().expect("failed to convert")
     }
@@ -196,6 +200,7 @@ impl<From: Real> RealConvert for &From {
     where
         To: Real;
 
+    #[inline]
     fn try_convert<To: Real>(self) -> Option<To> {
         <To as NumCast>::from(*self)
     }
@@ -207,6 +212,7 @@ impl<From: Real, const R: usize, const C: usize> RealConvert for SMatrix<From, R
     where
         To: Real;
 
+    #[inline]
     fn try_convert<To: Real>(self) -> Option<SMatrix<To, R, C>> {
         let mut m_out: SMatrix<To, R, C> = SMatrix::zeros();
         m_out

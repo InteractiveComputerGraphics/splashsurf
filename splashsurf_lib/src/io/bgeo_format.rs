@@ -45,11 +45,8 @@ pub fn particles_from_bgeo_file<R: Real>(
     };
 
     // Convert the array storage into individual vectors
-    let positions: Vec<_> = position_storage
-        .chunks(3)
-        .map(|p| Vector3::new(p[0], p[1], p[2]).try_convert().unwrap())
-        .collect();
-
+    let positions: Vec<_> =
+        io_utils::try_convert_scalar_slice_to_vectors(position_storage, |v| v.try_convert())?;
     Ok(positions)
 }
 

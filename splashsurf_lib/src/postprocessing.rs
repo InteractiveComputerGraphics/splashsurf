@@ -12,7 +12,7 @@ use rayon::prelude::*;
 /// Laplacian Smoothing with feature weights
 ///
 /// Move each vertex towards the mean position of its neighbors.
-/// Factor beta in \[0;1] proportional to amount of smoothing (for beta=1 each vertex is placed at the mean position).
+/// Factor beta in \[0;1] proportional to the amount of smoothing (for beta=1 each vertex is placed at the mean position).
 /// Additionally, feature weights can be specified to apply a varying amount of smoothing over the mesh.
 pub fn par_laplacian_smoothing_inplace<R: Real>(
     mesh: &mut TriMesh3d<R>,
@@ -668,7 +668,7 @@ pub fn convert_tris_to_quads<R: Real>(
 
     let min_dot = normal_angle_limit_rad.cos();
     let max_non_squareness = non_squareness_limit;
-    let sqrt_two = R::from_f64(2.0_f64.sqrt()).unwrap();
+    let sqrt_two = R::from_float(2.0_f64.sqrt());
 
     let tris_to_quad = |tri_i: &[usize; 3], tri_j: &[usize; 3]| -> [usize; 4] {
         let mut quad = [0, 0, 0, 0];

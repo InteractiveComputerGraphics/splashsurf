@@ -26,7 +26,7 @@ pub struct CubicSplineKernel<R: Real> {
 
 impl<R: Real> CubicSplineKernel<R> {
     /// Initializes a cubic spline kernel with the given compact support radius
-    #[replace_float_literals(R::from_f64(literal).expect("Literal must fit in R"))]
+    #[replace_float_literals(R::from_float(literal))]
     pub fn new(compact_support_radius: R) -> Self {
         let h = compact_support_radius;
         let sigma = 8.0 / (h * h * h);
@@ -38,7 +38,7 @@ impl<R: Real> CubicSplineKernel<R> {
     }
 
     /// The cubic spline function used by the cubic spline kernel
-    #[replace_float_literals(R::from_f64(literal).expect("Literal must fit in R"))]
+    #[replace_float_literals(R::from_float(literal))]
     fn cubic_function(q: R) -> R {
         if q < R::one() {
             (3.0 / (2.0 * R::pi())) * ((2.0 / 3.0) - q * q + 0.5 * q * q * q)
@@ -51,7 +51,7 @@ impl<R: Real> CubicSplineKernel<R> {
     }
 
     /// The derivative of the cubic spline function used by the cubic spline kernel w.r.t to the parameter `q`
-    #[replace_float_literals(R::from_f64(literal).expect("Literal must fit in R"))]
+    #[replace_float_literals(R::from_float(literal))]
     fn cubic_function_dq(q: R) -> R {
         if q < 1.0 {
             (3.0 / (4.0 * R::pi())) * (-4.0 * q + 3.0 * q * q)

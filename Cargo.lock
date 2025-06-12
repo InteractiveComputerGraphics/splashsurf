@@ -1340,6 +1340,7 @@ dependencies = [
  "rstar",
  "sdfu",
  "serde_json",
+ "simba",
  "thiserror",
  "thread_local",
  "ultraviolet",

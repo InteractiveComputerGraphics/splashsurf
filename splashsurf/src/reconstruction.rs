@@ -999,8 +999,8 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
             );
 
             let particle_rest_density = params.rest_density;
-            let particle_rest_volume = R::from_f64((4.0 / 3.0) * std::f64::consts::PI).unwrap()
-                * params.particle_radius.powi(3);
+            let particle_rest_volume =
+                R::from_float(4.0) * R::frac_pi_3() * params.particle_radius.powi(3);
             let particle_rest_mass = particle_rest_volume * particle_rest_density;
 
             let particle_densities = reconstruction

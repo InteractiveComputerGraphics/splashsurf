@@ -33,6 +33,7 @@ io = ["vtk_extras", "vtkio", "ply-rs", "nom", "serde_json", "flate2"]
 [dependencies]
 log = "0.4"
 nalgebra = { version = "0.33", features = ["rand", "bytemuck"] }
+simba = "0.9.0"
 num-traits = "0.2"
 num-integer = "0.1"
 anyhow = "1.0"

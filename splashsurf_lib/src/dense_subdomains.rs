@@ -62,7 +62,7 @@ pub(crate) struct ParametersSubdomainGrid<I: Index, R: Real> {
     surface_threshold: R,
     /// MC cube size (in simulation units)
     cube_size: R,
-    /// Size of a subdomain in multiplies of MC cubes
+    /// Size of a subdomain in multiples of MC cubes
     subdomain_cubes: I,
     /// Margin for ghost particles around each subdomain
     ghost_particle_margin: R,
@@ -130,7 +130,7 @@ pub(crate) fn initialize_parameters<I: Index, R: Real>(
     let cube_size = parameters.cube_size;
     let surface_threshold = parameters.iso_surface_threshold;
 
-    let particle_rest_volume = to_real!(4) * R::frac_pi_3() * particle_radius.powi(3);
+    let particle_rest_volume = R::from_float(4.0) * R::frac_pi_3() * particle_radius.powi(3);
     let particle_rest_mass = particle_rest_volume * particle_rest_density;
 
     let ghost_particle_margin =
