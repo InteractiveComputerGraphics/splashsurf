@@ -6,10 +6,10 @@ use clap::value_parser;
 use indicatif::{ProgressBar, ProgressStyle};
 use log::{error, info, warn};
 use rayon::prelude::*;
-use splashsurf_lib::mesh::{AttributeData, Mesh3d, MeshAttribute, MeshWithData};
+use splashsurf_lib::mesh::{AttributeData, Mesh3d, MeshAttribute, MeshWithData, MixedTriQuadMesh3d, TriMesh3d};
 use splashsurf_lib::nalgebra::{Unit, Vector3};
 use splashsurf_lib::sph_interpolation::SphInterpolator;
-use splashsurf_lib::{Aabb3d, Index, Real, profile};
+use splashsurf_lib::{Aabb3d, Index, Real, profile, SurfaceReconstruction};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::convert::TryFrom;
@@ -889,7 +889,7 @@ pub(crate) fn reconstruction_pipeline(
 ) -> Result<(), anyhow::Error> {
     if args.use_double_precision {
         info!("Using double precision (f64) for surface reconstruction.");
-        reconstruction_pipeline_generic::<i64, f64>(
+        reconstruction_pipeline_from_path::<i64, f64>(
             paths,
             &args.params,
             &args.io_params,
@@ -897,7 +897,7 @@ pub(crate) fn reconstruction_pipeline(
         )?;
     } else {
         info!("Using single precision (f32) for surface reconstruction.");
-        reconstruction_pipeline_generic::<i64, f32>(
+        reconstruction_pipeline_from_path::<i64, f32>(
             paths,
             &args.params.try_convert().ok_or(anyhow!(
                 "Unable to convert surface reconstruction parameters from f64 to f32."
@@ -910,62 +910,24 @@ pub(crate) fn reconstruction_pipeline(
     Ok(())
 }
 
-/// Wrapper for the reconstruction pipeline: loads input file, runs reconstructions, stores output files
-pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
-    paths: &ReconstructionRunnerPaths,
+pub fn reconstruction_pipeline_from_data<I: Index, R: Real>(
+    particle_positions: Vec<Vector3<R>>,
+    attributes: Vec<MeshAttribute<R>>,
     params: &splashsurf_lib::Parameters<R>,
-    io_params: &io::FormatParameters,
     postprocessing: &ReconstructionRunnerPostprocessingArgs,
-) -> Result<(), anyhow::Error> {
-    profile!("surface reconstruction");
-
-    // Load particle positions and attributes to interpolate
-    let (particle_positions, attributes) = io::read_particle_positions_with_attributes(
-        &paths.input_file,
-        &postprocessing.interpolate_attributes,
-        &io_params.input,
-    )
-    .with_context(|| {
-        format!(
-            "Failed to load particle positions from file \"{}\"",
-            paths.input_file.display()
-        )
-    })?;
-
+) -> Result<(Option<MeshWithData<R, TriMesh3d<R>>>, Option<MeshWithData<R, MixedTriQuadMesh3d<R>>>, Option<SurfaceReconstruction<I, R>>), anyhow::Error> {
     // Perform the surface reconstruction
     let reconstruction =
         splashsurf_lib::reconstruct_surface::<I, R>(particle_positions.as_slice(), params)?;
 
+    let reconstruction_output = if postprocessing.output_raw_mesh {
+        Some(reconstruction.clone())
+    } else {
+        None
+    };
+
     let grid = reconstruction.grid();
     let mut mesh_with_data = MeshWithData::new(Cow::Borrowed(reconstruction.mesh()));
-
-    if postprocessing.output_raw_mesh {
-        profile!("write surface mesh to file");
-
-        let output_path = paths
-            .output_file
-            .parent()
-            // Add a trailing separator if the parent is non-empty
-            .map(|p| p.join(""))
-            .unwrap_or_default();
-        let output_filename = format!(
-            "raw_{}",
-            paths.output_file.file_name().unwrap().to_string_lossy()
-        );
-        let raw_output_file = output_path.join(output_filename);
-
-        info!(
-            "Writing unprocessed surface mesh to \"{}\"...",
-            raw_output_file.display()
-        );
-
-        io::write_mesh(&mesh_with_data, raw_output_file, &io_params.output).with_context(|| {
-            anyhow!(
-                "Failed to write raw output mesh to file \"{}\"",
-                paths.output_file.display()
-            )
-        })?;
-    }
 
     // Perform post-processing
     {
@@ -1277,7 +1239,7 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
     };
 
     // Convert triangles to quads
-    let (tri_mesh, tri_quad_mesh) = if postprocessing.generate_quads {
+    let (mut tri_mesh, tri_quad_mesh) = if postprocessing.generate_quads {
         info!("Post-processing: Convert triangles to quads...");
         let non_squareness_limit = R::from_f64(postprocessing.quad_max_edge_diag_ratio).unwrap();
         let normal_angle_limit_rad =
@@ -1312,28 +1274,6 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
         (Some(mesh_with_data), None)
     };
 
-    // Store the surface mesh
-    {
-        profile!("write surface mesh to file");
-
-        match (&tri_mesh, &tri_quad_mesh) {
-            (Some(mesh), None) => {
-                io::write_mesh(mesh, paths.output_file.clone(), &io_params.output)
-            }
-            (None, Some(mesh)) => {
-                io::write_mesh(mesh, paths.output_file.clone(), &io_params.output)
-            }
-
-            _ => unreachable!(),
-        }
-        .with_context(|| {
-            anyhow!(
-                "Failed to write output mesh to file \"{}\"",
-                paths.output_file.display()
-            )
-        })?;
-    }
-
     // TODO: Option to continue processing sequences even if checks fail. Maybe return special error type?
 
     if postprocessing.check_mesh_closed || postprocessing.check_mesh_manifold {
@@ -1347,7 +1287,7 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
             ),
             (None, Some(_mesh)) => {
                 info!("Checking for mesh consistency not implemented for quad mesh at the moment.");
-                return Ok(());
+                return Ok((None, Some(_mesh.to_owned()), reconstruction_output));
             }
             _ => unreachable!(),
         } {
@@ -1358,7 +1298,7 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
             error!("{}", err);
             return Err(anyhow!("{}", err))
                 .context(format!("Checked mesh for problems (holes: {}, non-manifold edges/vertices: {}), problems were found!", postprocessing.check_mesh_closed, postprocessing.check_mesh_manifold))
-                .context(format!("Problem found with mesh file \"{}\"", paths.output_file.display()));
+                .context("Problem found with mesh");
         } else {
             info!(
                 "Checked mesh for problems (holes: {}, non-manifold edges/vertices: {}), no problems were found.",
@@ -1416,7 +1356,7 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
                 info!(
                     "Checking for normal orientation not implemented for quad mesh at the moment."
                 );
-                return Ok(());
+                Ok(())
             }
             _ => unreachable!(),
         } {
@@ -1424,13 +1364,103 @@ pub(crate) fn reconstruction_pipeline_generic<I: Index, R: Real>(
             error!("{}", err);
             return Err(anyhow!("{}", err))
                 .context("Checked mesh orientation (flipped normals), problems were found!")
-                .context(format!(
-                    "Problem found with mesh file \"{}\"",
-                    paths.output_file.display()
-                ));
+                .context("Problem found with mesh");
         } else {
             info!("Checked mesh orientation (flipped normals), no problems were found.");
         }
+    }
+
+    match (&mut tri_mesh, &tri_quad_mesh) {
+        (Some(mesh), None) => {
+            let mut res: MeshWithData<R, TriMesh3d<R>> = MeshWithData::new(mesh.to_owned().mesh.into_owned());
+            res.point_attributes = std::mem::take(&mut mesh.point_attributes);
+            res.cell_attributes = std::mem::take(&mut mesh.cell_attributes);
+
+            Ok((Some(res), None, reconstruction_output))
+        },
+        (None, Some(_mesh)) => {
+            Ok((None, Some(_mesh.to_owned()), reconstruction_output))
+        },
+        _ => unreachable!()
+    }
+}
+
+/// Wrapper for the reconstruction pipeline: loads input file, runs reconstructions, stores output files
+pub(crate) fn reconstruction_pipeline_from_path<I: Index, R: Real>(
+    paths: &ReconstructionRunnerPaths,
+    params: &splashsurf_lib::Parameters<R>,
+    io_params: &io::FormatParameters,
+    postprocessing: &ReconstructionRunnerPostprocessingArgs,
+) -> Result<(), anyhow::Error> {
+    profile!("surface reconstruction");
+
+    // Load particle positions and attributes to interpolate
+    let (particle_positions, attributes) = io::read_particle_positions_with_attributes(
+        &paths.input_file,
+        &postprocessing.interpolate_attributes,
+        &io_params.input,
+    )
+    .with_context(|| {
+        format!(
+            "Failed to load particle positions from file \"{}\"",
+            paths.input_file.display()
+        )
+    })?;
+
+    let (tri_mesh, tri_quad_mesh, reconstruction) =
+        reconstruction_pipeline_from_data::<I, R>(particle_positions, attributes, params, postprocessing)?;
+
+    if postprocessing.output_raw_mesh {
+        profile!("write surface mesh to file");
+
+        let reconstruction = reconstruction.expect("reconstruction_pipeline_from_data did not return a SurfaceReconstruction object");
+        let mesh = reconstruction.mesh();
+
+        let output_path = paths
+            .output_file
+            .parent()
+            // Add a trailing separator if the parent is non-empty
+            .map(|p| p.join(""))
+            .unwrap_or_default();
+        let output_filename = format!(
+            "raw_{}",
+            paths.output_file.file_name().unwrap().to_string_lossy()
+        );
+        let raw_output_file = output_path.join(output_filename);
+
+        info!(
+            "Writing unprocessed surface mesh to \"{}\"...",
+            raw_output_file.display()
+        );
+
+        io::write_mesh(&MeshWithData::new(mesh.to_owned()), raw_output_file, &io_params.output).with_context(|| {
+            anyhow!(
+                "Failed to write raw output mesh to file \"{}\"",
+                paths.output_file.display()
+            )
+        })?;
+    }
+
+    // Store the surface mesh
+    {
+        profile!("write surface mesh to file");
+
+        match (&tri_mesh, &tri_quad_mesh) {
+            (Some(mesh), None) => {
+                io::write_mesh(mesh, paths.output_file.clone(), &io_params.output)
+            }
+            (None, Some(mesh)) => {
+                io::write_mesh(mesh, paths.output_file.clone(), &io_params.output)
+            }
+
+            _ => unreachable!(),
+        }
+        .with_context(|| {
+            anyhow!(
+                "Failed to write output mesh to file \"{}\"",
+                paths.output_file.display()
+            )
+        })?;
     }
 
     Ok(())
