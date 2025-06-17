@@ -84,8 +84,8 @@ def reconstruction_pipeline(input_file, output_file, *, attributes_to_interpolat
                             iso_surface_threshold=0.6, mesh_smoothing_weights=False, output_mesh_smoothing_weights=False, sph_normals=False, 
                             mesh_smoothing_weights_normalization=13.0, mesh_smoothing_iters=5, normals_smoothing_iters=5,
                             mesh_aabb_min=None, mesh_aabb_max=None, mesh_cleanup=False, decimate_barnacles=False, keep_vertices=False,
-                            compute_normals=False, output_raw_normals=False, mesh_aabb_clamp_vertices=False,
-                            check_mesh_closed=False, check_mesh_manifold=False, check_mesh_debug=False,
+                            compute_normals=False, output_raw_normals=False, output_raw_mesh=False, mesh_aabb_clamp_vertices=False,
+                            check_mesh_closed=False, check_mesh_manifold=False, check_mesh_orientation=False, check_mesh_debug=False,
                             generate_quads=False, quad_max_edge_diag_ratio=1.75, quad_max_normal_angle=10.0, quad_max_interior_angle=135.0,
                             subdomain_grid=False, subdomain_num_cubes_per_dim=64):
     
@@ -106,25 +106,12 @@ def reconstruction_pipeline(input_file, output_file, *, attributes_to_interpolat
                                                           mesh_smoothing_weights_normalization=mesh_smoothing_weights_normalization,
                                                           mesh_smoothing_iters=mesh_smoothing_iters, normals_smoothing_iters=normals_smoothing_iters,
                                                           mesh_aabb_min=mesh_aabb_min, mesh_aabb_max=mesh_aabb_max, mesh_cleanup=mesh_cleanup, decimate_barnacles=decimate_barnacles,
-                                                          keep_vertices=keep_vertices, compute_normals=compute_normals, output_raw_normals=output_raw_normals,
-                                                          mesh_aabb_clamp_vertices=mesh_aabb_clamp_vertices, subdomain_grid=subdomain_grid, subdomain_num_cubes_per_dim=subdomain_num_cubes_per_dim, output_mesh_smoothing_weights=output_mesh_smoothing_weights)
-    
-    # Convert triangles to quads
-    if generate_quads:
-        mesh_with_data = pysplashsurf.convert_tris_to_quads(mesh_with_data, non_squareness_limit=quad_max_edge_diag_ratio, normal_angle_limit_rad=math.radians(quad_max_normal_angle), max_interior_angle=math.radians(quad_max_interior_angle))
+                                                          keep_vertices=keep_vertices, compute_normals=compute_normals, output_raw_normals=output_raw_normals, output_raw_mesh=output_raw_mesh,
+                                                          mesh_aabb_clamp_vertices=mesh_aabb_clamp_vertices, subdomain_grid=subdomain_grid, subdomain_num_cubes_per_dim=subdomain_num_cubes_per_dim, output_mesh_smoothing_weights=output_mesh_smoothing_weights,
+                                                          check_mesh_closed=check_mesh_closed, check_mesh_manifold=check_mesh_manifold, check_mesh_orientation=check_mesh_orientation, check_mesh_debug=check_mesh_debug,
+                                                          generate_quads=generate_quads, quad_max_edge_diag_ratio=quad_max_edge_diag_ratio, quad_max_normal_angle=quad_max_normal_angle, quad_max_interior_angle=quad_max_interior_angle)
 
-    pysplashsurf.write_to_file(mesh_with_data, output_file, consume_object=False)
-
-    mesh = mesh_with_data.take_mesh()
-    
-    if type(mesh) is pysplashsurf.TriMesh3dF64 or type(mesh) is pysplashsurf.TriMesh3dF32:
-        # Mesh checks
-        if check_mesh_closed or check_mesh_manifold:
-            pysplashsurf.check_mesh_consistency(reconstruction.grid, mesh, check_closed=check_mesh_closed, check_manifold=check_mesh_manifold, debug=check_mesh_debug)
-    
-    
-    # Left out: Mesh orientation check
-    
+    pysplashsurf.write_to_file(mesh_with_data, output_file, consume_object=True)
 
 
 def test_no_post_processing():
@@ -134,9 +121,8 @@ def test_no_post_processing():
     
     start = time.time()
     reconstruction_pipeline(VTK_PATH, DIR.joinpath("test.vtk"), particle_radius=np.float64(0.025), smoothing_length=np.float64(2.0), 
-                            cube_size=np.float64(0.5), iso_surface_threshold=np.float64(0.6), mesh_smoothing_weights=True, 
-                            mesh_smoothing_weights_normalization=np.float64(13.0), mesh_smoothing_iters=0, normals_smoothing_iters=0, 
-                            generate_quads=False, mesh_cleanup=False, compute_normals=False, subdomain_grid=True)
+                            cube_size=np.float64(0.5), iso_surface_threshold=np.float64(0.6), mesh_smoothing_weights=False, 
+                            mesh_smoothing_iters=0, normals_smoothing_iters=0, mesh_cleanup=False, compute_normals=False, subdomain_grid=True)
     print("Python done in", time.time() - start)
     
     binary_mesh = meshio.read(DIR.joinpath("test_bin.vtk"))

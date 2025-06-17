@@ -6,4 +6,6 @@ mod reconstruction;
 mod allocator;
 mod logging;
 
+pub use reconstruction::arguments::ReconstructionRunnerPostprocessingArgs;
+pub use reconstruction::reconstruction_pipeline_from_data;
 pub(crate) use register_counting_allocator;

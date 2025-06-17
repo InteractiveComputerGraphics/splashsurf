@@ -6,10 +6,12 @@ use clap::value_parser;
 use indicatif::{ProgressBar, ProgressStyle};
 use log::{error, info, warn};
 use rayon::prelude::*;
-use splashsurf_lib::mesh::{AttributeData, Mesh3d, MeshAttribute, MeshWithData, MixedTriQuadMesh3d, TriMesh3d};
+use splashsurf_lib::mesh::{
+    AttributeData, Mesh3d, MeshAttribute, MeshWithData, MixedTriQuadMesh3d, TriMesh3d,
+};
 use splashsurf_lib::nalgebra::{Unit, Vector3};
 use splashsurf_lib::sph_interpolation::SphInterpolator;
-use splashsurf_lib::{Aabb3d, Index, Real, profile, SurfaceReconstruction};
+use splashsurf_lib::{Aabb3d, Index, Real, SurfaceReconstruction, profile};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::convert::TryFrom;
@@ -419,7 +421,7 @@ pub fn reconstruct_subcommand(cmd_args: &ReconstructSubcommandArgs) -> Result<()
 }
 
 /// Conversion and validation of command line arguments
-mod arguments {
+pub mod arguments {
     use super::ReconstructSubcommandArgs;
     use crate::io;
     use anyhow::{Context, anyhow};
@@ -433,6 +435,8 @@ mod arguments {
     use std::str::FromStr;
     use walkdir::WalkDir;
 
+    /// Parameters for the reconstruction post-processing pipeline
+    #[derive(Clone, Debug)]
     pub struct ReconstructionRunnerPostprocessingArgs {
         pub check_mesh_closed: bool,
         pub check_mesh_manifold: bool,
@@ -915,7 +919,14 @@ pub fn reconstruction_pipeline_from_data<I: Index, R: Real>(
     attributes: Vec<MeshAttribute<R>>,
     params: &splashsurf_lib::Parameters<R>,
     postprocessing: &ReconstructionRunnerPostprocessingArgs,
-) -> Result<(Option<MeshWithData<R, TriMesh3d<R>>>, Option<MeshWithData<R, MixedTriQuadMesh3d<R>>>, Option<SurfaceReconstruction<I, R>>), anyhow::Error> {
+) -> Result<
+    (
+        Option<MeshWithData<R, TriMesh3d<R>>>,
+        Option<MeshWithData<R, MixedTriQuadMesh3d<R>>>,
+        Option<SurfaceReconstruction<I, R>>,
+    ),
+    anyhow::Error,
+> {
     // Perform the surface reconstruction
     let reconstruction =
         splashsurf_lib::reconstruct_surface::<I, R>(particle_positions.as_slice(), params)?;
@@ -1372,16 +1383,15 @@ pub fn reconstruction_pipeline_from_data<I: Index, R: Real>(
 
     match (&mut tri_mesh, &tri_quad_mesh) {
         (Some(mesh), None) => {
-            let mut res: MeshWithData<R, TriMesh3d<R>> = MeshWithData::new(mesh.to_owned().mesh.into_owned());
+            let mut res: MeshWithData<R, TriMesh3d<R>> =
+                MeshWithData::new(mesh.to_owned().mesh.into_owned());
             res.point_attributes = std::mem::take(&mut mesh.point_attributes);
             res.cell_attributes = std::mem::take(&mut mesh.cell_attributes);
 
             Ok((Some(res), None, reconstruction_output))
-        },
-        (None, Some(_mesh)) => {
-            Ok((None, Some(_mesh.to_owned()), reconstruction_output))
-        },
-        _ => unreachable!()
+        }
+        (None, Some(_mesh)) => Ok((None, Some(_mesh.to_owned()), reconstruction_output)),
+        _ => unreachable!(),
     }
 }
 
@@ -1407,13 +1417,19 @@ pub(crate) fn reconstruction_pipeline_from_path<I: Index, R: Real>(
         )
     })?;
 
-    let (tri_mesh, tri_quad_mesh, reconstruction) =
-        reconstruction_pipeline_from_data::<I, R>(particle_positions, attributes, params, postprocessing)?;
+    let (tri_mesh, tri_quad_mesh, reconstruction) = reconstruction_pipeline_from_data::<I, R>(
+        particle_positions,
+        attributes,
+        params,
+        postprocessing,
+    )?;
 
     if postprocessing.output_raw_mesh {
         profile!("write surface mesh to file");
 
-        let reconstruction = reconstruction.expect("reconstruction_pipeline_from_data did not return a SurfaceReconstruction object");
+        let reconstruction = reconstruction.expect(
+            "reconstruction_pipeline_from_data did not return a SurfaceReconstruction object",
+        );
         let mesh = reconstruction.mesh();
 
         let output_path = paths
@@ -1433,7 +1449,12 @@ pub(crate) fn reconstruction_pipeline_from_path<I: Index, R: Real>(
             raw_output_file.display()
         );
 
-        io::write_mesh(&MeshWithData::new(mesh.to_owned()), raw_output_file, &io_params.output).with_context(|| {
+        io::write_mesh(
+            &MeshWithData::new(mesh.to_owned()),
+            raw_output_file,
+            &io_params.output,
+        )
+        .with_context(|| {
             anyhow!(
                 "Failed to write raw output mesh to file \"{}\"",
                 paths.output_file.display()

@@ -1,27 +1,19 @@
-use anyhow::anyhow;
-use log::info;
+use crate::{
+    mesh::{
+        MixedTriQuadMeshWithDataF32, MixedTriQuadMeshWithDataF64, TriMeshWithDataF32,
+        TriMeshWithDataF64,
+    },
+    reconstruction::{SurfaceReconstructionF32, SurfaceReconstructionF64},
+};
 use numpy::{Element, PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::{
     prelude::*,
     types::{PyDict, PyString},
 };
-use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
-use splashsurf_lib::{
-    Aabb3d, Index, Real, SurfaceReconstruction,
-    mesh::{AttributeData, Mesh3d, MeshAttribute, MeshWithData, TriMesh3d},
-    nalgebra::{Unit, Vector3},
-    profile,
-    sph_interpolation::SphInterpolator,
-};
-use std::borrow::Cow;
-
-use crate::{
-    mesh::{TriMeshWithDataF32, TriMeshWithDataF64},
-    reconstruction::{SurfaceReconstructionF32, SurfaceReconstructionF64, reconstruct_surface_py},
-};
+use splashsurf_lib::{mesh::{AttributeData, MeshAttribute, MeshWithData, TriMesh3d, MixedTriQuadMesh3d}, nalgebra::Vector3, Aabb3d, GridDecompositionParameters, Index, Real, SpatialDecomposition, SurfaceReconstruction};
 
 fn reconstruction_pipeline_generic<I: Index, R: Real>(
-    particles: &[Vector3<R>],
+    particle_positions: &[Vector3<R>],
     attributes: Vec<MeshAttribute<R>>,
     particle_radius: R,
     rest_density: R,
@@ -33,13 +25,12 @@ fn reconstruction_pipeline_generic<I: Index, R: Real>(
     enable_multi_threading: bool,
     use_custom_grid_decomposition: bool,
     subdomain_num_cubes_per_dim: u32,
-    global_neighborhood_list: bool,
-    // check_mesh_closed: bool,
-    // check_mesh_manifold: bool,
-    // check_mesh_orientation: bool,
-    // check_mesh_debug: bool,
+    check_mesh_closed: bool,
+    check_mesh_manifold: bool,
+    check_mesh_orientation: bool,
+    check_mesh_debug: bool,
     mesh_cleanup: bool,
-    max_rel_snap_dist: Option<R>,
+    max_rel_snap_dist: Option<f64>,
     decimate_barnacles: bool,
     keep_vertices: bool,
     compute_normals: bool,
@@ -48,378 +39,103 @@ fn reconstruction_pipeline_generic<I: Index, R: Real>(
     mesh_smoothing_iters: Option<usize>,
     mesh_smoothing_weights: bool,
     mesh_smoothing_weights_normalization: f64,
-    // generate_quads: bool,
-    // quad_max_edge_diag_ratio: f64,
-    // quad_max_normal_angle: f64,
-    // quad_max_interior_angle: f64,
+    generate_quads: bool,
+    quad_max_edge_diag_ratio: f64,
+    quad_max_normal_angle: f64,
+    quad_max_interior_angle: f64,
     output_mesh_smoothing_weights: bool,
     output_raw_normals: bool,
-    mesh_aabb_min: Option<[R; 3]>,
-    mesh_aabb_max: Option<[R; 3]>,
+    output_raw_mesh: bool,
+    mesh_aabb_min: Option<[f64; 3]>,
+    mesh_aabb_max: Option<[f64; 3]>,
     mesh_aabb_clamp_vertices: bool,
-) -> Result<(MeshWithData<R, TriMesh3d<R>>, SurfaceReconstruction<I, R>), anyhow::Error> {
-    profile!("surface reconstruction");
-
-    let compact_support_radius = R::from_f64(2.0).unwrap() * smoothing_length * particle_radius;
-
-    // Perform the surface reconstruction
-    let reconstruction = reconstruct_surface_py::<I, R>(
-        particles,
-        particle_radius,
-        rest_density,
-        smoothing_length,
-        cube_size,
-        iso_surface_threshold,
-        enable_multi_threading,
-        global_neighborhood_list,
-        use_custom_grid_decomposition,
-        subdomain_num_cubes_per_dim,
-        aabb_min,
-        aabb_max,
-    );
-
-    // let grid = reconstruction.grid();
-    let mut mesh_with_data: MeshWithData<R, TriMesh3d<R>> =
-        MeshWithData::new(reconstruction.mesh().clone());
-
-    // Perform post-processing
-    {
-        profile!("postprocessing");
-        let mut vertex_connectivity = None;
-
-        if mesh_cleanup {
-            info!("Post-processing: Performing mesh cleanup");
-            let tris_before = mesh_with_data.mesh.triangles.len();
-            let verts_before = mesh_with_data.mesh.vertices.len();
-            vertex_connectivity = Some(splashsurf_lib::postprocessing::marching_cubes_cleanup(
-                &mut mesh_with_data.mesh,
-                reconstruction.grid(),
-                max_rel_snap_dist,
-                5,
-                keep_vertices,
-            ));
-            let tris_after = mesh_with_data.mesh.triangles.len();
-            let verts_after = mesh_with_data.mesh.vertices.len();
-            info!(
-                "Post-processing: Cleanup reduced number of vertices to {:.2}% and number of triangles to {:.2}% of original mesh.",
-                (verts_after as f64 / verts_before as f64) * 100.0,
-                (tris_after as f64 / tris_before as f64) * 100.0
-            )
-        }
-
-        // Decimate mesh if requested
-        if decimate_barnacles {
-            info!("Post-processing: Performing decimation");
-            vertex_connectivity = Some(splashsurf_lib::postprocessing::decimation(
-                &mut mesh_with_data.mesh,
-                keep_vertices,
-            ));
-        }
-
-        // Initialize SPH interpolator if required later
-        let interpolator_required = mesh_smoothing_weights || sph_normals;
-
-        let interpolator = if interpolator_required {
-            profile!("initialize interpolator");
-            info!("Post-processing: Initializing interpolator...");
-
-            info!(
-                "Constructing global acceleration structure for SPH interpolation to {} vertices...",
-                mesh_with_data.vertices().len()
-            );
-
-            let particle_rest_density = rest_density;
-            let particle_rest_volume =
-                R::from_float(4.0) * R::frac_pi_3() * particle_radius.powi(3);
-            let particle_rest_mass = particle_rest_volume * particle_rest_density;
-
-            let particle_densities = reconstruction
-                .particle_densities()
-                .ok_or_else(|| anyhow::anyhow!("Particle densities were not returned by surface reconstruction but are required for SPH normal computation"))?
-                .as_slice();
-            assert_eq!(
-                particles.len(),
-                particle_densities.len(),
-                "There has to be one density value per particle"
-            );
-
-            Some(SphInterpolator::new(
-                &particles,
-                particle_densities,
-                particle_rest_mass,
-                compact_support_radius,
-            ))
-        } else {
-            None
-        };
-
-        // Compute mesh vertex-vertex connectivity map if required later
-        let vertex_connectivity_required =
-            normals_smoothing_iters.is_some() || mesh_smoothing_iters.is_some();
-        if vertex_connectivity.is_none() && vertex_connectivity_required {
-            vertex_connectivity = Some(mesh_with_data.mesh.vertex_vertex_connectivity());
-        }
-
-        // Compute smoothing weights if requested
-        let smoothing_weights = if mesh_smoothing_weights {
-            profile!("compute smoothing weights");
-            info!("Post-processing: Computing smoothing weights...");
-
-            // TODO: Switch between parallel/single threaded
-            // TODO: Re-use data from reconstruction?
-
-            // Global neighborhood search
-            let nl = reconstruction
-                .particle_neighbors()
-                .map(Cow::Borrowed)
-                .unwrap_or_else(||
-                    {
-                        let search_radius = compact_support_radius;
-
-                        let mut domain = Aabb3d::from_points(particles);
-                        domain.grow_uniformly(search_radius);
-
-                        let mut nl = Vec::new();
-                        splashsurf_lib::neighborhood_search::neighborhood_search_spatial_hashing_parallel::<I, R>(
-                            &domain,
-                            particles,
-                            search_radius,
-                            &mut nl,
-                        );
-                        assert_eq!(nl.len(), particles.len());
-                        Cow::Owned(nl)
-                    }
-                );
-
-            // Compute weighted neighbor count
-            let squared_r = compact_support_radius * compact_support_radius;
-            let weighted_ncounts = nl
-                .par_iter()
-                .enumerate()
-                .map(|(i, nl)| {
-                    nl.iter()
-                        .copied()
-                        .map(|j| {
-                            let dist = (particles[i] - particles[j]).norm_squared();
-
-                            R::one() - (dist / squared_r).clamp(R::zero(), R::one())
-                        })
-                        .fold(R::zero(), R::add)
-                })
-                .collect::<Vec<_>>();
-
-            let vertex_weighted_num_neighbors = {
-                profile!("interpolate weighted neighbor counts");
-                interpolator
-                    .as_ref()
-                    .expect("interpolator is required")
-                    .interpolate_scalar_quantity(
-                        weighted_ncounts.as_slice(),
-                        mesh_with_data.vertices(),
-                        true,
-                    )
-            };
-
-            let smoothing_weights = {
-                let offset = R::zero();
-                let normalization = R::from_f64(mesh_smoothing_weights_normalization).expect(
-                    "smoothing weight normalization value cannot be represented as Real type",
-                ) - offset;
-
-                // Normalize number of neighbors
-                let smoothing_weights = vertex_weighted_num_neighbors
-                    .par_iter()
-                    .copied()
-                    .map(|n| (n - offset).max(R::zero()))
-                    .map(|n| (n / normalization).min(R::one()))
-                    // Smooth-Step function
-                    .map(|x| x.powi(5).times(6) - x.powi(4).times(15) + x.powi(3).times(10))
-                    .collect::<Vec<_>>();
-
-                if output_mesh_smoothing_weights {
-                    // Raw distance-weighted number of neighbors value per vertex (can be used to determine normalization value)
-                    mesh_with_data.point_attributes.push(MeshAttribute::new(
-                        "wnn".to_string(),
-                        AttributeData::ScalarReal(vertex_weighted_num_neighbors),
-                    ));
-                    // Final smoothing weights per vertex
-                    mesh_with_data.point_attributes.push(MeshAttribute::new(
-                        "sw".to_string(),
-                        AttributeData::ScalarReal(smoothing_weights.clone()),
-                    ));
-                }
-
-                smoothing_weights
-            };
-
-            Some(smoothing_weights)
-        } else {
-            None
-        };
-
-        // Perform smoothing if requested
-        if let Some(mesh_smoothing_iters) = mesh_smoothing_iters {
-            profile!("mesh smoothing");
-            info!("Post-processing: Smoothing mesh...");
-
-            // TODO: Switch between parallel/single threaded
-
-            let smoothing_weights = smoothing_weights
-                .unwrap_or_else(|| vec![R::one(); mesh_with_data.vertices().len()]);
-
-            splashsurf_lib::postprocessing::par_laplacian_smoothing_inplace(
-                &mut mesh_with_data.mesh,
-                vertex_connectivity
-                    .as_ref()
-                    .expect("vertex connectivity is required"),
-                mesh_smoothing_iters,
-                R::one(),
-                &smoothing_weights,
-            );
-        }
-
-        // Add normals to mesh if requested
-        if compute_normals {
-            profile!("compute normals");
-            info!("Post-processing: Computing surface normals...");
-
-            // Compute normals
-            let normals = if sph_normals {
-                info!("Using SPH interpolation to compute surface normals");
-
-                let sph_normals = interpolator
-                    .as_ref()
-                    .expect("interpolator is required")
-                    .interpolate_normals(mesh_with_data.vertices());
-                bytemuck::allocation::cast_vec::<Unit<Vector3<R>>, Vector3<R>>(sph_normals)
-            } else {
-                info!("Using area weighted triangle normals for surface normals");
-                profile!("mesh.par_vertex_normals");
-                let tri_normals = mesh_with_data.mesh.par_vertex_normals();
-
-                // Convert unit vectors to plain vectors
-                bytemuck::allocation::cast_vec::<Unit<Vector3<R>>, Vector3<R>>(tri_normals)
-            };
-
-            // Smooth normals
-            if let Some(smoothing_iters) = normals_smoothing_iters {
-                info!("Post-processing: Smoothing normals...");
-
-                let mut smoothed_normals = normals.clone();
-                splashsurf_lib::postprocessing::par_laplacian_smoothing_normals_inplace(
-                    &mut smoothed_normals,
-                    vertex_connectivity
-                        .as_ref()
-                        .expect("vertex connectivity is required"),
-                    smoothing_iters,
-                );
-
-                mesh_with_data.point_attributes.push(MeshAttribute::new(
-                    "normals".to_string(),
-                    AttributeData::Vector3Real(smoothed_normals),
-                ));
-                if output_raw_normals {
-                    mesh_with_data.point_attributes.push(MeshAttribute::new(
-                        "raw_normals".to_string(),
-                        AttributeData::Vector3Real(normals),
-                    ));
-                }
-            } else {
-                mesh_with_data.point_attributes.push(MeshAttribute::new(
-                    "normals".to_string(),
-                    AttributeData::Vector3Real(normals),
-                ));
-            }
-        }
-
-        // Interpolate attributes if requested
-        if !attributes.is_empty() {
-            profile!("interpolate attributes");
-            info!("Post-processing: Interpolating attributes...");
-            let interpolator = interpolator.as_ref().expect("interpolator is required");
-
-            for attribute in attributes.into_iter() {
-                info!("Interpolating attribute \"{}\"...", attribute.name);
-
-                match attribute.data {
-                    AttributeData::ScalarReal(values) => {
-                        let interpolated_values = interpolator.interpolate_scalar_quantity(
-                            values.as_slice(),
-                            mesh_with_data.vertices(),
-                            true,
-                        );
-                        mesh_with_data.point_attributes.push(MeshAttribute::new(
-                            attribute.name,
-                            AttributeData::ScalarReal(interpolated_values),
-                        ));
-                    }
-                    AttributeData::Vector3Real(values) => {
-                        let interpolated_values = interpolator.interpolate_vector_quantity(
-                            values.as_slice(),
-                            mesh_with_data.vertices(),
-                            true,
-                        );
-                        mesh_with_data.point_attributes.push(MeshAttribute::new(
-                            attribute.name,
-                            AttributeData::Vector3Real(interpolated_values),
-                        ));
-                    }
-                    _ => unimplemented!("Interpolation of this attribute type not implemented"),
-                }
-            }
-        }
-    }
-
-    // Remove and clamp cells outside of AABB
-    let mesh_aabb = if aabb_min != None && aabb_max != None {
+) -> Result<
+    (
+        Option<MeshWithData<R, TriMesh3d<R>>>,
+        Option<MeshWithData<R, MixedTriQuadMesh3d<R>>>,
+        Option<SurfaceReconstruction<I, R>>,
+    ),
+    anyhow::Error,
+> {
+    let aabb = if let (Some(aabb_min), Some(aabb_max)) = (aabb_min, aabb_max) {
+        // Convert the min and max arrays to Vector3
         Some(Aabb3d::new(
-            Vector3::from(mesh_aabb_min.unwrap()),
-            Vector3::from(mesh_aabb_max.unwrap()),
+            Vector3::from(aabb_min),
+            Vector3::from(aabb_max),
         ))
     } else {
         None
     };
 
-    let mesh_with_data = if let Some(mesh_aabb) = &mesh_aabb {
-        profile!("clamp mesh to aabb");
-        info!("Post-processing: Clamping mesh to AABB...");
-
-        mesh_with_data.par_clamp_with_aabb(
-            &mesh_aabb
-                .try_convert()
-                .ok_or_else(|| anyhow!("Failed to convert mesh AABB"))?,
-            mesh_aabb_clamp_vertices,
-            keep_vertices,
-        )
+    let spatial_decomposition = if use_custom_grid_decomposition {
+        let mut grid_params = GridDecompositionParameters::default();
+        grid_params.subdomain_num_cubes_per_dim = subdomain_num_cubes_per_dim;
+        Some(SpatialDecomposition::UniformGrid(grid_params))
     } else {
-        mesh_with_data
+        None
     };
 
-    // Convert triangles to quads
-    // let (tri_mesh, tri_quad_mesh) = if generate_quads {
-    //     info!("Post-processing: Convert triangles to quads...");
-    //     let non_squareness_limit = R::from_f64(quad_max_edge_diag_ratio).unwrap();
-    //     let normal_angle_limit_rad =
-    //         R::from_f64(quad_max_normal_angle.to_radians()).unwrap();
-    //     let max_interior_angle =
-    //         R::from_f64(quad_max_interior_angle.to_radians()).unwrap();
+    let params: splashsurf_lib::Parameters<R> = splashsurf_lib::Parameters {
+        particle_radius,
+        rest_density,
+        compact_support_radius: R::from_f64(2.0).unwrap() * smoothing_length * particle_radius,
+        cube_size: cube_size * particle_radius,
+        iso_surface_threshold,
+        particle_aabb: aabb,
+        enable_multi_threading,
+        spatial_decomposition,
+        global_neighborhood_list: mesh_smoothing_weights,
+    };
 
-    //     let tri_quad_mesh = splashsurf_lib::postprocessing::convert_tris_to_quads(
-    //         &mesh_with_data.mesh,
-    //         non_squareness_limit,
-    //         normal_angle_limit_rad,
-    //         max_interior_angle,
-    //     );
+    let mesh_aabb =
+        if let (Some(mesh_aabb_min), Some(mesh_aabb_max)) = (mesh_aabb_min, mesh_aabb_max) {
+            // Convert the min and max arrays to Vector3
+            Some(Aabb3d::new(
+                Vector3::from(mesh_aabb_min),
+                Vector3::from(mesh_aabb_max),
+            ))
+        } else {
+            None
+        };
 
-    //     (None, Some(mesh_with_data.with_mesh(tri_quad_mesh)))
-    // } else {
-    //     (Some(mesh_with_data), None)
-    // };
-    Ok((mesh_with_data, reconstruction))
+    let postprocessing_args: splashsurf::ReconstructionRunnerPostprocessingArgs =
+        splashsurf::ReconstructionRunnerPostprocessingArgs {
+            check_mesh_closed,
+            check_mesh_manifold,
+            check_mesh_orientation,
+            check_mesh_debug,
+            mesh_cleanup,
+            mesh_cleanup_snap_dist: max_rel_snap_dist,
+            decimate_barnacles,
+            keep_vertices,
+            compute_normals,
+            sph_normals,
+            normals_smoothing_iters,
+            interpolate_attributes: Vec::new(),
+            mesh_smoothing_iters,
+            mesh_smoothing_weights,
+            mesh_smoothing_weights_normalization,
+            generate_quads,
+            quad_max_edge_diag_ratio,
+            quad_max_normal_angle,
+            quad_max_interior_angle,
+            output_mesh_smoothing_weights,
+            output_raw_normals,
+            output_raw_mesh,
+            mesh_aabb,
+            mesh_aabb_clamp_vertices,
+        };
+
+    splashsurf::reconstruction_pipeline_from_data(
+        particle_positions.to_owned(),
+        attributes,
+        &params,
+        &postprocessing_args,
+    )
 }
 
-fn attrs_conversion<'py, R: Real + Element>(
-    attributes_to_interpolate: Bound<'py, PyDict>,
+fn attrs_conversion<R: Real + Element>(
+    attributes_to_interpolate: Bound<PyDict>,
 ) -> Vec<MeshAttribute<R>> {
     let mut attrs: Vec<MeshAttribute<R>> = Vec::new();
     for (key, value) in attributes_to_interpolate.iter() {
@@ -468,11 +184,13 @@ fn attrs_conversion<'py, R: Real + Element>(
 #[pyo3(signature = (particles, *, attributes_to_interpolate, particle_radius, rest_density,
     smoothing_length, cube_size, iso_surface_threshold,
     aabb_min = None, aabb_max = None, enable_multi_threading = false,
-    use_custom_grid_decomposition = false, subdomain_num_cubes_per_dim = 64, global_neighborhood_list = false,
+    use_custom_grid_decomposition = false, subdomain_num_cubes_per_dim = 64,
+    check_mesh_closed = false, check_mesh_manifold = false, check_mesh_orientation = false, check_mesh_debug = false,
     mesh_cleanup, max_rel_snap_dist = None, decimate_barnacles, keep_vertices, compute_normals, sph_normals,
-    normals_smoothing_iters, mesh_smoothing_iters, mesh_smoothing_weights,
-    mesh_smoothing_weights_normalization, output_mesh_smoothing_weights,
-    output_raw_normals, mesh_aabb_min, mesh_aabb_max, mesh_aabb_clamp_vertices
+    normals_smoothing_iters, mesh_smoothing_iters, mesh_smoothing_weights, mesh_smoothing_weights_normalization,
+    generate_quads = false, quad_max_edge_diag_ratio = 1.75, quad_max_normal_angle = 10.0, quad_max_interior_angle = 135.0,
+    output_mesh_smoothing_weights, output_raw_normals, output_raw_mesh=false,
+    mesh_aabb_min, mesh_aabb_max, mesh_aabb_clamp_vertices
 ))]
 pub fn reconstruction_pipeline_py_f32<'py>(
     particles: &Bound<'py, PyArray2<f32>>,
@@ -487,9 +205,12 @@ pub fn reconstruction_pipeline_py_f32<'py>(
     enable_multi_threading: bool,
     use_custom_grid_decomposition: bool,
     subdomain_num_cubes_per_dim: u32,
-    global_neighborhood_list: bool,
+    check_mesh_closed: bool,
+    check_mesh_manifold: bool,
+    check_mesh_orientation: bool,
+    check_mesh_debug: bool,
     mesh_cleanup: bool,
-    max_rel_snap_dist: Option<f32>,
+    max_rel_snap_dist: Option<f64>,
     decimate_barnacles: bool,
     keep_vertices: bool,
     compute_normals: bool,
@@ -498,12 +219,21 @@ pub fn reconstruction_pipeline_py_f32<'py>(
     mesh_smoothing_iters: Option<usize>,
     mesh_smoothing_weights: bool,
     mesh_smoothing_weights_normalization: f64,
+    generate_quads: bool,
+    quad_max_edge_diag_ratio: f64,
+    quad_max_normal_angle: f64,
+    quad_max_interior_angle: f64,
     output_mesh_smoothing_weights: bool,
     output_raw_normals: bool,
-    mesh_aabb_min: Option<[f32; 3]>,
-    mesh_aabb_max: Option<[f32; 3]>,
+    output_raw_mesh: bool,
+    mesh_aabb_min: Option<[f64; 3]>,
+    mesh_aabb_max: Option<[f64; 3]>,
     mesh_aabb_clamp_vertices: bool,
-) -> (TriMeshWithDataF32, SurfaceReconstructionF32) {
+) -> (
+    Option<TriMeshWithDataF32>,
+    Option<MixedTriQuadMeshWithDataF32>,
+    Option<SurfaceReconstructionF32>,
+) {
     let particles: PyReadonlyArray2<f32> = particles.extract().unwrap();
 
     let particle_positions = particles.as_slice().unwrap();
@@ -511,7 +241,7 @@ pub fn reconstruction_pipeline_py_f32<'py>(
 
     let attrs = attrs_conversion(attributes_to_interpolate);
 
-    let (mesh, reconstruction) = reconstruction_pipeline_generic::<i64, f32>(
+    let (tri_mesh, tri_quad_mesh, reconstruction) = reconstruction_pipeline_generic::<i64, f32>(
         particle_positions,
         attrs,
         particle_radius,
@@ -524,7 +254,10 @@ pub fn reconstruction_pipeline_py_f32<'py>(
         enable_multi_threading,
         use_custom_grid_decomposition,
         subdomain_num_cubes_per_dim,
-        global_neighborhood_list,
+        check_mesh_closed,
+        check_mesh_manifold,
+        check_mesh_orientation,
+        check_mesh_debug,
         mesh_cleanup,
         max_rel_snap_dist,
         decimate_barnacles,
@@ -535,18 +268,38 @@ pub fn reconstruction_pipeline_py_f32<'py>(
         mesh_smoothing_iters,
         mesh_smoothing_weights,
         mesh_smoothing_weights_normalization,
+        generate_quads,
+        quad_max_edge_diag_ratio,
+        quad_max_normal_angle,
+        quad_max_interior_angle,
         output_mesh_smoothing_weights,
         output_raw_normals,
+        output_raw_mesh,
         mesh_aabb_min,
         mesh_aabb_max,
         mesh_aabb_clamp_vertices,
     )
     .unwrap();
 
-    (
-        TriMeshWithDataF32::new(mesh),
-        SurfaceReconstructionF32::new(reconstruction),
-    )
+    let tri_mesh = if let Some(tri_mesh) = tri_mesh {
+        Some(TriMeshWithDataF32::new(tri_mesh))
+    } else {
+        None
+    };
+
+    let tri_quad_mesh = if let Some(tri_quad_mesh) = tri_quad_mesh {
+        Some(MixedTriQuadMeshWithDataF32::new(tri_quad_mesh))
+    } else {
+        None
+    };
+
+    let reconstruction = if let Some(reconstruction) = reconstruction {
+        Some(SurfaceReconstructionF32::new(reconstruction))
+    } else {
+        None
+    };
+
+    (tri_mesh, tri_quad_mesh, reconstruction)
 }
 
 #[pyfunction]
@@ -554,11 +307,13 @@ pub fn reconstruction_pipeline_py_f32<'py>(
 #[pyo3(signature = (particles, *, attributes_to_interpolate, particle_radius, rest_density,
     smoothing_length, cube_size, iso_surface_threshold,
     aabb_min = None, aabb_max = None, enable_multi_threading = false,
-    use_custom_grid_decomposition = false, subdomain_num_cubes_per_dim = 64, global_neighborhood_list = false,
+    use_custom_grid_decomposition = false, subdomain_num_cubes_per_dim = 64,
+    check_mesh_closed = false, check_mesh_manifold = false, check_mesh_orientation = false, check_mesh_debug = false,
     mesh_cleanup, max_rel_snap_dist = None, decimate_barnacles, keep_vertices, compute_normals, sph_normals,
-    normals_smoothing_iters, mesh_smoothing_iters, mesh_smoothing_weights,
-    mesh_smoothing_weights_normalization, output_mesh_smoothing_weights,
-    output_raw_normals, mesh_aabb_min, mesh_aabb_max, mesh_aabb_clamp_vertices
+    normals_smoothing_iters, mesh_smoothing_iters, mesh_smoothing_weights, mesh_smoothing_weights_normalization,
+    generate_quads = false, quad_max_edge_diag_ratio = 1.75, quad_max_normal_angle = 10.0, quad_max_interior_angle = 135.0,
+    output_mesh_smoothing_weights, output_raw_normals, output_raw_mesh=false,
+    mesh_aabb_min, mesh_aabb_max, mesh_aabb_clamp_vertices
 ))]
 pub fn reconstruction_pipeline_py_f64<'py>(
     particles: &Bound<'py, PyArray2<f64>>,
@@ -573,7 +328,10 @@ pub fn reconstruction_pipeline_py_f64<'py>(
     enable_multi_threading: bool,
     use_custom_grid_decomposition: bool,
     subdomain_num_cubes_per_dim: u32,
-    global_neighborhood_list: bool,
+    check_mesh_closed: bool,
+    check_mesh_manifold: bool,
+    check_mesh_orientation: bool,
+    check_mesh_debug: bool,
     mesh_cleanup: bool,
     max_rel_snap_dist: Option<f64>,
     decimate_barnacles: bool,
@@ -584,12 +342,21 @@ pub fn reconstruction_pipeline_py_f64<'py>(
     mesh_smoothing_iters: Option<usize>,
     mesh_smoothing_weights: bool,
     mesh_smoothing_weights_normalization: f64,
+    generate_quads: bool,
+    quad_max_edge_diag_ratio: f64,
+    quad_max_normal_angle: f64,
+    quad_max_interior_angle: f64,
     output_mesh_smoothing_weights: bool,
     output_raw_normals: bool,
+    output_raw_mesh: bool,
     mesh_aabb_min: Option<[f64; 3]>,
     mesh_aabb_max: Option<[f64; 3]>,
     mesh_aabb_clamp_vertices: bool,
-) -> (TriMeshWithDataF64, SurfaceReconstructionF64) {
+) -> (
+    Option<TriMeshWithDataF64>,
+    Option<MixedTriQuadMeshWithDataF64>,
+    Option<SurfaceReconstructionF64>,
+) {
     let particles: PyReadonlyArray2<f64> = particles.extract().unwrap();
 
     let particle_positions = particles.as_slice().unwrap();
@@ -597,7 +364,7 @@ pub fn reconstruction_pipeline_py_f64<'py>(
 
     let attrs = attrs_conversion(attributes_to_interpolate);
 
-    let (mesh, reconstruction) = reconstruction_pipeline_generic::<i64, f64>(
+    let (tri_mesh, tri_quad_mesh, reconstruction) = reconstruction_pipeline_generic::<i64, f64>(
         particle_positions,
         attrs,
         particle_radius,
@@ -610,7 +377,10 @@ pub fn reconstruction_pipeline_py_f64<'py>(
         enable_multi_threading,
         use_custom_grid_decomposition,
         subdomain_num_cubes_per_dim,
-        global_neighborhood_list,
+        check_mesh_closed,
+        check_mesh_manifold,
+        check_mesh_orientation,
+        check_mesh_debug,
         mesh_cleanup,
         max_rel_snap_dist,
         decimate_barnacles,
@@ -621,16 +391,36 @@ pub fn reconstruction_pipeline_py_f64<'py>(
         mesh_smoothing_iters,
         mesh_smoothing_weights,
         mesh_smoothing_weights_normalization,
+        generate_quads,
+        quad_max_edge_diag_ratio,
+        quad_max_normal_angle,
+        quad_max_interior_angle,
         output_mesh_smoothing_weights,
         output_raw_normals,
+        output_raw_mesh,
         mesh_aabb_min,
         mesh_aabb_max,
         mesh_aabb_clamp_vertices,
     )
     .unwrap();
 
-    (
-        TriMeshWithDataF64::new(mesh),
-        SurfaceReconstructionF64::new(reconstruction),
-    )
+    let tri_mesh = if let Some(tri_mesh) = tri_mesh {
+        Some(TriMeshWithDataF64::new(tri_mesh))
+    } else {
+        None
+    };
+
+    let tri_quad_mesh = if let Some(tri_quad_mesh) = tri_quad_mesh {
+        Some(MixedTriQuadMeshWithDataF64::new(tri_quad_mesh))
+    } else {
+        None
+    };
+
+    let reconstruction = if let Some(reconstruction) = reconstruction {
+        Some(SurfaceReconstructionF64::new(reconstruction))
+    } else {
+        None
+    };
+
+    (tri_mesh, tri_quad_mesh, reconstruction)
 }
