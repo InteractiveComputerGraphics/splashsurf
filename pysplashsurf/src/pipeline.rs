@@ -127,7 +127,7 @@ fn reconstruction_pipeline_generic<I: Index, R: Real>(
         };
 
     splashsurf::reconstruction_pipeline_from_data(
-        particle_positions.to_owned(),
+        particle_positions,
         attributes,
         &params,
         &postprocessing_args,

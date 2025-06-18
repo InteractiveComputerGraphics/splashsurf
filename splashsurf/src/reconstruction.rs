@@ -915,7 +915,7 @@ pub(crate) fn reconstruction_pipeline(
 }
 
 pub fn reconstruction_pipeline_from_data<I: Index, R: Real>(
-    particle_positions: Vec<Vector3<R>>,
+    particle_positions: &[Vector3<R>],
     attributes: Vec<MeshAttribute<R>>,
     params: &splashsurf_lib::Parameters<R>,
     postprocessing: &ReconstructionRunnerPostprocessingArgs,
@@ -929,7 +929,7 @@ pub fn reconstruction_pipeline_from_data<I: Index, R: Real>(
 > {
     // Perform the surface reconstruction
     let reconstruction =
-        splashsurf_lib::reconstruct_surface::<I, R>(particle_positions.as_slice(), params)?;
+        splashsurf_lib::reconstruct_surface::<I, R>(particle_positions, params)?;
 
     let reconstruction_output = if postprocessing.output_raw_mesh {
         Some(reconstruction.clone())
@@ -1037,13 +1037,13 @@ pub fn reconstruction_pipeline_from_data<I: Index, R: Real>(
                     {
                         let search_radius = params.compact_support_radius;
 
-                        let mut domain = Aabb3d::from_points(particle_positions.as_slice());
+                        let mut domain = Aabb3d::from_points(particle_positions);
                         domain.grow_uniformly(search_radius);
 
                         let mut nl = Vec::new();
                         splashsurf_lib::neighborhood_search::neighborhood_search_spatial_hashing_parallel::<I, R>(
                             &domain,
-                            particle_positions.as_slice(),
+                            particle_positions,
                             search_radius,
                             &mut nl,
                         );
@@ -1418,7 +1418,7 @@ pub(crate) fn reconstruction_pipeline_from_path<I: Index, R: Real>(
     })?;
 
     let (tri_mesh, tri_quad_mesh, reconstruction) = reconstruction_pipeline_from_data::<I, R>(
-        particle_positions,
+        &particle_positions,
         attributes,
         params,
         postprocessing,
