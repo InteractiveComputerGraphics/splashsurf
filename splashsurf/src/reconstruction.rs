@@ -379,7 +379,7 @@ pub fn reconstruct_subcommand(cmd_args: &ReconstructSubcommandArgs) -> Result<()
 
     let result = if cmd_args.parallelize_over_files.into_bool() {
         paths.par_iter().try_for_each(|path| {
-            reconstruction_pipeline(path, &args)
+            reconstruction_pipeline_from_args(path, &args)
                 .with_context(|| {
                     format!(
                         "Error while processing input file \"{}\" from a file sequence",
@@ -398,7 +398,7 @@ pub fn reconstruct_subcommand(cmd_args: &ReconstructSubcommandArgs) -> Result<()
         })
     } else {
         paths.iter().try_for_each(|path| {
-            reconstruction_pipeline(path, &args).map(|_| {
+            reconstruction_pipeline_from_args(path, &args).map(|_| {
                 if let Some(pb) = logging::get_progress_bar() {
                     pb.inc(1)
                 }
@@ -887,7 +887,7 @@ pub mod arguments {
 }
 
 /// Calls the reconstruction pipeline for single or double precision depending on the runtime parameters
-pub(crate) fn reconstruction_pipeline(
+pub(crate) fn reconstruction_pipeline_from_args(
     paths: &ReconstructionRunnerPaths,
     args: &ReconstructionRunnerArgs,
 ) -> Result<(), anyhow::Error> {
@@ -914,7 +914,7 @@ pub(crate) fn reconstruction_pipeline(
     Ok(())
 }
 
-pub fn reconstruction_pipeline_from_data<I: Index, R: Real>(
+pub fn reconstruction_pipeline<I: Index, R: Real>(
     particle_positions: &[Vector3<R>],
     attributes: Vec<MeshAttribute<R>>,
     params: &splashsurf_lib::Parameters<R>,
@@ -1417,7 +1417,7 @@ pub(crate) fn reconstruction_pipeline_from_path<I: Index, R: Real>(
         )
     })?;
 
-    let (tri_mesh, tri_quad_mesh, reconstruction) = reconstruction_pipeline_from_data::<I, R>(
+    let (tri_mesh, tri_quad_mesh, reconstruction) = reconstruction_pipeline::<I, R>(
         &particle_positions,
         attributes,
         params,

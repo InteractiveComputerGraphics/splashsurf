@@ -130,7 +130,7 @@ fn reconstruction_pipeline_generic<I: Index, R: Real>(
             mesh_aabb_clamp_vertices,
         };
 
-    splashsurf::reconstruction_pipeline_from_data(
+    splashsurf::reconstruction_pipeline(
         particle_positions,
         attributes,
         &params,
