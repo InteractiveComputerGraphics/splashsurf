@@ -7,5 +7,5 @@ mod allocator;
 mod logging;
 
 pub use reconstruction::arguments::ReconstructionRunnerPostprocessingArgs;
-pub use reconstruction::reconstruction_pipeline;
+pub use reconstruction::{PipelineResult, reconstruction_pipeline};
 pub(crate) use register_counting_allocator;

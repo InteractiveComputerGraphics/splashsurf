@@ -10,9 +10,10 @@ use pyo3::{
     prelude::*,
     types::{PyDict, PyString},
 };
+use splashsurf::PipelineResult;
 use splashsurf_lib::{
-    Aabb3d, GridDecompositionParameters, Index, Real, SpatialDecomposition, SurfaceReconstruction,
-    mesh::{AttributeData, MeshAttribute, MeshWithData, MixedTriQuadMesh3d, TriMesh3d},
+    Aabb3d, GridDecompositionParameters, Index, Real, SpatialDecomposition,
+    mesh::{AttributeData, MeshAttribute},
     nalgebra::Vector3,
 };
 
@@ -53,14 +54,7 @@ fn reconstruction_pipeline_generic<I: Index, R: Real>(
     mesh_aabb_min: Option<[f64; 3]>,
     mesh_aabb_max: Option<[f64; 3]>,
     mesh_aabb_clamp_vertices: bool,
-) -> Result<
-    (
-        Option<MeshWithData<R, TriMesh3d<R>>>,
-        Option<MeshWithData<R, MixedTriQuadMesh3d<R>>>,
-        Option<SurfaceReconstruction<I, R>>,
-    ),
-    anyhow::Error,
-> {
+) -> Result<PipelineResult<I, R>, anyhow::Error> {
     let aabb = if let (Some(aabb_min), Some(aabb_max)) = (aabb_min, aabb_max) {
         // Convert the min and max arrays to Vector3
         Some(Aabb3d::new(
@@ -245,7 +239,11 @@ pub fn reconstruction_pipeline_py_f32<'py>(
 
     let attrs = attrs_conversion(attributes_to_interpolate);
 
-    let (tri_mesh, tri_quad_mesh, reconstruction) = reconstruction_pipeline_generic::<i64, f32>(
+    let PipelineResult {
+        tri_mesh,
+        tri_quad_mesh,
+        raw_reconstruction: reconstruction,
+    } = reconstruction_pipeline_generic::<i64, f32>(
         particle_positions,
         attrs,
         particle_radius,
@@ -368,7 +366,11 @@ pub fn reconstruction_pipeline_py_f64<'py>(
 
     let attrs = attrs_conversion(attributes_to_interpolate);
 
-    let (tri_mesh, tri_quad_mesh, reconstruction) = reconstruction_pipeline_generic::<i64, f64>(
+    let PipelineResult {
+        tri_mesh,
+        tri_quad_mesh,
+        raw_reconstruction: reconstruction,
+    } = reconstruction_pipeline_generic::<i64, f64>(
         particle_positions,
         attrs,
         particle_radius,

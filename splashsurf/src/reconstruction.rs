@@ -420,6 +420,16 @@ pub fn reconstruct_subcommand(cmd_args: &ReconstructSubcommandArgs) -> Result<()
     result
 }
 
+/// Struct to hold the result of the reconstruction pipeline
+pub struct PipelineResult<I: Index, R: Real> {
+    /// Holds the reconstructed tri mesh with data if `generate_quads` was not set
+    pub tri_mesh: Option<MeshWithData<R, TriMesh3d<R>>>,
+    /// Holds the reconstructed quad mesh with data if `generate_quads` was set
+    pub tri_quad_mesh: Option<MeshWithData<R, MixedTriQuadMesh3d<R>>>,
+    /// Holds the surface reconstruction with no post-processing applied if `output_raw_mesh` was set
+    pub raw_reconstruction: Option<SurfaceReconstruction<I, R>>,
+}
+
 /// Conversion and validation of command line arguments
 pub mod arguments {
     use super::ReconstructSubcommandArgs;
@@ -944,17 +954,9 @@ pub fn reconstruction_pipeline<I: Index, R: Real>(
     attributes: Vec<MeshAttribute<R>>,
     params: &splashsurf_lib::Parameters<R>,
     postprocessing: &ReconstructionRunnerPostprocessingArgs,
-) -> Result<
-    (
-        Option<MeshWithData<R, TriMesh3d<R>>>,
-        Option<MeshWithData<R, MixedTriQuadMesh3d<R>>>,
-        Option<SurfaceReconstruction<I, R>>,
-    ),
-    anyhow::Error,
-> {
+) -> Result<PipelineResult<I, R>, anyhow::Error> {
     // Perform the surface reconstruction
-    let reconstruction =
-        splashsurf_lib::reconstruct_surface::<I, R>(particle_positions, params)?;
+    let reconstruction = splashsurf_lib::reconstruct_surface::<I, R>(particle_positions, params)?;
 
     let reconstruction_output = if postprocessing.output_raw_mesh {
         Some(reconstruction.clone())
@@ -1323,7 +1325,11 @@ pub fn reconstruction_pipeline<I: Index, R: Real>(
             ),
             (None, Some(_mesh)) => {
                 info!("Checking for mesh consistency not implemented for quad mesh at the moment.");
-                return Ok((None, Some(_mesh.to_owned()), reconstruction_output));
+                return Ok(PipelineResult {
+                    tri_mesh: None,
+                    tri_quad_mesh: Some(_mesh.to_owned()),
+                    raw_reconstruction: reconstruction_output,
+                });
             }
             _ => unreachable!(),
         } {
@@ -1413,9 +1419,17 @@ pub fn reconstruction_pipeline<I: Index, R: Real>(
             res.point_attributes = std::mem::take(&mut mesh.point_attributes);
             res.cell_attributes = std::mem::take(&mut mesh.cell_attributes);
 
-            Ok((Some(res), None, reconstruction_output))
+            Ok(PipelineResult {
+                tri_mesh: Some(res),
+                tri_quad_mesh: None,
+                raw_reconstruction: reconstruction_output,
+            })
         }
-        (None, Some(_mesh)) => Ok((None, Some(_mesh.to_owned()), reconstruction_output)),
+        (None, Some(_mesh)) => Ok(PipelineResult {
+            tri_mesh: None,
+            tri_quad_mesh: Some(_mesh.to_owned()),
+            raw_reconstruction: reconstruction_output,
+        }),
         _ => unreachable!(),
     }
 }
@@ -1442,12 +1456,11 @@ pub(crate) fn reconstruction_pipeline_from_path<I: Index, R: Real>(
         )
     })?;
 
-    let (tri_mesh, tri_quad_mesh, reconstruction) = reconstruction_pipeline::<I, R>(
-        &particle_positions,
-        attributes,
-        params,
-        postprocessing,
-    )?;
+    let PipelineResult {
+        tri_mesh,
+        tri_quad_mesh,
+        raw_reconstruction: reconstruction,
+    } = reconstruction_pipeline::<I, R>(&particle_positions, attributes, params, postprocessing)?;
 
     if postprocessing.output_raw_mesh {
         profile!("write surface mesh to file");
