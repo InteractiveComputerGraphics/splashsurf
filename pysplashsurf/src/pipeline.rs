@@ -10,7 +10,11 @@ use pyo3::{
     prelude::*,
     types::{PyDict, PyString},
 };
-use splashsurf_lib::{mesh::{AttributeData, MeshAttribute, MeshWithData, TriMesh3d, MixedTriQuadMesh3d}, nalgebra::Vector3, Aabb3d, GridDecompositionParameters, Index, Real, SpatialDecomposition, SurfaceReconstruction};
+use splashsurf_lib::{
+    Aabb3d, GridDecompositionParameters, Index, Real, SpatialDecomposition, SurfaceReconstruction,
+    mesh::{AttributeData, MeshAttribute, MeshWithData, MixedTriQuadMesh3d, TriMesh3d},
+    nalgebra::Vector3,
+};
 
 fn reconstruction_pipeline_generic<I: Index, R: Real>(
     particle_positions: &[Vector3<R>],
