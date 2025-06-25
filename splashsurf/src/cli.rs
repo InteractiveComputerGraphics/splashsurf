@@ -82,7 +82,9 @@ impl Switch {
 
 /// Runs the splashsurf CLI with the provided command line arguments.
 ///
-/// This function behaves like the binary `splashsurf` command line tool including output to stdout and stderr.
+/// This function behaves like the binary `splashsurf` command line tool including output to stdout
+/// and stderr. It will also exit the process depending on the command line arguments, so it should
+/// not be used in typical library contexts.
 /// Note that the first argument is always ignored - this is typically the binary name when called using
 /// `std::env::args()` from the terminal:
 /// ```

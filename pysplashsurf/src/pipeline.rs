@@ -10,7 +10,6 @@ use pyo3::{
     prelude::*,
     types::{PyDict, PyString},
 };
-use splashsurf::PipelineResult;
 use splashsurf_lib::{
     Aabb3d, GridDecompositionParameters, Index, Real, SpatialDecomposition,
     mesh::{AttributeData, MeshAttribute},
@@ -54,7 +53,7 @@ fn reconstruction_pipeline_generic<I: Index, R: Real>(
     mesh_aabb_min: Option<[f64; 3]>,
     mesh_aabb_max: Option<[f64; 3]>,
     mesh_aabb_clamp_vertices: bool,
-) -> Result<PipelineResult<I, R>, anyhow::Error> {
+) -> Result<splashsurf::reconstruct::ReconstructionResult<I, R>, anyhow::Error> {
     let aabb = if let (Some(aabb_min), Some(aabb_max)) = (aabb_min, aabb_max) {
         // Convert the min and max arrays to Vector3
         Some(Aabb3d::new(
@@ -65,15 +64,13 @@ fn reconstruction_pipeline_generic<I: Index, R: Real>(
         None
     };
 
-    let spatial_decomposition = if use_custom_grid_decomposition {
+    let spatial_decomposition = use_custom_grid_decomposition.then(|| {
         let mut grid_params = GridDecompositionParameters::default();
         grid_params.subdomain_num_cubes_per_dim = subdomain_num_cubes_per_dim;
-        Some(SpatialDecomposition::UniformGrid(grid_params))
-    } else {
-        None
-    };
+        SpatialDecomposition::UniformGrid(grid_params)
+    });
 
-    let params: splashsurf_lib::Parameters<R> = splashsurf_lib::Parameters {
+    let params = splashsurf_lib::Parameters {
         particle_radius,
         rest_density,
         compact_support_radius: R::from_f64(2.0).unwrap() * smoothing_length * particle_radius,
@@ -96,35 +93,34 @@ fn reconstruction_pipeline_generic<I: Index, R: Real>(
             None
         };
 
-    let postprocessing_args: splashsurf::ReconstructionRunnerPostprocessingArgs =
-        splashsurf::ReconstructionRunnerPostprocessingArgs {
-            check_mesh_closed,
-            check_mesh_manifold,
-            check_mesh_orientation,
-            check_mesh_debug,
-            mesh_cleanup,
-            mesh_cleanup_snap_dist: max_rel_snap_dist,
-            decimate_barnacles,
-            keep_vertices,
-            compute_normals,
-            sph_normals,
-            normals_smoothing_iters,
-            interpolate_attributes: Vec::new(),
-            mesh_smoothing_iters,
-            mesh_smoothing_weights,
-            mesh_smoothing_weights_normalization,
-            generate_quads,
-            quad_max_edge_diag_ratio,
-            quad_max_normal_angle,
-            quad_max_interior_angle,
-            output_mesh_smoothing_weights,
-            output_raw_normals,
-            output_raw_mesh,
-            mesh_aabb,
-            mesh_aabb_clamp_vertices,
-        };
+    let postprocessing_args = splashsurf::reconstruct::ReconstructionPostprocessingParameters {
+        check_mesh_closed,
+        check_mesh_manifold,
+        check_mesh_orientation,
+        check_mesh_debug,
+        mesh_cleanup,
+        mesh_cleanup_snap_dist: max_rel_snap_dist,
+        decimate_barnacles,
+        keep_vertices,
+        compute_normals,
+        sph_normals,
+        normals_smoothing_iters,
+        interpolate_attributes: Vec::new(),
+        mesh_smoothing_iters,
+        mesh_smoothing_weights,
+        mesh_smoothing_weights_normalization,
+        generate_quads,
+        quad_max_edge_diag_ratio,
+        quad_max_normal_angle,
+        quad_max_interior_angle,
+        output_mesh_smoothing_weights,
+        output_raw_normals,
+        output_raw_mesh,
+        mesh_aabb,
+        mesh_aabb_clamp_vertices,
+    };
 
-    splashsurf::reconstruction_pipeline(
+    splashsurf::reconstruct::reconstruction_pipeline(
         particle_positions,
         attributes,
         &params,
@@ -227,19 +223,19 @@ pub fn reconstruction_pipeline_py_f32<'py>(
     mesh_aabb_min: Option<[f64; 3]>,
     mesh_aabb_max: Option<[f64; 3]>,
     mesh_aabb_clamp_vertices: bool,
-) -> (
+) -> PyResult<(
     Option<TriMeshWithDataF32>,
     Option<MixedTriQuadMeshWithDataF32>,
     Option<SurfaceReconstructionF32>,
-) {
-    let particles: PyReadonlyArray2<f32> = particles.extract().unwrap();
+)> {
+    let particles: PyReadonlyArray2<f32> = particles.extract()?;
 
-    let particle_positions = particles.as_slice().unwrap();
+    let particle_positions = particles.as_slice()?;
     let particle_positions: &[Vector3<f32>] = bytemuck::cast_slice(particle_positions);
 
     let attrs = attrs_conversion(attributes_to_interpolate);
 
-    let PipelineResult {
+    let splashsurf::reconstruct::ReconstructionResult {
         tri_mesh,
         tri_quad_mesh,
         raw_reconstruction: reconstruction,
@@ -283,25 +279,11 @@ pub fn reconstruction_pipeline_py_f32<'py>(
     )
     .unwrap();
 
-    let tri_mesh = if let Some(tri_mesh) = tri_mesh {
-        Some(TriMeshWithDataF32::new(tri_mesh))
-    } else {
-        None
-    };
-
-    let tri_quad_mesh = if let Some(tri_quad_mesh) = tri_quad_mesh {
-        Some(MixedTriQuadMeshWithDataF32::new(tri_quad_mesh))
-    } else {
-        None
-    };
-
-    let reconstruction = if let Some(reconstruction) = reconstruction {
-        Some(SurfaceReconstructionF32::new(reconstruction))
-    } else {
-        None
-    };
-
-    (tri_mesh, tri_quad_mesh, reconstruction)
+    Ok((
+        tri_mesh.map(TriMeshWithDataF32::new),
+        tri_quad_mesh.map(MixedTriQuadMeshWithDataF32::new),
+        reconstruction.map(SurfaceReconstructionF32::new),
+    ))
 }
 
 #[pyfunction]
@@ -354,19 +336,19 @@ pub fn reconstruction_pipeline_py_f64<'py>(
     mesh_aabb_min: Option<[f64; 3]>,
     mesh_aabb_max: Option<[f64; 3]>,
     mesh_aabb_clamp_vertices: bool,
-) -> (
+) -> PyResult<(
     Option<TriMeshWithDataF64>,
     Option<MixedTriQuadMeshWithDataF64>,
     Option<SurfaceReconstructionF64>,
-) {
-    let particles: PyReadonlyArray2<f64> = particles.extract().unwrap();
+)> {
+    let particles: PyReadonlyArray2<f64> = particles.extract()?;
 
-    let particle_positions = particles.as_slice().unwrap();
+    let particle_positions = particles.as_slice()?;
     let particle_positions: &[Vector3<f64>] = bytemuck::cast_slice(particle_positions);
 
     let attrs = attrs_conversion(attributes_to_interpolate);
 
-    let PipelineResult {
+    let splashsurf::reconstruct::ReconstructionResult {
         tri_mesh,
         tri_quad_mesh,
         raw_reconstruction: reconstruction,
@@ -410,23 +392,9 @@ pub fn reconstruction_pipeline_py_f64<'py>(
     )
     .unwrap();
 
-    let tri_mesh = if let Some(tri_mesh) = tri_mesh {
-        Some(TriMeshWithDataF64::new(tri_mesh))
-    } else {
-        None
-    };
-
-    let tri_quad_mesh = if let Some(tri_quad_mesh) = tri_quad_mesh {
-        Some(MixedTriQuadMeshWithDataF64::new(tri_quad_mesh))
-    } else {
-        None
-    };
-
-    let reconstruction = if let Some(reconstruction) = reconstruction {
-        Some(SurfaceReconstructionF64::new(reconstruction))
-    } else {
-        None
-    };
-
-    (tri_mesh, tri_quad_mesh, reconstruction)
+    Ok((
+        tri_mesh.map(TriMeshWithDataF64::new),
+        tri_quad_mesh.map(MixedTriQuadMeshWithDataF64::new),
+        reconstruction.map(SurfaceReconstructionF64::new),
+    ))
 }
