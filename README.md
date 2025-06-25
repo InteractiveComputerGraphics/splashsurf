@@ -71,12 +71,12 @@ The following sections mainly focus on the CLI of `splashsurf`. For more informa
 
 ## Introduction
 
-This is CLI to run a fast marching cubes based surface reconstruction for SPH fluid simulations (e.g., performed with [SPlisHSPlasH](https://github.com/InteractiveComputerGraphics/SPlisHSPlasH)).
-The output of this tool is the reconstructed triangle surface mesh of the fluid.
-At the moment, it supports computing normals on the surface using SPH gradients and interpolating scalar and vector particle attributes to the surface.
+The `splashsurf` CLI provides a "fast" marching cubes based surface reconstruction for particle data from SPH fluid simulations (e.g., performed with [SPlisHSPlasH](https://github.com/InteractiveComputerGraphics/SPlisHSPlasH)).
+The output of this tool is a (closed) triangle mesh of the fluid's surface.
+At the moment, it supports computing normals on the surface using SPH gradients and interpolating scalar and vector attributes defined on the particles to the surface.
 To get rid of the typical bumps from SPH simulations, it supports a weighted Laplacian smoothing approach [detailed below](#weighted-surface-smoothing).
 As input, it supports reading particle positions from `.vtk`/`.vtu`, `.bgeo`, `.ply`, `.json` and binary `.xyz` (i.e., files containing a binary dump of a particle position array) files.
-Required parameters to perform a reconstruction are the kernel radius and particle radius (to compute the volume of particles) used for the original SPH simulation as well as the marching cubes resolution (a default iso-surface threshold is pre-configured).
+Required parameters to perform a reconstruction are the kernel radius (its compact support) and particle radius (to compute the volume of particles) used for the original SPH simulation as well as the marching cubes resolution (a default iso-surface threshold is pre-configured).
 
 ## Domain decomposition
 
@@ -91,7 +91,7 @@ To improve on this situation `splashsurf` utilizes a domain decomposition approa
 Since version 0.10.0, `splashsurf` implements a domain decomposition approach called the "subdomain grid" approach, toggled with the `--subdomain-grid=on` flag (default since version 0.11.0).
 Here, the goal is to divide the fluid domain into subdomains with a fixed number of marching cubes cells, by default `64x64x64` cubes.
 For each subdomain, a dense 3D array is allocated for the marching cubes cells.
-Of course, only subdomains that contain fluid particles are actually allocated.
+Of course, only subdomains that contain any fluid particles are actually allocated.
 For subdomains that contain only a tiny number of fluid particles (less than 5% of the largest subdomain), a hashmap is used instead to not waste too much storage.
 As most domains are dense, however, the marching cubes triangulation per subdomain is very fast as it can make full use of cache locality.
 The triangulation per subdomain can be performed in parallel.
