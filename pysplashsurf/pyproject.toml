@@ -4,11 +4,15 @@ build-backend = "maturin"
 
 [project]
 name = "pysplashsurf"
-version = "0.12.0.0"
+version = "0.12.0.1"
 description = "Python bindings for splashsurf, a surface reconstruction library for SPH simulations."
 keywords = ["surface reconstruction", "marching cubes", "sph", "fluid", "particles", "mesh", "splashsurf", "splishsplash"]
 readme = "README.md"
 license = "MIT"
+authors = [
+  {name = "Interactive Computer Graphics"},
+  {name = "Fabian Löschner"},
+]
 requires-python = ">=3.7"
 classifiers = [
     "Programming Language :: Rust",
@@ -35,5 +39,6 @@ meshio = ["meshio"]
 pysplashsurf = "pysplashsurf:run_pysplashsurf"
 
 [project.urls]
-homepage = "https://splashsurf.physics-simulation.org/"
-repository = "https://github.com/InteractiveComputerGraphics/splashsurf.git"
+Homepage = "https://splashsurf.physics-simulation.org/"
+Repository = "https://github.com/InteractiveComputerGraphics/splashsurf.git"
+Documentation = "https://pysplashsurf.readthedocs.io/"
