@@ -1,0 +1,12 @@
+ - [ ] Update `CHANGELOG.md` with the new version and changes
+ - [ ] Update `README.md` with any relevant changes
+   - [ ] Update the CLI arguments in the `All command line options` section
+   - [ ] Update the benchmark output in the `Benchmark example` section
+   - [ ] Update the `splashsurf` create `README.md` with these changes (copy and paste content to `splashsurf/README.md`)
+ - [ ] Update version numbers of crates/packages:
+   - [ ] Update version number of crate `splashsurf_lib` in `splashsurf_lib/Cargo.toml`
+   - [ ] Update version number of dependency `splashsurf_lib` in crate `splashsurf` in `splashsurf/Cargo.toml`
+   - [ ] Update version number of crate `splashsurf` in `splashsurf/Cargo.toml`
+   - [ ] Update version number of crate `pysplashsurf` in `pysplashsurf/Cargo.toml`
+   - [ ] Update version number of Python package `pysplashsurf` in `pysplashsurf/pyproject.toml`
+   - [ ] Update version number and release date in `CITATION.cff`

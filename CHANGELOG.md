@@ -4,6 +4,14 @@ The following changes are present in the `main` branch of the repository and are
 
  - N/A
 
+## Version 0.12.0
+
+This release adds Python bindings for the CLI and library, see [README](pysplashsurf/README.md) for more details.
+
+ - CLI: Add a library target to the `splashsurf` crate to allow using high-level CLI functions from other crates
+ - CLI: Add an argument `--mesh-cleanup-snap-dist` to limit the snapping distance along cube edges (relative to marching cube size) of the marching cubes cleanup step (default is to snap without limit)
+ - CLI: Enable mesh cleanup by default if smoothing is enabled
+
 ## Version 0.11.0
 
  - CLI: Add a switch `--check_mesh_orientation` to check if the mesh orientation is consistent (i.e. vertex normals have the same orientation as all adjacent face normals)

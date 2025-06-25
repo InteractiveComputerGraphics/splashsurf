@@ -1,6 +1,6 @@
 [package]
 name = "splashsurf"
-version = "0.11.0"
+version = "0.12.0"
 description = "Command-line tool for surface reconstruction of SPH particle data"
 keywords = ["sph", "particle", "surface", "reconstruction", "marching-cubes"]
 categories = ["command-line-utilities", "graphics", "science", "simulation", "visualization"]
@@ -13,7 +13,7 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-splashsurf_lib = { path = "../splashsurf_lib", version = "0.11.0", features = ["vtk_extras", "profiling", "io"] }
+splashsurf_lib = { path = "../splashsurf_lib", version = "0.12.0", features = ["vtk_extras", "profiling", "io"] }
 clap = { version = "4.4", features = ["derive"] }
 log = "0.4"
 fern = "0.7"

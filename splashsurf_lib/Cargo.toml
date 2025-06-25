@@ -1,6 +1,6 @@
 [package]
 name = "splashsurf_lib"
-version = "0.11.0"
+version = "0.12.0"
 description = "Library for surface reconstruction of SPH particle data"
 keywords = ["sph", "particle", "surface", "reconstruction", "marching-cubes"]
 categories = ["graphics", "science", "simulation", "visualization", "rendering"]
@@ -67,7 +67,7 @@ sdfu = { git = "https://github.com/w1th0utnam3/sdfu", features = [
 ], rev = "74856c41aaace7cf12e21b41bd0007f1363fea45" }
 clap = { version = "4.5", features = ["derive"] }
 fern = "0.7"
-chrono = "0.4"
+chrono = "0.4.41"
 
 [[example]]
 name = "minimal_levelset"
