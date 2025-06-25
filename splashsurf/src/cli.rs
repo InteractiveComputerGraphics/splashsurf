@@ -4,7 +4,7 @@
 //! The reconstruction procedure and other internals of the CLI are provided by the [`splashsurf_lib`] crate.
 
 use crate::allocator::GetPeakAllocatedMemory;
-use crate::{convert, logging, reconstruction};
+use crate::{convert, logging, reconstruct};
 use anyhow::Context;
 use clap::Parser;
 use log::info;
@@ -44,7 +44,7 @@ struct CommandlineArgs {
 enum Subcommand {
     /// Reconstruct a surface from particle data
     #[command(help_template = HELP_TEMPLATE)]
-    Reconstruct(reconstruction::ReconstructSubcommandArgs),
+    Reconstruct(reconstruct::ReconstructSubcommandArgs),
     /// Convert particle or mesh files between different file formats
     #[command(help_template = HELP_TEMPLATE)]
     Convert(convert::ConvertSubcommandArgs),
@@ -115,7 +115,7 @@ where
 
     // Delegate to subcommands
     let result = match &cmd_args.subcommand {
-        Subcommand::Reconstruct(cmd_args) => reconstruction::reconstruct_subcommand(cmd_args),
+        Subcommand::Reconstruct(cmd_args) => reconstruct::reconstruct_subcommand(cmd_args),
         Subcommand::Convert(cmd_args) => convert::convert_subcommand(cmd_args),
     };
 
@@ -189,7 +189,7 @@ mod cli_args_tests {
     #[test]
     fn verify_reconstruct_cli() {
         use clap::CommandFactory;
-        crate::reconstruction::ReconstructSubcommandArgs::command().debug_assert()
+        crate::reconstruct::ReconstructSubcommandArgs::command().debug_assert()
     }
 
     #[test]

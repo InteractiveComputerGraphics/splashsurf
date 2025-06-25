@@ -1,7 +1,7 @@
 pub mod cli;
 mod convert;
 mod io;
-mod reconstruction;
+mod reconstruct;
 #[macro_use]
 mod allocator;
 mod logging;
