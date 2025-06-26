@@ -1,5 +1,6 @@
 # ![splashsurf logo](https://raw.githubusercontent.com/InteractiveComputerGraphics/splashsurf/main/logos/logo_small.svg "splashsurf")
 [![On crates.io](https://img.shields.io/crates/v/splashsurf)](https://crates.io/crates/splashsurf)
+[![On PyPI](https://img.shields.io/pypi/v/pysplashsurf)](https://pypi.org/project/pysplashsurf/)
 [![On docs.rs](https://docs.rs/splashsurf_lib/badge.svg)](https://docs.rs/splashsurf_lib)
 [![Commits since last release](https://img.shields.io/github/commits-since/InteractiveComputerGraphics/splashsurf/latest)](https://github.com/InteractiveComputerGraphics/splashsurf)
 [![License: MIT](https://img.shields.io/crates/l/splashsurf)](https://github.com/InteractiveComputerGraphics/splashsurf/blob/main/LICENSE)
@@ -14,7 +15,7 @@ This repository consists of the following crates:
  - 🧰 `splashsurf_lib`: Library that implements the reconstruction pipeline used by the CLI. Allows integrating the reconstruction procedure directly into other Rust applications. Furthermore, it resembles a framework providing access to individual building blocks to create your own surface reconstruction pipeline.
  - 🐍 `pysplashsurf`: Bindings to the CLI and library for Python. Install with `pip install splashsurf` and see the [`README`](pysplashsurf/README.md) for more details.
 
-This page provides an overview of the CLI's features and high-level notes on the algorithmic structure and implementation of the reconstruction.
+This page provides an overview of the CLI's features and high-level notes on implementation of the reconstruction method.
 
 <p align="center">
 <img src="example_particles.png" alt="Image of the original particle data" width="32%"> <img src="example_coarse.png" alt="Image of a coarse reconstructed surface mesh" width="32%"> <img src="example_fine.png" alt="Image of a fine reconstructed surface mesh" width="32%">
