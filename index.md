@@ -7,10 +7,6 @@
 [![Rust library & CLI](https://github.com/InteractiveComputerGraphics/splashsurf/actions/workflows/build.yml/badge.svg)](https://github.com/InteractiveComputerGraphics/splashsurf/actions/workflows/build.yml)
 [![Python bindings](https://github.com/InteractiveComputerGraphics/splashsurf/actions/workflows/pysplashsurf_CI.yml/badge.svg)](https://github.com/InteractiveComputerGraphics/splashsurf/actions/workflows/pysplashsurf_CI.yml)
 
-Surface reconstruction library and CLI for particle data from SPH simulations, written in Rust.
-
----
-
 ## News
 
 **2025-06-25**: We published Python bindings for the CLI of splashsurf and most library features 🐍! Pre-built wheels can be installed using PIP: `pip install pysplashsurf`. See the [PyPI entry of pySplashsurf](https://pypi.org/project/pysplashsurf) for more information.
@@ -24,8 +20,6 @@ The images below show a rendering of a typical surface reconstruction (on the le
 </p>
 
 You can see this rendering in motion in [this video](https://youtu.be/2bYvaUXlBQs). For more details see the [paper](https://animation.rwth-aachen.de/publication/0583/) and the [readme](https://github.com/InteractiveComputerGraphics/splashsurf) in the repository.
-
----
 
 ## About
 
