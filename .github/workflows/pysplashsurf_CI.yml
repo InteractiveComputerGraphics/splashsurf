@@ -36,22 +36,79 @@ jobs:
         with:
           name: pysplashsurf.pyi
           path: pysplashsurf/pysplashsurf/
-  
-  linux:
-    name: Build wheels for Linux
+
+  # linux_wheels:
+  #   name: Build wheels for "${{ matrix.python-version }}"
+  #   needs: generate-stub
+  #   runs-on: ubuntu-24.04
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       include:
+  #         - python-version: "manylinux_x86_64"
+  #           archs: "x86_64"
+  #           enable_test: true
+  #         - python-version: "manylinux_i686"
+  #           archs: "i686"
+  #           enable_test: false
+  #         - python-version: "manylinux_aarch64"
+  #           archs: "aarch64"
+  #           enable_test: false
+  #         - python-version: "manylinux_armv7l"
+  #           archs: "armv7l"
+  #           enable_test: false
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - name: Download stub artifact
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: pysplashsurf.pyi
+  #         path: pysplashsurf/pysplashsurf/
+  #     - uses: actions/setup-python@v5
+  #       with:
+  #         python-version: 3.12
+  #     # QEMU is required for non-native archs
+  #     # https://cibuildwheel.pypa.io/en/stable/faq/#emulation
+  #     - name: Set up QEMU
+  #       if: runner.os == 'Linux'
+  #       uses: docker/setup-qemu-action@v3
+  #       with:
+  #         platforms: all
+  #     - name: Install cibuildwheel
+  #       run: python -m pip install cibuildwheel==3.1.3
+  #     - name: Build wheels with tests
+  #       run: python -m cibuildwheel --output-dir wheelhouse pysplashsurf
+  #       if: matrix.enable_test == true
+  #       env:
+  #           CIBW_BUILD: ${{ format('cp312-{0}', matrix.python-version) }}
+  #           CIBW_ARCHS: ${{ matrix.archs }}
+  #           CIBW_BEFORE_ALL_LINUX: curl -sSf https://sh.rustup.rs | sh -s -- -y
+  #           CIBW_ENVIRONMENT_LINUX: "PATH=$HOME/.cargo/bin:$PATH"
+  #           CIBW_TEST_COMMAND: "cargo install --path {project}/splashsurf && pytest pysplashsurf/tests"
+  #           CIBW_TEST_SOURCES: "pysplashsurf/tests"
+  #           CIBW_TEST_REQUIRES: pytest meshio trimesh rtree scipy
+  #     - name: Build wheels without tests
+  #       run: python -m cibuildwheel --output-dir wheelhouse pysplashsurf
+  #       if: matrix.enable_test == false
+  #       env:
+  #           CIBW_BUILD: ${{ format('cp312-{0}', matrix.python-version) }}
+  #           CIBW_ARCHS: ${{ matrix.archs }}
+  #           CIBW_BEFORE_ALL_LINUX: curl -sSf https://sh.rustup.rs | sh -s -- -y
+  #           CIBW_ENVIRONMENT_LINUX: "PATH=$HOME/.cargo/bin:$PATH"
+  #     - name: Upload wheels
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: wheels-${{ matrix.python-version }}
+  #         path: wheelhouse
+
+  linux_wheels:
+    name: Build wheels for Linux ${{ matrix.target }}
     needs: generate-stub
-    runs-on: ${{ matrix.platform.runner }}
+    runs-on: ubuntu-24.04
     strategy:
+      fail-fast: false
       matrix:
-        platform:
-          - runner: ubuntu-24.04
-            target: x86_64
-          - runner: ubuntu-24.04
-            target: x86
-          - runner: ubuntu-24.04
-            target: aarch64
-          - runner: ubuntu-24.04
-            target: armv7
+        target: [x86_64, x86, aarch64, armv7]
     steps:
       - uses: actions/checkout@v4
       - name: Download stub artifact
@@ -61,61 +118,75 @@ jobs:
           path: pysplashsurf/pysplashsurf/
       - uses: actions/setup-python@v5
         with:
-          python-version: 3.x
+          python-version: 3.12
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
-          target: ${{ matrix.platform.target }}
-          args: --release --out dist -m pysplashsurf/Cargo.toml
-          # sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
-          manylinux: auto
+          target: ${{ matrix.target }}
+          args: --release --out wheelhouse --auditwheel repair -m pysplashsurf/Cargo.toml
+          #sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
+          manylinux: 2014
+      - name: Audit & fix wheels
+        run: |
+          pip install auditwheel
+          auditwheel repair wheelhouse/*.whl
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
-          name: wheels-linux-${{ matrix.platform.target }}
-          path: dist
+          name: wheels-linux-${{ matrix.target }}
+          path: wheelhouse
 
-  windows:
-    name: Build wheels for Windows
-    needs: generate-stub
-    runs-on: ${{ matrix.platform.runner }}
-    strategy:
-      matrix:
-        platform:
-          - runner: windows-latest
-            target: x64
-          - runner: windows-latest
-            target: x86
-    steps:
-      - uses: actions/checkout@v4
-      - name: Download stub artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: pysplashsurf.pyi
-          path: pysplashsurf/pysplashsurf/
-      - uses: actions/setup-python@v5
-        with:
-          python-version: 3.x
-          architecture: ${{ matrix.platform.target }}
-      - name: Build wheels
-        uses: PyO3/maturin-action@v1
-        with:
-          target: ${{ matrix.platform.target }}
-          args: --release --out dist -m pysplashsurf\Cargo.toml
-          sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
-      - name: Upload wheels
-        uses: actions/upload-artifact@v4
-        with:
-          name: wheels-windows-${{ matrix.platform.target }}
-          path: dist
+  # macos_wheels:
+  #   name: Build wheels for "${{ matrix.python-version }}"
+  #   needs: generate-stub
+  #   runs-on: ${{ matrix.runner }}
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       include:
+  #         - runner: macos-13
+  #           python-version: "macosx_x86_64"
+  #           archs: "x86_64"
+  #           macosx_deployment_target: "13.0"
+  #         - runner: macos-14
+  #           python-version: "macosx_arm64"
+  #           archs: "arm64"
+  #           macosx_deployment_target: "14.0"
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - name: Download stub artifact
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: pysplashsurf.pyi
+  #         path: pysplashsurf/pysplashsurf/
+  #     - uses: actions/setup-python@v5
+  #       with:
+  #         python-version: 3.12
+  #     - name: Install cibuildwheel
+  #       run: python -m pip install cibuildwheel==3.1.3
+  #     - name: Build wheels
+  #       run: python -m cibuildwheel --output-dir wheelhouse pysplashsurf
+  #       env:
+  #           CIBW_BUILD: ${{ format('cp312-{0}', matrix.python-version) }}
+  #           CIBW_ARCHS: ${{ matrix.archs }}
+  #           CIBW_ENVIRONMENT_MACOS: "MACOSX_DEPLOYMENT_TARGET=${{ matrix.macosx_deployment_target }}"
+  #           CIBW_TEST_COMMAND: "cargo install --path {project}/splashsurf && pytest pysplashsurf/tests"
+  #           CIBW_TEST_SOURCES: "pysplashsurf/tests"
+  #           CIBW_TEST_REQUIRES: pytest meshio trimesh rtree scipy
+  #     - name: Upload wheels
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: wheels-${{ matrix.python-version }}
+  #         path: wheelhouse
 
-  macos:
-    name: Build wheels for macOS
+  macos_wheels:
+    name: Build wheels for macOS ${{ matrix.target }}
     needs: generate-stub
-    runs-on: ${{ matrix.platform.runner }}
+    runs-on: ${{ matrix.runner }}
     strategy:
+      fail-fast: false
       matrix:
-        platform:
+        include:
           - runner: macos-13
             target: x86_64
           - runner: macos-14
@@ -129,18 +200,96 @@ jobs:
           path: pysplashsurf/pysplashsurf/
       - uses: actions/setup-python@v5
         with:
-          python-version: 3.x
+          python-version: 3.12
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
-          target: ${{ matrix.platform.target }}
-          args: --release --out dist -m pysplashsurf/Cargo.toml
-          sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
+          target: ${{ matrix.target }}
+          args: --release --out wheelhouse -m pysplashsurf/Cargo.toml
+          #sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
+      - name: Audit & fix wheels
+        run: |
+          pip install delocate
+          delocate-wheel -v wheelhouse/*.whl
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
-          name: wheels-macos-${{ matrix.platform.target }}
-          path: dist
+          name: wheels-macos-${{ matrix.target }}
+          path: wheelhouse
+
+  # windows_wheels:
+  #   name: Build wheels for "${{ matrix.python-version }}"
+  #   needs: generate-stub
+  #   runs-on: windows-latest
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       include:
+  #         - archs: "AMD64"
+  #           python-version: "win_amd64"
+  #         - archs: "x86"
+  #           python-version: "win32"
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - name: Download stub artifact
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: pysplashsurf.pyi
+  #         path: pysplashsurf/pysplashsurf/
+  #     - uses: actions/setup-python@v5
+  #       with:
+  #         python-version: 3.12
+  #     - name: Install cibuildwheel
+  #       run: python -m pip install cibuildwheel==3.1.3
+  #     - name: Build wheels
+  #       run: python -m cibuildwheel --output-dir wheelhouse pysplashsurf
+  #       env:
+  #           CIBW_BUILD: ${{ format('cp312-{0}', matrix.python-version) }}
+  #           CIBW_ARCHS: ${{ matrix.archs }}
+  #           # Tests are broken on Windows because trimesh library tries to write temporary files which fails
+  #           #CIBW_TEST_COMMAND: "cargo install --path {project}/splashsurf && pytest pysplashsurf/tests"
+  #           #CIBW_TEST_SOURCES: "pysplashsurf/tests"
+  #           #CIBW_TEST_REQUIRES: pytest meshio trimesh rtree scipy
+  #     - name: Upload wheels
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: wheels-${{ matrix.python-version }}
+  #         path: wheelhouse
+
+  windows_wheels:
+    name: Build wheels for Windows ${{ matrix.target }}
+    needs: generate-stub
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [x64, x86]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download stub artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: pysplashsurf.pyi
+          path: pysplashsurf/pysplashsurf/
+      - uses: actions/setup-python@v5
+        with:
+          python-version: 3.12
+          architecture: ${{ matrix.target }}
+      - name: Build wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          args: --release --out wheelhouse -m pysplashsurf/Cargo.toml
+          #sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
+      - name: Audit wheels
+        run: |
+          pip install delvewheel
+          delvewheel show -v wheelhouse/*.whl
+      - name: Upload wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-windows-${{ matrix.target }}
+          path: wheelhouse
 
   sdist:
     name: Build source distribution
@@ -168,30 +317,28 @@ jobs:
     name: Publish to PyPI
     runs-on: ubuntu-latest
     if: ${{ startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' }}
-    needs: [linux, windows, macos, sdist, tests]
-    permissions:
-      # Use to sign the release artifacts
-      id-token: write
-      # Used to upload release artifacts
-      contents: write
-      # Used to generate artifact attestation
-      attestations: write
+    needs: [linux_wheels, macos_wheels, windows_wheels, sdist, tests, docs]
     steps:
       - uses: actions/download-artifact@v4
-      #- name: Generate artifact attestation
-      #  uses: actions/attest-build-provenance@v1
-      #  with:
-      #    subject-path: 'wheels-*/*'
-      - name: Publish to PyPI
-        #if: ${{ startsWith(github.ref, 'refs/tags/') }}
-        uses: PyO3/maturin-action@v1
-        env:
-          MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
         with:
-          command: upload
-          args: --non-interactive --skip-existing wheels-*/*
+          pattern: wheels-*
+          merge-multiple: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: 3.x
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install twine
+      - name: Test
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          ls
+          twine upload *.whl --skip-existing
   
-  build_wheel:
+  build_wheel_dev:
     name: Build wheel for documentation and tests
     runs-on: ubuntu-latest
     outputs:
@@ -220,7 +367,7 @@ jobs:
 
   docs:
     name: Build documentation
-    needs: build_wheel
+    needs: build_wheel_dev
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
@@ -234,7 +381,7 @@ jobs:
         path: dist/
     - name: Append output to file
       run: |
-        echo "./dist/${{ needs.build_wheel.outputs.filename }}" >> pysplashsurf/pysplashsurf/docs/requirements.txt
+        echo "./dist/${{ needs.build_wheel_dev.outputs.filename }}" >> pysplashsurf/pysplashsurf/docs/requirements.txt
     - uses: ammaraskar/sphinx-action@8.2.3
       with:
         docs-folder: "pysplashsurf/pysplashsurf/docs/"
@@ -254,7 +401,7 @@ jobs:
 
   tests:
     name: Run pytest
-    needs: build_wheel
+    needs: build_wheel_dev
     defaults:
       run:
         shell: bash -l {0}
@@ -277,7 +424,7 @@ jobs:
       with:
         name: doc_tests_wheel
         path: dist/
-    - run: pip install dist/${{ needs.build_wheel.outputs.filename }}
+    - run: pip install dist/${{ needs.build_wheel_dev.outputs.filename }}
     - name: Install splashsurf CLI
       run: cargo install splashsurf
     - name: Run pytest
