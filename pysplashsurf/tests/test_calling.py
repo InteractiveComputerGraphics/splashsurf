@@ -9,9 +9,11 @@ import pathlib
 
 BINARY_PATH = "splashsurf"
 DIR = pathlib.Path(__file__).parent.resolve()
-BGEO_PATH = DIR.joinpath("../ParticleData_Fluid_50.bgeo")
-VTK_PATH = DIR.joinpath("../ParticleData_Fluid_5.vtk")
+BGEO_PATH = DIR.joinpath("ParticleData_Fluid_50.bgeo")
+VTK_PATH = DIR.joinpath("ParticleData_Fluid_5.vtk")
 
+def now_s():
+    return time.process_time_ns() / (10 ** 9)
 
 def test_bgeo():
     particles = np.array(meshio.read(BGEO_PATH).points, dtype=np.float32)
@@ -63,15 +65,15 @@ def test_memory_access():
                                                                  iso_surface_threshold=0.6, aabb_min=np.array([0.0, 0.0, 0.0]), aabb_max=np.array([2.0, 2.0, 2.0]))
     mesh = reconstruction.mesh
     
-    start = time.time()
+    start = now_s()
     triangles_copy = mesh.triangles
     vertices_copy = mesh.vertices
-    copy_time = time.time() - start
+    copy_time = now_s() - start
     print("Copy time:", copy_time)
     
-    start = time.time()
+    start = now_s()
     vertices, triangles = mesh.take_vertices_and_triangles()
-    take_time = time.time() - start
+    take_time = now_s() - start
     print("Take time:", take_time)
     
     print("Copy time / Take time (Speedup):", copy_time / take_time)
@@ -115,15 +117,15 @@ def reconstruction_pipeline(input_file, output_file, *, attributes_to_interpolat
 
 
 def test_no_post_processing():
-    start = time.time()
+    start = now_s()
     subprocess.run([BINARY_PATH] + f"reconstruct {VTK_PATH} -o {DIR.joinpath("test_bin.vtk")} -r=0.025 -l=2.0 -c=0.5 -t=0.6 -d=on --subdomain-grid=on --mesh-cleanup=off --mesh-smoothing-weights=off --mesh-smoothing-iters=0 --normals=off --normals-smoothing-iters=0".split(), check=True)
-    print("Binary done in", time.time() - start)
+    print("Binary done in", now_s() - start)
     
-    start = time.time()
+    start = now_s()
     reconstruction_pipeline(VTK_PATH, DIR.joinpath("test.vtk"), particle_radius=np.float64(0.025), smoothing_length=np.float64(2.0), 
                             cube_size=np.float64(0.5), iso_surface_threshold=np.float64(0.6), mesh_smoothing_weights=False, 
                             mesh_smoothing_iters=0, normals_smoothing_iters=0, mesh_cleanup=False, compute_normals=False, subdomain_grid=True)
-    print("Python done in", time.time() - start)
+    print("Python done in", now_s() - start)
     
     binary_mesh = meshio.read(DIR.joinpath("test_bin.vtk"))
     python_mesh = meshio.read(DIR.joinpath("test.vtk"))
@@ -142,17 +144,17 @@ def test_no_post_processing():
     assert(np.allclose(binary_verts, python_verts))
     
 def test_with_post_processing():
-    start = time.time()
+    start = now_s()
     subprocess.run([BINARY_PATH] + f"reconstruct {VTK_PATH} -o {DIR.joinpath("test_bin.vtk")} -r=0.025 -l=2.0 -c=0.5 -t=0.6 -d=on --subdomain-grid=on --interpolate_attribute velocity --decimate-barnacles=on --mesh-cleanup=on --mesh-smoothing-weights=on --mesh-smoothing-iters=25 --normals=on --normals-smoothing-iters=10 --output-smoothing-weights=on --generate-quads=off".split(), check=True)
-    print("Binary done in", time.time() - start)
+    print("Binary done in", now_s() - start)
     
-    start = time.time()
+    start = now_s()
     reconstruction_pipeline(VTK_PATH, DIR.joinpath("test.vtk"), attributes_to_interpolate=["velocity"], particle_radius=np.float64(0.025), smoothing_length=np.float64(2.0), 
                             cube_size=np.float64(0.5), iso_surface_threshold=np.float64(0.6), mesh_smoothing_weights=True, 
                             mesh_smoothing_weights_normalization=np.float64(13.0), mesh_smoothing_iters=25, normals_smoothing_iters=10, 
                             generate_quads=False, mesh_cleanup=True, compute_normals=True, subdomain_grid=True, decimate_barnacles=True,
                             output_mesh_smoothing_weights=True, output_raw_normals=True)
-    print("Python done in", time.time() - start)
+    print("Python done in", now_s() - start)
     
     binary_mesh = meshio.read(DIR.joinpath("test_bin.vtk"))
     python_mesh = meshio.read(DIR.joinpath("test.vtk"))
@@ -176,6 +178,7 @@ def test_with_post_processing():
     assert(np.allclose(binary_vels, python_vels))
     
     # Trimesh similarity test
+    # TODO: Replace load_mesh call: the function tries to create temporary files which may fail on some CI runners
     binary_mesh = trimesh.load_mesh(DIR.joinpath("test_bin.vtk"), "vtk")
     python_mesh = trimesh.load_mesh(DIR.joinpath("test.vtk"), "vtk")
     
