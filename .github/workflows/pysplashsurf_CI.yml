@@ -336,7 +336,7 @@ jobs:
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
         run: |
           ls
-          twine upload *.whl --skip-existing
+          twine upload --skip-existing *.whl *.tar.gz
   
   build_wheel_dev:
     name: Build wheel for documentation and tests
