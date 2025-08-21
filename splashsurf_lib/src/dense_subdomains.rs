@@ -142,10 +142,10 @@ pub(crate) fn initialize_parameters<I: Index, R: Real>(
             ghost_particle_margin / (cube_size * subdomain_cubes.to_real_unchecked())
         );
 
-        if ghost_margin_cubes > subdomain_cubes / I::two() {
+        if ghost_margin_cubes > subdomain_cubes {
             panic!(
-                "The ghost margin is {ghost_margin_cubes} cubes wide (rounded up), while the subdomain only has an extent of {subdomain_cubes} cubes. The subdomain has to have at least twice the number of cubes ({})!",
-                ghost_margin_cubes.times(2)
+                "The ghost margin is {ghost_margin_cubes} cubes wide (rounded up), while the subdomain only has an extent of {subdomain_cubes} cubes. The subdomain has to have at least the same number of cubes ({})!",
+                ghost_margin_cubes
             );
         }
     }
@@ -1494,7 +1494,7 @@ pub(crate) mod subdomain_classification {
 
     /// Classifier that assign a particle to its owning subdomain and all subdomains where it's a ghost particle
     pub struct GhostMarginClassifier<I: Index> {
-        subdomains: ArrayVec<I, 8>,
+        subdomains: ArrayVec<I, 27>,
     }
 
     impl<I: Index, R: Real> ParticleToSubdomainClassifier<I, R> for GhostMarginClassifier<I> {
@@ -1535,7 +1535,7 @@ pub(crate) mod subdomain_classification {
         particle: &Vector3<R>,
         subdomain_grid: &UniformCartesianCubeGrid3d<I, R>,
         ghost_particle_margin: R,
-        subdomains: &mut ArrayVec<I, 8>,
+        subdomains: &mut ArrayVec<I, 27>,
     ) {
         // Find the owning subdomain of the particle
         let subdomain_ijk = subdomain_grid.enclosing_cell(particle);
