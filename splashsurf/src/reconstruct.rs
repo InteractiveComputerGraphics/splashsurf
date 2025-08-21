@@ -460,7 +460,7 @@ pub struct ReconstructionPostprocessingParameters {
     /// Number of Laplacian smoothing iterations to apply to normals if normal interpolation is enabled
     pub normals_smoothing_iters: Option<usize>,
     /// Interpolate point attributes with the given names from the input attributes to the reconstructed surface
-    pub interpolate_attributes: Vec<String>,
+    pub interpolate_attributes: Option<Vec<String>>,
     /// Number of Laplacian smoothing iterations to apply t the reconstructed mesh
     pub mesh_smoothing_iters: Option<usize>,
     /// Enable feature weights for mesh smoothing if mesh smoothing enabled. Preserves isolated particles even under strong smoothing.
@@ -485,6 +485,38 @@ pub struct ReconstructionPostprocessingParameters {
     pub mesh_aabb: Option<Aabb3d<f64>>,
     /// Enable clamping of vertices outside the specified mesh AABB to the AABB (only has an effect if mesh-aabb is specified)
     pub mesh_aabb_clamp_vertices: bool,
+}
+
+impl ReconstructionPostprocessingParameters {
+    /// Returns a new instance of the post-processing parameters with all postprocessing disabled
+    pub fn new() -> Self {
+        ReconstructionPostprocessingParameters {
+            check_mesh_closed: false,
+            check_mesh_manifold: false,
+            check_mesh_orientation: false,
+            check_mesh_debug: false,
+            mesh_cleanup: false,
+            mesh_cleanup_snap_dist: None,
+            decimate_barnacles: false,
+            keep_vertices: false,
+            compute_normals: false,
+            sph_normals: false,
+            normals_smoothing_iters: None,
+            interpolate_attributes: None,
+            mesh_smoothing_iters: None,
+            mesh_smoothing_weights: false,
+            mesh_smoothing_weights_normalization: 0.0,
+            generate_quads: false,
+            quad_max_edge_diag_ratio: 0.0,
+            quad_max_normal_angle: 0.0,
+            quad_max_interior_angle: 0.0,
+            output_mesh_smoothing_weights: false,
+            output_raw_normals: false,
+            output_raw_mesh: false,
+            mesh_aabb: None,
+            mesh_aabb_clamp_vertices: false,
+        }
+    }
 }
 
 /// Conversion and validation of command line arguments
@@ -619,7 +651,7 @@ pub(crate) mod arguments {
                 compute_normals: args.normals.into_bool(),
                 sph_normals: args.sph_normals.into_bool(),
                 normals_smoothing_iters: args.normals_smoothing_iters,
-                interpolate_attributes: args.interpolate_attributes.clone(),
+                interpolate_attributes: Some(args.interpolate_attributes.clone()),
                 mesh_smoothing_iters: args.mesh_smoothing_iters,
                 mesh_smoothing_weights: args.mesh_smoothing_weights.into_bool(),
                 mesh_smoothing_weights_normalization: args.mesh_smoothing_weights_normalization,
@@ -959,11 +991,15 @@ pub(crate) fn reconstruction_pipeline_from_args(
 /// Inputs are the particle positions, a (possibly empty) list of attributes defined on the particles,
 /// [`Parameters`](splashsurf_lib::Parameters) for the surface reconstruction itself, and a set of parameters for optional
 /// post-processing steps.
-/// Please note that, unlike the CLI, the parameters for the surface reconstruction are not relative
-/// to the particle radius but absolute values.
+///
+/// * `params`: Please note that, unlike the CLI, any distance parameters for the surface reconstruction are not relative
+/// to the particle radius but are **absolute distance values** (see [`Parameters`](splashsurf_lib::Parameters)).
+/// * `attributes`: Note that the attributes are not required for the reconstruction itself but can be used for
+/// post-processing steps like attribute interpolation to the reconstructed surface. This has to be enabled explicitly
+/// in the post-processing parameters (see [`ReconstructionPostprocessingParameters`]).
 pub fn reconstruction_pipeline<I: Index, R: Real>(
     particle_positions: &[Vector3<R>],
-    attributes: Vec<MeshAttribute<R>>,
+    attributes: &[MeshAttribute<R>],
     params: &splashsurf_lib::Parameters<R>,
     postprocessing: &ReconstructionPostprocessingParameters,
 ) -> Result<ReconstructionResult<I, R>, anyhow::Error> {
@@ -1018,7 +1054,12 @@ pub fn reconstruction_pipeline<I: Index, R: Real>(
         // Initialize SPH interpolator if required later
         let interpolator_required = postprocessing.mesh_smoothing_weights
             || postprocessing.sph_normals
-            || !attributes.is_empty();
+            || (!attributes.is_empty()
+                && !postprocessing
+                    .interpolate_attributes
+                    .as_ref()
+                    .map(Vec::is_empty)
+                    .unwrap_or(true));
         let interpolator = if interpolator_required {
             profile!("initialize interpolator");
             info!("Post-processing: Initializing interpolator...");
@@ -1235,15 +1276,20 @@ pub fn reconstruction_pipeline<I: Index, R: Real>(
         }
 
         // Interpolate attributes if requested
-        if !attributes.is_empty() {
+        if let Some(attribute_names) = &postprocessing.interpolate_attributes
+            && !attributes.is_empty()
+        {
             profile!("interpolate attributes");
             info!("Post-processing: Interpolating attributes...");
             let interpolator = interpolator.as_ref().expect("interpolator is required");
 
-            for attribute in attributes.into_iter() {
+            for attribute in attributes
+                .iter()
+                .filter(|a| attribute_names.contains(&a.name))
+            {
                 info!("Interpolating attribute \"{}\"...", attribute.name);
 
-                match attribute.data {
+                match &attribute.data {
                     AttributeData::ScalarReal(values) => {
                         let interpolated_values = interpolator.interpolate_scalar_quantity(
                             values.as_slice(),
@@ -1251,7 +1297,7 @@ pub fn reconstruction_pipeline<I: Index, R: Real>(
                             true,
                         );
                         mesh_with_data.point_attributes.push(MeshAttribute::new(
-                            attribute.name,
+                            attribute.name.clone(),
                             AttributeData::ScalarReal(interpolated_values),
                         ));
                     }
@@ -1262,7 +1308,7 @@ pub fn reconstruction_pipeline<I: Index, R: Real>(
                             true,
                         );
                         mesh_with_data.point_attributes.push(MeshAttribute::new(
-                            attribute.name,
+                            attribute.name.clone(),
                             AttributeData::Vector3Real(interpolated_values),
                         ));
                     }
@@ -1458,7 +1504,11 @@ pub(crate) fn reconstruction_pipeline_from_path<I: Index, R: Real>(
     // Load particle positions and attributes to interpolate
     let (particle_positions, attributes) = io::read_particle_positions_with_attributes(
         &paths.input_file,
-        &postprocessing.interpolate_attributes,
+        postprocessing
+            .interpolate_attributes
+            .as_ref()
+            .map(Vec::as_slice)
+            .unwrap_or(&[]),
         &io_params.input,
     )
     .with_context(|| {
@@ -1472,7 +1522,7 @@ pub(crate) fn reconstruction_pipeline_from_path<I: Index, R: Real>(
         tri_mesh,
         tri_quad_mesh,
         raw_reconstruction: reconstruction,
-    } = reconstruction_pipeline::<I, R>(&particle_positions, attributes, params, postprocessing)?;
+    } = reconstruction_pipeline::<I, R>(&particle_positions, &attributes, params, postprocessing)?;
 
     if postprocessing.output_raw_mesh {
         profile!("write surface mesh to file");

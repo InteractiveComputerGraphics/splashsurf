@@ -105,7 +105,7 @@ fn reconstruction_pipeline_generic<I: Index, R: Real>(
         compute_normals,
         sph_normals,
         normals_smoothing_iters,
-        interpolate_attributes: Vec::new(),
+        interpolate_attributes: Some(attributes.iter().map(|a| a.name.clone()).collect()),
         mesh_smoothing_iters,
         mesh_smoothing_weights,
         mesh_smoothing_weights_normalization,
@@ -122,7 +122,7 @@ fn reconstruction_pipeline_generic<I: Index, R: Real>(
 
     splashsurf::reconstruct::reconstruction_pipeline(
         particle_positions,
-        attributes,
+        &attributes,
         &params,
         &postprocessing_args,
     )

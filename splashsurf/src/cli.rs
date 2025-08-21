@@ -191,13 +191,13 @@ mod cli_args_tests {
     #[test]
     fn verify_reconstruct_cli() {
         use clap::CommandFactory;
-        crate::reconstruct::ReconstructSubcommandArgs::command().debug_assert()
+        reconstruct::ReconstructSubcommandArgs::command().debug_assert()
     }
 
     #[test]
     fn verify_convert_cli() {
         use clap::CommandFactory;
-        crate::convert::ConvertSubcommandArgs::command().debug_assert()
+        convert::ConvertSubcommandArgs::command().debug_assert()
     }
 
     #[test]
