@@ -1493,44 +1493,6 @@ pub(crate) mod subdomain_classification {
         fn get(&self, i: usize) -> I;
     }
 
-    /// Classifier that assigns only the owning subdomain to a particle
-    pub struct NoMarginClassifier<I: Index> {
-        subdomain: I,
-    }
-
-    impl<I: Index, R: Real> ParticleToSubdomainClassifier<I, R> for NoMarginClassifier<I> {
-        #[inline(always)]
-        fn new() -> Self {
-            NoMarginClassifier {
-                subdomain: I::zero(),
-            }
-        }
-
-        #[inline(always)]
-        fn classify_particle(
-            &mut self,
-            particle: &Vector3<R>,
-            subdomain_grid: &UniformCartesianCubeGrid3d<I, R>,
-            _ghost_particle_margin: R,
-        ) {
-            // Find the owning subdomain of the particle
-            let subdomain_ijk = subdomain_grid.enclosing_cell(particle);
-            // And store its flattened index
-            let flat_subdomain_idx = subdomain_grid.flatten_cell_index_array(&subdomain_ijk);
-            self.subdomain = flat_subdomain_idx;
-        }
-
-        #[inline(always)]
-        fn len(&self) -> usize {
-            1
-        }
-
-        #[inline(always)]
-        fn get(&self, _i: usize) -> I {
-            self.subdomain
-        }
-    }
-
     /// Classifier that assign a particle to its owning subdomain and all subdomains where it's a ghost particle
     pub struct GhostMarginClassifier<I: Index> {
         subdomains: ArrayVec<I, 8>,
