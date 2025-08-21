@@ -209,7 +209,8 @@ def reconstruct_surface(
     iso_surface_threshold: float = 0.6,
     enable_multi_threading: bool = False,
     global_neighborhood_list: bool = False,
-    subdomain_grid: bool = False,
+    subdomain_grid: bool = True,
+    auto_disable_subdomain_grid: bool = True,
     subdomain_num_cubes_per_dim: int = 64,
     aabb_min = None,
     aabb_max = None,
@@ -245,7 +246,10 @@ def reconstruct_surface(
         Global neighborhood list flag
     
     subdomain_grid: bool
-        Enable spatial decomposition using a regular grid-based approach
+        Enable spatial decomposition using by dividing the domain into subdomains with dense marching cube grids for efficient multi-threading
+
+    auto_disable_subdomain_grid: bool
+        Whether to automatically disable the subdomain grid if the global domain is too small
         
     subdomain_num_cubes_per_dim: int
         Each subdomain will be a cube consisting of this number of MC cube cells along each coordinate axis
@@ -267,13 +271,13 @@ def reconstruct_surface(
         return reconstruct_surface_f32(particles, particle_radius=particle_radius, rest_density=rest_density, 
                                 smoothing_length=smoothing_length, cube_size=cube_size, iso_surface_threshold=iso_surface_threshold, 
                                 enable_multi_threading=enable_multi_threading, global_neighborhood_list=global_neighborhood_list, 
-                                use_custom_grid_decomposition=subdomain_grid, subdomain_num_cubes_per_dim=subdomain_num_cubes_per_dim, 
+                                use_subdomain_grid=subdomain_grid, auto_disable_subdomain_grid=auto_disable_subdomain_grid, subdomain_num_cubes_per_dim=subdomain_num_cubes_per_dim,
                                 aabb_min=aabb_min, aabb_max=aabb_max)   
     elif particles.dtype == 'float64':
         return reconstruct_surface_f64(particles, particle_radius=particle_radius, rest_density=rest_density, 
                                 smoothing_length=smoothing_length, cube_size=cube_size, iso_surface_threshold=iso_surface_threshold, 
                                 enable_multi_threading=enable_multi_threading, global_neighborhood_list=global_neighborhood_list, 
-                                use_custom_grid_decomposition=subdomain_grid, subdomain_num_cubes_per_dim=subdomain_num_cubes_per_dim, 
+                                use_subdomain_grid=subdomain_grid, auto_disable_subdomain_grid=auto_disable_subdomain_grid, subdomain_num_cubes_per_dim=subdomain_num_cubes_per_dim,
                                 aabb_min=aabb_min, aabb_max=aabb_max)
     else:
         raise ValueError("Invalid data type (only float32 and float64 are supported, consider explicitly specifying the dtype for particles)")
@@ -530,7 +534,7 @@ def reconstruction_pipeline(
     mesh_smoothing_weights_normalization=13.0, mesh_smoothing_iters=None, normals_smoothing_iters=None,
     mesh_cleanup=False, mesh_cleanup_snap_dist=None, decimate_barnacles=False, keep_vertices=False,
     compute_normals=False, output_raw_normals=False, output_raw_mesh=False, output_mesh_smoothing_weights=False, mesh_aabb_clamp_vertices=False,
-    subdomain_grid=True, subdomain_num_cubes_per_dim=64, aabb_min=None, aabb_max=None, mesh_aabb_min=None, mesh_aabb_max=None,
+    subdomain_grid=True, auto_disable_subdomain_grid=True, subdomain_num_cubes_per_dim=64, aabb_min=None, aabb_max=None, mesh_aabb_min=None, mesh_aabb_max=None,
     generate_quads=False, quad_max_edge_diag_ratio=1.75, quad_max_normal_angle=10.0, quad_max_interior_angle=135.0
 ):
     """Surface reconstruction based on particle positions with subsequent post-processing
@@ -622,7 +626,10 @@ def reconstruction_pipeline(
         Flag to clamp the vertices of the mesh to the AABB
         
     subdomain_grid: bool
-        Enables spatial decomposition using a regular grid-based approach
+        Enable spatial decomposition using by dividing the domain into subdomains with dense marching cube grids for efficient multi-threading
+
+    auto_disable_subdomain_grid: bool
+        Whether to automatically disable the subdomain grid if the global domain is too small
     
     subdomain_num_cubes_per_dim: int
         Each subdomain will be a cube consisting of this number of MC cube cells along each coordinate axis
@@ -660,7 +667,7 @@ def reconstruction_pipeline(
         tri_mesh, tri_quad_mesh, reconstruction = reconstruction_pipeline_f32(particles, attributes_to_interpolate=attributes_to_interpolate, particle_radius=particle_radius, rest_density=rest_density, 
                                                                               smoothing_length=smoothing_length, cube_size=cube_size, iso_surface_threshold=iso_surface_threshold, 
                                                                               aabb_min=aabb_min, aabb_max=aabb_max, enable_multi_threading=enable_multi_threading, 
-                                                                              use_custom_grid_decomposition=subdomain_grid, subdomain_num_cubes_per_dim=subdomain_num_cubes_per_dim,
+                                                                              use_subdomain_grid=subdomain_grid, auto_disable_subdomain_grid=auto_disable_subdomain_grid, subdomain_num_cubes_per_dim=subdomain_num_cubes_per_dim,
                                                                               check_mesh_closed=check_mesh_closed, check_mesh_manifold=check_mesh_manifold, check_mesh_orientation=check_mesh_orientation, check_mesh_debug=check_mesh_debug,
                                                                               mesh_cleanup=mesh_cleanup, max_rel_snap_dist=mesh_cleanup_snap_dist, decimate_barnacles=decimate_barnacles,
                                                                               keep_vertices=keep_vertices, compute_normals=compute_normals, sph_normals=sph_normals, normals_smoothing_iters=normals_smoothing_iters,
@@ -678,7 +685,7 @@ def reconstruction_pipeline(
         tri_mesh, tri_quad_mesh, reconstruction = reconstruction_pipeline_f64(particles, attributes_to_interpolate=attributes_to_interpolate, particle_radius=particle_radius, rest_density=rest_density,
                                                                               smoothing_length=smoothing_length, cube_size=cube_size, iso_surface_threshold=iso_surface_threshold,
                                                                               aabb_min=aabb_min, aabb_max=aabb_max, enable_multi_threading=enable_multi_threading,
-                                                                              use_custom_grid_decomposition=subdomain_grid, subdomain_num_cubes_per_dim=subdomain_num_cubes_per_dim,
+                                                                              use_subdomain_grid=subdomain_grid, auto_disable_subdomain_grid=auto_disable_subdomain_grid, subdomain_num_cubes_per_dim=subdomain_num_cubes_per_dim,
                                                                               check_mesh_closed=check_mesh_closed, check_mesh_manifold=check_mesh_manifold, check_mesh_orientation=check_mesh_orientation, check_mesh_debug=check_mesh_debug,
                                                                               mesh_cleanup=mesh_cleanup, max_rel_snap_dist=mesh_cleanup_snap_dist, decimate_barnacles=decimate_barnacles,
                                                                               keep_vertices=keep_vertices, compute_normals=compute_normals, sph_normals=sph_normals, normals_smoothing_iters=normals_smoothing_iters,

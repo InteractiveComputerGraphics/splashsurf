@@ -27,7 +27,8 @@ fn reconstruction_pipeline_generic<I: Index, R: Real>(
     aabb_min: Option<[R; 3]>,
     aabb_max: Option<[R; 3]>,
     enable_multi_threading: bool,
-    use_custom_grid_decomposition: bool,
+    use_subdomain_grid: bool,
+    auto_disable_subdomain_grid: bool,
     subdomain_num_cubes_per_dim: u32,
     check_mesh_closed: bool,
     check_mesh_manifold: bool,
@@ -64,10 +65,11 @@ fn reconstruction_pipeline_generic<I: Index, R: Real>(
         None
     };
 
-    let spatial_decomposition = if use_custom_grid_decomposition {
-        let mut grid_params = GridDecompositionParameters::default();
-        grid_params.subdomain_num_cubes_per_dim = subdomain_num_cubes_per_dim;
-        SpatialDecomposition::UniformGrid(grid_params)
+    let spatial_decomposition = if use_subdomain_grid {
+        SpatialDecomposition::UniformGrid(GridDecompositionParameters {
+            subdomain_num_cubes_per_dim,
+            auto_disable: auto_disable_subdomain_grid,
+        })
     } else {
         SpatialDecomposition::None
     };
@@ -180,7 +182,7 @@ fn attrs_conversion<R: Real + Element>(
 #[pyo3(signature = (particles, *, attributes_to_interpolate, particle_radius, rest_density,
     smoothing_length, cube_size, iso_surface_threshold,
     aabb_min = None, aabb_max = None, enable_multi_threading = false,
-    use_custom_grid_decomposition = false, subdomain_num_cubes_per_dim = 64,
+    use_subdomain_grid = true, auto_disable_subdomain_grid = true, subdomain_num_cubes_per_dim = 64,
     check_mesh_closed = false, check_mesh_manifold = false, check_mesh_orientation = false, check_mesh_debug = false,
     mesh_cleanup, max_rel_snap_dist = None, decimate_barnacles, keep_vertices, compute_normals, sph_normals,
     normals_smoothing_iters, mesh_smoothing_iters, mesh_smoothing_weights, mesh_smoothing_weights_normalization,
@@ -199,7 +201,8 @@ pub fn reconstruction_pipeline_py_f32<'py>(
     aabb_min: Option<[f32; 3]>,
     aabb_max: Option<[f32; 3]>,
     enable_multi_threading: bool,
-    use_custom_grid_decomposition: bool,
+    use_subdomain_grid: bool,
+    auto_disable_subdomain_grid: bool,
     subdomain_num_cubes_per_dim: u32,
     check_mesh_closed: bool,
     check_mesh_manifold: bool,
@@ -252,7 +255,8 @@ pub fn reconstruction_pipeline_py_f32<'py>(
         aabb_min,
         aabb_max,
         enable_multi_threading,
-        use_custom_grid_decomposition,
+        use_subdomain_grid,
+        auto_disable_subdomain_grid,
         subdomain_num_cubes_per_dim,
         check_mesh_closed,
         check_mesh_manifold,
@@ -293,7 +297,7 @@ pub fn reconstruction_pipeline_py_f32<'py>(
 #[pyo3(signature = (particles, *, attributes_to_interpolate, particle_radius, rest_density,
     smoothing_length, cube_size, iso_surface_threshold,
     aabb_min = None, aabb_max = None, enable_multi_threading = false,
-    use_custom_grid_decomposition = false, subdomain_num_cubes_per_dim = 64,
+    use_subdomain_grid = true, auto_disable_subdomain_grid = true, subdomain_num_cubes_per_dim = 64,
     check_mesh_closed = false, check_mesh_manifold = false, check_mesh_orientation = false, check_mesh_debug = false,
     mesh_cleanup, max_rel_snap_dist = None, decimate_barnacles, keep_vertices, compute_normals, sph_normals,
     normals_smoothing_iters, mesh_smoothing_iters, mesh_smoothing_weights, mesh_smoothing_weights_normalization,
@@ -312,7 +316,8 @@ pub fn reconstruction_pipeline_py_f64<'py>(
     aabb_min: Option<[f64; 3]>,
     aabb_max: Option<[f64; 3]>,
     enable_multi_threading: bool,
-    use_custom_grid_decomposition: bool,
+    use_subdomain_grid: bool,
+    auto_disable_subdomain_grid: bool,
     subdomain_num_cubes_per_dim: u32,
     check_mesh_closed: bool,
     check_mesh_manifold: bool,
@@ -365,7 +370,8 @@ pub fn reconstruction_pipeline_py_f64<'py>(
         aabb_min,
         aabb_max,
         enable_multi_threading,
-        use_custom_grid_decomposition,
+        use_subdomain_grid,
+        auto_disable_subdomain_grid,
         subdomain_num_cubes_per_dim,
         check_mesh_closed,
         check_mesh_manifold,

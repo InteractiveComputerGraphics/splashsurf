@@ -79,7 +79,8 @@ pub fn reconstruct_surface_py<I: Index, R: Real>(
     iso_surface_threshold: R,
     enable_multi_threading: bool,
     global_neighborhood_list: bool,
-    use_custom_grid_decomposition: bool,
+    use_subdomain_grid: bool,
+    auto_disable_subdomain_grid: bool,
     subdomain_num_cubes_per_dim: u32,
     aabb_min: Option<[R; 3]>,
     aabb_max: Option<[R; 3]>,
@@ -96,10 +97,11 @@ pub fn reconstruct_surface_py<I: Index, R: Real>(
     }
 
     let spatial_decomposition;
-    if use_custom_grid_decomposition {
-        let mut grid_params = GridDecompositionParameters::default();
-        grid_params.subdomain_num_cubes_per_dim = subdomain_num_cubes_per_dim;
-        spatial_decomposition = SpatialDecomposition::UniformGrid(grid_params);
+    if use_subdomain_grid {
+        spatial_decomposition = SpatialDecomposition::UniformGrid(GridDecompositionParameters {
+            subdomain_num_cubes_per_dim,
+            auto_disable: auto_disable_subdomain_grid,
+        });
     } else {
         spatial_decomposition = SpatialDecomposition::None;
     }
@@ -126,7 +128,7 @@ pub fn reconstruct_surface_py<I: Index, R: Real>(
 #[pyo3(name = "reconstruct_surface_f32")]
 #[pyo3(signature = (particles, *, particle_radius, rest_density,
     smoothing_length, cube_size, iso_surface_threshold, enable_multi_threading=false,
-    global_neighborhood_list=false, use_custom_grid_decomposition=false, subdomain_num_cubes_per_dim=64,
+    global_neighborhood_list=false, use_subdomain_grid=true, auto_disable_subdomain_grid=true, subdomain_num_cubes_per_dim=64,
     aabb_min = None, aabb_max = None
 ))]
 pub fn reconstruct_surface_py_f32<'py>(
@@ -138,7 +140,8 @@ pub fn reconstruct_surface_py_f32<'py>(
     iso_surface_threshold: f32,
     enable_multi_threading: bool,
     global_neighborhood_list: bool,
-    use_custom_grid_decomposition: bool,
+    use_subdomain_grid: bool,
+    auto_disable_subdomain_grid: bool,
     subdomain_num_cubes_per_dim: u32,
     aabb_min: Option<[f32; 3]>,
     aabb_max: Option<[f32; 3]>,
@@ -157,7 +160,8 @@ pub fn reconstruct_surface_py_f32<'py>(
         iso_surface_threshold,
         enable_multi_threading,
         global_neighborhood_list,
-        use_custom_grid_decomposition,
+        use_subdomain_grid,
+        auto_disable_subdomain_grid,
         subdomain_num_cubes_per_dim,
         aabb_min,
         aabb_max,
@@ -170,7 +174,7 @@ pub fn reconstruct_surface_py_f32<'py>(
 #[pyo3(name = "reconstruct_surface_f64")]
 #[pyo3(signature = (particles, *, particle_radius, rest_density,
     smoothing_length, cube_size, iso_surface_threshold, enable_multi_threading=false,
-    global_neighborhood_list=false, use_custom_grid_decomposition=false, subdomain_num_cubes_per_dim=64,
+    global_neighborhood_list=false, use_subdomain_grid=true, auto_disable_subdomain_grid=true, subdomain_num_cubes_per_dim=64,
     aabb_min = None, aabb_max = None
 ))]
 pub fn reconstruct_surface_py_f64<'py>(
@@ -182,7 +186,8 @@ pub fn reconstruct_surface_py_f64<'py>(
     iso_surface_threshold: f64,
     enable_multi_threading: bool,
     global_neighborhood_list: bool,
-    use_custom_grid_decomposition: bool,
+    use_subdomain_grid: bool,
+    auto_disable_subdomain_grid: bool,
     subdomain_num_cubes_per_dim: u32,
     aabb_min: Option<[f64; 3]>,
     aabb_max: Option<[f64; 3]>,
@@ -201,7 +206,8 @@ pub fn reconstruct_surface_py_f64<'py>(
         iso_surface_threshold,
         enable_multi_threading,
         global_neighborhood_list,
-        use_custom_grid_decomposition,
+        use_subdomain_grid,
+        auto_disable_subdomain_grid,
         subdomain_num_cubes_per_dim,
         aabb_min,
         aabb_max,
