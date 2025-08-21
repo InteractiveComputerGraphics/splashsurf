@@ -102,7 +102,7 @@ pub fn surface_reconstruction_dam_break(c: &mut Criterion) {
         iso_surface_threshold: 0.6,
         particle_aabb: None,
         enable_multi_threading: true,
-        spatial_decomposition: None,
+        spatial_decomposition: SpatialDecomposition::None,
         global_neighborhood_list: false,
     };
 
@@ -123,11 +123,11 @@ pub fn surface_reconstruction_dam_break(c: &mut Criterion) {
     group.bench_function("surface_reconstruction_dam_break_par_grid_64", |b| {
         b.iter(|| {
             let mut parameters = parameters.clone();
-            parameters.spatial_decomposition = Some(SpatialDecomposition::UniformGrid(
-                GridDecompositionParameters {
+            parameters.spatial_decomposition =
+                SpatialDecomposition::UniformGrid(GridDecompositionParameters {
                     subdomain_num_cubes_per_dim: 64,
-                },
-            ));
+                    auto_disable: false,
+                });
             reconstruction =
                 reconstruct_surface::<i64, _>(particle_positions.as_slice(), &parameters).unwrap()
         })
@@ -161,7 +161,7 @@ pub fn surface_reconstruction_double_dam_break(c: &mut Criterion) {
         iso_surface_threshold: 0.6,
         particle_aabb: None,
         enable_multi_threading: true,
-        spatial_decomposition: None,
+        spatial_decomposition: SpatialDecomposition::None,
         global_neighborhood_list: false,
     };
 
@@ -182,11 +182,11 @@ pub fn surface_reconstruction_double_dam_break(c: &mut Criterion) {
     group.bench_function("surface_reconstruction_double_dam_break_par_grid_64", |b| {
         b.iter(|| {
             let mut parameters = parameters.clone();
-            parameters.spatial_decomposition = Some(SpatialDecomposition::UniformGrid(
-                GridDecompositionParameters {
+            parameters.spatial_decomposition =
+                SpatialDecomposition::UniformGrid(GridDecompositionParameters {
                     subdomain_num_cubes_per_dim: 64,
-                },
-            ));
+                    auto_disable: false,
+                });
             reconstruction =
                 reconstruct_surface::<i64, _>(particle_positions.as_slice(), &parameters).unwrap()
         })
@@ -220,7 +220,7 @@ pub fn surface_reconstruction_double_dam_break_inplace(c: &mut Criterion) {
         iso_surface_threshold: 0.6,
         particle_aabb: None,
         enable_multi_threading: true,
-        spatial_decomposition: None,
+        spatial_decomposition: SpatialDecomposition::None,
         global_neighborhood_list: false,
     };
 
@@ -250,11 +250,11 @@ pub fn surface_reconstruction_double_dam_break_inplace(c: &mut Criterion) {
         |b| {
             b.iter(|| {
                 let mut parameters = parameters.clone();
-                parameters.spatial_decomposition = Some(SpatialDecomposition::UniformGrid(
-                    GridDecompositionParameters {
+                parameters.spatial_decomposition =
+                    SpatialDecomposition::UniformGrid(GridDecompositionParameters {
                         subdomain_num_cubes_per_dim: 64,
-                    },
-                ));
+                        auto_disable: false,
+                    });
                 reconstruct_surface_inplace::<i64, _>(
                     particle_positions.as_slice(),
                     &parameters,

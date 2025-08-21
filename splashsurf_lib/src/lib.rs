@@ -118,6 +118,8 @@ fn new_parallel_map<K: Eq + Hash, V>() -> ParallelMapType<K, V> {
 /// Approach used for spatial decomposition of the surface reconstruction and its parameters
 #[derive(Clone, Debug)]
 pub enum SpatialDecomposition {
+    /// No spatial decomposition is used, i.e. the surface reconstruction is done globally
+    None,
     /// Use a uniform grid of subdomains with contiguous (dense) marching cubes grids per subdomain
     ///
     /// Only subdomains containing at least one particle will be processed.
@@ -137,12 +139,15 @@ impl Default for SpatialDecomposition {
 pub struct GridDecompositionParameters {
     /// Each uniform subdomain will be a cube consisting of this number of MC cube cells along each coordinate axis
     pub subdomain_num_cubes_per_dim: u32,
+    /// Whether to automatically disable spatial decomposition if the domain is too small
+    pub auto_disable: bool,
 }
 
 impl Default for GridDecompositionParameters {
     fn default() -> Self {
         Self {
             subdomain_num_cubes_per_dim: 64,
+            auto_disable: true,
         }
     }
 }
@@ -158,7 +163,7 @@ pub struct Parameters<R: Real> {
     pub compact_support_radius: R,
     /// Edge length of the marching cubes implicit background grid (in distance units, not relative to particle radius)
     pub cube_size: R,
-    /// Density threshold value to distinguish between the inside (above threshold) and outside (below threshold) of the fluid
+    /// Relative rest density threshold value to distinguish between the inside (above threshold) and outside (below threshold) of the fluid
     pub iso_surface_threshold: R,
     /// Bounding box of particles to reconstruct
     ///
@@ -171,7 +176,7 @@ pub struct Parameters<R: Real> {
     pub enable_multi_threading: bool,
     /// Parameters for the spatial decomposition of the surface reconstruction
     /// If not provided, no spatial decomposition is performed and a global approach is used instead.
-    pub spatial_decomposition: Option<SpatialDecomposition>,
+    pub spatial_decomposition: SpatialDecomposition,
     /// Whether to return the global particle neighborhood list from the reconstruction.
     /// Depending on the settings of the reconstruction, neighborhood lists are only computed locally
     /// in subdomains. Enabling this flag joins this data over all particles which can add a small overhead.
@@ -179,6 +184,53 @@ pub struct Parameters<R: Real> {
 }
 
 impl<R: Real> Parameters<R> {
+    /// Creates a new set of parameters with the specified (absolute) parameters and default values for the rest
+    ///
+    /// The arguments are in absolute distance units, not relative to the particle radius.
+    /// A default rest density of 1000.0 and iso surface threshold of 0.6 is used.
+    /// Multi threading and spatial decomposition is enabled.
+    pub fn new(particle_radius: R, compact_support_radius: R, cube_size: R) -> Self {
+        Self {
+            particle_radius,
+            rest_density: R::from_float(1000.0),
+            compact_support_radius,
+            cube_size,
+            iso_surface_threshold: R::from_float(0.6),
+            particle_aabb: None,
+            enable_multi_threading: true,
+            spatial_decomposition: Default::default(),
+            global_neighborhood_list: false,
+        }
+    }
+
+    /// Creates a new set of parameters with the specified parameters relative to the particle radius and default values for the rest
+    ///
+    /// The arguments are relative to the particle radius, i.e. the actual values are computed as `particle_radius * relative_*`.
+    /// For the remaining parameters, see [`Parameters::new`].
+    pub fn new_relative(
+        particle_radius: R,
+        relative_compact_support_radius: R,
+        relative_cube_size: R,
+    ) -> Self {
+        Self::new(
+            particle_radius,
+            particle_radius * relative_compact_support_radius,
+            particle_radius * relative_cube_size,
+        )
+    }
+
+    /// Returns the given reconstruction parameters with the rest density set to the given value
+    pub fn with_rest_density(mut self, rest_density: R) -> Self {
+        self.rest_density = rest_density;
+        self
+    }
+
+    /// Returns the given reconstruction parameters with the iso surface threshold set to the given value
+    pub fn with_iso_surface_threshold(mut self, iso_surface_threshold: R) -> Self {
+        self.iso_surface_threshold = iso_surface_threshold;
+        self
+    }
+
     /// Tries to convert the parameters from one [Real] type to another [Real] type, returns `None` if conversion fails
     pub fn try_convert<T: Real>(&self) -> Option<Parameters<T>> {
         Some(Parameters {
@@ -369,14 +421,44 @@ pub fn reconstruct_surface_inplace<I: Index, R: Real>(
     output_surface.grid.log_grid_info();
 
     match &parameters.spatial_decomposition {
-        Some(SpatialDecomposition::UniformGrid(_)) => {
-            reconstruction::reconstruct_surface_subdomain_grid::<I, R>(
-                particle_positions,
-                parameters,
-                output_surface,
-            )?
+        SpatialDecomposition::UniformGrid(p) => {
+            let use_decomposition = if p.auto_disable {
+                // Enable spatial decomposition if the domain has more cubes than the subdomain size + 20% margin
+                let max_cubes = output_surface
+                    .grid
+                    .cells_per_dim()
+                    .iter()
+                    .copied()
+                    .max()
+                    .unwrap_or(I::one());
+                let subdomain_cubes_with_margin =
+                    (1.2 * p.subdomain_num_cubes_per_dim as f64) as u32;
+                let use_decomposition =
+                    max_cubes.to_u32().unwrap_or(u32::MAX) > subdomain_cubes_with_margin;
+                info!(
+                    "Enabling decomposition: {}. Max domain extent ({}) > cubes per subdomain + 20% ({})",
+                    use_decomposition, max_cubes, subdomain_cubes_with_margin
+                );
+                use_decomposition
+            } else {
+                true
+            };
+
+            if use_decomposition {
+                reconstruction::reconstruct_surface_subdomain_grid::<I, R>(
+                    particle_positions,
+                    parameters,
+                    output_surface,
+                )?
+            } else {
+                reconstruction::reconstruct_surface_global(
+                    particle_positions,
+                    parameters,
+                    output_surface,
+                )?
+            }
         }
-        None => reconstruction::reconstruct_surface_global(
+        SpatialDecomposition::None => reconstruction::reconstruct_surface_global(
             particle_positions,
             parameters,
             output_surface,

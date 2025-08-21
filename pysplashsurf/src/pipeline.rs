@@ -64,11 +64,13 @@ fn reconstruction_pipeline_generic<I: Index, R: Real>(
         None
     };
 
-    let spatial_decomposition = use_custom_grid_decomposition.then(|| {
+    let spatial_decomposition = if use_custom_grid_decomposition {
         let mut grid_params = GridDecompositionParameters::default();
         grid_params.subdomain_num_cubes_per_dim = subdomain_num_cubes_per_dim;
         SpatialDecomposition::UniformGrid(grid_params)
-    });
+    } else {
+        SpatialDecomposition::None
+    };
 
     let params = splashsurf_lib::Parameters {
         particle_radius,

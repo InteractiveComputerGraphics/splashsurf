@@ -99,9 +99,9 @@ pub fn reconstruct_surface_py<I: Index, R: Real>(
     if use_custom_grid_decomposition {
         let mut grid_params = GridDecompositionParameters::default();
         grid_params.subdomain_num_cubes_per_dim = subdomain_num_cubes_per_dim;
-        spatial_decomposition = Some(SpatialDecomposition::UniformGrid(grid_params));
+        spatial_decomposition = SpatialDecomposition::UniformGrid(grid_params);
     } else {
-        spatial_decomposition = None;
+        spatial_decomposition = SpatialDecomposition::None;
     }
 
     let params = splashsurf_lib::Parameters {

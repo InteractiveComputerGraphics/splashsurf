@@ -88,8 +88,7 @@ pub(crate) fn initialize_parameters<I: Index, R: Real>(
 ) -> Result<ParametersSubdomainGrid<I, R>, anyhow::Error> {
     let chunk_size = 500;
 
-    let Some(SpatialDecomposition::UniformGrid(grid_parameters)) =
-        &parameters.spatial_decomposition
+    let SpatialDecomposition::UniformGrid(grid_parameters) = &parameters.spatial_decomposition
     else {
         return Err(anyhow!(
             "spatial decomposition parameters for uniform grid are missing"

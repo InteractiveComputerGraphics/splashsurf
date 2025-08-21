@@ -24,7 +24,7 @@ use std::path::PathBuf;
 static ARGS_IO: &str = "Input/output";
 static ARGS_BASIC: &str = "Numerical reconstruction parameters";
 static ARGS_ADV: &str = "Advanced parameters";
-static ARGS_OCTREE: &str = "Domain decomposition parameters";
+static ARGS_DECOMPOSITION: &str = "Domain decomposition parameters";
 static ARGS_DEBUG: &str = "Debug options";
 static ARGS_INTERP: &str = "Interpolation & normals";
 static ARGS_DECIMATE: &str = "Mesh decimation and cleanup";
@@ -125,9 +125,9 @@ pub(crate) struct ReconstructSubcommandArgs {
     #[arg(help_heading = ARGS_ADV, long, short = 'n')]
     pub num_threads: Option<usize>,
 
-    /// Enable spatial decomposition using a regular grid-based approach (for efficient multithreading)
+    /// Enable automatic spatial decomposition using a regular grid-based approach (for efficient multithreading) if the domain is large enough
     #[arg(
-        help_heading = ARGS_OCTREE,
+        help_heading = ARGS_DECOMPOSITION,
         long,
         default_value = "on",
         value_name = "off|on",
@@ -135,8 +135,18 @@ pub(crate) struct ReconstructSubcommandArgs {
         require_equals = true
     )]
     pub subdomain_grid: Switch,
+    /// Whether to automatically disable the spatial decomposition if the domain is too small
+    #[arg(
+        help_heading = ARGS_DECOMPOSITION,
+        long,
+        default_value = "on",
+        value_name = "off|on",
+        ignore_case = true,
+        require_equals = true
+    )]
+    pub subdomain_grid_auto_disable: Switch,
     /// Each subdomain will be a cube consisting of this number of MC grid cells along each coordinate axis
-    #[arg(help_heading = ARGS_OCTREE, long, default_value="64")]
+    #[arg(help_heading = ARGS_DECOMPOSITION, long, default_value="64")]
     pub subdomain_cubes: u32,
 
     /// Enable computing surface normals at the mesh vertices and write them to the output file
@@ -608,14 +618,14 @@ pub(crate) mod arguments {
             let cube_size = args.particle_radius * args.cube_size;
 
             let spatial_decomposition = if args.subdomain_grid.into_bool() {
-                Some(splashsurf_lib::SpatialDecomposition::UniformGrid(
+                splashsurf_lib::SpatialDecomposition::UniformGrid(
                     splashsurf_lib::GridDecompositionParameters {
                         subdomain_num_cubes_per_dim: args.subdomain_cubes,
-                        ..Default::default()
+                        auto_disable: !args.subdomain_grid_auto_disable.into_bool(),
                     },
-                ))
+                )
             } else {
-                None
+                splashsurf_lib::SpatialDecomposition::None
             };
 
             // Assemble all parameters for the surface reconstruction

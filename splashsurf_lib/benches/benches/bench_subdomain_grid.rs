@@ -22,12 +22,10 @@ fn parameters_canyon() -> Parameters<f32> {
         iso_surface_threshold: 0.6,
         particle_aabb: None,
         enable_multi_threading: true,
-        spatial_decomposition: Some(SpatialDecomposition::UniformGrid(
-            GridDecompositionParameters {
-                subdomain_num_cubes_per_dim: 32,
-                ..Default::default()
-            },
-        )),
+        spatial_decomposition: SpatialDecomposition::UniformGrid(GridDecompositionParameters {
+            subdomain_num_cubes_per_dim: 32,
+            auto_disable: false,
+        }),
         global_neighborhood_list: false,
     }
 }
@@ -48,12 +46,11 @@ pub fn grid_canyon(c: &mut Criterion) {
         b.iter(|| {
             let mut parameters = parameters.clone();
             parameters.cube_size = 1.5 * parameters.particle_radius;
-            parameters.spatial_decomposition = Some(SpatialDecomposition::UniformGrid(
-                GridDecompositionParameters {
+            parameters.spatial_decomposition =
+                SpatialDecomposition::UniformGrid(GridDecompositionParameters {
                     subdomain_num_cubes_per_dim: 32,
-                    ..Default::default()
-                },
-            ));
+                    auto_disable: false,
+                });
             reconstruction =
                 reconstruct_surface::<i64, _>(particle_positions.as_slice(), &parameters).unwrap()
         })
@@ -63,12 +60,11 @@ pub fn grid_canyon(c: &mut Criterion) {
         b.iter(|| {
             let mut parameters = parameters.clone();
             parameters.cube_size = 1.0 * parameters.particle_radius;
-            parameters.spatial_decomposition = Some(SpatialDecomposition::UniformGrid(
-                GridDecompositionParameters {
+            parameters.spatial_decomposition =
+                SpatialDecomposition::UniformGrid(GridDecompositionParameters {
                     subdomain_num_cubes_per_dim: 48,
-                    ..Default::default()
-                },
-            ));
+                    auto_disable: false,
+                });
             reconstruction =
                 reconstruct_surface::<i64, _>(particle_positions.as_slice(), &parameters).unwrap()
         })
@@ -78,12 +74,11 @@ pub fn grid_canyon(c: &mut Criterion) {
         b.iter(|| {
             let mut parameters = parameters.clone();
             parameters.cube_size = 0.75 * parameters.particle_radius;
-            parameters.spatial_decomposition = Some(SpatialDecomposition::UniformGrid(
-                GridDecompositionParameters {
+            parameters.spatial_decomposition =
+                SpatialDecomposition::UniformGrid(GridDecompositionParameters {
                     subdomain_num_cubes_per_dim: 64,
-                    ..Default::default()
-                },
-            ));
+                    auto_disable: false,
+                });
             reconstruction =
                 reconstruct_surface::<i64, _>(particle_positions.as_slice(), &parameters).unwrap()
         })
@@ -112,12 +107,11 @@ pub fn grid_optimal_num_cubes_canyon(c: &mut Criterion) {
             group.bench_function(format!("subdomain_num_cubes_{}", num_cubes), |b| {
                 b.iter(|| {
                     let mut parameters = parameters.clone();
-                    parameters.spatial_decomposition = Some(SpatialDecomposition::UniformGrid(
-                        GridDecompositionParameters {
+                    parameters.spatial_decomposition =
+                        SpatialDecomposition::UniformGrid(GridDecompositionParameters {
                             subdomain_num_cubes_per_dim: num_cubes,
-                            ..Default::default()
-                        },
-                    ));
+                            auto_disable: false,
+                        });
                     reconstruction =
                         reconstruct_surface::<i64, _>(particle_positions.as_slice(), &parameters)
                             .unwrap()

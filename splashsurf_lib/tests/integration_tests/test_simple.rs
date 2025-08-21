@@ -29,18 +29,18 @@ fn params_with_aabb<R: Real>(
         iso_surface_threshold,
         particle_aabb: domain_aabb,
         enable_multi_threading: false,
-        spatial_decomposition: None,
+        spatial_decomposition: SpatialDecomposition::None,
         global_neighborhood_list: false,
     };
 
     match strategy {
         Strategy::Global => {}
         Strategy::SubdomainGrid => {
-            parameters.spatial_decomposition = Some(SpatialDecomposition::UniformGrid(
-                GridDecompositionParameters {
+            parameters.spatial_decomposition =
+                SpatialDecomposition::UniformGrid(GridDecompositionParameters {
                     subdomain_num_cubes_per_dim: 64,
-                },
-            ))
+                    auto_disable: false,
+                })
         }
     }
 
