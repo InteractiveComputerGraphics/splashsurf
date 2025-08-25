@@ -9,7 +9,8 @@ use indicatif::{ProgressBar, ProgressStyle};
 use log::{error, info, warn};
 use rayon::prelude::*;
 use splashsurf_lib::mesh::{
-    Mesh3d, MeshWithData, MixedTriQuadMesh3d, OwnedAttributeData, OwnedMeshAttribute, TriMesh3d,
+    AttributeData, Mesh3d, MeshAttribute, MeshWithData, MixedTriQuadMesh3d, OwnedAttributeData,
+    OwnedMeshAttribute, TriMesh3d,
 };
 use splashsurf_lib::nalgebra::{Unit, Vector3};
 use splashsurf_lib::sph_interpolation::SphInterpolator;
@@ -18,7 +19,6 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::path::PathBuf;
-
 // TODO: Detect smallest index type (i.e. check if ok to use i32 as index)
 
 static ARGS_IO: &str = "Input/output";
@@ -1007,9 +1007,9 @@ pub(crate) fn reconstruction_pipeline_from_args(
 /// * `attributes`: Note that the attributes are not required for the reconstruction itself but can be used for
 /// post-processing steps like attribute interpolation to the reconstructed surface. This has to be enabled explicitly
 /// in the post-processing parameters (see [`ReconstructionPostprocessingParameters`]).
-pub fn reconstruction_pipeline<I: Index, R: Real>(
+pub fn reconstruction_pipeline<'a, I: Index, R: Real>(
     particle_positions: &[Vector3<R>],
-    attributes: &[OwnedMeshAttribute<R>],
+    attributes: &[MeshAttribute<'a, R>],
     params: &splashsurf_lib::Parameters<R>,
     postprocessing: &ReconstructionPostprocessingParameters,
 ) -> Result<ReconstructionResult<I, R>, anyhow::Error> {
@@ -1340,7 +1340,7 @@ pub fn reconstruction_pipeline<I: Index, R: Real>(
 
                 let particles_inside = reconstruction.particle_inside_aabb().map(Vec::as_slice);
                 match &attribute.data {
-                    OwnedAttributeData::ScalarReal(values) => {
+                    AttributeData::ScalarReal(values) => {
                         let filtered_values = filtered_quantity(&values, particles_inside);
                         let interpolated_values = interpolator.interpolate_scalar_quantity(
                             &filtered_values,
@@ -1354,7 +1354,7 @@ pub fn reconstruction_pipeline<I: Index, R: Real>(
                                 OwnedAttributeData::ScalarReal(interpolated_values.into()),
                             ));
                     }
-                    OwnedAttributeData::Vector3Real(values) => {
+                    AttributeData::Vector3Real(values) => {
                         let filtered_values = filtered_quantity(&values, particles_inside);
                         let interpolated_values = interpolator.interpolate_vector_quantity(
                             &filtered_values,

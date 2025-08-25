@@ -5,20 +5,21 @@ use crate::{
     },
     reconstruction::{SurfaceReconstructionF32, SurfaceReconstructionF64},
 };
-use numpy::{Element, PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2};
+use numpy::{Element, PyArray1, PyArray2, PyArrayMethods, PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::{
     prelude::*,
     types::{PyDict, PyString},
 };
 use splashsurf_lib::{
     Aabb3d, GridDecompositionParameters, Index, Real, SpatialDecomposition,
-    mesh::{OwnedAttributeData, OwnedMeshAttribute},
+    mesh::{AttributeData, MeshAttribute},
     nalgebra::Vector3,
 };
+use std::borrow::Cow;
 
-fn reconstruction_pipeline_generic<I: Index, R: Real>(
-    particle_positions: &[Vector3<R>],
-    attributes: Vec<OwnedMeshAttribute<R>>,
+fn reconstruction_pipeline_generic<'py, I: Index, R: Real + Element>(
+    particles: &Bound<'py, PyArray2<R>>,
+    attributes_to_interpolate: Bound<'py, PyDict>,
     particle_radius: R,
     rest_density: R,
     smoothing_length: R,
@@ -55,6 +56,60 @@ fn reconstruction_pipeline_generic<I: Index, R: Real>(
     mesh_aabb_max: Option<[f64; 3]>,
     mesh_aabb_clamp_vertices: bool,
 ) -> Result<splashsurf::reconstruct::ReconstructionResult<I, R>, anyhow::Error> {
+    let particles: PyReadonlyArray2<R> = particles.readonly();
+    let particle_positions: &[Vector3<R>] = bytemuck::cast_slice(particles.as_slice()?);
+
+    enum AttributePyView<'a, R: Real + Element> {
+        U64(PyReadonlyArray1<'a, u64>),
+        Float(PyReadonlyArray1<'a, R>),
+        FloatVec3(PyReadonlyArray2<'a, R>),
+    }
+
+    let mut attr_names = Vec::new();
+    let mut attr_views = Vec::new();
+
+    // Collect readonly views of all attribute arrays
+    for (key, value) in attributes_to_interpolate.iter() {
+        let key_str: String = key
+            .downcast::<PyString>()
+            .expect("Key wasn't a string")
+            .extract()?;
+
+        if let Ok(value) = value.downcast::<PyArray1<u64>>() {
+            attr_views.push(AttributePyView::U64(value.readonly()));
+            attr_names.push(key_str);
+        } else if let Ok(value) = value.downcast::<PyArray1<R>>() {
+            attr_views.push(AttributePyView::Float(value.readonly()));
+            attr_names.push(key_str);
+        } else if let Ok(value) = value.downcast::<PyArray2<R>>() {
+            attr_views.push(AttributePyView::FloatVec3(value.readonly()));
+            attr_names.push(key_str);
+        } else {
+            println!("Couldn't downcast attribute {} to valid type", &key_str);
+        }
+    }
+
+    // Get slices from attribute views and construct borrowed MeshAttributes
+    let attributes = attr_names
+        .into_iter()
+        .zip(attr_views.iter())
+        .map(|(name, view)| -> Result<MeshAttribute<R>, anyhow::Error> {
+            let data = match view {
+                AttributePyView::U64(view) => {
+                    AttributeData::ScalarU64(Cow::Borrowed(view.as_slice()?.into()))
+                }
+                AttributePyView::Float(view) => {
+                    AttributeData::ScalarReal(Cow::Borrowed(view.as_slice()?.into()))
+                }
+                AttributePyView::FloatVec3(view) => {
+                    let vec3_slice: &[Vector3<R>] = bytemuck::cast_slice(view.as_slice()?);
+                    AttributeData::Vector3Real(Cow::Borrowed(vec3_slice.into()))
+                }
+            };
+            Ok(MeshAttribute::new(name, data))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
     let aabb = if let (Some(aabb_min), Some(aabb_max)) = (aabb_min, aabb_max) {
         // Convert the min and max arrays to Vector3
         Some(Aabb3d::new(
@@ -132,55 +187,6 @@ fn reconstruction_pipeline_generic<I: Index, R: Real>(
     )
 }
 
-fn attrs_conversion<R: Real + Element>(
-    attributes_to_interpolate: Bound<PyDict>,
-) -> Vec<OwnedMeshAttribute<R>> {
-    let mut attrs: Vec<OwnedMeshAttribute<R>> = Vec::new();
-    for (key, value) in attributes_to_interpolate.iter() {
-        let key_str: String = key
-            .downcast::<PyString>()
-            .expect("Key wasn't a string")
-            .extract()
-            .unwrap();
-
-        if let Ok(value) = value.downcast::<PyArray1<u64>>() {
-            let value: Vec<u64> = value
-                .extract::<PyReadonlyArray1<u64>>()
-                .unwrap()
-                .as_slice()
-                .unwrap()
-                .to_vec();
-            let mesh_attr =
-                OwnedMeshAttribute::new(key_str, OwnedAttributeData::ScalarU64(value.into()));
-            attrs.push(mesh_attr);
-        } else if let Ok(value) = value.downcast::<PyArray1<R>>() {
-            let value: Vec<R> = value
-                .extract::<PyReadonlyArray1<R>>()
-                .unwrap()
-                .as_slice()
-                .unwrap()
-                .to_vec();
-            let mesh_attr =
-                OwnedMeshAttribute::new(key_str, OwnedAttributeData::ScalarReal(value.into()));
-            attrs.push(mesh_attr);
-        } else if let Ok(value) = value.downcast::<PyArray2<R>>() {
-            let value: PyReadonlyArray2<R> = value.extract().unwrap();
-
-            let value_slice = value.as_slice().unwrap();
-            let value_slice: &[Vector3<R>] = bytemuck::cast_slice(value_slice);
-
-            let mesh_attr = OwnedMeshAttribute::new(
-                key_str,
-                OwnedAttributeData::Vector3Real(value_slice.to_vec().into()),
-            );
-            attrs.push(mesh_attr);
-        } else {
-            println!("Couldnt downcast attribute {} to valid type", &key_str);
-        }
-    }
-    attrs
-}
-
 #[pyfunction]
 #[pyo3(name = "reconstruction_pipeline_f32")]
 #[pyo3(signature = (particles, *, attributes_to_interpolate, particle_radius, rest_density,
@@ -237,20 +243,13 @@ pub fn reconstruction_pipeline_py_f32<'py>(
     Option<MixedTriQuadMeshWithDataF32>,
     Option<SurfaceReconstructionF32>,
 )> {
-    let particles: PyReadonlyArray2<f32> = particles.extract()?;
-
-    let particle_positions = particles.as_slice()?;
-    let particle_positions: &[Vector3<f32>] = bytemuck::cast_slice(particle_positions);
-
-    let attrs = attrs_conversion(attributes_to_interpolate);
-
     let splashsurf::reconstruct::ReconstructionResult {
         tri_mesh,
         tri_quad_mesh,
         raw_reconstruction: reconstruction,
     } = reconstruction_pipeline_generic::<i64, f32>(
-        particle_positions,
-        attrs,
+        particles,
+        attributes_to_interpolate,
         particle_radius,
         rest_density,
         smoothing_length,
@@ -286,8 +285,7 @@ pub fn reconstruction_pipeline_py_f32<'py>(
         mesh_aabb_min,
         mesh_aabb_max,
         mesh_aabb_clamp_vertices,
-    )
-    .unwrap();
+    )?;
 
     Ok((
         tri_mesh.map(TriMeshWithDataF32::new),
@@ -352,20 +350,13 @@ pub fn reconstruction_pipeline_py_f64<'py>(
     Option<MixedTriQuadMeshWithDataF64>,
     Option<SurfaceReconstructionF64>,
 )> {
-    let particles: PyReadonlyArray2<f64> = particles.extract()?;
-
-    let particle_positions = particles.as_slice()?;
-    let particle_positions: &[Vector3<f64>] = bytemuck::cast_slice(particle_positions);
-
-    let attrs = attrs_conversion(attributes_to_interpolate);
-
     let splashsurf::reconstruct::ReconstructionResult {
         tri_mesh,
         tri_quad_mesh,
         raw_reconstruction: reconstruction,
     } = reconstruction_pipeline_generic::<i64, f64>(
-        particle_positions,
-        attrs,
+        particles,
+        attributes_to_interpolate,
         particle_radius,
         rest_density,
         smoothing_length,
@@ -401,8 +392,7 @@ pub fn reconstruction_pipeline_py_f64<'py>(
         mesh_aabb_min,
         mesh_aabb_max,
         mesh_aabb_clamp_vertices,
-    )
-    .unwrap();
+    )?;
 
     Ok((
         tri_mesh.map(TriMeshWithDataF64::new),
