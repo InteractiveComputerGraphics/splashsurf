@@ -9,7 +9,7 @@ use indicatif::{ProgressBar, ProgressStyle};
 use log::{error, info, warn};
 use rayon::prelude::*;
 use splashsurf_lib::mesh::{
-    AttributeData, Mesh3d, MeshAttribute, MeshWithData, MixedTriQuadMesh3d, TriMesh3d,
+    Mesh3d, MeshWithData, MixedTriQuadMesh3d, OwnedAttributeData, OwnedMeshAttribute, TriMesh3d,
 };
 use splashsurf_lib::nalgebra::{Unit, Vector3};
 use splashsurf_lib::sph_interpolation::SphInterpolator;
@@ -1009,7 +1009,7 @@ pub(crate) fn reconstruction_pipeline_from_args(
 /// in the post-processing parameters (see [`ReconstructionPostprocessingParameters`]).
 pub fn reconstruction_pipeline<I: Index, R: Real>(
     particle_positions: &[Vector3<R>],
-    attributes: &[MeshAttribute<R>],
+    attributes: &[OwnedMeshAttribute<R>],
     params: &splashsurf_lib::Parameters<R>,
     postprocessing: &ReconstructionPostprocessingParameters,
 ) -> Result<ReconstructionResult<I, R>, anyhow::Error> {
@@ -1220,15 +1220,19 @@ pub fn reconstruction_pipeline<I: Index, R: Real>(
 
                 if postprocessing.output_mesh_smoothing_weights {
                     // Raw distance-weighted number of neighbors value per vertex (can be used to determine normalization value)
-                    mesh_with_data.point_attributes.push(MeshAttribute::new(
-                        "wnn".to_string(),
-                        AttributeData::ScalarReal(vertex_weighted_num_neighbors),
-                    ));
+                    mesh_with_data
+                        .point_attributes
+                        .push(OwnedMeshAttribute::new(
+                            "wnn".to_string(),
+                            OwnedAttributeData::ScalarReal(vertex_weighted_num_neighbors.into()),
+                        ));
                     // Final smoothing weights per vertex
-                    mesh_with_data.point_attributes.push(MeshAttribute::new(
-                        "sw".to_string(),
-                        AttributeData::ScalarReal(smoothing_weights.clone()),
-                    ));
+                    mesh_with_data
+                        .point_attributes
+                        .push(OwnedMeshAttribute::new(
+                            "sw".to_string(),
+                            OwnedAttributeData::ScalarReal(smoothing_weights.clone().into()),
+                        ));
                 }
 
                 smoothing_weights
@@ -1296,21 +1300,27 @@ pub fn reconstruction_pipeline<I: Index, R: Real>(
                     smoothing_iters,
                 );
 
-                mesh_with_data.point_attributes.push(MeshAttribute::new(
-                    "normals".to_string(),
-                    AttributeData::Vector3Real(smoothed_normals),
-                ));
-                if postprocessing.output_raw_normals {
-                    mesh_with_data.point_attributes.push(MeshAttribute::new(
-                        "raw_normals".to_string(),
-                        AttributeData::Vector3Real(normals),
+                mesh_with_data
+                    .point_attributes
+                    .push(OwnedMeshAttribute::new(
+                        "normals".to_string(),
+                        OwnedAttributeData::Vector3Real(smoothed_normals.into()),
                     ));
+                if postprocessing.output_raw_normals {
+                    mesh_with_data
+                        .point_attributes
+                        .push(OwnedMeshAttribute::new(
+                            "raw_normals".to_string(),
+                            OwnedAttributeData::Vector3Real(normals.into()),
+                        ));
                 }
             } else {
-                mesh_with_data.point_attributes.push(MeshAttribute::new(
-                    "normals".to_string(),
-                    AttributeData::Vector3Real(normals),
-                ));
+                mesh_with_data
+                    .point_attributes
+                    .push(OwnedMeshAttribute::new(
+                        "normals".to_string(),
+                        OwnedAttributeData::Vector3Real(normals.into()),
+                    ));
             }
         }
 
@@ -1330,29 +1340,33 @@ pub fn reconstruction_pipeline<I: Index, R: Real>(
 
                 let particles_inside = reconstruction.particle_inside_aabb().map(Vec::as_slice);
                 match &attribute.data {
-                    AttributeData::ScalarReal(values) => {
-                        let filtered_values = filtered_quantity(values, particles_inside);
+                    OwnedAttributeData::ScalarReal(values) => {
+                        let filtered_values = filtered_quantity(&values, particles_inside);
                         let interpolated_values = interpolator.interpolate_scalar_quantity(
                             &filtered_values,
                             mesh_with_data.vertices(),
                             true,
                         );
-                        mesh_with_data.point_attributes.push(MeshAttribute::new(
-                            attribute.name.clone(),
-                            AttributeData::ScalarReal(interpolated_values),
-                        ));
+                        mesh_with_data
+                            .point_attributes
+                            .push(OwnedMeshAttribute::new(
+                                attribute.name.clone(),
+                                OwnedAttributeData::ScalarReal(interpolated_values.into()),
+                            ));
                     }
-                    AttributeData::Vector3Real(values) => {
-                        let filtered_values = filtered_quantity(values, particles_inside);
+                    OwnedAttributeData::Vector3Real(values) => {
+                        let filtered_values = filtered_quantity(&values, particles_inside);
                         let interpolated_values = interpolator.interpolate_vector_quantity(
                             &filtered_values,
                             mesh_with_data.vertices(),
                             true,
                         );
-                        mesh_with_data.point_attributes.push(MeshAttribute::new(
-                            attribute.name.clone(),
-                            AttributeData::Vector3Real(interpolated_values),
-                        ));
+                        mesh_with_data
+                            .point_attributes
+                            .push(OwnedMeshAttribute::new(
+                                attribute.name.clone(),
+                                OwnedAttributeData::Vector3Real(interpolated_values.into()),
+                            ));
                     }
                     _ => unimplemented!("Interpolation of this attribute type not implemented"),
                 }

@@ -19,6 +19,7 @@ use crate::{Aabb3d, MapType, Real, RealConvert, new_map, profile};
 use bytemuck_derive::{Pod, Zeroable};
 use nalgebra::{Unit, Vector3};
 use rayon::prelude::*;
+use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::fmt::Debug;
@@ -155,23 +156,32 @@ impl<R: Real> TriMesh3dExt<R> for TriMesh3d<R> {
 }
 
 /// A named attribute with data that can be attached to the vertices or cells of a mesh
+///
+/// The attribute data can be owned or borrowed.
 #[derive(Clone, Debug)]
-pub struct MeshAttribute<R: Real> {
+pub struct MeshAttribute<'a, R: Real> {
     /// Name of the attribute
     pub name: String,
     /// Data of the attribute
-    pub data: AttributeData<R>,
+    pub data: AttributeData<'a, R>,
 }
+
+/// Owned version of [`MeshAttribute`] (with static lifetime)
+pub type OwnedMeshAttribute<R> = MeshAttribute<'static, R>;
 
 /// Data of an [`MeshAttribute`] that can be attached to the vertices or cells of a mesh
 ///
-/// One value in the data-set is associated to a point or cell of the mesh.
+/// Each value in the data-set is associated to a point or cell of the mesh.
+/// Data can be owned or borrowed.
 #[derive(Clone, Debug)]
-pub enum AttributeData<R: Real> {
-    ScalarU64(Vec<u64>),
-    ScalarReal(Vec<R>),
-    Vector3Real(Vec<Vector3<R>>),
+pub enum AttributeData<'a, R: Real> {
+    ScalarU64(Cow<'a, [u64]>),
+    ScalarReal(Cow<'a, [R]>),
+    Vector3Real(Cow<'a, [Vector3<R>]>),
 }
+
+/// Owned version of [`AttributeData`] (with static lifetime)
+pub type OwnedAttributeData<R> = AttributeData<'static, R>;
 
 /// A triangle (surface) mesh in 3D
 #[derive(Clone, Debug, Default)]
@@ -1218,9 +1228,9 @@ pub struct MeshWithData<R: Real, MeshT: Mesh3d<R>> {
     /// The mesh geometry itself
     pub mesh: MeshT,
     /// Data attached to each vertex or point of the mesh
-    pub point_attributes: Vec<MeshAttribute<R>>,
+    pub point_attributes: Vec<OwnedMeshAttribute<R>>,
     /// Data attached to each cell of the mesh
-    pub cell_attributes: Vec<MeshAttribute<R>>,
+    pub cell_attributes: Vec<OwnedMeshAttribute<R>>,
 }
 
 impl<R: Real, MeshT: Mesh3d<R>> Mesh3d<R> for MeshWithData<R, MeshT> {
@@ -1329,7 +1339,7 @@ impl<R: Real, MeshT: Mesh3d<R>> MeshWithData<R, MeshT> {
     }
 
     /// Attaches an attribute to the points of the mesh, panics if the length of the data does not match the mesh's number of points
-    pub fn with_point_data(mut self, point_attribute: impl Into<MeshAttribute<R>>) -> Self {
+    pub fn with_point_data(mut self, point_attribute: impl Into<OwnedMeshAttribute<R>>) -> Self {
         let point_attribute = point_attribute.into();
         assert_eq!(point_attribute.data.len(), self.mesh.vertices().len());
         self.point_attributes.push(point_attribute);
@@ -1337,7 +1347,7 @@ impl<R: Real, MeshT: Mesh3d<R>> MeshWithData<R, MeshT> {
     }
 
     /// Attaches an attribute to the cells of the mesh, panics if the length of the data does not match the mesh's number of cells
-    pub fn with_cell_data(mut self, cell_attribute: impl Into<MeshAttribute<R>>) -> Self {
+    pub fn with_cell_data(mut self, cell_attribute: impl Into<OwnedMeshAttribute<R>>) -> Self {
         let cell_attribute = cell_attribute.into();
         assert_eq!(cell_attribute.data.len(), self.mesh.cells().len());
         self.cell_attributes.push(cell_attribute);
@@ -1345,20 +1355,42 @@ impl<R: Real, MeshT: Mesh3d<R>> MeshWithData<R, MeshT> {
     }
 }
 
-impl<R: Real> MeshAttribute<R> {
+impl<'a, R: Real> MeshAttribute<'a, R> {
     /// Creates a new named mesh attribute with the given data
-    pub fn new<S: Into<String>>(name: S, data: impl Into<AttributeData<R>>) -> Self {
+    pub fn new<S: Into<String>>(name: S, data: impl Into<AttributeData<'a, R>>) -> Self {
         Self {
             name: name.into(),
             data: data.into(),
         }
     }
 
+    /// Returns a new attribute keeping only the entries with the given index
+    fn keep_indices(&self, indices: &[usize]) -> OwnedMeshAttribute<R> {
+        let data: OwnedAttributeData<R> = match &self.data {
+            AttributeData::ScalarU64(d) => OwnedAttributeData::ScalarU64(Cow::Owned(
+                indices.iter().copied().map(|i| d[i]).collect(),
+            )),
+            AttributeData::ScalarReal(d) => OwnedAttributeData::ScalarReal(Cow::Owned(
+                indices.iter().copied().map(|i| d[i]).collect(),
+            )),
+            AttributeData::Vector3Real(d) => OwnedAttributeData::Vector3Real(Cow::Owned(
+                indices.iter().copied().map(|i| d[i]).collect::<Vec<_>>(),
+            )),
+        };
+
+        OwnedMeshAttribute {
+            name: self.name.clone(),
+            data,
+        }
+    }
+}
+
+impl<R: Real> OwnedMeshAttribute<R> {
     /// Creates a new named mesh attribute with scalar values implementing the [`Real`] trait
     pub fn new_real_scalar<S: Into<String>>(name: S, data: impl Into<Vec<R>>) -> Self {
         Self {
             name: name.into(),
-            data: AttributeData::ScalarReal(data.into()),
+            data: OwnedAttributeData::ScalarReal(Cow::Owned(data.into())),
         }
     }
 
@@ -1366,7 +1398,7 @@ impl<R: Real> MeshAttribute<R> {
     pub fn new_real_vector3<S: Into<String>>(name: S, data: impl Into<Vec<Vector3<R>>>) -> Self {
         Self {
             name: name.into(),
-            data: AttributeData::Vector3Real(data.into()),
+            data: OwnedAttributeData::Vector3Real(Cow::Owned(data.into())),
         }
     }
 
@@ -1375,39 +1407,19 @@ impl<R: Real> MeshAttribute<R> {
     #[cfg_attr(docsrs, doc(cfg(feature = "vtk_extras")))]
     fn to_vtk_attribute(&self) -> Attribute {
         match &self.data {
-            AttributeData::ScalarU64(u64_vec) => {
-                Attribute::scalars(&self.name, 1).with_data(u64_vec.clone())
+            OwnedAttributeData::ScalarU64(u64_vec) => {
+                Attribute::scalars(&self.name, 1).with_data(u64_vec.clone().into_owned())
             }
-            AttributeData::ScalarReal(real_vec) => {
-                Attribute::scalars(&self.name, 1).with_data(real_vec.clone())
+            OwnedAttributeData::ScalarReal(real_vec) => {
+                Attribute::scalars(&self.name, 1).with_data(real_vec.clone().into_owned())
             }
-            AttributeData::Vector3Real(vec3r_vec) => Attribute::scalars(&self.name, 3)
+            OwnedAttributeData::Vector3Real(vec3r_vec) => Attribute::scalars(&self.name, 3)
                 .with_data(vec3r_vec.iter().flatten().copied().collect::<Vec<R>>()),
-        }
-    }
-
-    /// Returns a new attribute keeping only the entries with the given index
-    fn keep_indices(&self, indices: &[usize]) -> Self {
-        let data = match &self.data {
-            AttributeData::ScalarU64(d) => {
-                AttributeData::ScalarU64(indices.iter().copied().map(|i| d[i]).collect())
-            }
-            AttributeData::ScalarReal(d) => {
-                AttributeData::ScalarReal(indices.iter().copied().map(|i| d[i]).collect())
-            }
-            AttributeData::Vector3Real(d) => {
-                AttributeData::Vector3Real(indices.iter().copied().map(|i| d[i]).collect())
-            }
-        };
-
-        Self {
-            name: self.name.clone(),
-            data,
         }
     }
 }
 
-impl<R: Real> AttributeData<R> {
+impl<'a, R: Real> AttributeData<'a, R> {
     /// Returns the number of entries in the data set
     fn len(&self) -> usize {
         match self {
@@ -1418,9 +1430,9 @@ impl<R: Real> AttributeData<R> {
     }
 }
 
-impl<R: Real, V: Into<Vec<u64>>> From<V> for AttributeData<R> {
+impl<R: Real, V: Into<Vec<u64>>> From<V> for OwnedAttributeData<R> {
     fn from(data: V) -> Self {
-        Self::ScalarU64(data.into())
+        Self::ScalarU64(Cow::Owned(data.into()))
     }
 }
 

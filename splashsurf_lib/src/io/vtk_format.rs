@@ -1,7 +1,9 @@
 //! Helper functions for the VTK file format
 
 use crate::io::io_utils::IteratorExt;
-use crate::mesh::{AttributeData, IntoVtkDataSet, MeshAttribute, MeshWithData, TriMesh3d};
+use crate::mesh::{
+    IntoVtkDataSet, MeshWithData, OwnedAttributeData, OwnedMeshAttribute, TriMesh3d,
+};
 use crate::{Real, RealConvert, io::io_utils, profile};
 use anyhow::{Context, anyhow};
 use nalgebra::Vector3;
@@ -94,7 +96,7 @@ impl DataPiece {
     pub fn load_point_attributes<R: Real>(
         &self,
         names: &[String],
-    ) -> Result<Vec<MeshAttribute<R>>, anyhow::Error> {
+    ) -> Result<Vec<OwnedMeshAttribute<R>>, anyhow::Error> {
         let mut mesh_attributes = Vec::new();
 
         'fields: for field_name in names {
@@ -106,7 +108,7 @@ impl DataPiece {
                             data_array.num_comp(),
                         )
                         .with_context(|| anyhow!("Attribute \"{}\"", field_name))?;
-                        let mesh_attribute = MeshAttribute::new(field_name, attribute_data);
+                        let mesh_attribute = OwnedMeshAttribute::new(field_name, attribute_data);
                         mesh_attributes.push(mesh_attribute);
                         continue 'fields;
                     }
@@ -118,7 +120,8 @@ impl DataPiece {
                                     field_array.num_comp(),
                                 )
                                 .with_context(|| anyhow!("Attribute \"{}\"", field_name))?;
-                                let mesh_attribute = MeshAttribute::new(field_name, attribute_data);
+                                let mesh_attribute =
+                                    OwnedMeshAttribute::new(field_name, attribute_data);
                                 mesh_attributes.push(mesh_attribute);
                                 continue 'fields;
                             }
@@ -315,23 +318,23 @@ fn surface_mesh_from_unstructured_grid<R: Real>(
 fn try_convert_io_buffer_to_attribute<R: Real>(
     io_buffer: &vtkio::model::IOBuffer,
     num_comp: usize,
-) -> Result<AttributeData<R>, anyhow::Error> {
+) -> Result<OwnedAttributeData<R>, anyhow::Error> {
     match num_comp {
         1 => match &io_buffer {
             IOBuffer::U32(vec) => io_utils::try_convert_scalar_slice(vec, R::from_u32)
-                .map(|v| AttributeData::ScalarReal(v)),
+                .map(|v| OwnedAttributeData::ScalarReal(v.into())),
             IOBuffer::F32(vec) => io_utils::try_convert_scalar_slice(vec, R::from_f32)
-                .map(|v| AttributeData::ScalarReal(v)),
+                .map(|v| OwnedAttributeData::ScalarReal(v.into())),
             IOBuffer::F64(vec) => io_utils::try_convert_scalar_slice(vec, R::from_f64)
-                .map(|v| AttributeData::ScalarReal(v)),
+                .map(|v| OwnedAttributeData::ScalarReal(v.into())),
             _ => Err(anyhow!("Unsupported IOBuffer scalar data type")),
         },
         3 => match &io_buffer {
             IOBuffer::F32(coords) => {
-                particles_from_coords(coords).map(|p| AttributeData::Vector3Real(p))
+                particles_from_coords(coords).map(|p| OwnedAttributeData::Vector3Real(p.into()))
             }
             IOBuffer::F64(coords) => {
-                particles_from_coords(coords).map(|p| AttributeData::Vector3Real(p))
+                particles_from_coords(coords).map(|p| OwnedAttributeData::Vector3Real(p.into()))
             }
             _ => Err(anyhow!("Unsupported IOBuffer vector data type")),
         },

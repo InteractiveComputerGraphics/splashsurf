@@ -1,7 +1,7 @@
 //! Helper functions for the BGEO file format
 
 use crate::io::io_utils::IteratorExt;
-use crate::mesh::{AttributeData, MeshAttribute};
+use crate::mesh::{OwnedAttributeData, OwnedMeshAttribute};
 use crate::{Real, RealConvert, io::io_utils};
 use anyhow::{Context, anyhow};
 use flate2::Compression;
@@ -54,7 +54,7 @@ pub fn particles_from_bgeo_file<R: Real>(
 pub fn attributes_from_bgeo_file<R: Real>(
     bgeo_file: &BgeoFile,
     names: &[String],
-) -> Result<Vec<MeshAttribute<R>>, anyhow::Error> {
+) -> Result<Vec<OwnedMeshAttribute<R>>, anyhow::Error> {
     let mut mesh_attributes = Vec::new();
 
     'fields: for field_name in names {
@@ -63,7 +63,7 @@ pub fn attributes_from_bgeo_file<R: Real>(
                 let attribute_data = storage
                     .try_into_attribute_data::<R>()
                     .context(anyhow!("Failed to convert attribute \"{name}\""))?;
-                mesh_attributes.push(MeshAttribute::new(field_name.clone(), attribute_data));
+                mesh_attributes.push(OwnedMeshAttribute::new(field_name.clone(), attribute_data));
                 continue 'fields;
             }
         }
@@ -329,18 +329,18 @@ impl AttributeStorage {
     }
 
     /// Tries to convert this BGEO attribute storage into a mesh [`AttributeData`] storage
-    fn try_into_attribute_data<R: Real>(&self) -> Result<AttributeData<R>, anyhow::Error> {
+    fn try_into_attribute_data<R: Real>(&self) -> Result<OwnedAttributeData<R>, anyhow::Error> {
         match self {
             AttributeStorage::Int(data) => io_utils::try_convert_scalar_slice(data, u64::from_i32)
-                .map(|v| AttributeData::ScalarU64(v))
+                .map(|v| OwnedAttributeData::ScalarU64(v.into()))
                 .context(anyhow!("failed to convert integer attribute")),
             AttributeStorage::Float(data) => io_utils::try_convert_scalar_slice(data, R::from_f32)
-                .map(|v| AttributeData::ScalarReal(v))
+                .map(|v| OwnedAttributeData::ScalarReal(v.into()))
                 .context(anyhow!("failed to convert float attribute")),
             AttributeStorage::Vector(n, data) => {
                 if *n == 3 {
                     io_utils::try_convert_scalar_slice_to_vectors(data, R::from_f32)
-                        .map(|v| AttributeData::Vector3Real(v))
+                        .map(|v| OwnedAttributeData::Vector3Real(v.into()))
                         .context(anyhow!("failed to convert vector attribute"))
                 } else {
                     Err(anyhow!("unsupported vector attribute size: {}", n))
@@ -910,25 +910,28 @@ fn test_bgeo_read_dam_break_attributes() {
 
     assert_eq!(attribs.len(), 3);
 
-    assert!(matches!(attribs[0].data, AttributeData::ScalarU64(_)));
-    assert!(matches!(attribs[1].data, AttributeData::ScalarReal(_)));
-    assert!(matches!(attribs[2].data, AttributeData::Vector3Real(_)));
+    assert!(matches!(attribs[0].data, OwnedAttributeData::ScalarU64(_)));
+    assert!(matches!(attribs[1].data, OwnedAttributeData::ScalarReal(_)));
+    assert!(matches!(
+        attribs[2].data,
+        OwnedAttributeData::Vector3Real(_)
+    ));
 
-    if let AttributeData::ScalarU64(ids) = &attribs[0].data {
+    if let OwnedAttributeData::ScalarU64(ids) = &attribs[0].data {
         assert_eq!(ids.len(), particles.len());
         assert_eq!(ids[0], 30);
         assert_eq!(ids[1], 11);
         assert_eq!(ids[2], 12);
     }
 
-    if let AttributeData::ScalarReal(densities) = &attribs[1].data {
+    if let OwnedAttributeData::ScalarReal(densities) = &attribs[1].data {
         assert_eq!(densities.len(), particles.len());
         assert_eq!(densities[0], 1000.1286);
         assert_eq!(densities[1], 1001.53424);
         assert_eq!(densities[2], 1001.6626);
     }
 
-    if let AttributeData::Vector3Real(velocities) = &attribs[2].data {
+    if let OwnedAttributeData::Vector3Real(velocities) = &attribs[2].data {
         assert_eq!(velocities.len(), particles.len());
         assert_eq!(
             velocities[0],

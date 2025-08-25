@@ -12,13 +12,13 @@ use pyo3::{
 };
 use splashsurf_lib::{
     Aabb3d, GridDecompositionParameters, Index, Real, SpatialDecomposition,
-    mesh::{AttributeData, MeshAttribute},
+    mesh::{OwnedAttributeData, OwnedMeshAttribute},
     nalgebra::Vector3,
 };
 
 fn reconstruction_pipeline_generic<I: Index, R: Real>(
     particle_positions: &[Vector3<R>],
-    attributes: Vec<MeshAttribute<R>>,
+    attributes: Vec<OwnedMeshAttribute<R>>,
     particle_radius: R,
     rest_density: R,
     smoothing_length: R,
@@ -134,8 +134,8 @@ fn reconstruction_pipeline_generic<I: Index, R: Real>(
 
 fn attrs_conversion<R: Real + Element>(
     attributes_to_interpolate: Bound<PyDict>,
-) -> Vec<MeshAttribute<R>> {
-    let mut attrs: Vec<MeshAttribute<R>> = Vec::new();
+) -> Vec<OwnedMeshAttribute<R>> {
+    let mut attrs: Vec<OwnedMeshAttribute<R>> = Vec::new();
     for (key, value) in attributes_to_interpolate.iter() {
         let key_str: String = key
             .downcast::<PyString>()
@@ -150,7 +150,8 @@ fn attrs_conversion<R: Real + Element>(
                 .as_slice()
                 .unwrap()
                 .to_vec();
-            let mesh_attr = MeshAttribute::new(key_str, AttributeData::ScalarU64(value));
+            let mesh_attr =
+                OwnedMeshAttribute::new(key_str, OwnedAttributeData::ScalarU64(value.into()));
             attrs.push(mesh_attr);
         } else if let Ok(value) = value.downcast::<PyArray1<R>>() {
             let value: Vec<R> = value
@@ -159,7 +160,8 @@ fn attrs_conversion<R: Real + Element>(
                 .as_slice()
                 .unwrap()
                 .to_vec();
-            let mesh_attr = MeshAttribute::new(key_str, AttributeData::ScalarReal(value));
+            let mesh_attr =
+                OwnedMeshAttribute::new(key_str, OwnedAttributeData::ScalarReal(value.into()));
             attrs.push(mesh_attr);
         } else if let Ok(value) = value.downcast::<PyArray2<R>>() {
             let value: PyReadonlyArray2<R> = value.extract().unwrap();
@@ -167,8 +169,10 @@ fn attrs_conversion<R: Real + Element>(
             let value_slice = value.as_slice().unwrap();
             let value_slice: &[Vector3<R>] = bytemuck::cast_slice(value_slice);
 
-            let mesh_attr =
-                MeshAttribute::new(key_str, AttributeData::Vector3Real(value_slice.to_vec()));
+            let mesh_attr = OwnedMeshAttribute::new(
+                key_str,
+                OwnedAttributeData::Vector3Real(value_slice.to_vec().into()),
+            );
             attrs.push(mesh_attr);
         } else {
             println!("Couldnt downcast attribute {} to valid type", &key_str);

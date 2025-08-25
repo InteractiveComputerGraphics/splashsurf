@@ -10,8 +10,8 @@ use pyo3_stub_gen::derive::*;
 use splashsurf_lib::{
     Real,
     mesh::{
-        AttributeData, Mesh3d, MeshAttribute, MeshWithData, MixedTriQuadMesh3d, TriMesh3d,
-        TriangleOrQuadCell,
+        Mesh3d, MeshWithData, MixedTriQuadMesh3d, OwnedAttributeData, OwnedMeshAttribute,
+        TriMesh3d, TriangleOrQuadCell,
     },
     nalgebra::{Unit, Vector3},
 };
@@ -20,7 +20,7 @@ use crate::aabb::{Aabb3dF32, Aabb3dF64};
 
 fn get_attribute_with_name<'py, R: Real + Element>(
     py: Python<'py>,
-    attrs: &[MeshAttribute<R>],
+    attrs: &[OwnedMeshAttribute<R>],
     name: &str,
 ) -> PyResult<PyObject>
 where
@@ -29,10 +29,14 @@ where
     let elem = attrs.iter().filter(|x| x.name == name).next();
     match elem {
         Some(attr) => match attr.data.clone() {
-            AttributeData::ScalarU64(res) => Ok(res.into_pyobject(py).unwrap().into()),
-            AttributeData::ScalarReal(res) => Ok(res.into_pyobject(py).unwrap().into()),
-            AttributeData::Vector3Real(res) => {
-                let flattened: Vec<R> = bytemuck::cast_vec(res);
+            OwnedAttributeData::ScalarU64(res) => {
+                Ok(res.into_owned().into_pyobject(py).unwrap().into())
+            }
+            OwnedAttributeData::ScalarReal(res) => {
+                Ok(res.into_owned().into_pyobject(py).unwrap().into())
+            }
+            OwnedAttributeData::Vector3Real(res) => {
+                let flattened: Vec<R> = bytemuck::cast_vec(res.into_owned());
                 let res: Array2<R> =
                     Array2::from_shape_vec((flattened.len() / 3, 3), flattened).unwrap();
                 Ok(res.into_pyarray(py).into_bound_py_any(py).unwrap().into())
@@ -46,8 +50,8 @@ where
 }
 
 fn add_attribute_with_name<'py, R: Real + Element>(
-    attrs: &mut Vec<MeshAttribute<R>>,
-    attribute: MeshAttribute<R>,
+    attrs: &mut Vec<OwnedMeshAttribute<R>>,
+    attribute: OwnedMeshAttribute<R>,
 ) -> PyResult<()> {
     let elem = attrs.iter().filter(|x| x.name == attribute.name).next();
     match elem {
@@ -119,7 +123,7 @@ macro_rules! create_mesh_data_interface {
             ) -> PyResult<()> {
                 add_attribute_with_name::<$type>(
                     &mut self.inner.point_attributes,
-                    MeshAttribute::new(name, AttributeData::ScalarU64(data)),
+                    OwnedMeshAttribute::new(name, OwnedAttributeData::ScalarU64(data.into())),
                 )
             }
 
@@ -130,7 +134,7 @@ macro_rules! create_mesh_data_interface {
             ) -> PyResult<()> {
                 add_attribute_with_name::<$type>(
                     &mut self.inner.point_attributes,
-                    MeshAttribute::new(name, AttributeData::ScalarReal(data)),
+                    OwnedMeshAttribute::new(name, OwnedAttributeData::ScalarReal(data.into())),
                 )
             }
 
@@ -145,7 +149,10 @@ macro_rules! create_mesh_data_interface {
 
                 add_attribute_with_name::<$type>(
                     &mut self.inner.point_attributes,
-                    MeshAttribute::new(name, AttributeData::Vector3Real(data.to_vec())),
+                    OwnedMeshAttribute::new(
+                        name,
+                        OwnedAttributeData::Vector3Real(data.to_vec().into()),
+                    ),
                 )
             }
 
@@ -156,7 +163,7 @@ macro_rules! create_mesh_data_interface {
             ) -> PyResult<()> {
                 add_attribute_with_name::<$type>(
                     &mut self.inner.cell_attributes,
-                    MeshAttribute::new(name, AttributeData::ScalarU64(data)),
+                    OwnedMeshAttribute::new(name, OwnedAttributeData::ScalarU64(data.into())),
                 )
             }
 
@@ -167,7 +174,7 @@ macro_rules! create_mesh_data_interface {
             ) -> PyResult<()> {
                 add_attribute_with_name::<$type>(
                     &mut self.inner.cell_attributes,
-                    MeshAttribute::new(name, AttributeData::ScalarReal(data)),
+                    OwnedMeshAttribute::new(name, OwnedAttributeData::ScalarReal(data.into())),
                 )
             }
 
@@ -182,7 +189,10 @@ macro_rules! create_mesh_data_interface {
 
                 add_attribute_with_name::<$type>(
                     &mut self.inner.cell_attributes,
-                    MeshAttribute::new(name, AttributeData::Vector3Real(data.to_vec())),
+                    OwnedMeshAttribute::new(
+                        name,
+                        OwnedAttributeData::Vector3Real(data.to_vec().into()),
+                    ),
                 )
             }
 

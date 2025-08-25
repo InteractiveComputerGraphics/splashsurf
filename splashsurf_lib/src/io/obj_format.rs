@@ -1,7 +1,7 @@
 //! Helper functions for the OBJ file format
 
 use crate::mesh::{
-    AttributeData, CellConnectivity, Mesh3d, MeshAttribute, MeshWithData, TriMesh3d,
+    CellConnectivity, Mesh3d, MeshWithData, OwnedAttributeData, OwnedMeshAttribute, TriMesh3d,
 };
 use crate::{Real, RealConvert, io::io_utils, profile};
 use anyhow::Context;
@@ -40,8 +40,8 @@ pub fn mesh_to_obj<R: Real, M: Mesh3d<R>, P: AsRef<Path>>(
         .find(|attrib| attrib.name == "normals");
 
     if let Some(normals) = normals {
-        if let AttributeData::Vector3Real(normals) = &normals.data {
-            for n in normals {
+        if let OwnedAttributeData::Vector3Real(normals) = &normals.data {
+            for n in normals.iter() {
                 writeln!(&mut writer, "vn {} {} {}", n.x, n.y, n.z)?;
             }
         }
@@ -151,9 +151,9 @@ pub fn surface_mesh_from_obj<R: Real, P: AsRef<Path>>(
             normals.len(),
             "length of vertex and vertex normal array doesn't match"
         );
-        mesh.point_attributes.push(MeshAttribute::new(
+        mesh.point_attributes.push(OwnedMeshAttribute::new(
             "normals",
-            AttributeData::Vector3Real(normals),
+            OwnedAttributeData::Vector3Real(normals.into()),
         ));
     }
 
@@ -181,8 +181,8 @@ pub mod test {
         assert_eq!(mesh.vertices().len(), 42);
         assert_eq!(mesh.cells().len(), 80);
         let normals = mesh.point_attributes.iter().find(|a| a.name == "normals");
-        if let Some(MeshAttribute { data, .. }) = normals {
-            if let AttributeData::Vector3Real(normals) = data {
+        if let Some(OwnedMeshAttribute { data, .. }) = normals {
+            if let OwnedAttributeData::Vector3Real(normals) = data {
                 assert_eq!(normals.len(), 42)
             }
         }

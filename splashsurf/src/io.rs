@@ -3,7 +3,7 @@ use anyhow::{Context, anyhow};
 use log::{info, warn};
 use splashsurf_lib::Real;
 use splashsurf_lib::mesh::{
-    IntoVtkUnstructuredGridPiece, Mesh3d, MeshAttribute, MeshWithData, TriMesh3d,
+    IntoVtkUnstructuredGridPiece, Mesh3d, MeshWithData, OwnedMeshAttribute, TriMesh3d,
 };
 use splashsurf_lib::nalgebra::Vector3;
 use splashsurf_lib::{io, profile};
@@ -69,7 +69,7 @@ pub fn read_particle_positions_with_attributes<R: Real, P: AsRef<Path>>(
     input_file: P,
     attribute_names: &[String],
     format_params: &InputFormatParameters,
-) -> Result<(Vec<Vector3<R>>, Vec<MeshAttribute<R>>), anyhow::Error> {
+) -> Result<(Vec<Vector3<R>>, Vec<OwnedMeshAttribute<R>>), anyhow::Error> {
     if attribute_names.is_empty() {
         return read_particle_positions(input_file, format_params).map(|p| (p, Vec::new()));
     }

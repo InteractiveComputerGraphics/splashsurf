@@ -2,7 +2,7 @@
 
 use crate::io::io_utils::IteratorExt;
 use crate::mesh::{
-    AttributeData, CellConnectivity, Mesh3d, MeshAttribute, MeshWithData, TriMesh3d,
+    CellConnectivity, Mesh3d, MeshWithData, OwnedAttributeData, OwnedMeshAttribute, TriMesh3d,
 };
 use crate::{Real, RealConvert, profile};
 use anyhow::{Context, anyhow};
@@ -174,8 +174,10 @@ fn parse_mesh_from_ply<R: Real>(
                 normals.push(normal);
             }
 
-            let normals =
-                MeshAttribute::new("normals".to_string(), AttributeData::Vector3Real(normals));
+            let normals = OwnedMeshAttribute::new(
+                "normals".to_string(),
+                OwnedAttributeData::Vector3Real(normals.into()),
+            );
             mesh.point_attributes.push(normals);
         }
     }
@@ -213,9 +215,9 @@ pub fn mesh_to_ply<R: Real, M: Mesh3d<R>, P: AsRef<Path>>(
             writeln!(&mut writer, "property float nz")?;
         } else {
             match p_attr.data {
-                AttributeData::ScalarU64(_) => writeln!(&mut writer, "property uint {}", p_attr.name)?,
-                AttributeData::ScalarReal(_) => writeln!(&mut writer, "property float {}", p_attr.name)?,
-                AttributeData::Vector3Real(_) => {
+                OwnedAttributeData::ScalarU64(_) => writeln!(&mut writer, "property uint {}", p_attr.name)?,
+                OwnedAttributeData::ScalarReal(_) => writeln!(&mut writer, "property float {}", p_attr.name)?,
+                OwnedAttributeData::Vector3Real(_) => {
                     writeln!(&mut writer, "property float {}_x", p_attr.name)?;
                     writeln!(&mut writer, "property float {}_y", p_attr.name)?;
                     writeln!(&mut writer, "property float {}_z", p_attr.name)?;
@@ -234,15 +236,15 @@ pub fn mesh_to_ply<R: Real, M: Mesh3d<R>, P: AsRef<Path>>(
 
         for p_attr in &mesh.point_attributes {
             match &p_attr.data {
-                AttributeData::ScalarU64(data) => {
+                OwnedAttributeData::ScalarU64(data) => {
                     let val = data[i].to_u32().expect("failed to convert attribute to u32");
                     writer.write_all(&val.to_le_bytes())?;
                 },
-                AttributeData::ScalarReal(data) => {
+                OwnedAttributeData::ScalarReal(data) => {
                     let val = data[i].to_f32().expect("failed to convert attribute to f32");
                     writer.write_all(&val.to_le_bytes())?;
                 },
-                AttributeData::Vector3Real(data) => {
+                OwnedAttributeData::Vector3Real(data) => {
                     let val = &data[i];
                     writer.write_all(&val.x.to_f32().expect("failed to convert attribute to f32").to_le_bytes())?;
                     writer.write_all(&val.y.to_f32().expect("failed to convert attribute to f32").to_le_bytes())?;
@@ -299,8 +301,8 @@ pub mod test {
         assert_eq!(mesh.mesh.vertices.len(), 24);
         assert_eq!(mesh.mesh.triangles.len(), 12);
         let normals = mesh.point_attributes.iter().find(|a| a.name == "normals");
-        if let Some(MeshAttribute { data, .. }) = normals {
-            if let AttributeData::Vector3Real(normals) = data {
+        if let Some(OwnedMeshAttribute { data, .. }) = normals {
+            if let OwnedAttributeData::Vector3Real(normals) = data {
                 assert_eq!(normals.len(), 24)
             }
         }

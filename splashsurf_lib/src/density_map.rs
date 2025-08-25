@@ -20,7 +20,7 @@
 
 use crate::aabb::Aabb3d;
 use crate::kernel::DiscreteSquaredDistanceCubicKernel;
-use crate::mesh::{HexMesh3d, MeshAttribute, MeshWithData};
+use crate::mesh::{HexMesh3d, MeshWithData, OwnedMeshAttribute};
 use crate::neighborhood_search::NeighborhoodList;
 use crate::uniform_grid::UniformGrid;
 use crate::utils::{ChunkSize, ParallelPolicy};
@@ -780,7 +780,7 @@ pub fn sparse_density_map_to_hex_mesh<I: Index, R: Real>(
         ]);
     }
 
-    MeshWithData::new(mesh).with_point_data(MeshAttribute::new_real_scalar(
+    MeshWithData::new(mesh).with_point_data(OwnedMeshAttribute::new_real_scalar(
         "density".to_string(),
         values,
     ))
