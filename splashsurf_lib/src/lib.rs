@@ -219,18 +219,6 @@ impl<R: Real> Parameters<R> {
         )
     }
 
-    /// Returns the given reconstruction parameters with the rest density set to the given value
-    pub fn with_rest_density(mut self, rest_density: R) -> Self {
-        self.rest_density = rest_density;
-        self
-    }
-
-    /// Returns the given reconstruction parameters with the iso surface threshold set to the given value
-    pub fn with_iso_surface_threshold(mut self, iso_surface_threshold: R) -> Self {
-        self.iso_surface_threshold = iso_surface_threshold;
-        self
-    }
-
     /// Tries to convert the parameters from one [Real] type to another [Real] type, returns `None` if conversion fails
     pub fn try_convert<T: Real>(&self) -> Option<Parameters<T>> {
         Some(Parameters {
@@ -287,6 +275,11 @@ impl<I: Index, R: Real> SurfaceReconstruction<I, R> {
     /// Returns a reference to the global particle density vector if computed during the reconstruction (currently, all reconstruction approaches return this)
     pub fn particle_densities(&self) -> Option<&Vec<R>> {
         self.particle_densities.as_ref()
+    }
+
+    /// Returns a reference to the per input particle boolean vector indicating whether the particle was inside the specified AABB (if any)
+    pub fn particle_inside_aabb(&self) -> Option<&Vec<bool>> {
+        self.particle_inside_aabb.as_ref()
     }
 
     /// Returns a reference to the global list of per-particle neighborhood lists if computed during the reconstruction (`None` if not specified in the parameters)
@@ -378,6 +371,7 @@ pub fn reconstruct_surface_inplace<I: Index, R: Real>(
             .particle_inside_aabb
             .take()
             .unwrap_or_default();
+        particle_inside.clear();
         utils::reserve_total(&mut particle_inside, particle_positions.len());
         particle_positions
             .par_iter()
@@ -404,6 +398,7 @@ pub fn reconstruct_surface_inplace<I: Index, R: Real>(
         output_surface.particle_inside_aabb = Some(particle_inside);
         Cow::Owned(filtered_particles)
     } else {
+        output_surface.particle_inside_aabb = None;
         Cow::Borrowed(particle_positions)
     };
     let particle_positions = filtered_particle_positions.as_ref();

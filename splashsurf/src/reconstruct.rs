@@ -1016,6 +1016,25 @@ pub fn reconstruction_pipeline<I: Index, R: Real>(
     // Perform the surface reconstruction
     let reconstruction = splashsurf_lib::reconstruct_surface::<I, R>(particle_positions, params)?;
 
+    // Filters a particle quantity based on an optional mask of particles inside the reconstruction domain
+    fn filtered_quantity<'a, T: Clone>(
+        values: &'a [T],
+        particles_inside: Option<&[bool]>,
+    ) -> Cow<'a, [T]> {
+        if let Some(particles_inside) = particles_inside {
+            assert_eq!(values.len(), particles_inside.len());
+            let filtered_values = values
+                .iter()
+                .zip(particles_inside.iter().copied())
+                .filter(|(_, is_inside)| *is_inside)
+                .map(|(v, _)| v.clone())
+                .collect::<Vec<_>>();
+            Cow::Owned(filtered_values)
+        } else {
+            Cow::Borrowed(values)
+        }
+    }
+
     let reconstruction_output = if postprocessing.output_raw_mesh {
         Some(reconstruction.clone())
     } else {
@@ -1070,6 +1089,17 @@ pub fn reconstruction_pipeline<I: Index, R: Real>(
                     .as_ref()
                     .map(Vec::is_empty)
                     .unwrap_or(true));
+        let filtered_particle_positions_cow = if interpolator_required {
+            // TODO: Re-use filtered particles from reconstruction?
+            filtered_quantity(
+                particle_positions,
+                reconstruction.particle_inside_aabb().map(Vec::as_slice),
+            )
+        } else {
+            Cow::Borrowed(particle_positions)
+        };
+        let filtered_particle_positions = filtered_particle_positions_cow.as_ref();
+
         let interpolator = if interpolator_required {
             profile!("initialize interpolator");
             info!("Post-processing: Initializing interpolator...");
@@ -1089,13 +1119,13 @@ pub fn reconstruction_pipeline<I: Index, R: Real>(
                 .ok_or_else(|| anyhow::anyhow!("Particle densities were not returned by surface reconstruction but are required for SPH normal computation"))?
                 .as_slice();
             assert_eq!(
-                particle_positions.len(),
+                filtered_particle_positions.len(),
                 particle_densities.len(),
                 "There has to be one density value per particle"
             );
 
             Some(SphInterpolator::new(
-                &particle_positions,
+                &filtered_particle_positions,
                 particle_densities,
                 particle_rest_mass,
                 params.compact_support_radius,
@@ -1127,17 +1157,17 @@ pub fn reconstruction_pipeline<I: Index, R: Real>(
                     {
                         let search_radius = params.compact_support_radius;
 
-                        let mut domain = Aabb3d::from_points(particle_positions);
+                        let mut domain = Aabb3d::from_points(filtered_particle_positions);
                         domain.grow_uniformly(search_radius);
 
                         let mut nl = Vec::new();
                         splashsurf_lib::neighborhood_search::neighborhood_search_spatial_hashing_parallel::<I, R>(
                             &domain,
-                            particle_positions,
+                            filtered_particle_positions,
                             search_radius,
                             &mut nl,
                         );
-                        assert_eq!(nl.len(), particle_positions.len());
+                        assert_eq!(nl.len(), filtered_particle_positions.len());
                         Cow::Owned(nl)
                     }
                 );
@@ -1151,8 +1181,9 @@ pub fn reconstruction_pipeline<I: Index, R: Real>(
                     nl.iter()
                         .copied()
                         .map(|j| {
-                            let dist =
-                                (particle_positions[i] - particle_positions[j]).norm_squared();
+                            let dist = (filtered_particle_positions[i]
+                                - filtered_particle_positions[j])
+                                .norm_squared();
 
                             R::one() - (dist / squared_r).clamp(R::zero(), R::one())
                         })
@@ -1299,10 +1330,12 @@ pub fn reconstruction_pipeline<I: Index, R: Real>(
             {
                 info!("Interpolating attribute \"{}\"...", attribute.name);
 
+                let particles_inside = reconstruction.particle_inside_aabb().map(Vec::as_slice);
                 match &attribute.data {
                     AttributeData::ScalarReal(values) => {
+                        let filtered_values = filtered_quantity(values, particles_inside);
                         let interpolated_values = interpolator.interpolate_scalar_quantity(
-                            values.as_slice(),
+                            &filtered_values,
                             mesh_with_data.vertices(),
                             true,
                         );
@@ -1312,8 +1345,9 @@ pub fn reconstruction_pipeline<I: Index, R: Real>(
                         ));
                     }
                     AttributeData::Vector3Real(values) => {
+                        let filtered_values = filtered_quantity(values, particles_inside);
                         let interpolated_values = interpolator.interpolate_vector_quantity(
-                            values.as_slice(),
+                            &filtered_values,
                             mesh_with_data.vertices(),
                             true,
                         );
