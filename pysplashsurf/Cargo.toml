@@ -8,7 +8,7 @@ license.workspace = true
 [dependencies]
 splashsurf = { path = "../splashsurf" }
 splashsurf_lib = { path = "../splashsurf_lib" }
-pyo3 = {version = "0.25.0", features = ["anyhow"]}
+pyo3 = { version = "0.25.0", features = ["anyhow"] }
 numpy = "0.25.0"
 ndarray = "0.16.1"
 bytemuck = { version = "1.23.0", features = ["extern_crate_alloc"] }

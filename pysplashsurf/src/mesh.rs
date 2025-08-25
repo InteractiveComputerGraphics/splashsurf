@@ -29,17 +29,13 @@ where
     let elem = attrs.iter().filter(|x| x.name == name).next();
     match elem {
         Some(attr) => match attr.data.clone() {
-            OwnedAttributeData::ScalarU64(res) => {
-                Ok(res.into_owned().into_pyobject(py).unwrap().into())
-            }
-            OwnedAttributeData::ScalarReal(res) => {
-                Ok(res.into_owned().into_pyobject(py).unwrap().into())
-            }
+            OwnedAttributeData::ScalarU64(res) => Ok(res.into_owned().into_pyobject(py)?.into()),
+            OwnedAttributeData::ScalarReal(res) => Ok(res.into_owned().into_pyobject(py)?.into()),
             OwnedAttributeData::Vector3Real(res) => {
                 let flattened: Vec<R> = bytemuck::cast_vec(res.into_owned());
-                let res: Array2<R> =
-                    Array2::from_shape_vec((flattened.len() / 3, 3), flattened).unwrap();
-                Ok(res.into_pyarray(py).into_bound_py_any(py).unwrap().into())
+                let res: Array2<R> = Array2::from_shape_vec((flattened.len() / 3, 3), flattened)
+                    .map_err(anyhow::Error::new)?;
+                Ok(res.into_pyarray(py).into_bound_py_any(py)?.into())
             }
         },
         None => Err(PyErr::new::<PyValueError, _>(format!(
@@ -90,13 +86,13 @@ macro_rules! create_mesh_data_interface {
                 Ok($name::new(meshdata))
             }
 
-            /// Clone of the contained mesh
+            /// Returns a copy of the contained mesh
             #[getter]
             fn mesh(&self) -> $pymesh_class {
                 $pymesh_class::new(self.inner.mesh.clone())
             }
 
-            /// Returns mesh without copying the mesh data, removes it from the object
+            /// Returns the contained mesh by moving it out of this object (zero copy)
             fn take_mesh(&mut self) -> $pymesh_class {
                 let mesh = std::mem::take(&mut self.inner.mesh);
                 $pymesh_class::new(mesh)
@@ -143,8 +139,8 @@ macro_rules! create_mesh_data_interface {
                 name: &str,
                 data: &Bound<'py, PyArray2<$type>>,
             ) -> PyResult<()> {
-                let data: PyReadonlyArray2<$type> = data.extract().unwrap();
-                let data = data.as_slice().unwrap();
+                let data: PyReadonlyArray2<$type> = data.extract()?;
+                let data = data.as_slice()?;
                 let data: &[Vector3<$type>] = bytemuck::cast_slice(data);
 
                 add_attribute_with_name::<$type>(
@@ -183,8 +179,8 @@ macro_rules! create_mesh_data_interface {
                 name: &str,
                 data: &Bound<'py, PyArray2<$type>>,
             ) -> PyResult<()> {
-                let data: PyReadonlyArray2<$type> = data.extract().unwrap();
-                let data = data.as_slice().unwrap();
+                let data: PyReadonlyArray2<$type> = data.extract()?;
+                let data = data.as_slice()?;
                 let data: &[Vector3<$type>] = bytemuck::cast_slice(data);
 
                 add_attribute_with_name::<$type>(
@@ -207,7 +203,7 @@ macro_rules! create_mesh_data_interface {
             }
 
             /// Get all point attributes in a python dictionary
-            fn get_point_attributes<'py>(&self, py: Python<'py>) -> Bound<'py, PyDict> {
+            fn get_point_attributes<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
                 let res = PyDict::new(py);
 
                 for attr in self.inner.point_attributes.iter() {
@@ -217,16 +213,16 @@ macro_rules! create_mesh_data_interface {
                         &attr.name,
                     );
                     match data {
-                        Ok(data) => res.set_item(&attr.name, data).unwrap(),
+                        Ok(data) => res.set_item(&attr.name, data)?,
                         Err(_) => println!("Couldn't embed attribute {} in PyDict", &attr.name),
                     }
                 }
 
-                res
+                Ok(res)
             }
 
             /// Get all cell attributes in a python dictionary
-            fn get_cell_attributes<'py>(&self, py: Python<'py>) -> Bound<'py, PyDict> {
+            fn get_cell_attributes<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
                 let res = PyDict::new(py);
 
                 for attr in self.inner.cell_attributes.iter() {
@@ -236,40 +232,46 @@ macro_rules! create_mesh_data_interface {
                         &attr.name,
                     );
                     match data {
-                        Ok(data) => res.set_item(&attr.name, data).unwrap(),
+                        Ok(data) => res.set_item(&attr.name, data)?,
                         Err(_) => println!("Couldn't embed attribute {} in PyDict", &attr.name),
                     }
                 }
 
-                res
+                Ok(res)
             }
 
             /// Get all registered point attribute names
-            fn get_point_attribute_keys<'py>(&self, py: Python<'py>) -> Bound<'py, PyList> {
+            fn get_point_attribute_keys<'py>(
+                &self,
+                py: Python<'py>,
+            ) -> PyResult<Bound<'py, PyList>> {
                 let mut res: Vec<&str> = vec![];
 
                 for attr in self.inner.point_attributes.iter() {
                     res.push(&attr.name);
                 }
 
-                PyList::new(py, res).unwrap()
+                PyList::new(py, res)
             }
 
             /// Get all registered cell attribute names
-            fn get_cell_attribute_keys<'py>(&self, py: Python<'py>) -> Bound<'py, PyList> {
+            fn get_cell_attribute_keys<'py>(
+                &self,
+                py: Python<'py>,
+            ) -> PyResult<Bound<'py, PyList>> {
                 let mut res: Vec<&str> = vec![];
 
                 for attr in self.inner.cell_attributes.iter() {
                     res.push(&attr.name);
                 }
 
-                PyList::new(py, res).unwrap()
+                PyList::new(py, res)
             }
         }
     };
 }
 
-macro_rules! create_mesh_interface {
+macro_rules! create_tri_mesh_interface {
     ($name: ident, $type: ident) => {
         /// TriMesh3d wrapper
         #[gen_stub_pyclass]
@@ -289,24 +291,29 @@ macro_rules! create_mesh_interface {
         impl $name {
             /// nx3 array of vertex positions, copies the data
             #[getter]
-            fn vertices<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<$type>> {
+            fn vertices<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyArray2<$type>>> {
                 let points: &[$type] = bytemuck::cast_slice(&self.inner.vertices);
                 let vertices: ArrayView2<$type> =
-                    ArrayView::from_shape((self.inner.vertices.len(), 3), points).unwrap();
-                vertices.to_pyarray(py) // seems like at least one copy is necessary here (to_pyarray copies the data)
+                    ArrayView::from_shape((self.inner.vertices.len(), 3), points)
+                        .map_err(anyhow::Error::new)?;
+                Ok(vertices.to_pyarray(py)) // seems like at least one copy is necessary here (to_pyarray copies the data)
             }
 
             /// nx3 array of the vertex indices that make up a triangle, copies the data
             #[getter]
-            fn triangles<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<u64>> {
+            fn triangles<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyArray2<u64>>> {
                 let tris: &[u64] = bytemuck::cast_slice(&self.inner.triangles);
                 let triangles: ArrayView2<u64> =
-                    ArrayView::from_shape((self.inner.triangles.len(), 3), tris).unwrap();
-                triangles.to_pyarray(py)
+                    ArrayView::from_shape((self.inner.triangles.len(), 3), tris)
+                        .map_err(anyhow::Error::new)?;
+                Ok(triangles.to_pyarray(py))
             }
 
-            /// Returns a tuple of vertices and triangles without copying the data, removes the data in the class
-            fn take_vertices_and_triangles<'py>(&mut self, py: Python<'py>) -> Bound<'py, PyTuple> {
+            /// Returns a tuple containing the vertices and triangles by moving them out of the mesh (zero copy)
+            fn take_vertices_and_triangles<'py>(
+                &mut self,
+                py: Python<'py>,
+            ) -> PyResult<Bound<'py, PyTuple>> {
                 let vertices = std::mem::take(&mut self.inner.vertices);
                 let triangles = std::mem::take(&mut self.inner.triangles);
 
@@ -316,28 +323,32 @@ macro_rules! create_mesh_interface {
                 let vertices_scalar: Vec<$type> = bytemuck::cast_vec(vertices);
                 let vertices_array = PyArray::from_vec(py, vertices_scalar)
                     .reshape([n, 3])
-                    .unwrap();
+                    .map_err(anyhow::Error::new)?;
 
                 let triangles_scalar: Vec<usize> = bytemuck::cast_vec(triangles);
                 let triangles_array = PyArray::from_vec(py, triangles_scalar)
                     .reshape([m, 3])
-                    .unwrap();
+                    .map_err(anyhow::Error::new)?;
 
                 let tup = (vertices_array, triangles_array);
-                tup.into_pyobject(py).unwrap()
+                tup.into_pyobject(py)
             }
 
             /// Computes the mesh's vertex normals using an area weighted average of the adjacent triangle faces (parallelized version)
-            fn par_vertex_normals<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<$type>> {
+            fn par_vertex_normals<'py>(
+                &self,
+                py: Python<'py>,
+            ) -> PyResult<Bound<'py, PyArray2<$type>>> {
                 let normals_vec = self.inner.par_vertex_normals();
                 let normals_vec =
                     bytemuck::allocation::cast_vec::<Unit<Vector3<$type>>, $type>(normals_vec);
 
                 let normals: &[$type] = normals_vec.as_slice();
                 let normals: ArrayView2<$type> =
-                    ArrayView::from_shape((normals.len() / 3, 3), normals).unwrap();
+                    ArrayView::from_shape((normals.len() / 3, 3), normals)
+                        .map_err(anyhow::Error::new)?;
 
-                normals.to_pyarray(py)
+                Ok(normals.to_pyarray(py))
             }
 
             /// Returns a mapping of all mesh vertices to the set of their connected neighbor vertices
@@ -368,16 +379,17 @@ macro_rules! create_tri_quad_mesh_interface {
         impl $name {
             /// nx3 array of vertex positions, copies data
             #[getter]
-            fn vertices<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<$type>> {
+            fn vertices<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyArray2<$type>>> {
                 let points: &[$type] = bytemuck::cast_slice(&self.inner.vertices);
                 let vertices: ArrayView2<$type> =
-                    ArrayView::from_shape((self.inner.vertices.len(), 3), points).unwrap();
-                vertices.to_pyarray(py)
+                    ArrayView::from_shape((self.inner.vertices.len(), 3), points)
+                        .map_err(anyhow::Error::new)?;
+                Ok(vertices.to_pyarray(py))
             }
 
             /// 2D list specifying the vertex indices either for a triangle or a quad
             #[getter]
-            fn cells(&self) -> Vec<Vec<usize>> {
+            fn cells(&self) -> PyResult<Vec<Vec<usize>>> {
                 let cells: Vec<Vec<usize>> = self
                     .inner
                     .cells
@@ -387,11 +399,14 @@ macro_rules! create_tri_quad_mesh_interface {
                         TriangleOrQuadCell::Quad(v) => v.to_vec(),
                     })
                     .collect();
-                cells
+                Ok(cells)
             }
 
             /// Returns a tuple of vertices and triangles without copying the data, removes the data in the class
-            fn take_vertices_and_cells<'py>(&mut self, py: Python<'py>) -> Bound<'py, PyTuple> {
+            fn take_vertices_and_cells<'py>(
+                &mut self,
+                py: Python<'py>,
+            ) -> PyResult<Bound<'py, PyTuple>> {
                 let vertices = std::mem::take(&mut self.inner.vertices);
                 let cells = std::mem::take(&mut self.inner.cells);
 
@@ -400,7 +415,7 @@ macro_rules! create_tri_quad_mesh_interface {
                 let vertices_scalar: Vec<$type> = bytemuck::cast_vec(vertices);
                 let vertices_array = PyArray::from_vec(py, vertices_scalar)
                     .reshape([n, 3])
-                    .unwrap();
+                    .map_err(anyhow::Error::new)?;
 
                 let cells_list: Vec<Vec<usize>> = cells
                     .into_iter()
@@ -411,14 +426,14 @@ macro_rules! create_tri_quad_mesh_interface {
                     .collect();
 
                 let tup = (vertices_array, cells_list);
-                tup.into_pyobject(py).unwrap()
+                tup.into_pyobject(py)
             }
         }
     };
 }
 
-create_mesh_interface!(TriMesh3dF64, f64);
-create_mesh_interface!(TriMesh3dF32, f32);
+create_tri_mesh_interface!(TriMesh3dF64, f64);
+create_tri_mesh_interface!(TriMesh3dF32, f32);
 
 create_tri_quad_mesh_interface!(MixedTriQuadMesh3dF64, f64);
 create_tri_quad_mesh_interface!(MixedTriQuadMesh3dF32, f32);
