@@ -25,8 +25,8 @@ pub trait MarchingCubesLevelSet<R: Real> {
     /// that will not contain any triangles in the final triangulation (i.e. regions that are not part
     /// of the support of the level set).
     ///
-    /// Therefore an implementation should conservatively return `true` and only return `false` if it
-    /// can be guaranteed that the region is not part of the support. Consequently an implementation
+    /// Therefore, an implementation should conservatively return `true` and only return `false` if it
+    /// can be guaranteed that the region is not part of the support. Consequently, an implementation
     /// should:
     ///  - return `true` if part of the region is guaranteed to be part of the support
     ///  - return `true` if it *cannot* be ruled out that the region contains parts of the support of the level set

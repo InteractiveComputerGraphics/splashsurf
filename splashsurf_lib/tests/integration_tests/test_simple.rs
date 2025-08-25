@@ -23,7 +23,7 @@ fn params_with_aabb<R: Real>(
 
     let mut parameters = Parameters {
         particle_radius,
-        rest_density: R::from_f64(1000.0).unwrap(),
+        rest_density: R::from_float(1000.0),
         compact_support_radius,
         cube_size,
         iso_surface_threshold,

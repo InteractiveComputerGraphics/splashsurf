@@ -183,7 +183,7 @@ impl<R: Real> DiscreteSquaredDistanceCubicKernel<R> {
                 .expect("Number of discrete kernel steps `n` has to fit into kernel pre-computation type `PR`");
         // Evaluate the kernel per discrete segment
         for i in 0..n {
-            let i_and_half = PR::from_usize(i).unwrap() + PR::from_f64(0.5).unwrap();
+            let i_and_half = PR::from_usize(i).unwrap() + PR::from_float(0.5);
             let r_squared = dr * i_and_half;
             let r = r_squared.sqrt();
 

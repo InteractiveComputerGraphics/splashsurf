@@ -77,7 +77,7 @@ fn reconstruction_pipeline_generic<I: Index, R: Real>(
     let params = splashsurf_lib::Parameters {
         particle_radius,
         rest_density,
-        compact_support_radius: R::from_f64(2.0).unwrap() * smoothing_length * particle_radius,
+        compact_support_radius: R::from_float(2.0) * smoothing_length * particle_radius,
         cube_size: cube_size * particle_radius,
         iso_surface_threshold,
         particle_aabb: aabb,

@@ -1206,9 +1206,7 @@ pub fn reconstruction_pipeline<I: Index, R: Real>(
             let smoothing_weights = {
                 let offset = R::zero();
                 let normalization =
-                    R::from_f64(postprocessing.mesh_smoothing_weights_normalization).expect(
-                        "smoothing weight normalization value cannot be represented as Real type",
-                    ) - offset;
+                    R::from_float(postprocessing.mesh_smoothing_weights_normalization) - offset;
 
                 // Normalize number of neighbors
                 let smoothing_weights = vertex_weighted_num_neighbors
@@ -1381,16 +1379,14 @@ pub fn reconstruction_pipeline<I: Index, R: Real>(
     // Convert triangles to quads
     let (mut tri_mesh, tri_quad_mesh) = if postprocessing.generate_quads {
         info!("Post-processing: Convert triangles to quads...");
-        let non_squareness_limit = R::from_f64(postprocessing.quad_max_edge_diag_ratio).unwrap();
-        let normal_angle_limit_rad =
-            R::from_f64(postprocessing.quad_max_normal_angle.to_radians()).unwrap();
-        let max_interior_angle =
-            R::from_f64(postprocessing.quad_max_interior_angle.to_radians()).unwrap();
+        let non_squareness_limit = R::from_float(postprocessing.quad_max_edge_diag_ratio);
+        let normal_angle_limit = R::from_float(postprocessing.quad_max_normal_angle.to_radians());
+        let max_interior_angle = R::from_float(postprocessing.quad_max_interior_angle.to_radians());
 
         let tri_quad_mesh = splashsurf_lib::postprocessing::convert_tris_to_quads(
             &mesh_with_data.mesh,
             non_squareness_limit,
-            normal_angle_limit_rad,
+            normal_angle_limit,
             max_interior_angle,
         );
 
