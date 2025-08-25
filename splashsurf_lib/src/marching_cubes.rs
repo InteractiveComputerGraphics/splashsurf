@@ -190,7 +190,7 @@ pub fn check_mesh_consistency<I: Index, R: Real>(
     }
 
     if check_manifold && !non_manifold_edges.is_empty() {
-        error_strings.push(format!("Mesh is not manifold. It has {} non-manifold edges (edges that are connected to more than twi triangles).", non_manifold_edges.len()));
+        error_strings.push(format!("Mesh is not manifold. It has {} non-manifold edges (edges that are connected to more than two triangles).", non_manifold_edges.len()));
         if debug {
             for e in non_manifold_edges {
                 add_edge_errors(&mut error_strings, e);

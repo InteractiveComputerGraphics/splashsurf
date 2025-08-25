@@ -18,6 +18,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "all_asserts"
+version = "2.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "514ce16346f9fc96702fd52f2ae7e383b185516ee6f556efd7c3176be8fe7bea"
+
+[[package]]
 name = "android-tzdata"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1598,6 +1604,7 @@ checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
 name = "splashsurf"
 version = "0.12.0"
 dependencies = [
+ "all_asserts",
  "anyhow",
  "bytemuck",
  "chrono",
