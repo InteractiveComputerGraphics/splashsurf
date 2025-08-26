@@ -13,7 +13,10 @@ numpy = "0.25.0"
 ndarray = "0.16.1"
 bytemuck = { version = "1.23.0", features = ["extern_crate_alloc"] }
 anyhow = "1.0.98"
-pyo3-stub-gen = "0.12.0"
+pyo3-stub-gen = "0.12.2"
+
+[build-dependencies]
+pyo3-build-config = "0.25.1"
 
 [features]
 extension-module = ["pyo3/extension-module", "pyo3/abi3-py37"]

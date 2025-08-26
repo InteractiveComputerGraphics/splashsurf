@@ -85,4 +85,4 @@ To generate the Sphinx documentation, make sure that the package is installed th
 The resulting HTML files will be in `pysplashsurf/pysplashsurf/docs/build/html`.
 
 ### Stub File Generation
-To automatically generate a stub file for the package, run `cargo run --bin stub_gen` from the root project folder (from `pysplashsurf/`).
+To automatically generate a stub file for the package, run `cargo run --bin stub_gen --no-default-features` from the root project folder (from `pysplashsurf/`).

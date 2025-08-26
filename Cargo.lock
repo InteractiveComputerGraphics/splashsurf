@@ -1303,6 +1303,7 @@ dependencies = [
  "ndarray",
  "numpy",
  "pyo3",
+ "pyo3-build-config",
  "pyo3-stub-gen",
  "splashsurf",
  "splashsurf_lib",
