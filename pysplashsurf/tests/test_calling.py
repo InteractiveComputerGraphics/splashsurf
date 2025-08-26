@@ -46,13 +46,14 @@ def test_marching_cubes_calls():
                                                                  rest_density=1000.0, smoothing_length=2.0, cube_size=0.5, 
                                                                  iso_surface_threshold=0.6)
     mesh = reconstruction.mesh
-    verts_before = len(mesh.vertices)
+    verts_before = len(mesh.get_vertices())
     print("# of vertices before:", verts_before)
     
     mesh_with_data = pysplashsurf.create_mesh_with_data_object(mesh)
     pysplashsurf.marching_cubes_cleanup(mesh_with_data, reconstruction.grid)
-    
-    verts_after = len(mesh_with_data.mesh.vertices)
+
+    mesh = mesh_with_data.take_mesh()
+    verts_after = len(mesh.get_vertices())
     print("# of vertices after:", verts_after)
     assert(verts_after < verts_before)
 
@@ -66,8 +67,8 @@ def test_memory_access():
     mesh = reconstruction.mesh
     
     start = now_s()
-    triangles_copy = mesh.triangles
-    vertices_copy = mesh.vertices
+    triangles_copy = mesh.get_triangles()
+    vertices_copy = mesh.get_vertices()
     copy_time = now_s() - start
     print("Copy time:", copy_time)
     

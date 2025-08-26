@@ -87,8 +87,7 @@ macro_rules! create_mesh_data_interface {
             }
 
             /// Returns a copy of the contained mesh
-            #[getter]
-            fn mesh(&self) -> $pymesh_class {
+            fn get_mesh(&self) -> $pymesh_class {
                 $pymesh_class::new(self.inner.mesh.clone())
             }
 
@@ -289,9 +288,8 @@ macro_rules! create_tri_mesh_interface {
         #[gen_stub_pymethods]
         #[pymethods]
         impl $name {
-            /// nx3 array of vertex positions, copies the data
-            #[getter]
-            fn vertices<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyArray2<$type>>> {
+            /// Returns a copy of the `Nx3` array of vertex positions
+            fn get_vertices<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyArray2<$type>>> {
                 let points: &[$type] = bytemuck::cast_slice(&self.inner.vertices);
                 let vertices: ArrayView2<$type> =
                     ArrayView::from_shape((self.inner.vertices.len(), 3), points)
@@ -299,9 +297,8 @@ macro_rules! create_tri_mesh_interface {
                 Ok(vertices.to_pyarray(py)) // seems like at least one copy is necessary here (to_pyarray copies the data)
             }
 
-            /// nx3 array of the vertex indices that make up a triangle, copies the data
-            #[getter]
-            fn triangles<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyArray2<u64>>> {
+            /// Returns a copy of the `Mx3` array of the vertex indices that make up a triangle
+            fn get_triangles<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyArray2<u64>>> {
                 let tris: &[u64] = bytemuck::cast_slice(&self.inner.triangles);
                 let triangles: ArrayView2<u64> =
                     ArrayView::from_shape((self.inner.triangles.len(), 3), tris)
@@ -309,28 +306,50 @@ macro_rules! create_tri_mesh_interface {
                 Ok(triangles.to_pyarray(py))
             }
 
-            /// Returns a tuple containing the vertices and triangles by moving them out of the mesh (zero copy)
-            fn take_vertices_and_triangles<'py>(
+            /// Alias for `get_triangles`
+            fn get_cells<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyArray2<u64>>> {
+                self.get_triangles(py)
+            }
+
+            /// Returns the `Nx3` array of vertex positions by moving it out of the mesh (zero copy)
+            fn take_vertices<'py>(
                 &mut self,
                 py: Python<'py>,
-            ) -> PyResult<Bound<'py, PyTuple>> {
+            ) -> PyResult<Bound<'py, PyArray2<$type>>> {
                 let vertices = std::mem::take(&mut self.inner.vertices);
-                let triangles = std::mem::take(&mut self.inner.triangles);
-
                 let n = vertices.len();
-                let m = triangles.len();
-
                 let vertices_scalar: Vec<$type> = bytemuck::cast_vec(vertices);
                 let vertices_array = PyArray::from_vec(py, vertices_scalar)
                     .reshape([n, 3])
                     .map_err(anyhow::Error::new)?;
+                Ok(vertices_array)
+            }
 
-                let triangles_scalar: Vec<usize> = bytemuck::cast_vec(triangles);
+            /// Returns the `Mx3` array of the vertex indices that make up the triangles by moving it out of the mesh (zero copy)
+            fn take_triangles<'py>(
+                &mut self,
+                py: Python<'py>,
+            ) -> PyResult<Bound<'py, PyArray2<u64>>> {
+                let triangles = std::mem::take(&mut self.inner.triangles);
+                let m = triangles.len();
+                let triangles_scalar: Vec<u64> = bytemuck::cast_vec(triangles);
                 let triangles_array = PyArray::from_vec(py, triangles_scalar)
                     .reshape([m, 3])
                     .map_err(anyhow::Error::new)?;
+                Ok(triangles_array)
+            }
 
-                let tup = (vertices_array, triangles_array);
+            /// Alias for `take_triangles`
+            fn take_cells<'py>(&mut self, py: Python<'py>) -> PyResult<Bound<'py, PyArray2<u64>>> {
+                self.take_triangles(py)
+            }
+
+            /// Returns a tuple containing the vertices and triangles of the mesh by moving them out of the mesh (zero copy)
+            fn take_vertices_and_triangles<'py>(
+                &mut self,
+                py: Python<'py>,
+            ) -> PyResult<Bound<'py, PyTuple>> {
+                let tup = (self.take_vertices(py)?, self.take_triangles(py)?);
                 tup.into_pyobject(py)
             }
 
@@ -377,9 +396,8 @@ macro_rules! create_tri_quad_mesh_interface {
         #[gen_stub_pymethods]
         #[pymethods]
         impl $name {
-            /// nx3 array of vertex positions, copies data
-            #[getter]
-            fn vertices<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyArray2<$type>>> {
+            /// Returns a copy of the `Nx3` array of vertex positions
+            fn get_vertices<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyArray2<$type>>> {
                 let points: &[$type] = bytemuck::cast_slice(&self.inner.vertices);
                 let vertices: ArrayView2<$type> =
                     ArrayView::from_shape((self.inner.vertices.len(), 3), points)
@@ -387,9 +405,8 @@ macro_rules! create_tri_quad_mesh_interface {
                 Ok(vertices.to_pyarray(py))
             }
 
-            /// 2D list specifying the vertex indices either for a triangle or a quad
-            #[getter]
-            fn cells(&self) -> PyResult<Vec<Vec<usize>>> {
+            /// Returns a 2D list specifying the vertex indices either for a triangle or a quad
+            fn get_cells(&self) -> PyResult<Vec<Vec<usize>>> {
                 let cells: Vec<Vec<usize>> = self
                     .inner
                     .cells
@@ -402,31 +419,18 @@ macro_rules! create_tri_quad_mesh_interface {
                 Ok(cells)
             }
 
-            /// Returns a tuple of vertices and triangles without copying the data, removes the data in the class
-            fn take_vertices_and_cells<'py>(
+            /// Returns the `Nx3` array of vertex positions by moving it out of the mesh (zero copy)
+            fn take_vertices<'py>(
                 &mut self,
                 py: Python<'py>,
-            ) -> PyResult<Bound<'py, PyTuple>> {
+            ) -> PyResult<Bound<'py, PyArray2<$type>>> {
                 let vertices = std::mem::take(&mut self.inner.vertices);
-                let cells = std::mem::take(&mut self.inner.cells);
-
                 let n = vertices.len();
-
                 let vertices_scalar: Vec<$type> = bytemuck::cast_vec(vertices);
                 let vertices_array = PyArray::from_vec(py, vertices_scalar)
                     .reshape([n, 3])
                     .map_err(anyhow::Error::new)?;
-
-                let cells_list: Vec<Vec<usize>> = cells
-                    .into_iter()
-                    .map(|c| match c {
-                        TriangleOrQuadCell::Tri(v) => v.into(),
-                        TriangleOrQuadCell::Quad(v) => v.into(),
-                    })
-                    .collect();
-
-                let tup = (vertices_array, cells_list);
-                tup.into_pyobject(py)
+                Ok(vertices_array)
             }
         }
     };
