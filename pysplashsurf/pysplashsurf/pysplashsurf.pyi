@@ -324,6 +324,36 @@ class MixedTriQuadMeshWithDataF64:
         Get all registered cell attribute names
         """
 
+class PyMeshWithData:
+    @property
+    def dtype(self) -> numpy.dtype:
+        r"""
+        Returns the numpy dtype of the underlying scalar type (either `np.float32` or `np.float64`)
+        """
+    def copy_mesh(self) -> PyTriMesh3d:
+        r"""
+        Returns a copy of the contained mesh without associated data and attributes
+        """
+    def copy_vertices(self) -> numpy.typing.NDArray[typing.Any]:
+        r"""
+        Returns a copy of the `Nx3` array of vertex positions
+        """
+
+class PyTriMesh3d:
+    @property
+    def dtype(self) -> numpy.dtype:
+        r"""
+        Returns the numpy dtype of the underlying scalar type (either `np.float32` or `np.float64`)
+        """
+    def copy_vertices(self) -> numpy.typing.NDArray[typing.Any]:
+        r"""
+        Returns a copy of the `Nx3` array of vertex positions
+        """
+    def copy_triangles(self) -> numpy.typing.NDArray[numpy.uint64]:
+        r"""
+        Returns a copy of the `Nx3` array of vertex positions
+        """
+
 class SphInterpolatorF32:
     r"""
     SphInterpolator wrapper
@@ -595,4 +625,6 @@ class UniformGridF64:
     UniformGrid wrapper
     """
     ...
+
+def reconstruction_pipeline_multi(particles:numpy.typing.NDArray[typing.Any], *, attributes_to_interpolate:typing.Optional[dict]=None, particle_radius:builtins.float, rest_density:builtins.float=1000.0, smoothing_length:builtins.float, cube_size:builtins.float, iso_surface_threshold:builtins.float=0.6, aabb_min:typing.Optional[typing.Sequence[builtins.float]]=None, aabb_max:typing.Optional[typing.Sequence[builtins.float]]=None, multi_threading:builtins.bool=True, subdomain_grid:builtins.bool=True, subdomain_grid_auto_disable:builtins.bool=True, subdomain_num_cubes_per_dim:builtins.int=64, check_mesh_closed:builtins.bool=False, check_mesh_manifold:builtins.bool=False, check_mesh_orientation:builtins.bool=False, check_mesh_debug:builtins.bool=False, mesh_cleanup:builtins.bool=False, mesh_cleanup_snap_dist:typing.Optional[builtins.float]=None, decimate_barnacles:builtins.bool=False, keep_vertices:builtins.bool=False, compute_normals:builtins.bool=False, sph_normals:builtins.bool=False, normals_smoothing_iters:typing.Optional[builtins.int]=None, mesh_smoothing_iters:typing.Optional[builtins.int]=None, mesh_smoothing_weights:builtins.bool=True, mesh_smoothing_weights_normalization:builtins.float=13.0, generate_quads:builtins.bool=False, quad_max_edge_diag_ratio:builtins.float=1.75, quad_max_normal_angle:builtins.float=10.0, quad_max_interior_angle:builtins.float=135.0, output_mesh_smoothing_weights:builtins.bool=False, output_raw_normals:builtins.bool=False, output_raw_mesh:builtins.bool=False, mesh_aabb_min:typing.Optional[typing.Sequence[builtins.float]]=None, mesh_aabb_max:typing.Optional[typing.Sequence[builtins.float]]=None, mesh_aabb_clamp_vertices:builtins.bool=True, dtype:typing.Optional[numpy.dtype]=None) -> typing.Optional[PyMeshWithData]: ...
 

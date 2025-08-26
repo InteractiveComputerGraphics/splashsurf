@@ -108,6 +108,11 @@ fn pysplashsurf(m: &Bound<'_, PyModule>) -> PyResult<()> {
     )?);
 
     let _ = m.add_function(wrap_pyfunction!(
+        pipeline::reconstruction_pipeline_multi,
+        m
+    )?);
+
+    let _ = m.add_function(wrap_pyfunction!(
         pipeline::reconstruction_pipeline_py_f32,
         m
     )?);
