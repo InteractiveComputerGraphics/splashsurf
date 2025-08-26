@@ -77,10 +77,10 @@ pub fn reconstruct_surface_py<I: Index, R: Real>(
     smoothing_length: R,
     cube_size: R,
     iso_surface_threshold: R,
-    enable_multi_threading: bool,
+    multi_threading: bool,
     global_neighborhood_list: bool,
-    use_subdomain_grid: bool,
-    auto_disable_subdomain_grid: bool,
+    subdomain_grid: bool,
+    subdomain_grid_auto_disable: bool,
     subdomain_num_cubes_per_dim: u32,
     aabb_min: Option<[R; 3]>,
     aabb_max: Option<[R; 3]>,
@@ -97,10 +97,10 @@ pub fn reconstruct_surface_py<I: Index, R: Real>(
     }
 
     let spatial_decomposition;
-    if use_subdomain_grid {
+    if subdomain_grid {
         spatial_decomposition = SpatialDecomposition::UniformGrid(GridDecompositionParameters {
             subdomain_num_cubes_per_dim,
-            auto_disable: auto_disable_subdomain_grid,
+            auto_disable: subdomain_grid_auto_disable,
         });
     } else {
         spatial_decomposition = SpatialDecomposition::None;
@@ -114,7 +114,7 @@ pub fn reconstruct_surface_py<I: Index, R: Real>(
         cube_size: cube_size * particle_radius,
         iso_surface_threshold,
         particle_aabb: aabb,
-        enable_multi_threading,
+        enable_multi_threading: multi_threading,
         spatial_decomposition,
         global_neighborhood_list,
     };
@@ -127,8 +127,8 @@ pub fn reconstruct_surface_py<I: Index, R: Real>(
 #[pyfunction]
 #[pyo3(name = "reconstruct_surface_f32")]
 #[pyo3(signature = (particles, *, particle_radius, rest_density,
-    smoothing_length, cube_size, iso_surface_threshold, enable_multi_threading=false,
-    global_neighborhood_list=false, use_subdomain_grid=true, auto_disable_subdomain_grid=true, subdomain_num_cubes_per_dim=64,
+    smoothing_length, cube_size, iso_surface_threshold, multi_threading=true,
+    global_neighborhood_list=false, subdomain_grid=true, subdomain_grid_auto_disable=true, subdomain_num_cubes_per_dim=64,
     aabb_min = None, aabb_max = None
 ))]
 pub fn reconstruct_surface_py_f32<'py>(
@@ -138,10 +138,10 @@ pub fn reconstruct_surface_py_f32<'py>(
     smoothing_length: f32,
     cube_size: f32,
     iso_surface_threshold: f32,
-    enable_multi_threading: bool,
+    multi_threading: bool,
     global_neighborhood_list: bool,
-    use_subdomain_grid: bool,
-    auto_disable_subdomain_grid: bool,
+    subdomain_grid: bool,
+    subdomain_grid_auto_disable: bool,
     subdomain_num_cubes_per_dim: u32,
     aabb_min: Option<[f32; 3]>,
     aabb_max: Option<[f32; 3]>,
@@ -158,10 +158,10 @@ pub fn reconstruct_surface_py_f32<'py>(
         smoothing_length,
         cube_size,
         iso_surface_threshold,
-        enable_multi_threading,
+        multi_threading,
         global_neighborhood_list,
-        use_subdomain_grid,
-        auto_disable_subdomain_grid,
+        subdomain_grid,
+        subdomain_grid_auto_disable,
         subdomain_num_cubes_per_dim,
         aabb_min,
         aabb_max,
@@ -173,8 +173,8 @@ pub fn reconstruct_surface_py_f32<'py>(
 #[pyfunction]
 #[pyo3(name = "reconstruct_surface_f64")]
 #[pyo3(signature = (particles, *, particle_radius, rest_density,
-    smoothing_length, cube_size, iso_surface_threshold, enable_multi_threading=false,
-    global_neighborhood_list=false, use_subdomain_grid=true, auto_disable_subdomain_grid=true, subdomain_num_cubes_per_dim=64,
+    smoothing_length, cube_size, iso_surface_threshold, multi_threading=true,
+    global_neighborhood_list=false, subdomain_grid=true, subdomain_grid_auto_disable=true, subdomain_num_cubes_per_dim=64,
     aabb_min = None, aabb_max = None
 ))]
 pub fn reconstruct_surface_py_f64<'py>(
@@ -184,10 +184,10 @@ pub fn reconstruct_surface_py_f64<'py>(
     smoothing_length: f64,
     cube_size: f64,
     iso_surface_threshold: f64,
-    enable_multi_threading: bool,
+    multi_threading: bool,
     global_neighborhood_list: bool,
-    use_subdomain_grid: bool,
-    auto_disable_subdomain_grid: bool,
+    subdomain_grid: bool,
+    subdomain_grid_auto_disable: bool,
     subdomain_num_cubes_per_dim: u32,
     aabb_min: Option<[f64; 3]>,
     aabb_max: Option<[f64; 3]>,
@@ -204,10 +204,10 @@ pub fn reconstruct_surface_py_f64<'py>(
         smoothing_length,
         cube_size,
         iso_surface_threshold,
-        enable_multi_threading,
+        multi_threading,
         global_neighborhood_list,
-        use_subdomain_grid,
-        auto_disable_subdomain_grid,
+        subdomain_grid,
+        subdomain_grid_auto_disable,
         subdomain_num_cubes_per_dim,
         aabb_min,
         aabb_max,

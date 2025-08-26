@@ -418,6 +418,10 @@ class TriMesh3dF32:
         r"""
         Returns a copy of the `Mx3` array of the vertex indices that make up a triangle
         """
+    def get_cells(self) -> numpy.typing.NDArray[numpy.uint64]:
+        r"""
+        Alias for `get_triangles`
+        """
     def take_vertices(self) -> numpy.typing.NDArray[numpy.float32]:
         r"""
         Returns the `Nx3` array of vertex positions by moving it out of the mesh (zero copy)
@@ -425,6 +429,10 @@ class TriMesh3dF32:
     def take_triangles(self) -> numpy.typing.NDArray[numpy.uint64]:
         r"""
         Returns the `Mx3` array of the vertex indices that make up the triangles by moving it out of the mesh (zero copy)
+        """
+    def take_cells(self) -> numpy.typing.NDArray[numpy.uint64]:
+        r"""
+        Alias for `take_triangles`
         """
     def take_vertices_and_triangles(self) -> tuple:
         r"""
@@ -451,6 +459,10 @@ class TriMesh3dF64:
         r"""
         Returns a copy of the `Mx3` array of the vertex indices that make up a triangle
         """
+    def get_cells(self) -> numpy.typing.NDArray[numpy.uint64]:
+        r"""
+        Alias for `get_triangles`
+        """
     def take_vertices(self) -> numpy.typing.NDArray[numpy.float64]:
         r"""
         Returns the `Nx3` array of vertex positions by moving it out of the mesh (zero copy)
@@ -458,6 +470,10 @@ class TriMesh3dF64:
     def take_triangles(self) -> numpy.typing.NDArray[numpy.uint64]:
         r"""
         Returns the `Mx3` array of the vertex indices that make up the triangles by moving it out of the mesh (zero copy)
+        """
+    def take_cells(self) -> numpy.typing.NDArray[numpy.uint64]:
+        r"""
+        Alias for `take_triangles`
         """
     def take_vertices_and_triangles(self) -> tuple:
         r"""

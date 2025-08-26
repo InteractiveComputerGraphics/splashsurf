@@ -207,10 +207,10 @@ def reconstruct_surface(
     smoothing_length: float = 2.0,
     cube_size: float = 0.5,
     iso_surface_threshold: float = 0.6,
-    enable_multi_threading: bool = False,
+    multi_threading: bool = True,
     global_neighborhood_list: bool = False,
     subdomain_grid: bool = True,
-    auto_disable_subdomain_grid: bool = True,
+    subdomain_grid_auto_disable: bool = True,
     subdomain_num_cubes_per_dim: int = 64,
     aabb_min = None,
     aabb_max = None,
@@ -239,7 +239,7 @@ def reconstruct_surface(
     iso_surface_threshold: float
         Threshold for the iso surface
     
-    enable_multi_threading: bool
+    multi_threading: bool
         Multi-threading flag
     
     global_neighborhood_list: bool
@@ -248,7 +248,7 @@ def reconstruct_surface(
     subdomain_grid: bool
         Enable spatial decomposition using by dividing the domain into subdomains with dense marching cube grids for efficient multi-threading
 
-    auto_disable_subdomain_grid: bool
+    subdomain_grid_auto_disable: bool
         Whether to automatically disable the subdomain grid if the global domain is too small
         
     subdomain_num_cubes_per_dim: int
@@ -270,14 +270,14 @@ def reconstruct_surface(
     if particles.dtype == 'float32':
         return reconstruct_surface_f32(particles, particle_radius=particle_radius, rest_density=rest_density, 
                                 smoothing_length=smoothing_length, cube_size=cube_size, iso_surface_threshold=iso_surface_threshold, 
-                                enable_multi_threading=enable_multi_threading, global_neighborhood_list=global_neighborhood_list, 
-                                use_subdomain_grid=subdomain_grid, auto_disable_subdomain_grid=auto_disable_subdomain_grid, subdomain_num_cubes_per_dim=subdomain_num_cubes_per_dim,
+                                multi_threading=multi_threading, global_neighborhood_list=global_neighborhood_list, 
+                                subdomain_grid=subdomain_grid, subdomain_grid_auto_disable=subdomain_grid_auto_disable, subdomain_num_cubes_per_dim=subdomain_num_cubes_per_dim,
                                 aabb_min=aabb_min, aabb_max=aabb_max)   
     elif particles.dtype == 'float64':
         return reconstruct_surface_f64(particles, particle_radius=particle_radius, rest_density=rest_density, 
                                 smoothing_length=smoothing_length, cube_size=cube_size, iso_surface_threshold=iso_surface_threshold, 
-                                enable_multi_threading=enable_multi_threading, global_neighborhood_list=global_neighborhood_list, 
-                                use_subdomain_grid=subdomain_grid, auto_disable_subdomain_grid=auto_disable_subdomain_grid, subdomain_num_cubes_per_dim=subdomain_num_cubes_per_dim,
+                                multi_threading=multi_threading, global_neighborhood_list=global_neighborhood_list, 
+                                subdomain_grid=subdomain_grid, subdomain_grid_auto_disable=subdomain_grid_auto_disable, subdomain_num_cubes_per_dim=subdomain_num_cubes_per_dim,
                                 aabb_min=aabb_min, aabb_max=aabb_max)
     else:
         raise ValueError("Invalid data type (only float32 and float64 are supported, consider explicitly specifying the dtype for particles)")
@@ -525,16 +525,16 @@ def convert_tris_to_quads(
     
 
 def reconstruction_pipeline(
-    particles, *, attributes_to_interpolate={}, particle_radius,
+    particles, *, attributes_to_interpolate=None, particle_radius,
     rest_density=1000.0, smoothing_length=2.0, cube_size,
-    iso_surface_threshold=0.6, enable_multi_threading=True,
+    iso_surface_threshold=0.6, multi_threading=True,
     check_mesh_closed=False, check_mesh_manifold=False,
     check_mesh_orientation=False, check_mesh_debug=False,
     mesh_smoothing_weights=False, sph_normals=False,
     mesh_smoothing_weights_normalization=13.0, mesh_smoothing_iters=None, normals_smoothing_iters=None,
     mesh_cleanup=False, mesh_cleanup_snap_dist=None, decimate_barnacles=False, keep_vertices=False,
     compute_normals=False, output_raw_normals=False, output_raw_mesh=False, output_mesh_smoothing_weights=False, mesh_aabb_clamp_vertices=False,
-    subdomain_grid=True, auto_disable_subdomain_grid=True, subdomain_num_cubes_per_dim=64, aabb_min=None, aabb_max=None, mesh_aabb_min=None, mesh_aabb_max=None,
+    subdomain_grid=True, subdomain_grid_auto_disable=True, subdomain_num_cubes_per_dim=64, aabb_min=None, aabb_max=None, mesh_aabb_min=None, mesh_aabb_max=None,
     generate_quads=False, quad_max_edge_diag_ratio=1.75, quad_max_normal_angle=10.0, quad_max_interior_angle=135.0
 ):
     """Surface reconstruction based on particle positions with subsequent post-processing
@@ -564,7 +564,7 @@ def reconstruction_pipeline(
     iso_surface_threshold: float
         Threshold for the iso surface
         
-    enable_multi_threading: bool
+    multi_threading: bool
         Multi-threading flag
         
     check_mesh_closed: bool
@@ -628,7 +628,7 @@ def reconstruction_pipeline(
     subdomain_grid: bool
         Enable spatial decomposition using by dividing the domain into subdomains with dense marching cube grids for efficient multi-threading
 
-    auto_disable_subdomain_grid: bool
+    subdomain_grid_auto_disable: bool
         Whether to automatically disable the subdomain grid if the global domain is too small
     
     subdomain_num_cubes_per_dim: int
@@ -663,11 +663,14 @@ def reconstruction_pipeline(
     tuple[TriMeshWithDataF32 | TriMeshWithDataF64 | MixedTriQuadMeshWithDataF32 | MixedTriQuadMeshWithDataF64, Optional[SurfaceReconstructionF32] | Optional[SurfaceReconstructionF64]]
         Mesh with data object and SurfaceReconstruction object containing the reconstructed mesh and used grid
     """
+    if attributes_to_interpolate is None:
+        attributes_to_interpolate = {}
+
     if particles.dtype == 'float32':
         tri_mesh, tri_quad_mesh, reconstruction = reconstruction_pipeline_f32(particles, attributes_to_interpolate=attributes_to_interpolate, particle_radius=particle_radius, rest_density=rest_density, 
                                                                               smoothing_length=smoothing_length, cube_size=cube_size, iso_surface_threshold=iso_surface_threshold, 
-                                                                              aabb_min=aabb_min, aabb_max=aabb_max, enable_multi_threading=enable_multi_threading, 
-                                                                              use_subdomain_grid=subdomain_grid, auto_disable_subdomain_grid=auto_disable_subdomain_grid, subdomain_num_cubes_per_dim=subdomain_num_cubes_per_dim,
+                                                                              aabb_min=aabb_min, aabb_max=aabb_max, multi_threading=multi_threading, 
+                                                                              subdomain_grid=subdomain_grid, subdomain_grid_auto_disable=subdomain_grid_auto_disable, subdomain_num_cubes_per_dim=subdomain_num_cubes_per_dim,
                                                                               check_mesh_closed=check_mesh_closed, check_mesh_manifold=check_mesh_manifold, check_mesh_orientation=check_mesh_orientation, check_mesh_debug=check_mesh_debug,
                                                                               mesh_cleanup=mesh_cleanup, mesh_cleanup_snap_dist=mesh_cleanup_snap_dist, decimate_barnacles=decimate_barnacles,
                                                                               keep_vertices=keep_vertices, compute_normals=compute_normals, sph_normals=sph_normals, normals_smoothing_iters=normals_smoothing_iters,
@@ -684,8 +687,8 @@ def reconstruction_pipeline(
     elif particles.dtype == 'float64':
         tri_mesh, tri_quad_mesh, reconstruction = reconstruction_pipeline_f64(particles, attributes_to_interpolate=attributes_to_interpolate, particle_radius=particle_radius, rest_density=rest_density,
                                                                               smoothing_length=smoothing_length, cube_size=cube_size, iso_surface_threshold=iso_surface_threshold,
-                                                                              aabb_min=aabb_min, aabb_max=aabb_max, enable_multi_threading=enable_multi_threading,
-                                                                              use_subdomain_grid=subdomain_grid, auto_disable_subdomain_grid=auto_disable_subdomain_grid, subdomain_num_cubes_per_dim=subdomain_num_cubes_per_dim,
+                                                                              aabb_min=aabb_min, aabb_max=aabb_max, multi_threading=multi_threading,
+                                                                              subdomain_grid=subdomain_grid, subdomain_grid_auto_disable=subdomain_grid_auto_disable, subdomain_num_cubes_per_dim=subdomain_num_cubes_per_dim,
                                                                               check_mesh_closed=check_mesh_closed, check_mesh_manifold=check_mesh_manifold, check_mesh_orientation=check_mesh_orientation, check_mesh_debug=check_mesh_debug,
                                                                               mesh_cleanup=mesh_cleanup, mesh_cleanup_snap_dist=mesh_cleanup_snap_dist, decimate_barnacles=decimate_barnacles,
                                                                               keep_vertices=keep_vertices, compute_normals=compute_normals, sph_normals=sph_normals, normals_smoothing_iters=normals_smoothing_iters,

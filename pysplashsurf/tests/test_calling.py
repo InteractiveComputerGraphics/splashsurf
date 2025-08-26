@@ -42,8 +42,8 @@ def test_marching_cubes_calls():
     print("\nTesting marching cubes calls")
     
     particles = np.array(meshio.read(VTK_PATH).points, dtype=np.float32)
-    reconstruction = pysplashsurf.reconstruct_surface(particles, enable_multi_threading=True, particle_radius=0.025,
-                                                                 rest_density=1000.0, smoothing_length=2.0, cube_size=0.5, 
+    reconstruction = pysplashsurf.reconstruct_surface(particles, particle_radius=0.025, rest_density=1000.0,
+                                                                 smoothing_length=2.0, cube_size=0.5,
                                                                  iso_surface_threshold=0.6)
     mesh = reconstruction.mesh
     verts_before = len(mesh.get_vertices())
@@ -61,9 +61,10 @@ def test_memory_access():
     print("\nTesting memory copy vs take")
     
     particles = np.array(meshio.read(VTK_PATH).points, dtype=np.float64)
-    reconstruction = pysplashsurf.reconstruct_surface(particles, enable_multi_threading=True, particle_radius=0.025, 
-                                                                 rest_density=1000.0, smoothing_length=2.0, cube_size=0.5, 
-                                                                 iso_surface_threshold=0.6, aabb_min=np.array([0.0, 0.0, 0.0]), aabb_max=np.array([2.0, 2.0, 2.0]))
+    reconstruction = pysplashsurf.reconstruct_surface(particles, particle_radius=0.025,  rest_density=1000.0,
+                                                                 smoothing_length=2.0, cube_size=0.5,
+                                                                 iso_surface_threshold=0.6,
+                                                                 aabb_min=np.array([0.0, 0.0, 0.0]), aabb_max=np.array([2.0, 2.0, 2.0]))
     mesh = reconstruction.mesh
     
     start = now_s()
@@ -82,7 +83,7 @@ def test_memory_access():
     assert(np.allclose(vertices, vertices_copy))
     assert(np.allclose(triangles, triangles_copy))
 
-def reconstruction_pipeline(input_file, output_file, *, attributes_to_interpolate=[], enable_multi_threading=True, particle_radius=0.025, 
+def reconstruction_pipeline(input_file, output_file, *, attributes_to_interpolate=None, multi_threading=True, particle_radius=0.025,
                             rest_density=1000.0, smoothing_length=2.0, cube_size=0.5, 
                             iso_surface_threshold=0.6, mesh_smoothing_weights=False, output_mesh_smoothing_weights=False, sph_normals=False, 
                             mesh_smoothing_weights_normalization=13.0, mesh_smoothing_iters=5, normals_smoothing_iters=5,
@@ -94,7 +95,11 @@ def reconstruction_pipeline(input_file, output_file, *, attributes_to_interpolat
     
     mesh = meshio.read(input_file)
     particles = np.array(mesh.points, dtype=np.float64)
-    
+
+    if attributes_to_interpolate is None:
+        attributes_to_interpolate = []
+
+     # Prepare attributes dictionary
     attrs = {}
     for attr in attributes_to_interpolate:
         if attr in mesh.point_data:
@@ -103,7 +108,7 @@ def reconstruction_pipeline(input_file, output_file, *, attributes_to_interpolat
             else:
                 attrs[attr] = mesh.point_data[attr].astype(np.int64)
     
-    mesh_with_data, reconstruction = pysplashsurf.reconstruction_pipeline(particles, attributes_to_interpolate=attrs, enable_multi_threading=enable_multi_threading, particle_radius=particle_radius,
+    mesh_with_data, reconstruction = pysplashsurf.reconstruction_pipeline(particles, attributes_to_interpolate=attrs, multi_threading=multi_threading, particle_radius=particle_radius,
                                                           rest_density=rest_density, smoothing_length=smoothing_length, cube_size=cube_size, iso_surface_threshold=iso_surface_threshold,
                                                           mesh_smoothing_weights=mesh_smoothing_weights, sph_normals=sph_normals,
                                                           mesh_smoothing_weights_normalization=mesh_smoothing_weights_normalization,

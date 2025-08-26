@@ -27,9 +27,9 @@ fn reconstruction_pipeline_generic<'py, I: Index, R: Real + Element>(
     iso_surface_threshold: R,
     aabb_min: Option<[R; 3]>,
     aabb_max: Option<[R; 3]>,
-    enable_multi_threading: bool,
-    use_subdomain_grid: bool,
-    auto_disable_subdomain_grid: bool,
+    multi_threading: bool,
+    subdomain_grid: bool,
+    subdomain_grid_auto_disable: bool,
     subdomain_num_cubes_per_dim: u32,
     check_mesh_closed: bool,
     check_mesh_manifold: bool,
@@ -120,10 +120,10 @@ fn reconstruction_pipeline_generic<'py, I: Index, R: Real + Element>(
         None
     };
 
-    let spatial_decomposition = if use_subdomain_grid {
+    let spatial_decomposition = if subdomain_grid {
         SpatialDecomposition::UniformGrid(GridDecompositionParameters {
             subdomain_num_cubes_per_dim,
-            auto_disable: auto_disable_subdomain_grid,
+            auto_disable: subdomain_grid_auto_disable,
         })
     } else {
         SpatialDecomposition::None
@@ -136,7 +136,7 @@ fn reconstruction_pipeline_generic<'py, I: Index, R: Real + Element>(
         cube_size: cube_size * particle_radius,
         iso_surface_threshold,
         particle_aabb: aabb,
-        enable_multi_threading,
+        enable_multi_threading: multi_threading,
         spatial_decomposition,
         global_neighborhood_list: mesh_smoothing_weights,
     };
@@ -191,8 +191,8 @@ fn reconstruction_pipeline_generic<'py, I: Index, R: Real + Element>(
 #[pyo3(name = "reconstruction_pipeline_f32")]
 #[pyo3(signature = (particles, *, attributes_to_interpolate, particle_radius, rest_density,
     smoothing_length, cube_size, iso_surface_threshold,
-    aabb_min = None, aabb_max = None, enable_multi_threading = false,
-    use_subdomain_grid = true, auto_disable_subdomain_grid = true, subdomain_num_cubes_per_dim = 64,
+    aabb_min = None, aabb_max = None, multi_threading = true,
+    subdomain_grid = true, subdomain_grid_auto_disable = true, subdomain_num_cubes_per_dim = 64,
     check_mesh_closed = false, check_mesh_manifold = false, check_mesh_orientation = false, check_mesh_debug = false,
     mesh_cleanup, mesh_cleanup_snap_dist = None, decimate_barnacles, keep_vertices, compute_normals, sph_normals,
     normals_smoothing_iters, mesh_smoothing_iters, mesh_smoothing_weights, mesh_smoothing_weights_normalization,
@@ -210,9 +210,9 @@ pub fn reconstruction_pipeline_py_f32<'py>(
     iso_surface_threshold: f32,
     aabb_min: Option<[f32; 3]>,
     aabb_max: Option<[f32; 3]>,
-    enable_multi_threading: bool,
-    use_subdomain_grid: bool,
-    auto_disable_subdomain_grid: bool,
+    multi_threading: bool,
+    subdomain_grid: bool,
+    subdomain_grid_auto_disable: bool,
     subdomain_num_cubes_per_dim: u32,
     check_mesh_closed: bool,
     check_mesh_manifold: bool,
@@ -257,9 +257,9 @@ pub fn reconstruction_pipeline_py_f32<'py>(
         iso_surface_threshold,
         aabb_min,
         aabb_max,
-        enable_multi_threading,
-        use_subdomain_grid,
-        auto_disable_subdomain_grid,
+        multi_threading,
+        subdomain_grid,
+        subdomain_grid_auto_disable,
         subdomain_num_cubes_per_dim,
         check_mesh_closed,
         check_mesh_manifold,
@@ -298,8 +298,8 @@ pub fn reconstruction_pipeline_py_f32<'py>(
 #[pyo3(name = "reconstruction_pipeline_f64")]
 #[pyo3(signature = (particles, *, attributes_to_interpolate, particle_radius, rest_density,
     smoothing_length, cube_size, iso_surface_threshold,
-    aabb_min = None, aabb_max = None, enable_multi_threading = false,
-    use_subdomain_grid = true, auto_disable_subdomain_grid = true, subdomain_num_cubes_per_dim = 64,
+    aabb_min = None, aabb_max = None, multi_threading = true,
+    subdomain_grid = true, subdomain_grid_auto_disable = true, subdomain_num_cubes_per_dim = 64,
     check_mesh_closed = false, check_mesh_manifold = false, check_mesh_orientation = false, check_mesh_debug = false,
     mesh_cleanup, mesh_cleanup_snap_dist = None, decimate_barnacles, keep_vertices, compute_normals, sph_normals,
     normals_smoothing_iters, mesh_smoothing_iters, mesh_smoothing_weights, mesh_smoothing_weights_normalization,
@@ -317,9 +317,9 @@ pub fn reconstruction_pipeline_py_f64<'py>(
     iso_surface_threshold: f64,
     aabb_min: Option<[f64; 3]>,
     aabb_max: Option<[f64; 3]>,
-    enable_multi_threading: bool,
-    use_subdomain_grid: bool,
-    auto_disable_subdomain_grid: bool,
+    multi_threading: bool,
+    subdomain_grid: bool,
+    subdomain_grid_auto_disable: bool,
     subdomain_num_cubes_per_dim: u32,
     check_mesh_closed: bool,
     check_mesh_manifold: bool,
@@ -364,9 +364,9 @@ pub fn reconstruction_pipeline_py_f64<'py>(
         iso_surface_threshold,
         aabb_min,
         aabb_max,
-        enable_multi_threading,
-        use_subdomain_grid,
-        auto_disable_subdomain_grid,
+        multi_threading,
+        subdomain_grid,
+        subdomain_grid_auto_disable,
         subdomain_num_cubes_per_dim,
         check_mesh_closed,
         check_mesh_manifold,
