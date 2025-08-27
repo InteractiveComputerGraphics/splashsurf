@@ -17,7 +17,6 @@ use pyo3::{
     types::{PyDict, PyString},
 };
 use pyo3_stub_gen::derive::gen_stub_pyfunction;
-use splashsurf::reconstruct::ReconstructionResult;
 use splashsurf_lib::{
     Aabb3d, GridDecompositionParameters, Index, Real, SpatialDecomposition,
     mesh::{AttributeData, MeshAttribute},
@@ -80,7 +79,11 @@ pub fn reconstruction_pipeline_multi<'py>(
     dtype: Option<Bound<'py, PyArrayDescr>>,
 ) -> PyResult<PyMeshWithData> {
     let py = particles.py();
-    let element_type = dtype.unwrap_or_else(|| particles.dtype());
+    let element_type = particles.dtype();
+
+    if let Some(target_dtype) = dtype && !target_dtype.is_equiv_to(&element_type) {
+        unimplemented!("Casting to different dtype is not implemented yet");
+    }
 
     let particle_aabb = aabb_min
         .zip(aabb_max)
@@ -108,7 +111,7 @@ pub fn reconstruction_pipeline_multi<'py>(
         particle_aabb,
         enable_multi_threading: multi_threading,
         spatial_decomposition,
-        global_neighborhood_list: mesh_smoothing_weights,
+        global_neighborhood_list: false,
     };
 
     let postprocessing_args = splashsurf::reconstruct::ReconstructionPostprocessingParameters {
@@ -139,7 +142,7 @@ pub fn reconstruction_pipeline_multi<'py>(
     };
 
     fn reconstruction_to_pymesh<I: Index, R: Real + Element>(
-        reconstruction: ReconstructionResult<I, R>,
+        reconstruction: splashsurf::reconstruct::ReconstructionResult<I, R>,
     ) -> PyResult<PyMeshWithData> {
         if let Some(tri_mesh) = reconstruction.tri_mesh {
             PyMeshWithData::try_from_generic(tri_mesh)
@@ -153,7 +156,6 @@ pub fn reconstruction_pipeline_multi<'py>(
     }
 
     if element_type.is_equiv_to(&np::dtype::<f32>(py)) {
-        println!("Detected f32 particle array");
         let particles = particles.downcast::<PyArray2<f32>>()?;
         let reconstruction = reconstruction_pipeline_generic_impl::<u64, _>(
             particles,
@@ -165,7 +167,6 @@ pub fn reconstruction_pipeline_multi<'py>(
         )?;
         reconstruction_to_pymesh(reconstruction)
     } else if element_type.is_equiv_to(&np::dtype::<f64>(py)) {
-        println!("Detected f64 particle array");
         let particles = particles.downcast::<PyArray2<f64>>()?;
         let reconstruction = reconstruction_pipeline_generic_impl::<u64, _>(
             particles,
