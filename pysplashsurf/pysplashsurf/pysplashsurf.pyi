@@ -195,6 +195,37 @@ class Aabb3dF64:
         Returns the smallest cubical AABB with the same center that encloses this AABB
         """
 
+class MeshWithData:
+    @property
+    def dtype(self) -> numpy.dtype:
+        r"""
+        Returns the numpy dtype of the underlying scalar type (either `np.float32` or `np.float64`)
+        """
+    @property
+    def mesh_cell_type(self) -> MeshType:
+        r"""
+        Returns the type of the underlying mesh
+        """
+    def copy_mesh(self) -> typing.Union[TriMesh3d, MixedTriQuadMesh3d]:
+        r"""
+        Returns a copy of the contained mesh without associated data and attributes
+        """
+    def copy_vertices(self) -> numpy.typing.NDArray[typing.Any]:
+        r"""
+        Returns a copy of the `Nx3` array of vertex positions
+        """
+
+class MixedTriQuadMesh3d:
+    @property
+    def dtype(self) -> numpy.dtype:
+        r"""
+        Returns the numpy dtype of the underlying scalar type (either `np.float32` or `np.float64`)
+        """
+    def copy_vertices(self) -> numpy.typing.NDArray[typing.Any]:
+        r"""
+        Returns a copy of the `Nx3` array of vertex positions
+        """
+
 class MixedTriQuadMesh3dF32:
     r"""
     MixedTriQuadMesh3d wrapper
@@ -325,81 +356,6 @@ class MixedTriQuadMeshWithDataF64:
         Get all registered cell attribute names
         """
 
-class PyMeshWithData:
-    @property
-    def dtype(self) -> numpy.dtype:
-        r"""
-        Returns the numpy dtype of the underlying scalar type (either `np.float32` or `np.float64`)
-        """
-    @property
-    def mesh_cell_type(self) -> MeshType:
-        r"""
-        Returns the type of the underlying mesh
-        """
-    def copy_mesh(self) -> typing.Union[PyTriMesh3d, PyMixedTriQuadMesh3d]:
-        r"""
-        Returns a copy of the contained mesh without associated data and attributes
-        """
-    def copy_vertices(self) -> numpy.typing.NDArray[typing.Any]:
-        r"""
-        Returns a copy of the `Nx3` array of vertex positions
-        """
-
-class PyMixedTriQuadMesh3d:
-    @property
-    def dtype(self) -> numpy.dtype:
-        r"""
-        Returns the numpy dtype of the underlying scalar type (either `np.float32` or `np.float64`)
-        """
-    def copy_vertices(self) -> numpy.typing.NDArray[typing.Any]:
-        r"""
-        Returns a copy of the `Nx3` array of vertex positions
-        """
-
-class PySurfaceReconstruction:
-    r"""
-    Struct containing results of the surface reconstruction including the mesh, grid parameters and optional particle data
-    """
-    def copy_mesh(self) -> PyTriMesh3d:
-        r"""
-        Returns a copy of the surface mesh of the reconstruction
-        """
-    def copy_grid(self) -> PyUniformGrid:
-        r"""
-        Returns a copy of the uniform grid parameters used for the reconstruction
-        """
-    def copy_particle_densities(self) -> typing.Optional[numpy.typing.NDArray[typing.Any]]:
-        r"""
-        Returns a copy of the particle densities computed during the reconstruction
-        """
-    def copy_particle_neighbors(self) -> typing.Optional[builtins.list[builtins.list[builtins.int]]]:
-        r"""
-        Returns a copy of the per-particle neighborhood lists computed during the reconstruction if available
-        
-        The neighborhood lists are only available if the flag for global neighborhood list was set in the reconstruction parameters.
-        """
-
-class PyTriMesh3d:
-    @property
-    def dtype(self) -> numpy.dtype:
-        r"""
-        Returns the numpy dtype of the underlying scalar type (either `np.float32` or `np.float64`)
-        """
-    def copy_vertices(self) -> numpy.typing.NDArray[typing.Any]:
-        r"""
-        Returns a copy of the `Nx3` array of vertex positions
-        """
-    def copy_triangles(self) -> numpy.typing.NDArray[numpy.uint64]:
-        r"""
-        Returns a copy of the `Mx3` array of vertex indices per triangle
-        """
-
-class PyUniformGrid:
-    r"""
-    Struct containing the parameters of a uniform grid used for the surface reconstruction
-    """
-    ...
-
 class SphInterpolatorF32:
     r"""
     SphInterpolator wrapper
@@ -436,50 +392,42 @@ class SphInterpolatorF64:
         Interpolates a vectorial per particle quantity to the given points, panics if the there are less per-particles values than particles
         """
 
-class SurfaceReconstructionF32:
+class SurfaceReconstruction:
     r"""
-    SurfaceReconstruction wrapper
+    Struct containing results of the surface reconstruction including the mesh, grid parameters and optional particle data
     """
-    @property
-    def mesh(self) -> TriMesh3dF32:
+    def copy_mesh(self) -> TriMesh3d:
         r"""
-        PyTrimesh3d clone of the contained mesh
+        Returns a copy of the surface mesh of the reconstruction
         """
-    @property
-    def grid(self) -> UniformGridF32:
+    def copy_grid(self) -> UniformGrid:
         r"""
-        PyUniformGrid clone of the contained grid
+        Returns a copy of the uniform grid parameters used for the reconstruction
         """
-    def particle_densities(self) -> builtins.list[builtins.float]:
+    def copy_particle_densities(self) -> typing.Optional[numpy.typing.NDArray[typing.Any]]:
         r"""
-        Returns a reference to the global particle density vector if computed during the reconstruction (currently, all reconstruction approaches return this)
+        Returns a copy of the particle densities computed during the reconstruction
         """
-    def particle_neighbors(self) -> typing.Optional[builtins.list[builtins.list[builtins.int]]]:
+    def copy_particle_neighbors(self) -> typing.Optional[builtins.list[builtins.list[builtins.int]]]:
         r"""
-        Returns a reference to the global list of per-particle neighborhood lists if computed during the reconstruction (`None` if not specified in the parameters)
+        Returns a copy of the per-particle neighborhood lists computed during the reconstruction if available
+        
+        The neighborhood lists are only available if the flag for global neighborhood list was set in the reconstruction parameters.
         """
 
-class SurfaceReconstructionF64:
-    r"""
-    SurfaceReconstruction wrapper
-    """
+class TriMesh3d:
     @property
-    def mesh(self) -> TriMesh3dF64:
+    def dtype(self) -> numpy.dtype:
         r"""
-        PyTrimesh3d clone of the contained mesh
+        Returns the numpy dtype of the underlying scalar type (either `np.float32` or `np.float64`)
         """
-    @property
-    def grid(self) -> UniformGridF64:
+    def copy_vertices(self) -> numpy.typing.NDArray[typing.Any]:
         r"""
-        PyUniformGrid clone of the contained grid
+        Returns a copy of the `Nx3` array of vertex positions
         """
-    def particle_densities(self) -> builtins.list[builtins.float]:
+    def copy_triangles(self) -> numpy.typing.NDArray[numpy.uint64]:
         r"""
-        Returns a reference to the global particle density vector if computed during the reconstruction (currently, all reconstruction approaches return this)
-        """
-    def particle_neighbors(self) -> typing.Optional[builtins.list[builtins.list[builtins.int]]]:
-        r"""
-        Returns a reference to the global list of per-particle neighborhood lists if computed during the reconstruction (`None` if not specified in the parameters)
+        Returns a copy of the `Mx3` array of vertex indices per triangle
         """
 
 class TriMesh3dF32:
@@ -660,15 +608,9 @@ class TriMeshWithDataF64:
         Get all registered cell attribute names
         """
 
-class UniformGridF32:
+class UniformGrid:
     r"""
-    UniformGrid wrapper
-    """
-    ...
-
-class UniformGridF64:
-    r"""
-    UniformGrid wrapper
+    Struct containing the parameters of the uniform grid used for the surface reconstruction
     """
     ...
 
@@ -685,24 +627,24 @@ class MeshType(Enum):
     3D mixed triangle and quad mesh
     """
 
-def check_mesh_consistency(mesh:typing.Union[PyTriMesh3d, PyMeshWithData], grid:PyUniformGrid, *, check_closed:builtins.bool=True, check_manifold:builtins.bool=True, debug:builtins.bool=False) -> typing.Optional[builtins.str]:
+def check_mesh_consistency(mesh:typing.Union[TriMesh3d, MeshWithData], grid:UniformGrid, *, check_closed:builtins.bool=True, check_manifold:builtins.bool=True, debug:builtins.bool=False) -> typing.Optional[builtins.str]:
     r"""
     Checks the consistency of a reconstructed surface mesh (watertightness, manifoldness), optionally returns a string with details if problems are found
     """
 
-def marching_cubes_cleanup(mesh:typing.Union[PyTriMesh3d, PyMeshWithData], grid:PyUniformGrid, *, max_rel_snap_dist:typing.Optional[builtins.float]=None, max_iter:builtins.int=5, keep_vertices:builtins.bool=False) -> None:
+def marching_cubes_cleanup(mesh:typing.Union[TriMesh3d, MeshWithData], grid:UniformGrid, *, max_rel_snap_dist:typing.Optional[builtins.float]=None, max_iter:builtins.int=5, keep_vertices:builtins.bool=False) -> None:
     r"""
     Mesh simplification designed for marching cubes surfaces meshes inspired by the "Compact Contouring"/"Mesh displacement" approach by Doug Moore and Joe Warren
     """
 
-def reconstruct_surface(particles:numpy.typing.NDArray[typing.Any], *, particle_radius:builtins.float, rest_density:builtins.float=1000.0, smoothing_length:builtins.float, cube_size:builtins.float, iso_surface_threshold:builtins.float=0.6, multi_threading:builtins.bool=True, global_neighborhood_list:builtins.bool=False, subdomain_grid:builtins.bool=True, subdomain_grid_auto_disable:builtins.bool=True, subdomain_num_cubes_per_dim:builtins.int=64, aabb_min:typing.Optional[typing.Sequence[builtins.float]]=None, aabb_max:typing.Optional[typing.Sequence[builtins.float]]=None) -> PySurfaceReconstruction:
+def reconstruct_surface(particles:numpy.typing.NDArray[typing.Any], *, particle_radius:builtins.float, rest_density:builtins.float=1000.0, smoothing_length:builtins.float, cube_size:builtins.float, iso_surface_threshold:builtins.float=0.6, multi_threading:builtins.bool=True, global_neighborhood_list:builtins.bool=False, subdomain_grid:builtins.bool=True, subdomain_grid_auto_disable:builtins.bool=True, subdomain_num_cubes_per_dim:builtins.int=64, aabb_min:typing.Optional[typing.Sequence[builtins.float]]=None, aabb_max:typing.Optional[typing.Sequence[builtins.float]]=None) -> SurfaceReconstruction:
     r"""
     Performs a surface reconstruction from the given particles without additional post-processing
     
     Note that all parameters use absolute distance units and are not relative to the particle radius.
     """
 
-def reconstruction_pipeline(particles:numpy.typing.NDArray[typing.Any], *, attributes_to_interpolate:typing.Optional[dict]=None, particle_radius:builtins.float, rest_density:builtins.float=1000.0, smoothing_length:builtins.float, cube_size:builtins.float, iso_surface_threshold:builtins.float=0.6, aabb_min:typing.Optional[typing.Sequence[builtins.float]]=None, aabb_max:typing.Optional[typing.Sequence[builtins.float]]=None, multi_threading:builtins.bool=True, subdomain_grid:builtins.bool=True, subdomain_grid_auto_disable:builtins.bool=True, subdomain_num_cubes_per_dim:builtins.int=64, check_mesh_closed:builtins.bool=False, check_mesh_manifold:builtins.bool=False, check_mesh_orientation:builtins.bool=False, check_mesh_debug:builtins.bool=False, mesh_cleanup:builtins.bool=False, mesh_cleanup_snap_dist:typing.Optional[builtins.float]=None, decimate_barnacles:builtins.bool=False, keep_vertices:builtins.bool=False, compute_normals:builtins.bool=False, sph_normals:builtins.bool=False, normals_smoothing_iters:typing.Optional[builtins.int]=None, mesh_smoothing_iters:typing.Optional[builtins.int]=None, mesh_smoothing_weights:builtins.bool=True, mesh_smoothing_weights_normalization:builtins.float=13.0, generate_quads:builtins.bool=False, quad_max_edge_diag_ratio:builtins.float=1.75, quad_max_normal_angle:builtins.float=10.0, quad_max_interior_angle:builtins.float=135.0, output_mesh_smoothing_weights:builtins.bool=False, output_raw_normals:builtins.bool=False, output_raw_mesh:builtins.bool=False, mesh_aabb_min:typing.Optional[typing.Sequence[builtins.float]]=None, mesh_aabb_max:typing.Optional[typing.Sequence[builtins.float]]=None, mesh_aabb_clamp_vertices:builtins.bool=True, dtype:typing.Optional[numpy.dtype]=None) -> PyMeshWithData:
+def reconstruction_pipeline(particles:numpy.typing.NDArray[typing.Any], *, attributes_to_interpolate:typing.Optional[dict]=None, particle_radius:builtins.float, rest_density:builtins.float=1000.0, smoothing_length:builtins.float, cube_size:builtins.float, iso_surface_threshold:builtins.float=0.6, aabb_min:typing.Optional[typing.Sequence[builtins.float]]=None, aabb_max:typing.Optional[typing.Sequence[builtins.float]]=None, multi_threading:builtins.bool=True, subdomain_grid:builtins.bool=True, subdomain_grid_auto_disable:builtins.bool=True, subdomain_num_cubes_per_dim:builtins.int=64, check_mesh_closed:builtins.bool=False, check_mesh_manifold:builtins.bool=False, check_mesh_orientation:builtins.bool=False, check_mesh_debug:builtins.bool=False, mesh_cleanup:builtins.bool=False, mesh_cleanup_snap_dist:typing.Optional[builtins.float]=None, decimate_barnacles:builtins.bool=False, keep_vertices:builtins.bool=False, compute_normals:builtins.bool=False, sph_normals:builtins.bool=False, normals_smoothing_iters:typing.Optional[builtins.int]=None, mesh_smoothing_iters:typing.Optional[builtins.int]=None, mesh_smoothing_weights:builtins.bool=True, mesh_smoothing_weights_normalization:builtins.float=13.0, generate_quads:builtins.bool=False, quad_max_edge_diag_ratio:builtins.float=1.75, quad_max_normal_angle:builtins.float=10.0, quad_max_interior_angle:builtins.float=135.0, output_mesh_smoothing_weights:builtins.bool=False, output_raw_normals:builtins.bool=False, output_raw_mesh:builtins.bool=False, mesh_aabb_min:typing.Optional[typing.Sequence[builtins.float]]=None, mesh_aabb_max:typing.Optional[typing.Sequence[builtins.float]]=None, mesh_aabb_clamp_vertices:builtins.bool=True, dtype:typing.Optional[numpy.dtype]=None) -> MeshWithData:
     r"""
     Runs the surface reconstruction pipeline for the given particle positions with optional post-processing
     

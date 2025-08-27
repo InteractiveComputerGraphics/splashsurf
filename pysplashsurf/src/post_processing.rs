@@ -10,7 +10,7 @@ use crate::mesh::{
     MixedTriQuadMeshWithDataF64, PyMeshWithData, PyTriMesh3d, TriMesh3dF32, TriMesh3dF64,
     TriMeshWithDataF32, TriMeshWithDataF64,
 };
-use crate::reconstruction::PyUniformGrid;
+use crate::uniform_grid::PyUniformGrid;
 
 #[pyfunction]
 #[pyo3(name = "convert_tris_to_quads_f64")]
@@ -264,20 +264,20 @@ pub fn decimation_py_f32<'py>(
 #[pyo3(name = "marching_cubes_cleanup")]
 #[pyo3(signature = (mesh, grid, *, max_rel_snap_dist = None, max_iter = 5, keep_vertices = false))]
 pub fn marching_cubes_cleanup<'py>(
-    #[gen_stub(override_type(type_repr="typing.Union[PyTriMesh3d, PyMeshWithData]", imports=()))]
+    #[gen_stub(override_type(type_repr="typing.Union[TriMesh3d, MeshWithData]", imports=()))]
     mesh: Bound<'py, PyAny>,
     grid: &PyUniformGrid,
     max_rel_snap_dist: Option<f64>,
     max_iter: usize,
     keep_vertices: bool,
 ) -> PyResult<()> {
+    let max_rel_snap_dist_f32 = max_rel_snap_dist.map(|d| d as f32);
     use splashsurf_lib::postprocessing::marching_cubes_cleanup as cleanup;
 
     if let Ok(mesh) = mesh.downcast::<PyTriMesh3d>() {
         let mut mesh = mesh.borrow_mut();
         if let (Some(grid), Some(mesh)) = (grid.as_f32(), mesh.as_f32_mut()) {
-            let max_rel_snap_dist = max_rel_snap_dist.map(|d| d as f32);
-            cleanup(mesh, grid, max_rel_snap_dist, max_iter, keep_vertices);
+            cleanup(mesh, grid, max_rel_snap_dist_f32, max_iter, keep_vertices);
         } else if let (Some(grid), Some(mesh)) = (grid.as_f64(), mesh.as_f64_mut()) {
             cleanup(mesh, grid, max_rel_snap_dist, max_iter, keep_vertices);
         } else {
@@ -291,8 +291,7 @@ pub fn marching_cubes_cleanup<'py>(
     {
         if let (Some(grid), Some(mesh)) = (grid.as_f32(), mesh.as_tri_f32_mut()) {
             let mesh = &mut mesh.mesh;
-            let max_rel_snap_dist = max_rel_snap_dist.map(|d| d as f32);
-            cleanup(mesh, grid, max_rel_snap_dist, max_iter, keep_vertices);
+            cleanup(mesh, grid, max_rel_snap_dist_f32, max_iter, keep_vertices);
         } else if let (Some(grid), Some(mesh)) = (grid.as_f64(), mesh.as_tri_f64_mut()) {
             let mesh = &mut mesh.mesh;
             cleanup(mesh, grid, max_rel_snap_dist, max_iter, keep_vertices);

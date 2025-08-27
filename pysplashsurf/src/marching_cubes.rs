@@ -1,5 +1,5 @@
 use crate::mesh::{MeshType, PyMeshWithData, PyTriMesh3d};
-use crate::reconstruction::PyUniformGrid;
+use crate::uniform_grid::PyUniformGrid;
 use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 use pyo3_stub_gen::derive::*;
@@ -10,7 +10,7 @@ use pyo3_stub_gen::derive::*;
 #[pyo3(name = "check_mesh_consistency")]
 #[pyo3(signature = (mesh, grid, *, check_closed = true, check_manifold = true, debug = false))]
 pub fn check_mesh_consistency<'py>(
-    #[gen_stub(override_type(type_repr="typing.Union[PyTriMesh3d, PyMeshWithData]", imports=()))]
+    #[gen_stub(override_type(type_repr="typing.Union[TriMesh3d, MeshWithData]", imports=()))]
     mesh: Bound<'py, PyAny>,
     grid: &PyUniformGrid,
     check_closed: bool,

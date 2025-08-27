@@ -480,6 +480,7 @@ enum PyTriMesh3dData {
 
 #[gen_stub_pyclass]
 #[pyclass]
+#[pyo3(name = "TriMesh3d")]
 pub struct PyTriMesh3d {
     inner: PyTriMesh3dData,
 }
@@ -568,6 +569,7 @@ enum PyMixedTriQuadMesh3dData {
 
 #[gen_stub_pyclass]
 #[pyclass]
+#[pyo3(name = "MixedTriQuadMesh3d")]
 pub struct PyMixedTriQuadMesh3d {
     inner: PyMixedTriQuadMesh3dData,
 }
@@ -619,6 +621,7 @@ enum PyMeshWithDataData {
 
 #[gen_stub_pyclass]
 #[pyclass]
+#[pyo3(name = "MeshWithData")]
 pub struct PyMeshWithData {
     inner: PyMeshWithDataData,
 }
@@ -709,7 +712,7 @@ impl PyMeshWithData {
     }
 
     /// Returns a copy of the contained mesh without associated data and attributes
-    #[gen_stub(override_return_type(type_repr="typing.Union[PyTriMesh3d, PyMixedTriQuadMesh3d]", imports=()))]
+    #[gen_stub(override_return_type(type_repr="typing.Union[TriMesh3d, MixedTriQuadMesh3d]", imports=()))]
     pub fn copy_mesh<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         match &self.inner {
             PyMeshWithDataData::Tri3dF32(mesh) => {

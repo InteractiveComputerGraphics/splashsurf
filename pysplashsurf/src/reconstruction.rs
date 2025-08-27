@@ -1,9 +1,6 @@
 use crate::mesh::PyTriMesh3d;
+use crate::uniform_grid::PyUniformGrid;
 use crate::utils::*;
-use crate::{
-    mesh::{TriMesh3dF32, TriMesh3dF64},
-    uniform_grid::{UniformGridF32, UniformGridF64},
-};
 use anyhow::anyhow;
 use numpy as np;
 use numpy::prelude::*;
@@ -13,97 +10,8 @@ use pyo3::{Bound, prelude::*};
 use pyo3_stub_gen::derive::*;
 use splashsurf_lib::{
     Aabb3d, GridDecompositionParameters, Real, SpatialDecomposition, SurfaceReconstruction,
-    UniformGrid, nalgebra::Vector3,
+    nalgebra::Vector3,
 };
-
-macro_rules! create_reconstruction_interface {
-    ($name: ident, $type: ident, $mesh_class: ident, $grid_class: ident) => {
-        /// SurfaceReconstruction wrapper
-        #[gen_stub_pyclass]
-        #[pyclass]
-        pub struct $name {
-            pub inner: SurfaceReconstruction<i64, $type>,
-        }
-
-        impl $name {
-            pub fn new(data: SurfaceReconstruction<i64, $type>) -> Self {
-                Self { inner: data }
-            }
-        }
-
-        #[gen_stub_pymethods]
-        #[pymethods]
-        impl $name {
-            /// PyTrimesh3d clone of the contained mesh
-            #[getter]
-            fn mesh(&self) -> $mesh_class {
-                $mesh_class::new(self.inner.mesh().clone())
-            }
-
-            /// PyUniformGrid clone of the contained grid
-            #[getter]
-            fn grid(&self) -> $grid_class {
-                $grid_class::new(self.inner.grid().clone())
-            }
-
-            // Doesn't work because SurfaceReconstruction.mesh() only returns an immutable reference
-            // /// Returns PyTrimesh3dF32/F64 without copying the mesh data, removes the mesh from the object
-            // fn take_mesh(&mut self) -> $mesh_class {
-            //     let mesh = std::mem::take(&mut self.inner.mesh());
-            //     $mesh_class::new(mesh)
-            // }
-
-            /// Returns a reference to the global particle density vector if computed during the reconstruction (currently, all reconstruction approaches return this)
-            fn particle_densities(&self) -> &Vec<$type> {
-                self.inner
-                    .particle_densities()
-                    .ok_or_else(|| {
-                        anyhow::anyhow!("Surface Reconstruction did not return particle densities")
-                    })
-                    .unwrap()
-            }
-
-            /// Returns a reference to the global list of per-particle neighborhood lists if computed during the reconstruction (`None` if not specified in the parameters)
-            fn particle_neighbors(&self) -> Option<&Vec<Vec<usize>>> {
-                self.inner.particle_neighbors()
-            }
-        }
-    };
-}
-
-create_reconstruction_interface!(SurfaceReconstructionF64, f64, TriMesh3dF64, UniformGridF64);
-create_reconstruction_interface!(SurfaceReconstructionF32, f32, TriMesh3dF32, UniformGridF32);
-
-enum PyUniformGridData {
-    F32(UniformGrid<u64, f32>),
-    F64(UniformGrid<u64, f64>),
-}
-
-/// Struct containing the parameters of a uniform grid used for the surface reconstruction
-#[gen_stub_pyclass]
-#[pyclass]
-pub struct PyUniformGrid {
-    inner: PyUniformGridData,
-}
-
-impl_from_mesh!(PyUniformGrid, UniformGrid<u64, f32> => PyUniformGridData::F32);
-impl_from_mesh!(PyUniformGrid, UniformGrid<u64, f64> => PyUniformGridData::F64);
-
-impl PyUniformGrid {
-    pub(crate) fn as_f32(&self) -> Option<&UniformGrid<u64, f32>> {
-        match &self.inner {
-            PyUniformGridData::F32(grid) => Some(grid),
-            _ => None,
-        }
-    }
-
-    pub(crate) fn as_f64(&self) -> Option<&UniformGrid<u64, f64>> {
-        match &self.inner {
-            PyUniformGridData::F64(grid) => Some(grid),
-            _ => None,
-        }
-    }
-}
 
 enum PySurfaceReconstructionData {
     F32(SurfaceReconstruction<u64, f32>),
@@ -113,6 +21,7 @@ enum PySurfaceReconstructionData {
 /// Struct containing results of the surface reconstruction including the mesh, grid parameters and optional particle data
 #[gen_stub_pyclass]
 #[pyclass]
+#[pyo3(name = "SurfaceReconstruction")]
 pub struct PySurfaceReconstruction {
     inner: PySurfaceReconstructionData,
 }
