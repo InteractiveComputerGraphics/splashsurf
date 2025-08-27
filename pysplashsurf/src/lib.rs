@@ -36,6 +36,10 @@ fn pysplashsurf(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let _ = m.add_class::<mesh::MixedTriQuadMeshWithDataF32>()?;
     let _ = m.add_class::<mesh::MixedTriQuadMeshWithDataF64>()?;
 
+    let _ = m.add_class::<mesh::PyTriMesh3d>()?;
+    let _ = m.add_class::<mesh::PyMixedTriQuadMesh3d>()?;
+    let _ = m.add_class::<mesh::PyMeshWithData>()?;
+
     let _ = m.add_class::<uniform_grid::UniformGridF32>()?;
     let _ = m.add_class::<uniform_grid::UniformGridF64>()?;
 

@@ -23,7 +23,6 @@ use splashsurf_lib::{
     },
     nalgebra::{Unit, Vector3},
 };
-use std::any::TypeId;
 
 fn get_attribute_with_name<'py, R: Real + Element>(
     py: Python<'py>,
@@ -485,6 +484,22 @@ macro_rules! impl_from_mesh {
     };
 }
 
+/// Transmutes from a generic type to a concrete type if they are identical, takes the value and converts it into the target type
+fn transmute_take_into<
+    GenericSrc: 'static,
+    ConcreteSrc: Default + Into<Target> + 'static,
+    Target,
+>(
+    value: &mut GenericSrc,
+) -> Option<Target> {
+    if std::any::TypeId::of::<GenericSrc>() == std::any::TypeId::of::<ConcreteSrc>() {
+        let value_ref = unsafe { std::mem::transmute::<&mut GenericSrc, &mut ConcreteSrc>(value) };
+        Some(std::mem::take(value_ref).into())
+    } else {
+        None
+    }
+}
+
 enum PyTriMesh3dData {
     F32(TriMesh3d<f32>),
     F64(TriMesh3d<f64>),
@@ -500,18 +515,14 @@ impl_from_mesh!(PyTriMesh3d, TriMesh3d<f32> => PyTriMesh3dData::F32);
 impl_from_mesh!(PyTriMesh3d, TriMesh3d<f64> => PyTriMesh3dData::F64);
 
 impl PyTriMesh3d {
-    pub fn try_from_generic<R: Real + Element>(mesh: TriMesh3d<R>) -> PyResult<Self> {
-        if TypeId::of::<R>() == TypeId::of::<f32>() {
-            let mesh = unsafe { std::mem::transmute::<TriMesh3d<R>, TriMesh3d<f32>>(mesh) };
-            Ok(Self::from(mesh))
-        } else if TypeId::of::<R>() == TypeId::of::<f64>() {
-            let mesh = unsafe { std::mem::transmute::<TriMesh3d<R>, TriMesh3d<f64>>(mesh) };
-            Ok(Self::from(mesh))
-        } else {
-            Err(PyTypeError::new_err(
-                "Unsupported scalar type for TriMesh3d. Only f32 and f64 are supported.",
-            ))
-        }
+    pub fn try_from_generic<R: Real + Element>(mut mesh: TriMesh3d<R>) -> PyResult<Self> {
+        transmute_take_into::<_, TriMesh3d<f32>, _>(&mut mesh)
+            .or_else(|| transmute_take_into::<_, TriMesh3d<f64>, _>(&mut mesh))
+            .ok_or_else(|| {
+                PyTypeError::new_err(
+                    "Unsupported scalar type for TriMesh3d. Only f32 and f64 are supported.",
+                )
+            })
     }
 }
 
@@ -549,7 +560,7 @@ impl PyTriMesh3d {
     }
 }
 
-pub enum PyMixedTriQuadMesh3dData {
+enum PyMixedTriQuadMesh3dData {
     F32(MixedTriQuadMesh3d<f32>),
     F64(MixedTriQuadMesh3d<f64>),
 }
@@ -564,22 +575,14 @@ impl_from_mesh!(PyMixedTriQuadMesh3d, MixedTriQuadMesh3d<f32> => PyMixedTriQuadM
 impl_from_mesh!(PyMixedTriQuadMesh3d, MixedTriQuadMesh3d<f64> => PyMixedTriQuadMesh3dData::F64);
 
 impl PyMixedTriQuadMesh3d {
-    pub fn try_from_generic<R: Real + Element>(mesh: MixedTriQuadMesh3d<R>) -> PyResult<Self> {
-        if TypeId::of::<R>() == TypeId::of::<f32>() {
-            let mesh = unsafe {
-                std::mem::transmute::<MixedTriQuadMesh3d<R>, MixedTriQuadMesh3d<f32>>(mesh)
-            };
-            Ok(Self::from(mesh))
-        } else if TypeId::of::<R>() == TypeId::of::<f64>() {
-            let mesh = unsafe {
-                std::mem::transmute::<MixedTriQuadMesh3d<R>, MixedTriQuadMesh3d<f64>>(mesh)
-            };
-            Ok(Self::from(mesh))
-        } else {
-            Err(PyTypeError::new_err(
-                "Unsupported scalar type for MixedTriQuadMesh3d. Only f32 and f64 are supported.",
-            ))
-        }
+    pub fn try_from_generic<R: Real + Element>(mut mesh: MixedTriQuadMesh3d<R>) -> PyResult<Self> {
+        transmute_take_into::<_, MixedTriQuadMesh3d<f32>, _>(&mut mesh)
+            .or_else(|| transmute_take_into::<_, MixedTriQuadMesh3d<f64>, _>(&mut mesh))
+            .ok_or_else(|| {
+                PyTypeError::new_err(
+                    "Unsupported scalar type for MixedTriQuadMesh3d. Only f32 and f64 are supported.",
+                )
+            })
     }
 }
 
@@ -624,53 +627,17 @@ pub struct PyMeshWithData {
     inner: PyMeshWithDataData,
 }
 
-//fn transmute_into<Target, Generic, Concrete>()
-
 impl PyMeshWithData {
     pub fn try_from_generic<R: Real + Element, M: Mesh3d<R> + 'static>(
         mut mesh: MeshWithData<R, M>,
     ) -> PyResult<Self> {
-        if TypeId::of::<MeshWithData<R, M>>() == TypeId::of::<MeshWithData<f32, TriMesh3d<f32>>>() {
-            let mesh = unsafe {
-                std::mem::transmute::<&mut MeshWithData<R, M>, &mut MeshWithData<f32, TriMesh3d<f32>>>(
-                    &mut mesh,
-                )
-            };
-            Ok(Self::from(std::mem::take(mesh)))
-        } else if TypeId::of::<MeshWithData<R, M>>()
-            == TypeId::of::<MeshWithData<f64, TriMesh3d<f64>>>()
-        {
-            let mesh = unsafe {
-                std::mem::transmute::<&mut MeshWithData<R, M>, &mut MeshWithData<f64, TriMesh3d<f64>>>(
-                    &mut mesh,
-                )
-            };
-            Ok(Self::from(std::mem::take(mesh)))
-        } else if TypeId::of::<MeshWithData<R, M>>()
-            == TypeId::of::<MeshWithData<f32, MixedTriQuadMesh3d<f32>>>()
-        {
-            let mesh = unsafe {
-                std::mem::transmute::<
-                    &mut MeshWithData<R, M>,
-                    &mut MeshWithData<f32, MixedTriQuadMesh3d<f32>>,
-                >(&mut mesh)
-            };
-            Ok(Self::from(std::mem::take(mesh)))
-        } else if TypeId::of::<MeshWithData<R, M>>()
-            == TypeId::of::<MeshWithData<f64, MixedTriQuadMesh3d<f64>>>()
-        {
-            let mesh = unsafe {
-                std::mem::transmute::<
-                    &mut MeshWithData<R, M>,
-                    &mut MeshWithData<f64, MixedTriQuadMesh3d<f64>>,
-                >(&mut mesh)
-            };
-            Ok(Self::from(std::mem::take(mesh)))
-        } else {
-            Err(PyTypeError::new_err(
-                "Unsupported mesh type for MeshWithData. Only TriMesh3d and MixedTriQuadMesh3d are supported.",
-            ))
-        }
+        transmute_take_into::<_, MeshWithData<f32, TriMesh3d<f32>>, _>(&mut mesh)
+            .or_else(|| transmute_take_into::<_, MeshWithData<f64, TriMesh3d<f64>>, _>(&mut mesh))
+            .or_else(|| transmute_take_into::<_, MeshWithData<f32, MixedTriQuadMesh3d<f32>>, _>(&mut mesh))
+            .or_else(|| transmute_take_into::<_, MeshWithData<f64, MixedTriQuadMesh3d<f64>>, _>(&mut mesh))
+            .ok_or_else(|| PyTypeError::new_err(
+            "Unsupported mesh type for MeshWithData. Only TriMesh3d and MixedTriQuadMesh3d with f32 or f64 scalar types are supported.",
+        ))
     }
 }
 
