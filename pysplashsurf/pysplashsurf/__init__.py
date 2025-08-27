@@ -200,88 +200,6 @@ def create_aabb_object_from_points(points):
     else:
         raise ValueError("Invalid data type (only float32 and float64 are supported, consider explicitly specifying the dtype for points)")
 
-def reconstruct_surface(
-    particles, *, 
-    particle_radius: float = 0.025, 
-    rest_density: float = 1000.0,
-    smoothing_length: float = 2.0,
-    cube_size: float = 0.5,
-    iso_surface_threshold: float = 0.6,
-    multi_threading: bool = True,
-    global_neighborhood_list: bool = False,
-    subdomain_grid: bool = True,
-    subdomain_grid_auto_disable: bool = True,
-    subdomain_num_cubes_per_dim: int = 64,
-    aabb_min = None,
-    aabb_max = None,
-):
-    """Reconstruct the surface from only particle positions
-    
-    Performs a marching cubes surface construction of the fluid represented by the given particle positions
-    
-    Parameters
-    ----------
-    particles: np.ndarray
-        2-dimensional array containing all particle positions [[ax, ay, az], [bx, by, bz], ...]
-        
-    particle_radius: float, optional (default=0.025)
-        Particle radius
-    
-    rest_density: float
-        Rest density of the fluid
-    
-    smoothing_length: float
-        Smoothing length of the fluid
-    
-    cube_size: float
-        Size of the cubes used in the uniform grid
-    
-    iso_surface_threshold: float
-        Threshold for the iso surface
-    
-    multi_threading: bool
-        Multi-threading flag
-    
-    global_neighborhood_list: bool
-        Global neighborhood list flag
-    
-    subdomain_grid: bool
-        Enable spatial decomposition using by dividing the domain into subdomains with dense marching cube grids for efficient multi-threading
-
-    subdomain_grid_auto_disable: bool
-        Whether to automatically disable the subdomain grid if the global domain is too small
-        
-    subdomain_num_cubes_per_dim: int
-        Each subdomain will be a cube consisting of this number of MC cube cells along each coordinate axis
-    
-    aabb_min: np.ndarray
-        Smallest corner of the axis-aligned bounding box
-    
-    aabb_max: np.ndarray
-        Largest corner of the axis-aligned bounding box
-    
-    Returns
-    -------
-    SurfaceReconstructionF32 | SurfaceReconstructionF64
-        SurfaceReconstruction object containing the reconstructed mesh and used grid
-    
-    """
-    
-    if particles.dtype == 'float32':
-        return reconstruct_surface_f32(particles, particle_radius=particle_radius, rest_density=rest_density, 
-                                smoothing_length=smoothing_length, cube_size=cube_size, iso_surface_threshold=iso_surface_threshold, 
-                                multi_threading=multi_threading, global_neighborhood_list=global_neighborhood_list, 
-                                subdomain_grid=subdomain_grid, subdomain_grid_auto_disable=subdomain_grid_auto_disable, subdomain_num_cubes_per_dim=subdomain_num_cubes_per_dim,
-                                aabb_min=aabb_min, aabb_max=aabb_max)   
-    elif particles.dtype == 'float64':
-        return reconstruct_surface_f64(particles, particle_radius=particle_radius, rest_density=rest_density, 
-                                smoothing_length=smoothing_length, cube_size=cube_size, iso_surface_threshold=iso_surface_threshold, 
-                                multi_threading=multi_threading, global_neighborhood_list=global_neighborhood_list, 
-                                subdomain_grid=subdomain_grid, subdomain_grid_auto_disable=subdomain_grid_auto_disable, subdomain_num_cubes_per_dim=subdomain_num_cubes_per_dim,
-                                aabb_min=aabb_min, aabb_max=aabb_max)
-    else:
-        raise ValueError("Invalid data type (only float32 and float64 are supported, consider explicitly specifying the dtype for particles)")
-
 def marching_cubes_cleanup(
     mesh,
     grid,
@@ -448,42 +366,6 @@ def neighborhood_search_spatial_hashing_parallel(
     
     else:
         raise ValueError("Invalid domain type")
-
-def check_mesh_consistency(
-    grid,
-    mesh, *,
-    check_closed: bool,
-    check_manifold: bool,
-    debug: bool,
-):
-    """Checks the consistency of the mesh (currently checks for holes, non-manifold edges and vertices) and returns a string with debug information in case of problems
-    
-    Parameters
-    ----------
-    grid: UniformGridF32 | UniformGridF64
-        Uniform grid object
-        
-    mesh: TriMesh3dF32 | TriMesh3dF64 | TriMeshWithDataF32 | TriMeshWithDataF64
-        Triangular mesh object
-        
-    check_closed: bool
-        Flag to check for closed mesh
-        
-    check_manifold: bool
-        Flag to check for manifold mesh
-        
-    debug: bool
-        Flag to enable debug output
-    """
-    
-    if type(grid) is UniformGridF32 and (type(mesh) is TriMesh3dF32 or type(mesh) is TriMeshWithDataF32):
-        return check_mesh_consistency_f32(grid, mesh, check_closed=check_closed, check_manifold=check_manifold, debug=debug)
-    
-    elif type(grid) is UniformGridF64 and (type(mesh) is TriMesh3dF64 or type(mesh) is TriMeshWithDataF64):
-        return check_mesh_consistency_f64(grid, mesh, check_closed=check_closed, check_manifold=check_manifold, debug=debug)
-    
-    else:
-        raise ValueError("Invalid grid or mesh type")
 
 def convert_tris_to_quads(
     mesh, *,

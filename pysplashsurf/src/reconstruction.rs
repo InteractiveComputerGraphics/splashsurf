@@ -7,12 +7,12 @@ use crate::{
 use anyhow::anyhow;
 use numpy as np;
 use numpy::prelude::*;
-use numpy::{Element, PyArray2, PyReadonlyArray2, PyUntypedArray};
+use numpy::{Element, PyArray2, PyUntypedArray};
 use pyo3::exceptions::PyTypeError;
 use pyo3::{Bound, prelude::*};
 use pyo3_stub_gen::derive::*;
 use splashsurf_lib::{
-    Aabb3d, GridDecompositionParameters, Index, Real, SpatialDecomposition, SurfaceReconstruction,
+    Aabb3d, GridDecompositionParameters, Real, SpatialDecomposition, SurfaceReconstruction,
     UniformGrid, nalgebra::Vector3,
 };
 
@@ -88,6 +88,22 @@ pub struct PyUniformGrid {
 
 impl_from_mesh!(PyUniformGrid, UniformGrid<u64, f32> => PyUniformGridData::F32);
 impl_from_mesh!(PyUniformGrid, UniformGrid<u64, f64> => PyUniformGridData::F64);
+
+impl PyUniformGrid {
+    pub(crate) fn as_f32(&self) -> Option<&UniformGrid<u64, f32>> {
+        match &self.inner {
+            PyUniformGridData::F32(grid) => Some(grid),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn as_f64(&self) -> Option<&UniformGrid<u64, f64>> {
+        match &self.inner {
+            PyUniformGridData::F64(grid) => Some(grid),
+            _ => None,
+        }
+    }
+}
 
 enum PySurfaceReconstructionData {
     F32(SurfaceReconstruction<u64, f32>),
@@ -185,14 +201,14 @@ impl PySurfaceReconstruction {
 /// Note that all parameters use absolute distance units and are not relative to the particle radius.
 #[gen_stub_pyfunction]
 #[pyfunction]
-#[pyo3(name = "reconstruct_surface_multi")]
+#[pyo3(name = "reconstruct_surface")]
 #[pyo3(signature = (particles, *,
     particle_radius, rest_density = 1000.0, smoothing_length, cube_size, iso_surface_threshold = 0.6,
     multi_threading = true, global_neighborhood_list = false,
     subdomain_grid = true, subdomain_grid_auto_disable = true, subdomain_num_cubes_per_dim = 64,
     aabb_min = None, aabb_max = None
 ))]
-pub fn reconstruct_surface_multi<'py>(
+pub fn reconstruct_surface<'py>(
     particles: &Bound<'py, PyUntypedArray>,
     particle_radius: f64,
     rest_density: f64,
@@ -259,151 +275,4 @@ pub fn reconstruct_surface_multi<'py>(
             element_type
         )))
     }
-}
-
-/// Reconstruct the surface from only particle positions
-pub fn reconstruct_surface_py<I: Index, R: Real>(
-    particles: &[Vector3<R>],
-    particle_radius: R,
-    rest_density: R,
-    smoothing_length: R,
-    cube_size: R,
-    iso_surface_threshold: R,
-    multi_threading: bool,
-    global_neighborhood_list: bool,
-    subdomain_grid: bool,
-    subdomain_grid_auto_disable: bool,
-    subdomain_num_cubes_per_dim: u32,
-    aabb_min: Option<[R; 3]>,
-    aabb_max: Option<[R; 3]>,
-) -> SurfaceReconstruction<I, R> {
-    let aabb;
-    if let (Some(aabb_min), Some(aabb_max)) = (aabb_min, aabb_max) {
-        // Convert the min and max arrays to Vector3
-        aabb = Some(Aabb3d::new(
-            Vector3::from(aabb_min),
-            Vector3::from(aabb_max),
-        ));
-    } else {
-        aabb = None;
-    }
-
-    let spatial_decomposition;
-    if subdomain_grid {
-        spatial_decomposition = SpatialDecomposition::UniformGrid(GridDecompositionParameters {
-            subdomain_num_cubes_per_dim,
-            auto_disable: subdomain_grid_auto_disable,
-        });
-    } else {
-        spatial_decomposition = SpatialDecomposition::None;
-    }
-
-    let params = splashsurf_lib::Parameters {
-        particle_radius,
-        rest_density,
-        // Compact support is twice the smoothing length
-        compact_support_radius: (smoothing_length * particle_radius) * R::from_float(2.0),
-        cube_size: cube_size * particle_radius,
-        iso_surface_threshold,
-        particle_aabb: aabb,
-        enable_multi_threading: multi_threading,
-        spatial_decomposition,
-        global_neighborhood_list,
-    };
-
-    let surface = splashsurf_lib::reconstruct_surface(&particles, &params).unwrap();
-
-    surface
-}
-
-#[pyfunction]
-#[pyo3(name = "reconstruct_surface_f32")]
-#[pyo3(signature = (particles, *, particle_radius, rest_density,
-    smoothing_length, cube_size, iso_surface_threshold, multi_threading=true,
-    global_neighborhood_list=false, subdomain_grid=true, subdomain_grid_auto_disable=true, subdomain_num_cubes_per_dim=64,
-    aabb_min = None, aabb_max = None
-))]
-pub fn reconstruct_surface_py_f32<'py>(
-    particles: &Bound<'py, PyArray2<f32>>,
-    particle_radius: f32,
-    rest_density: f32,
-    smoothing_length: f32,
-    cube_size: f32,
-    iso_surface_threshold: f32,
-    multi_threading: bool,
-    global_neighborhood_list: bool,
-    subdomain_grid: bool,
-    subdomain_grid_auto_disable: bool,
-    subdomain_num_cubes_per_dim: u32,
-    aabb_min: Option<[f32; 3]>,
-    aabb_max: Option<[f32; 3]>,
-) -> PyResult<SurfaceReconstructionF32> {
-    let particles: PyReadonlyArray2<f32> = particles.extract()?;
-
-    let particle_positions = particles.as_slice()?;
-    let particle_positions: &[Vector3<f32>] = bytemuck::cast_slice(particle_positions);
-
-    let reconstruction = reconstruct_surface_py::<i64, f32>(
-        particle_positions,
-        particle_radius,
-        rest_density,
-        smoothing_length,
-        cube_size,
-        iso_surface_threshold,
-        multi_threading,
-        global_neighborhood_list,
-        subdomain_grid,
-        subdomain_grid_auto_disable,
-        subdomain_num_cubes_per_dim,
-        aabb_min,
-        aabb_max,
-    );
-
-    Ok(SurfaceReconstructionF32::new(reconstruction.to_owned()))
-}
-
-#[pyfunction]
-#[pyo3(name = "reconstruct_surface_f64")]
-#[pyo3(signature = (particles, *, particle_radius, rest_density,
-    smoothing_length, cube_size, iso_surface_threshold, multi_threading=true,
-    global_neighborhood_list=false, subdomain_grid=true, subdomain_grid_auto_disable=true, subdomain_num_cubes_per_dim=64,
-    aabb_min = None, aabb_max = None
-))]
-pub fn reconstruct_surface_py_f64<'py>(
-    particles: &Bound<'py, PyArray2<f64>>,
-    particle_radius: f64,
-    rest_density: f64,
-    smoothing_length: f64,
-    cube_size: f64,
-    iso_surface_threshold: f64,
-    multi_threading: bool,
-    global_neighborhood_list: bool,
-    subdomain_grid: bool,
-    subdomain_grid_auto_disable: bool,
-    subdomain_num_cubes_per_dim: u32,
-    aabb_min: Option<[f64; 3]>,
-    aabb_max: Option<[f64; 3]>,
-) -> PyResult<SurfaceReconstructionF64> {
-    let particles: PyReadonlyArray2<f64> = particles.extract()?;
-
-    let particle_positions = particles.as_slice()?;
-    let particle_positions: &[Vector3<f64>] = bytemuck::cast_slice(particle_positions);
-
-    let reconstruction = reconstruct_surface_py::<i64, f64>(
-        particle_positions,
-        particle_radius,
-        rest_density,
-        smoothing_length,
-        cube_size,
-        iso_surface_threshold,
-        multi_threading,
-        global_neighborhood_list,
-        subdomain_grid,
-        subdomain_grid_auto_disable,
-        subdomain_num_cubes_per_dim,
-        aabb_min,
-        aabb_max,
-    );
-
-    Ok(SurfaceReconstructionF64::new(reconstruction.to_owned()))
 }

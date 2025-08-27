@@ -497,6 +497,20 @@ impl PyTriMesh3d {
                 )
             })
     }
+
+    pub fn as_f32(&self) -> Option<&TriMesh3d<f32>> {
+        match &self.inner {
+            PyTriMesh3dData::F32(mesh) => Some(mesh),
+            _ => None,
+        }
+    }
+
+    pub fn as_f64(&self) -> Option<&TriMesh3d<f64>> {
+        match &self.inner {
+            PyTriMesh3dData::F64(mesh) => Some(mesh),
+            _ => None,
+        }
+    }
 }
 
 #[gen_stub_pymethods]
@@ -589,16 +603,27 @@ enum PyMeshWithDataData {
     MixedTriQuadF64(MeshWithData<f64, MixedTriQuadMesh3d<f64>>),
 }
 
-impl_from_mesh!(PyMeshWithData, MeshWithData<f32, TriMesh3d<f32>> => PyMeshWithDataData::Tri3dF32);
-impl_from_mesh!(PyMeshWithData, MeshWithData<f64, TriMesh3d<f64>> => PyMeshWithDataData::Tri3dF64);
-impl_from_mesh!(PyMeshWithData, MeshWithData<f32, MixedTriQuadMesh3d<f32>> => PyMeshWithDataData::MixedTriQuadF32);
-impl_from_mesh!(PyMeshWithData, MeshWithData<f64, MixedTriQuadMesh3d<f64>> => PyMeshWithDataData::MixedTriQuadF64);
-
 #[gen_stub_pyclass]
 #[pyclass]
 pub struct PyMeshWithData {
     inner: PyMeshWithDataData,
 }
+
+/// Enum specifying the type of mesh contained in a `MeshWithData`
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[gen_stub_pyclass_enum]
+#[pyclass]
+pub enum MeshType {
+    /// 3D triangle mesh
+    Tri3d,
+    /// 3D mixed triangle and quad mesh
+    MixedTriQuad3d,
+}
+
+impl_from_mesh!(PyMeshWithData, MeshWithData<f32, TriMesh3d<f32>> => PyMeshWithDataData::Tri3dF32);
+impl_from_mesh!(PyMeshWithData, MeshWithData<f64, TriMesh3d<f64>> => PyMeshWithDataData::Tri3dF64);
+impl_from_mesh!(PyMeshWithData, MeshWithData<f32, MixedTriQuadMesh3d<f32>> => PyMeshWithDataData::MixedTriQuadF32);
+impl_from_mesh!(PyMeshWithData, MeshWithData<f64, MixedTriQuadMesh3d<f64>> => PyMeshWithDataData::MixedTriQuadF64);
 
 impl PyMeshWithData {
     pub fn try_from_generic<R: Real + Element, M: Mesh3d<R> + 'static>(
@@ -611,6 +636,20 @@ impl PyMeshWithData {
             .ok_or_else(|| PyTypeError::new_err(
             "Unsupported mesh type for MeshWithData. Only TriMesh3d and MixedTriQuadMesh3d with f32 or f64 scalar types are supported.",
         ))
+    }
+
+    pub fn as_tri_f32(&self) -> Option<&MeshWithData<f32, TriMesh3d<f32>>> {
+        match &self.inner {
+            PyMeshWithDataData::Tri3dF32(mesh) => Some(mesh),
+            _ => None,
+        }
+    }
+
+    pub fn as_tri_f64(&self) -> Option<&MeshWithData<f64, TriMesh3d<f64>>> {
+        match &self.inner {
+            PyMeshWithDataData::Tri3dF64(mesh) => Some(mesh),
+            _ => None,
+        }
     }
 }
 
@@ -626,6 +665,17 @@ impl PyMeshWithData {
             }
             PyMeshWithDataData::Tri3dF64(_) | PyMeshWithDataData::MixedTriQuadF64(_) => {
                 np::dtype::<f64>(py)
+            }
+        }
+    }
+
+    /// Returns the type of the underlying mesh
+    #[getter]
+    pub fn mesh_cell_type(&self) -> MeshType {
+        match &self.inner {
+            PyMeshWithDataData::Tri3dF32(_) | PyMeshWithDataData::Tri3dF64(_) => MeshType::Tri3d,
+            PyMeshWithDataData::MixedTriQuadF32(_) | PyMeshWithDataData::MixedTriQuadF64(_) => {
+                MeshType::MixedTriQuad3d
             }
         }
     }

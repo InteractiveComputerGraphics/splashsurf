@@ -48,25 +48,16 @@ fn pysplashsurf(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let _ = m.add_class::<reconstruction::SurfaceReconstructionF32>()?;
     let _ = m.add_class::<reconstruction::SurfaceReconstructionF64>()?;
 
+    let _ = m.add_class::<reconstruction::PyUniformGrid>()?;
+    let _ = m.add_class::<reconstruction::PySurfaceReconstruction>()?;
+
     let _ = m.add_class::<sph_interpolation::SphInterpolatorF32>()?;
     let _ = m.add_class::<sph_interpolation::SphInterpolatorF64>()?;
 
     let _ = m.add_class::<aabb::Aabb3dF32>()?;
     let _ = m.add_class::<aabb::Aabb3dF64>()?;
 
-    let _ = m.add_function(wrap_pyfunction!(
-        reconstruction::reconstruct_surface_py_f32,
-        m
-    )?);
-    let _ = m.add_function(wrap_pyfunction!(
-        reconstruction::reconstruct_surface_py_f64,
-        m
-    )?);
-
-    let _ = m.add_function(wrap_pyfunction!(
-        reconstruction::reconstruct_surface_multi,
-        m
-    )?);
+    let _ = m.add_function(wrap_pyfunction!(reconstruction::reconstruct_surface, m)?);
 
     let _ = m.add_function(wrap_pyfunction!(
         post_processing::convert_tris_to_quads_py_f32,
@@ -86,14 +77,7 @@ fn pysplashsurf(m: &Bound<'_, PyModule>) -> PyResult<()> {
         m
     )?);
 
-    let _ = m.add_function(wrap_pyfunction!(
-        marching_cubes::check_mesh_consistency_py_f32,
-        m
-    )?);
-    let _ = m.add_function(wrap_pyfunction!(
-        marching_cubes::check_mesh_consistency_py_f64,
-        m
-    )?);
+    let _ = m.add_function(wrap_pyfunction!(marching_cubes::check_mesh_consistency, m)?);
 
     let _ = m.add_function(wrap_pyfunction!(post_processing::decimation_py_f32, m)?);
     let _ = m.add_function(wrap_pyfunction!(post_processing::decimation_py_f64, m)?);

@@ -5,6 +5,7 @@ import builtins
 import numpy
 import numpy.typing
 import typing
+from enum import Enum
 
 class Aabb3dF32:
     r"""
@@ -329,6 +330,11 @@ class PyMeshWithData:
     def dtype(self) -> numpy.dtype:
         r"""
         Returns the numpy dtype of the underlying scalar type (either `np.float32` or `np.float64`)
+        """
+    @property
+    def mesh_cell_type(self) -> MeshType:
+        r"""
+        Returns the type of the underlying mesh
         """
     def copy_mesh(self) -> typing.Union[PyTriMesh3d, PyMixedTriQuadMesh3d]:
         r"""
@@ -666,9 +672,27 @@ class UniformGridF64:
     """
     ...
 
-def reconstruct_surface_multi(particles:numpy.typing.NDArray[typing.Any], *, particle_radius:builtins.float, rest_density:builtins.float=1000.0, smoothing_length:builtins.float, cube_size:builtins.float, iso_surface_threshold:builtins.float=0.6, multi_threading:builtins.bool=True, global_neighborhood_list:builtins.bool=False, subdomain_grid:builtins.bool=True, subdomain_grid_auto_disable:builtins.bool=True, subdomain_num_cubes_per_dim:builtins.int=64, aabb_min:typing.Optional[typing.Sequence[builtins.float]]=None, aabb_max:typing.Optional[typing.Sequence[builtins.float]]=None) -> PySurfaceReconstruction:
+class MeshType(Enum):
     r"""
-    Performs a surface reconstruction of the given particles without post-processing
+    Enum specifying the type of mesh contained in a `MeshWithData`
+    """
+    Tri3d = ...
+    r"""
+    3D triangle mesh
+    """
+    MixedTriQuad3d = ...
+    r"""
+    3D mixed triangle and quad mesh
+    """
+
+def check_mesh_consistency(grid:PyUniformGrid, mesh:typing.Any, *, check_closed:builtins.bool=True, check_manifold:builtins.bool=True, debug:builtins.bool=False) -> typing.Optional[builtins.str]:
+    r"""
+    Checks the consistency of a reconstructed surface mesh (watertightness, manifoldness), optionally returns a string with details if problems are found
+    """
+
+def reconstruct_surface(particles:numpy.typing.NDArray[typing.Any], *, particle_radius:builtins.float, rest_density:builtins.float=1000.0, smoothing_length:builtins.float, cube_size:builtins.float, iso_surface_threshold:builtins.float=0.6, multi_threading:builtins.bool=True, global_neighborhood_list:builtins.bool=False, subdomain_grid:builtins.bool=True, subdomain_grid_auto_disable:builtins.bool=True, subdomain_num_cubes_per_dim:builtins.int=64, aabb_min:typing.Optional[typing.Sequence[builtins.float]]=None, aabb_max:typing.Optional[typing.Sequence[builtins.float]]=None) -> PySurfaceReconstruction:
+    r"""
+    Performs a surface reconstruction from the given particles without additional post-processing
     
     Note that all parameters use absolute distance units and are not relative to the particle radius.
     """

@@ -1,77 +1,76 @@
-use pyo3::{
-    exceptions::{PyRuntimeError, PyValueError},
-    prelude::*,
-};
+use crate::mesh::{MeshType, PyMeshWithData, PyTriMesh3d};
+use crate::reconstruction::PyUniformGrid;
+use pyo3::exceptions::PyTypeError;
+use pyo3::prelude::*;
+use pyo3_stub_gen::derive::*;
 
-use crate::{
-    mesh::{TriMesh3dF32, TriMesh3dF64, TriMeshWithDataF32, TriMeshWithDataF64},
-    uniform_grid::{UniformGridF32, UniformGridF64},
-};
-
+/// Checks the consistency of a reconstructed surface mesh (watertightness, manifoldness), optionally returns a string with details if problems are found
+#[gen_stub_pyfunction]
 #[pyfunction]
-#[pyo3(name = "check_mesh_consistency_f32")]
-#[pyo3(signature = (grid, mesh, *, check_closed, check_manifold, debug))]
-pub fn check_mesh_consistency_py_f32<'py>(
-    py: Python,
-    grid: &UniformGridF32,
-    mesh: PyObject,
+#[pyo3(name = "check_mesh_consistency")]
+#[pyo3(signature = (mesh, grid, *, check_closed = true, check_manifold = true, debug = false))]
+pub fn check_mesh_consistency<'py>(
+    mesh: Bound<'py, PyAny>,
+    grid: &PyUniformGrid,
     check_closed: bool,
     check_manifold: bool,
     debug: bool,
-) -> PyResult<()> {
-    if let Ok(mesh) = mesh.downcast_bound::<TriMesh3dF32>(py) {
-        splashsurf_lib::marching_cubes::check_mesh_consistency(
-            &grid.inner,
-            &mesh.borrow().inner,
-            check_closed,
-            check_manifold,
-            debug,
-        )
-        .map_err(|x| PyErr::new::<PyRuntimeError, _>(x))
-    } else if let Ok(mesh) = mesh.downcast_bound::<TriMeshWithDataF32>(py) {
-        splashsurf_lib::marching_cubes::check_mesh_consistency(
-            &grid.inner,
-            &mesh.borrow().inner.mesh,
-            check_closed,
-            check_manifold,
-            debug,
-        )
-        .map_err(|x| PyErr::new::<PyRuntimeError, _>(x))
+) -> PyResult<Option<String>> {
+    if let Ok(mesh) = mesh.downcast::<PyTriMesh3d>() {
+        let mesh = mesh.borrow();
+        if let (Some(grid), Some(mesh)) = (grid.as_f32(), mesh.as_f32()) {
+            Ok(splashsurf_lib::marching_cubes::check_mesh_consistency(
+                grid,
+                mesh,
+                check_closed,
+                check_manifold,
+                debug,
+            )
+            .err())
+        } else if let (Some(grid), Some(mesh)) = (grid.as_f64(), mesh.as_f64()) {
+            Ok(splashsurf_lib::marching_cubes::check_mesh_consistency(
+                grid,
+                mesh,
+                check_closed,
+                check_manifold,
+                debug,
+            )
+            .err())
+        } else {
+            Err(PyTypeError::new_err(
+                "invalid combination of grid and mesh scalar data types",
+            ))
+        }
+    } else if let Ok(mesh) = mesh.downcast::<PyMeshWithData>()
+        && let mesh = mesh.borrow()
+        && mesh.mesh_cell_type() == MeshType::Tri3d
+    {
+        if let (Some(grid), Some(mesh)) = (grid.as_f32(), mesh.as_tri_f32()) {
+            Ok(splashsurf_lib::marching_cubes::check_mesh_consistency(
+                grid,
+                &mesh.mesh,
+                check_closed,
+                check_manifold,
+                debug,
+            )
+            .err())
+        } else if let (Some(grid), Some(mesh)) = (grid.as_f64(), mesh.as_tri_f64()) {
+            Ok(splashsurf_lib::marching_cubes::check_mesh_consistency(
+                grid,
+                &mesh.mesh,
+                check_closed,
+                check_manifold,
+                debug,
+            )
+            .err())
+        } else {
+            Err(PyTypeError::new_err(
+                "invalid combination of grid and mesh scalar data types",
+            ))
+        }
     } else {
-        Err(PyErr::new::<PyValueError, _>("Invalid mesh type"))
-    }
-}
-
-#[pyfunction]
-#[pyo3(name = "check_mesh_consistency_f64")]
-#[pyo3(signature = (grid, mesh, *, check_closed, check_manifold, debug))]
-pub fn check_mesh_consistency_py_f64<'py>(
-    py: Python,
-    grid: &UniformGridF64,
-    mesh: PyObject,
-    check_closed: bool,
-    check_manifold: bool,
-    debug: bool,
-) -> PyResult<()> {
-    if let Ok(mesh) = mesh.downcast_bound::<TriMesh3dF64>(py) {
-        splashsurf_lib::marching_cubes::check_mesh_consistency(
-            &grid.inner,
-            &mesh.borrow().inner,
-            check_closed,
-            check_manifold,
-            debug,
-        )
-        .map_err(|x| PyErr::new::<PyRuntimeError, _>(x))
-    } else if let Ok(mesh) = mesh.downcast_bound::<TriMeshWithDataF64>(py) {
-        splashsurf_lib::marching_cubes::check_mesh_consistency(
-            &grid.inner,
-            &mesh.borrow().inner.mesh,
-            check_closed,
-            check_manifold,
-            debug,
-        )
-        .map_err(|x| PyErr::new::<PyRuntimeError, _>(x))
-    } else {
-        Err(PyErr::new::<PyValueError, _>("Invalid mesh type"))
+        Err(PyTypeError::new_err(
+            "unsupported mesh type for consistency check, only triangle meshes are supported",
+        ))
     }
 }
