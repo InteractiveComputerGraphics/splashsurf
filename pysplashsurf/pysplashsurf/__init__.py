@@ -199,45 +199,6 @@ def create_aabb_object_from_points(points):
         return Aabb3dF64.from_points(points)
     else:
         raise ValueError("Invalid data type (only float32 and float64 are supported, consider explicitly specifying the dtype for points)")
-
-def marching_cubes_cleanup(
-    mesh,
-    grid,
-    max_iter: int = 5, 
-    keep_vertices: bool = False
-):
-    """Mesh simplification designed for marching cubes surfaces meshes inspired by the "Compact Contouring"/"Mesh displacement" approach by Doug Moore and Joe Warren
-
-    See Moore and Warren: `"Mesh Displacement: An Improved Contouring Method for Trivariate Data" <https://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.49.5214&rep=rep1&type=pdf>`_ (1991)
-    or Moore and Warren: "Compact Isocontours from Sampled Data" in "Graphics Gems III" (1992).
-    
-    Parameters
-    ----------
-    mesh: TriMesh3dF32 | TriMesh3dF64 | TriMeshWithDataF32 | TriMeshWithDataF64
-        Mesh object to simplify
-    
-    grid: UniformGridF32 | UniformGridF64
-        Uniform grid object that was used to construct the mesh
-    
-    max_iter: int
-        Maximum number of iterations
-    
-    keep_vertices: bool
-        Flag to keep vertices
-    
-    Returns
-    -------
-    list
-        vertex connectivity list of the simplified mesh
-    """
-    if type(mesh) is TriMesh3dF32 or type(mesh) is TriMeshWithDataF32:
-        return marching_cubes_cleanup_f32(mesh, grid, max_iter=max_iter, keep_vertices=keep_vertices)
-    
-    elif type(mesh) is TriMesh3dF64 or type(mesh) is TriMeshWithDataF64:
-        return marching_cubes_cleanup_f64(mesh, grid, max_iter=max_iter, keep_vertices=keep_vertices)
-    
-    else:
-        raise ValueError("Invalid mesh type")
     
 def decimation(
     mesh,

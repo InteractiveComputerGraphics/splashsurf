@@ -1,16 +1,16 @@
 use ndarray::ArrayViewMut2;
 use numpy::{PyArray2, PyArrayMethods};
-use pyo3::{exceptions::PyValueError, prelude::*};
+use pyo3::exceptions::{PyTypeError, PyValueError};
+use pyo3::prelude::*;
+use pyo3_stub_gen::derive::gen_stub_pyfunction;
 use splashsurf_lib::nalgebra::Vector3;
 
-use crate::{
-    mesh::{
-        MixedTriQuadMesh3dF32, MixedTriQuadMesh3dF64, MixedTriQuadMeshWithDataF32,
-        MixedTriQuadMeshWithDataF64, TriMesh3dF32, TriMesh3dF64, TriMeshWithDataF32,
-        TriMeshWithDataF64,
-    },
-    uniform_grid::{UniformGridF32, UniformGridF64},
+use crate::mesh::{
+    MeshType, MixedTriQuadMesh3dF32, MixedTriQuadMesh3dF64, MixedTriQuadMeshWithDataF32,
+    MixedTriQuadMeshWithDataF64, PyMeshWithData, PyTriMesh3d, TriMesh3dF32, TriMesh3dF64,
+    TriMeshWithDataF32, TriMeshWithDataF64,
 };
+use crate::reconstruction::PyUniformGrid;
 
 #[pyfunction]
 #[pyo3(name = "convert_tris_to_quads_f64")]
@@ -258,66 +258,54 @@ pub fn decimation_py_f32<'py>(
     }
 }
 
+/// Mesh simplification designed for marching cubes surfaces meshes inspired by the "Compact Contouring"/"Mesh displacement" approach by Doug Moore and Joe Warren
+#[gen_stub_pyfunction]
 #[pyfunction]
-#[pyo3(name = "marching_cubes_cleanup_f64")]
+#[pyo3(name = "marching_cubes_cleanup")]
 #[pyo3(signature = (mesh, grid, *, max_rel_snap_dist = None, max_iter = 5, keep_vertices = false))]
-pub fn marching_cubes_cleanup_py_f64<'py>(
-    py: Python,
-    mesh: PyObject,
-    grid: &UniformGridF64,
+pub fn marching_cubes_cleanup<'py>(
+    #[gen_stub(override_type(type_repr="typing.Union[PyTriMesh3d, PyMeshWithData]", imports=()))]
+    mesh: Bound<'py, PyAny>,
+    grid: &PyUniformGrid,
     max_rel_snap_dist: Option<f64>,
     max_iter: usize,
     keep_vertices: bool,
-) -> PyResult<Vec<Vec<usize>>> {
-    if let Ok(mesh) = mesh.downcast_bound::<TriMesh3dF64>(py) {
-        Ok(splashsurf_lib::postprocessing::marching_cubes_cleanup(
-            &mut mesh.borrow_mut().inner,
-            &grid.inner,
-            max_rel_snap_dist,
-            max_iter,
-            keep_vertices,
-        ))
-    } else if let Ok(mesh) = mesh.downcast_bound::<TriMeshWithDataF64>(py) {
-        Ok(splashsurf_lib::postprocessing::marching_cubes_cleanup(
-            &mut mesh.borrow_mut().inner.mesh,
-            &grid.inner,
-            max_rel_snap_dist,
-            max_iter,
-            keep_vertices,
-        ))
-    } else {
-        Err(PyErr::new::<PyValueError, _>("Invalid mesh type"))
-    }
-}
+) -> PyResult<()> {
+    use splashsurf_lib::postprocessing::marching_cubes_cleanup as cleanup;
 
-#[pyfunction]
-#[pyo3(name = "marching_cubes_cleanup_f32")]
-#[pyo3(signature = (mesh, grid, *, max_rel_snap_dist = None, max_iter = 5, keep_vertices = false))]
-pub fn marching_cubes_cleanup_py_f32<'py>(
-    py: Python,
-    mesh: PyObject,
-    grid: &UniformGridF32,
-    max_rel_snap_dist: Option<f32>,
-    max_iter: usize,
-    keep_vertices: bool,
-) -> PyResult<Vec<Vec<usize>>> {
-    if let Ok(mesh) = mesh.downcast_bound::<TriMesh3dF32>(py) {
-        Ok(splashsurf_lib::postprocessing::marching_cubes_cleanup(
-            &mut mesh.borrow_mut().inner,
-            &grid.inner,
-            max_rel_snap_dist,
-            max_iter,
-            keep_vertices,
-        ))
-    } else if let Ok(mesh) = mesh.downcast_bound::<TriMeshWithDataF32>(py) {
-        Ok(splashsurf_lib::postprocessing::marching_cubes_cleanup(
-            &mut mesh.borrow_mut().inner.mesh,
-            &grid.inner,
-            max_rel_snap_dist,
-            max_iter,
-            keep_vertices,
-        ))
+    if let Ok(mesh) = mesh.downcast::<PyTriMesh3d>() {
+        let mut mesh = mesh.borrow_mut();
+        if let (Some(grid), Some(mesh)) = (grid.as_f32(), mesh.as_f32_mut()) {
+            let max_rel_snap_dist = max_rel_snap_dist.map(|d| d as f32);
+            cleanup(mesh, grid, max_rel_snap_dist, max_iter, keep_vertices);
+        } else if let (Some(grid), Some(mesh)) = (grid.as_f64(), mesh.as_f64_mut()) {
+            cleanup(mesh, grid, max_rel_snap_dist, max_iter, keep_vertices);
+        } else {
+            return Err(PyTypeError::new_err(
+                "invalid combination of grid and mesh scalar data types",
+            ));
+        }
+    } else if let Ok(mesh) = mesh.downcast::<PyMeshWithData>()
+        && let mut mesh = mesh.borrow_mut()
+        && mesh.mesh_cell_type() == MeshType::Tri3d
+    {
+        if let (Some(grid), Some(mesh)) = (grid.as_f32(), mesh.as_tri_f32_mut()) {
+            let mesh = &mut mesh.mesh;
+            let max_rel_snap_dist = max_rel_snap_dist.map(|d| d as f32);
+            cleanup(mesh, grid, max_rel_snap_dist, max_iter, keep_vertices);
+        } else if let (Some(grid), Some(mesh)) = (grid.as_f64(), mesh.as_tri_f64_mut()) {
+            let mesh = &mut mesh.mesh;
+            cleanup(mesh, grid, max_rel_snap_dist, max_iter, keep_vertices);
+        } else {
+            return Err(PyTypeError::new_err(
+                "invalid combination of grid and mesh scalar data types",
+            ));
+        }
     } else {
-        Err(PyErr::new::<PyValueError, _>("Invalid mesh type"))
+        return Err(PyTypeError::new_err(
+            "unsupported mesh type for marching cubes clean up, only triangle meshes are supported",
+        ));
     }
+
+    Ok(())
 }

@@ -685,9 +685,14 @@ class MeshType(Enum):
     3D mixed triangle and quad mesh
     """
 
-def check_mesh_consistency(grid:PyUniformGrid, mesh:typing.Any, *, check_closed:builtins.bool=True, check_manifold:builtins.bool=True, debug:builtins.bool=False) -> typing.Optional[builtins.str]:
+def check_mesh_consistency(mesh:typing.Union[PyTriMesh3d, PyMeshWithData], grid:PyUniformGrid, *, check_closed:builtins.bool=True, check_manifold:builtins.bool=True, debug:builtins.bool=False) -> typing.Optional[builtins.str]:
     r"""
     Checks the consistency of a reconstructed surface mesh (watertightness, manifoldness), optionally returns a string with details if problems are found
+    """
+
+def marching_cubes_cleanup(mesh:typing.Union[PyTriMesh3d, PyMeshWithData], grid:PyUniformGrid, *, max_rel_snap_dist:typing.Optional[builtins.float]=None, max_iter:builtins.int=5, keep_vertices:builtins.bool=False) -> None:
+    r"""
+    Mesh simplification designed for marching cubes surfaces meshes inspired by the "Compact Contouring"/"Mesh displacement" approach by Doug Moore and Joe Warren
     """
 
 def reconstruct_surface(particles:numpy.typing.NDArray[typing.Any], *, particle_radius:builtins.float, rest_density:builtins.float=1000.0, smoothing_length:builtins.float, cube_size:builtins.float, iso_surface_threshold:builtins.float=0.6, multi_threading:builtins.bool=True, global_neighborhood_list:builtins.bool=False, subdomain_grid:builtins.bool=True, subdomain_grid_auto_disable:builtins.bool=True, subdomain_num_cubes_per_dim:builtins.int=64, aabb_min:typing.Optional[typing.Sequence[builtins.float]]=None, aabb_max:typing.Optional[typing.Sequence[builtins.float]]=None) -> PySurfaceReconstruction:

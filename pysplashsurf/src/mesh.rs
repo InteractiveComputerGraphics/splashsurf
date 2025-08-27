@@ -511,6 +511,20 @@ impl PyTriMesh3d {
             _ => None,
         }
     }
+
+    pub fn as_f32_mut(&mut self) -> Option<&mut TriMesh3d<f32>> {
+        match &mut self.inner {
+            PyTriMesh3dData::F32(mesh) => Some(mesh),
+            _ => None,
+        }
+    }
+
+    pub fn as_f64_mut(&mut self) -> Option<&mut TriMesh3d<f64>> {
+        match &mut self.inner {
+            PyTriMesh3dData::F64(mesh) => Some(mesh),
+            _ => None,
+        }
+    }
 }
 
 #[gen_stub_pymethods]
@@ -647,6 +661,20 @@ impl PyMeshWithData {
 
     pub fn as_tri_f64(&self) -> Option<&MeshWithData<f64, TriMesh3d<f64>>> {
         match &self.inner {
+            PyMeshWithDataData::Tri3dF64(mesh) => Some(mesh),
+            _ => None,
+        }
+    }
+
+    pub fn as_tri_f32_mut(&mut self) -> Option<&mut MeshWithData<f32, TriMesh3d<f32>>> {
+        match &mut self.inner {
+            PyMeshWithDataData::Tri3dF32(mesh) => Some(mesh),
+            _ => None,
+        }
+    }
+
+    pub fn as_tri_f64_mut(&mut self) -> Option<&mut MeshWithData<f64, TriMesh3d<f64>>> {
+        match &mut self.inner {
             PyMeshWithDataData::Tri3dF64(mesh) => Some(mesh),
             _ => None,
         }

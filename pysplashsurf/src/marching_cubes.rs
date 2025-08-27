@@ -10,6 +10,7 @@ use pyo3_stub_gen::derive::*;
 #[pyo3(name = "check_mesh_consistency")]
 #[pyo3(signature = (mesh, grid, *, check_closed = true, check_manifold = true, debug = false))]
 pub fn check_mesh_consistency<'py>(
+    #[gen_stub(override_type(type_repr="typing.Union[PyTriMesh3d, PyMeshWithData]", imports=()))]
     mesh: Bound<'py, PyAny>,
     grid: &PyUniformGrid,
     check_closed: bool,

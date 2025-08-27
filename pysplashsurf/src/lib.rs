@@ -69,11 +69,7 @@ fn pysplashsurf(m: &Bound<'_, PyModule>) -> PyResult<()> {
     )?);
 
     let _ = m.add_function(wrap_pyfunction!(
-        post_processing::marching_cubes_cleanup_py_f32,
-        m
-    )?);
-    let _ = m.add_function(wrap_pyfunction!(
-        post_processing::marching_cubes_cleanup_py_f64,
+        post_processing::marching_cubes_cleanup,
         m
     )?);
 
