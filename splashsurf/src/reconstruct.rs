@@ -1013,8 +1013,13 @@ pub fn reconstruction_pipeline<'a, I: Index, R: Real>(
     params: &splashsurf_lib::Parameters<R>,
     postprocessing: &ReconstructionPostprocessingParameters,
 ) -> Result<ReconstructionResult<I, R>, anyhow::Error> {
+    // Ensure that we get global neighborhood lists if required for post-processing
+    let mut params = params.clone();
+    params.global_neighborhood_list =
+        params.global_neighborhood_list || postprocessing.mesh_smoothing_weights;
+
     // Perform the surface reconstruction
-    let reconstruction = splashsurf_lib::reconstruct_surface::<I, R>(particle_positions, params)?;
+    let reconstruction = splashsurf_lib::reconstruct_surface::<I, R>(particle_positions, &params)?;
 
     // Filters a particle quantity based on an optional mask of particles inside the reconstruction domain
     fn filtered_quantity<'a, T: Clone>(
