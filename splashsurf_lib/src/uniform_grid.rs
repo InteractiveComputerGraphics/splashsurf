@@ -230,7 +230,7 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
     }
 
     /// Constructs a degenerate grid with zero extents, zero cells and zero points
-    pub(crate) fn new_zero() -> Self {
+    pub fn new_zero() -> Self {
         Self {
             aabb: Aabb3d::new(Vector3::zeros(), Vector3::zeros()),
             cell_size: R::zero(),
