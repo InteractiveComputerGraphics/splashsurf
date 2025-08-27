@@ -4,10 +4,10 @@ use pyo3_stub_gen::define_stub_info_gatherer;
 
 use splashsurf::cli;
 
-#[cfg(target_pointer_width = "64")]
-pub(crate) use u64 as NumpyUsize;
 #[cfg(target_pointer_width = "32")]
 pub(crate) use u32 as NumpyUsize;
+#[cfg(target_pointer_width = "64")]
+pub(crate) use u64 as NumpyUsize;
 #[cfg(not(any(target_pointer_width = "64", target_pointer_width = "32")))]
 compile_error!("Unsupported target pointer width, only 32 and 64 bit are supported.");
 

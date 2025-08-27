@@ -6,18 +6,18 @@ use crate::{
     },
     reconstruction::{SurfaceReconstructionF32, SurfaceReconstructionF64},
 };
-use anyhow::anyhow;
 use numpy as np;
 use numpy::{
     Element, PyArray1, PyArray2, PyArrayDescr, PyArrayDescrMethods, PyArrayMethods,
     PyReadonlyArray1, PyReadonlyArray2, PyUntypedArray, PyUntypedArrayMethods,
 };
-use pyo3::exceptions::PyTypeError;
+use pyo3::exceptions::{PyRuntimeError, PyTypeError};
 use pyo3::{
     prelude::*,
     types::{PyDict, PyString},
 };
 use pyo3_stub_gen::derive::gen_stub_pyfunction;
+use splashsurf::reconstruct::ReconstructionResult;
 use splashsurf_lib::{
     Aabb3d, GridDecompositionParameters, Index, Real, SpatialDecomposition,
     mesh::{AttributeData, MeshAttribute},
@@ -78,7 +78,7 @@ pub fn reconstruction_pipeline_multi<'py>(
     mesh_aabb_max: Option<[f64; 3]>,
     mesh_aabb_clamp_vertices: bool,
     dtype: Option<Bound<'py, PyArrayDescr>>,
-) -> PyResult<Option<PyMeshWithData>> {
+) -> PyResult<PyMeshWithData> {
     let py = particles.py();
     let element_type = dtype.unwrap_or_else(|| particles.dtype());
 
@@ -138,6 +138,20 @@ pub fn reconstruction_pipeline_multi<'py>(
         mesh_aabb_clamp_vertices,
     };
 
+    fn reconstruction_to_pymesh<I: Index, R: Real + Element>(
+        reconstruction: ReconstructionResult<I, R>,
+    ) -> PyResult<PyMeshWithData> {
+        if let Some(tri_mesh) = reconstruction.tri_mesh {
+            PyMeshWithData::try_from_generic(tri_mesh)
+        } else if let Some(tri_quad_mesh) = reconstruction.tri_quad_mesh {
+            PyMeshWithData::try_from_generic(tri_quad_mesh)
+        } else {
+            Err(PyRuntimeError::new_err(
+                "Reconstruction resulted in no mesh",
+            ))
+        }
+    }
+
     if element_type.is_equiv_to(&np::dtype::<f32>(py)) {
         println!("Detected f32 particle array");
         let particles = particles.downcast::<PyArray2<f32>>()?;
@@ -149,10 +163,7 @@ pub fn reconstruction_pipeline_multi<'py>(
                 .expect("failed to convert reconstruction parameters to f32"),
             &postprocessing_args,
         )?;
-        let mesh = reconstruction
-            .tri_mesh
-            .map(|mesh_with_data| PyMeshWithData::try_from(mesh_with_data));
-        mesh.transpose().map_err(|err| anyhow!(err).into())
+        reconstruction_to_pymesh(reconstruction)
     } else if element_type.is_equiv_to(&np::dtype::<f64>(py)) {
         println!("Detected f64 particle array");
         let particles = particles.downcast::<PyArray2<f64>>()?;
@@ -162,13 +173,10 @@ pub fn reconstruction_pipeline_multi<'py>(
             &parameters,
             &postprocessing_args,
         )?;
-        let mesh = reconstruction
-            .tri_mesh
-            .map(|mesh_with_data| PyMeshWithData::try_from(mesh_with_data));
-        mesh.transpose().map_err(|err| anyhow!(err).into())
+        reconstruction_to_pymesh(reconstruction)
     } else {
         Err(PyTypeError::new_err(format!(
-            "Unsupported element type: {}",
+            "Unsupported scalar type for reconstruction: {}, only float32 and float64 are supported",
             element_type
         )))
     }
