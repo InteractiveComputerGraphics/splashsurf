@@ -1,4 +1,5 @@
 use anyhow::anyhow;
+use crate::NumpyUsize;
 use ndarray::{Array2, ArrayView, ArrayView2};
 use numpy as np;
 use numpy::{
@@ -88,15 +89,15 @@ impl<R: Real + Element> TriMeshInterface<R> {
     fn get_triangles<'py>(
         mesh: &TriMesh3d<R>,
         py: Python<'py>,
-    ) -> PyResult<Bound<'py, PyArray2<u64>>> {
-        let tris: &[u64] = bytemuck::cast_slice(&mesh.triangles);
-        let triangles: ArrayView2<u64> =
+    ) -> PyResult<Bound<'py, PyArray2<NumpyUsize>>> {
+        let tris: &[NumpyUsize] = bytemuck::cast_slice(&mesh.triangles);
+        let triangles: ArrayView2<NumpyUsize> =
             ArrayView::from_shape((mesh.triangles.len(), 3), tris).map_err(anyhow::Error::new)?;
         Ok(triangles.to_pyarray(py))
     }
 
     /// Alias for `get_triangles`
-    fn get_cells<'py>(mesh: &TriMesh3d<R>, py: Python<'py>) -> PyResult<Bound<'py, PyArray2<u64>>> {
+    fn get_cells<'py>(mesh: &TriMesh3d<R>, py: Python<'py>) -> PyResult<Bound<'py, PyArray2<NumpyUsize>>> {
         Self::get_triangles(mesh, py)
     }
 
@@ -118,10 +119,10 @@ impl<R: Real + Element> TriMeshInterface<R> {
     fn take_triangles<'py>(
         mesh: &mut TriMesh3d<R>,
         py: Python<'py>,
-    ) -> PyResult<Bound<'py, PyArray2<u64>>> {
+    ) -> PyResult<Bound<'py, PyArray2<NumpyUsize>>> {
         let triangles = std::mem::take(&mut mesh.triangles);
         let m = triangles.len();
-        let triangles_scalar: Vec<u64> = bytemuck::cast_vec(triangles);
+        let triangles_scalar: Vec<NumpyUsize> = bytemuck::cast_vec(triangles);
         let triangles_array = PyArray::from_vec(py, triangles_scalar)
             .reshape([m, 3])
             .map_err(anyhow::Error::new)?;
@@ -132,7 +133,7 @@ impl<R: Real + Element> TriMeshInterface<R> {
     fn take_cells<'py>(
         mesh: &mut TriMesh3d<R>,
         py: Python<'py>,
-    ) -> PyResult<Bound<'py, PyArray2<u64>>> {
+    ) -> PyResult<Bound<'py, PyArray2<NumpyUsize>>> {
         Self::take_triangles(mesh, py)
     }
 
@@ -405,16 +406,16 @@ macro_rules! create_tri_mesh_interface {
             }
 
             /// Returns a copy of the `Mx3` array of the vertex indices that make up a triangle
-            fn get_triangles<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyArray2<u64>>> {
-                let tris: &[u64] = bytemuck::cast_slice(&self.inner.triangles);
-                let triangles: ArrayView2<u64> =
+            fn get_triangles<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyArray2<NumpyUsize>>> {
+                let tris: &[NumpyUsize] = bytemuck::cast_slice(&self.inner.triangles);
+                let triangles: ArrayView2<NumpyUsize> =
                     ArrayView::from_shape((self.inner.triangles.len(), 3), tris)
                         .map_err(anyhow::Error::new)?;
                 Ok(triangles.to_pyarray(py))
             }
 
             /// Alias for `get_triangles`
-            fn get_cells<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyArray2<u64>>> {
+            fn get_cells<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyArray2<NumpyUsize>>> {
                 self.get_triangles(py)
             }
 
@@ -436,10 +437,10 @@ macro_rules! create_tri_mesh_interface {
             fn take_triangles<'py>(
                 &mut self,
                 py: Python<'py>,
-            ) -> PyResult<Bound<'py, PyArray2<u64>>> {
+            ) -> PyResult<Bound<'py, PyArray2<NumpyUsize>>> {
                 let triangles = std::mem::take(&mut self.inner.triangles);
                 let m = triangles.len();
-                let triangles_scalar: Vec<u64> = bytemuck::cast_vec(triangles);
+                let triangles_scalar: Vec<NumpyUsize> = bytemuck::cast_vec(triangles);
                 let triangles_array = PyArray::from_vec(py, triangles_scalar)
                     .reshape([m, 3])
                     .map_err(anyhow::Error::new)?;
@@ -447,7 +448,7 @@ macro_rules! create_tri_mesh_interface {
             }
 
             /// Alias for `take_triangles`
-            fn take_cells<'py>(&mut self, py: Python<'py>) -> PyResult<Bound<'py, PyArray2<u64>>> {
+            fn take_cells<'py>(&mut self, py: Python<'py>) -> PyResult<Bound<'py, PyArray2<NumpyUsize>>> {
                 self.take_triangles(py)
             }
 
@@ -597,7 +598,7 @@ impl PyTriMesh3d {
     }
 
     /// Returns a copy of the `Nx3` array of vertex positions
-    pub fn copy_triangles<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyArray2<u64>>> {
+    pub fn copy_triangles<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyArray2<NumpyUsize>>> {
         match &self.inner {
             PyTriMesh3dData::F32(mesh) => TriMeshInterface::get_triangles(mesh, py),
             PyTriMesh3dData::F64(mesh) => TriMeshInterface::get_triangles(mesh, py),
