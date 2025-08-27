@@ -22,6 +22,8 @@ mod pipeline;
 mod post_processing;
 mod reconstruction;
 
+pub(crate) mod utils;
+
 /// High-Level Bindings of the splashsurf surface reconstruction implementation.
 /// Support reconstructing Level-Set surfaces from particle clouds or from regular grids.
 #[pymodule]
@@ -58,6 +60,11 @@ fn pysplashsurf(m: &Bound<'_, PyModule>) -> PyResult<()> {
     )?);
     let _ = m.add_function(wrap_pyfunction!(
         reconstruction::reconstruct_surface_py_f64,
+        m
+    )?);
+
+    let _ = m.add_function(wrap_pyfunction!(
+        reconstruction::reconstruct_surface_multi,
         m
     )?);
 
@@ -118,19 +125,7 @@ fn pysplashsurf(m: &Bound<'_, PyModule>) -> PyResult<()> {
         m
     )?);
 
-    let _ = m.add_function(wrap_pyfunction!(
-        pipeline::reconstruction_pipeline_multi,
-        m
-    )?);
-
-    let _ = m.add_function(wrap_pyfunction!(
-        pipeline::reconstruction_pipeline_py_f32,
-        m
-    )?);
-    let _ = m.add_function(wrap_pyfunction!(
-        pipeline::reconstruction_pipeline_py_f64,
-        m
-    )?);
+    let _ = m.add_function(wrap_pyfunction!(pipeline::reconstruction_pipeline, m)?);
 
     let _ = m.add_function(wrap_pyfunction!(run_splashsurf_py, m)?);
 

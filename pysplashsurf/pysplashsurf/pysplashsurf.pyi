@@ -350,6 +350,29 @@ class PyMixedTriQuadMesh3d:
         Returns a copy of the `Nx3` array of vertex positions
         """
 
+class PySurfaceReconstruction:
+    r"""
+    Struct containing results of the surface reconstruction including the mesh, grid parameters and optional particle data
+    """
+    def copy_mesh(self) -> PyTriMesh3d:
+        r"""
+        Returns a copy of the surface mesh of the reconstruction
+        """
+    def copy_grid(self) -> PyUniformGrid:
+        r"""
+        Returns a copy of the uniform grid parameters used for the reconstruction
+        """
+    def copy_particle_densities(self) -> typing.Optional[numpy.typing.NDArray[typing.Any]]:
+        r"""
+        Returns a copy of the particle densities computed during the reconstruction
+        """
+    def copy_particle_neighbors(self) -> typing.Optional[builtins.list[builtins.list[builtins.int]]]:
+        r"""
+        Returns a copy of the per-particle neighborhood lists computed during the reconstruction if available
+        
+        The neighborhood lists are only available if the flag for global neighborhood list was set in the reconstruction parameters.
+        """
+
 class PyTriMesh3d:
     @property
     def dtype(self) -> numpy.dtype:
@@ -364,6 +387,12 @@ class PyTriMesh3d:
         r"""
         Returns a copy of the `Mx3` array of vertex indices per triangle
         """
+
+class PyUniformGrid:
+    r"""
+    Struct containing the parameters of a uniform grid used for the surface reconstruction
+    """
+    ...
 
 class SphInterpolatorF32:
     r"""
@@ -637,5 +666,17 @@ class UniformGridF64:
     """
     ...
 
-def reconstruction_pipeline_multi(particles:numpy.typing.NDArray[typing.Any], *, attributes_to_interpolate:typing.Optional[dict]=None, particle_radius:builtins.float, rest_density:builtins.float=1000.0, smoothing_length:builtins.float, cube_size:builtins.float, iso_surface_threshold:builtins.float=0.6, aabb_min:typing.Optional[typing.Sequence[builtins.float]]=None, aabb_max:typing.Optional[typing.Sequence[builtins.float]]=None, multi_threading:builtins.bool=True, subdomain_grid:builtins.bool=True, subdomain_grid_auto_disable:builtins.bool=True, subdomain_num_cubes_per_dim:builtins.int=64, check_mesh_closed:builtins.bool=False, check_mesh_manifold:builtins.bool=False, check_mesh_orientation:builtins.bool=False, check_mesh_debug:builtins.bool=False, mesh_cleanup:builtins.bool=False, mesh_cleanup_snap_dist:typing.Optional[builtins.float]=None, decimate_barnacles:builtins.bool=False, keep_vertices:builtins.bool=False, compute_normals:builtins.bool=False, sph_normals:builtins.bool=False, normals_smoothing_iters:typing.Optional[builtins.int]=None, mesh_smoothing_iters:typing.Optional[builtins.int]=None, mesh_smoothing_weights:builtins.bool=True, mesh_smoothing_weights_normalization:builtins.float=13.0, generate_quads:builtins.bool=False, quad_max_edge_diag_ratio:builtins.float=1.75, quad_max_normal_angle:builtins.float=10.0, quad_max_interior_angle:builtins.float=135.0, output_mesh_smoothing_weights:builtins.bool=False, output_raw_normals:builtins.bool=False, output_raw_mesh:builtins.bool=False, mesh_aabb_min:typing.Optional[typing.Sequence[builtins.float]]=None, mesh_aabb_max:typing.Optional[typing.Sequence[builtins.float]]=None, mesh_aabb_clamp_vertices:builtins.bool=True, dtype:typing.Optional[numpy.dtype]=None) -> PyMeshWithData: ...
+def reconstruct_surface_multi(particles:numpy.typing.NDArray[typing.Any], *, particle_radius:builtins.float, rest_density:builtins.float=1000.0, smoothing_length:builtins.float, cube_size:builtins.float, iso_surface_threshold:builtins.float=0.6, multi_threading:builtins.bool=True, global_neighborhood_list:builtins.bool=False, subdomain_grid:builtins.bool=True, subdomain_grid_auto_disable:builtins.bool=True, subdomain_num_cubes_per_dim:builtins.int=64, aabb_min:typing.Optional[typing.Sequence[builtins.float]]=None, aabb_max:typing.Optional[typing.Sequence[builtins.float]]=None) -> PySurfaceReconstruction:
+    r"""
+    Performs a surface reconstruction of the given particles without post-processing
+    
+    Note that all parameters use absolute distance units and are not relative to the particle radius.
+    """
+
+def reconstruction_pipeline(particles:numpy.typing.NDArray[typing.Any], *, attributes_to_interpolate:typing.Optional[dict]=None, particle_radius:builtins.float, rest_density:builtins.float=1000.0, smoothing_length:builtins.float, cube_size:builtins.float, iso_surface_threshold:builtins.float=0.6, aabb_min:typing.Optional[typing.Sequence[builtins.float]]=None, aabb_max:typing.Optional[typing.Sequence[builtins.float]]=None, multi_threading:builtins.bool=True, subdomain_grid:builtins.bool=True, subdomain_grid_auto_disable:builtins.bool=True, subdomain_num_cubes_per_dim:builtins.int=64, check_mesh_closed:builtins.bool=False, check_mesh_manifold:builtins.bool=False, check_mesh_orientation:builtins.bool=False, check_mesh_debug:builtins.bool=False, mesh_cleanup:builtins.bool=False, mesh_cleanup_snap_dist:typing.Optional[builtins.float]=None, decimate_barnacles:builtins.bool=False, keep_vertices:builtins.bool=False, compute_normals:builtins.bool=False, sph_normals:builtins.bool=False, normals_smoothing_iters:typing.Optional[builtins.int]=None, mesh_smoothing_iters:typing.Optional[builtins.int]=None, mesh_smoothing_weights:builtins.bool=True, mesh_smoothing_weights_normalization:builtins.float=13.0, generate_quads:builtins.bool=False, quad_max_edge_diag_ratio:builtins.float=1.75, quad_max_normal_angle:builtins.float=10.0, quad_max_interior_angle:builtins.float=135.0, output_mesh_smoothing_weights:builtins.bool=False, output_raw_normals:builtins.bool=False, output_raw_mesh:builtins.bool=False, mesh_aabb_min:typing.Optional[typing.Sequence[builtins.float]]=None, mesh_aabb_max:typing.Optional[typing.Sequence[builtins.float]]=None, mesh_aabb_clamp_vertices:builtins.bool=True, dtype:typing.Optional[numpy.dtype]=None) -> PyMeshWithData:
+    r"""
+    Runs the surface reconstruction pipeline for the given particle positions with optional post-processing
+    
+    Note that smoothing length and cube size are given in multiples of the particle radius.
+    """
 

@@ -1,5 +1,6 @@
 use crate::NumpyUsize;
 use crate::aabb::{Aabb3dF32, Aabb3dF64};
+use crate::utils::*;
 use ndarray::{Array2, ArrayView, ArrayView2};
 use numpy as np;
 use numpy::{
@@ -470,34 +471,6 @@ macro_rules! create_tri_quad_mesh_interface {
             }
         }
     };
-}
-
-macro_rules! impl_from_mesh {
-    ($pyclass:ident, $mesh:ty => $target_enum:path) => {
-        impl From<$mesh> for $pyclass {
-            fn from(mesh: $mesh) -> Self {
-                Self {
-                    inner: $target_enum(mesh),
-                }
-            }
-        }
-    };
-}
-
-/// Transmutes from a generic type to a concrete type if they are identical, takes the value and converts it into the target type
-fn transmute_take_into<
-    GenericSrc: 'static,
-    ConcreteSrc: Default + Into<Target> + 'static,
-    Target,
->(
-    value: &mut GenericSrc,
-) -> Option<Target> {
-    if std::any::TypeId::of::<GenericSrc>() == std::any::TypeId::of::<ConcreteSrc>() {
-        let value_ref = unsafe { std::mem::transmute::<&mut GenericSrc, &mut ConcreteSrc>(value) };
-        Some(std::mem::take(value_ref).into())
-    } else {
-        None
-    }
 }
 
 enum PyTriMesh3dData {
