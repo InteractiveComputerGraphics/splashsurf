@@ -206,13 +206,14 @@ class MeshWithData:
         r"""
         Returns the type of the underlying mesh
         """
+    @property
+    def vertices(self) -> numpy.typing.NDArray[typing.Any]:
+        r"""
+        The `Nx3` array of vertex positions of the mesh
+        """
     def copy_mesh(self) -> typing.Union[TriMesh3d, MixedTriQuadMesh3d]:
         r"""
         Returns a copy of the contained mesh without associated data and attributes
-        """
-    def copy_vertices(self) -> numpy.typing.NDArray[typing.Any]:
-        r"""
-        Returns a copy of the `Nx3` array of vertex positions
         """
 
 class MixedTriQuadMesh3d:
@@ -221,9 +222,10 @@ class MixedTriQuadMesh3d:
         r"""
         Returns the numpy dtype of the underlying scalar type (either `np.float32` or `np.float64`)
         """
-    def copy_vertices(self) -> numpy.typing.NDArray[typing.Any]:
+    @property
+    def vertices(self) -> numpy.typing.NDArray[typing.Any]:
         r"""
-        Returns a copy of the `Nx3` array of vertex positions
+        The `Nx3` array of vertex positions of the mesh
         """
 
 class MixedTriQuadMesh3dF32:
@@ -421,13 +423,15 @@ class TriMesh3d:
         r"""
         Returns the numpy dtype of the underlying scalar type (either `np.float32` or `np.float64`)
         """
-    def copy_vertices(self) -> numpy.typing.NDArray[typing.Any]:
+    @property
+    def vertices(self) -> numpy.typing.NDArray[typing.Any]:
         r"""
-        Returns a copy of the `Nx3` array of vertex positions
+        The `Nx3` array of vertex positions of the mesh
         """
-    def copy_triangles(self) -> numpy.typing.NDArray[numpy.uint64]:
+    @property
+    def triangles(self) -> numpy.typing.NDArray[numpy.uint64]:
         r"""
-        Returns a copy of the `Mx3` array of vertex indices per triangle
+        The `Mx3` array of vertex indices per triangle
         """
     def vertex_vertex_connectivity(self) -> VertexVertexConnectivity:
         r"""

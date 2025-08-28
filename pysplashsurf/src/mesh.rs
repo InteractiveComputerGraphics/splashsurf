@@ -69,25 +69,29 @@ fn add_attribute_with_name<'py, R: Real + Element>(
     }
 }
 
-fn get_vertices<'py, R: Real + Element>(
-    py: Python<'py>,
+fn get_vertices_generic<'py, R: Real + Element>(
     vertices: &[Vector3<R>],
-) -> PyResult<Bound<'py, PyArray2<R>>> {
+    container: Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyUntypedArray>> {
     let coordinates: &[R] = bytemuck::cast_slice(vertices);
-    let vertices: ArrayView2<R> =
+    let array: ArrayView2<R> =
         ArrayView::from_shape((vertices.len(), 3), coordinates).map_err(anyhow::Error::new)?;
-    // Seems like at least one copy is necessary here (to_pyarray copies the data)
-    Ok(vertices.to_pyarray(py))
+    let pyarray = unsafe { PyArray2::borrow_from_array(&array, container) };
+    Ok(pyarray
+        .into_any()
+        .downcast_into::<PyUntypedArray>()
+        .expect("downcast should not fail"))
 }
 
-fn get_triangles<'py>(
-    py: Python<'py>,
+fn get_triangles_generic<'py>(
     triangles: &[TriangleCell],
+    container: Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyArray2<NumpyUsize>>> {
     let vertex_indices: &[NumpyUsize] = bytemuck::cast_slice(triangles);
-    let triangles: ArrayView2<NumpyUsize> =
+    let array: ArrayView2<NumpyUsize> =
         ArrayView::from_shape((triangles.len(), 3), vertex_indices).map_err(anyhow::Error::new)?;
-    Ok(triangles.to_pyarray(py))
+    let pyarray = unsafe { PyArray2::borrow_from_array(&array, container) };
+    Ok(pyarray)
 }
 
 macro_rules! create_mesh_data_interface {
@@ -568,24 +572,21 @@ impl PyTriMesh3d {
         }
     }
 
-    /// Returns a copy of the `Nx3` array of vertex positions
-    pub fn copy_vertices<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyUntypedArray>> {
-        match &self.inner {
-            PyTriMesh3dData::F32(mesh) => get_vertices(py, mesh.vertices())
-                .map(|v| v.into_any().downcast_into::<PyUntypedArray>().unwrap()),
-            PyTriMesh3dData::F64(mesh) => get_vertices(py, mesh.vertices())
-                .map(|v| v.into_any().downcast_into::<PyUntypedArray>().unwrap()),
+    /// The `Nx3` array of vertex positions of the mesh
+    #[getter]
+    pub fn vertices<'py>(this: Bound<'py, Self>) -> PyResult<Bound<'py, PyUntypedArray>> {
+        match &this.borrow().inner {
+            PyTriMesh3dData::F32(mesh) => get_vertices_generic(mesh.vertices(), this.into_any()),
+            PyTriMesh3dData::F64(mesh) => get_vertices_generic(mesh.vertices(), this.into_any()),
         }
     }
 
-    /// Returns a copy of the `Mx3` array of vertex indices per triangle
-    pub fn copy_triangles<'py>(
-        &self,
-        py: Python<'py>,
-    ) -> PyResult<Bound<'py, PyArray2<NumpyUsize>>> {
-        match &self.inner {
-            PyTriMesh3dData::F32(mesh) => get_triangles(py, mesh.cells()),
-            PyTriMesh3dData::F64(mesh) => get_triangles(py, mesh.cells()),
+    /// The `Mx3` array of vertex indices per triangle
+    #[getter]
+    pub fn triangles<'py>(this: Bound<'py, Self>) -> PyResult<Bound<'py, PyArray2<NumpyUsize>>> {
+        match &this.borrow().inner {
+            PyTriMesh3dData::F32(mesh) => get_triangles_generic(mesh.cells(), this.into_any()),
+            PyTriMesh3dData::F64(mesh) => get_triangles_generic(mesh.cells(), this.into_any()),
         }
     }
 
@@ -638,13 +639,16 @@ impl PyMixedTriQuadMesh3d {
         }
     }
 
-    /// Returns a copy of the `Nx3` array of vertex positions
-    pub fn copy_vertices<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyUntypedArray>> {
-        match &self.inner {
-            PyMixedTriQuadMesh3dData::F32(mesh) => get_vertices(py, mesh.vertices())
-                .map(|v| v.into_any().downcast_into::<PyUntypedArray>().unwrap()),
-            PyMixedTriQuadMesh3dData::F64(mesh) => get_vertices(py, mesh.vertices())
-                .map(|v| v.into_any().downcast_into::<PyUntypedArray>().unwrap()),
+    /// The `Nx3` array of vertex positions of the mesh
+    #[getter]
+    pub fn vertices<'py>(this: Bound<'py, Self>) -> PyResult<Bound<'py, PyUntypedArray>> {
+        match &this.borrow().inner {
+            PyMixedTriQuadMesh3dData::F32(mesh) => {
+                get_vertices_generic(mesh.vertices(), this.into_any())
+            }
+            PyMixedTriQuadMesh3dData::F64(mesh) => {
+                get_vertices_generic(mesh.vertices(), this.into_any())
+            }
         }
     }
 }
@@ -767,17 +771,22 @@ impl PyMeshWithData {
         }
     }
 
-    /// Returns a copy of the `Nx3` array of vertex positions
-    pub fn copy_vertices<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyUntypedArray>> {
-        match &self.inner {
-            PyMeshWithDataData::Tri3dF32(mesh) => get_vertices(py, mesh.mesh.vertices())
-                .map(|v| v.into_any().downcast_into::<PyUntypedArray>().unwrap()),
-            PyMeshWithDataData::Tri3dF64(mesh) => get_vertices(py, mesh.mesh.vertices())
-                .map(|v| v.into_any().downcast_into::<PyUntypedArray>().unwrap()),
-            PyMeshWithDataData::MixedTriQuadF32(mesh) => get_vertices(py, mesh.mesh.vertices())
-                .map(|v| v.into_any().downcast_into::<PyUntypedArray>().unwrap()),
-            PyMeshWithDataData::MixedTriQuadF64(mesh) => get_vertices(py, mesh.mesh.vertices())
-                .map(|v| v.into_any().downcast_into::<PyUntypedArray>().unwrap()),
+    /// The `Nx3` array of vertex positions of the mesh
+    #[getter]
+    pub fn vertices<'py>(this: Bound<'py, Self>) -> PyResult<Bound<'py, PyUntypedArray>> {
+        match &this.borrow().inner {
+            PyMeshWithDataData::Tri3dF32(mesh) => {
+                get_vertices_generic(mesh.vertices(), this.into_any())
+            }
+            PyMeshWithDataData::Tri3dF64(mesh) => {
+                get_vertices_generic(mesh.vertices(), this.into_any())
+            }
+            PyMeshWithDataData::MixedTriQuadF32(mesh) => {
+                get_vertices_generic(mesh.vertices(), this.into_any())
+            }
+            PyMeshWithDataData::MixedTriQuadF64(mesh) => {
+                get_vertices_generic(mesh.vertices(), this.into_any())
+            }
         }
     }
 }
