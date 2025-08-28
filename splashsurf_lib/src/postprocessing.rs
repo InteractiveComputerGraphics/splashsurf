@@ -677,7 +677,7 @@ pub fn merge_double_barnacle_configurations_he<R: Real>(mesh: &mut HalfEdgeTriMe
 pub fn convert_tris_to_quads<R: Real>(
     mesh: &TriMesh3d<R>,
     non_squareness_limit: R,
-    normal_angle_limit_rad: R,
+    normal_angle_limit: R,
     max_interior_angle: R,
 ) -> MixedTriQuadMesh3d<R> {
     profile!("tri_to_quad");
@@ -694,7 +694,7 @@ pub fn convert_tris_to_quads<R: Real>(
         })
         .collect::<Vec<_>>();
 
-    let min_dot = normal_angle_limit_rad.cos();
+    let min_dot = normal_angle_limit.cos();
     let max_non_squareness = non_squareness_limit;
     let sqrt_two = R::from_float(2.0_f64.sqrt());
 
