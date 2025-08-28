@@ -41,6 +41,7 @@ fn pysplashsurf(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<mesh::PyTriMesh3d>()?;
     m.add_class::<mesh::PyMixedTriQuadMesh3d>()?;
     m.add_class::<mesh::PyMeshWithData>()?;
+    m.add_class::<mesh::PyVertexVertexConnectivity>()?;
 
     m.add_class::<uniform_grid::PyUniformGrid>()?;
     m.add_class::<reconstruction::PySurfaceReconstruction>()?;
@@ -85,7 +86,7 @@ fn pysplashsurf(m: &Bound<'_, PyModule>) -> PyResult<()> {
 fn run_splashsurf_py<'py>(args: Bound<'py, PyList>) -> PyResult<()> {
     cli::run_splashsurf(args.iter().map(|arg| {
         arg.downcast::<PyString>()
-            .expect("Argument wasn't a string")
+            .expect("argument wasn't a string")
             .extract::<String>()
             .unwrap()
     }))?;

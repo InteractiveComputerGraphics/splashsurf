@@ -94,6 +94,20 @@ fn get_triangles_generic<'py>(
     Ok(pyarray)
 }
 
+fn compute_normals_generic<'py, R: Real + Element>(
+    py: Python<'py>,
+    mesh: &TriMesh3d<R>,
+) -> PyResult<Bound<'py, PyUntypedArray>> {
+    let normals_vec = mesh.par_vertex_normals();
+    let normals_vec = bytemuck::allocation::cast_vec::<Unit<Vector3<R>>, R>(normals_vec);
+
+    Ok(PyArray::from_vec(py, normals_vec)
+        .reshape([mesh.vertices().len(), 3])?
+        .into_any()
+        .downcast_into::<PyUntypedArray>()
+        .expect("downcast should not fail"))
+}
+
 macro_rules! create_mesh_data_interface {
     ($name: ident, $type: ident, $mesh_class: ident, $pymesh_class: ident, $aabb_class: ident) => {
         /// MeshWithData wrapper
@@ -590,7 +604,18 @@ impl PyTriMesh3d {
         }
     }
 
-    /// Returns the vertex-vertex connectivity of the mesh
+    /// Computes the vertex normals of the mesh using an area weighted average of the adjacent triangle faces
+    pub fn vertex_normals_parallel<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<Bound<'py, PyUntypedArray>> {
+        match &self.inner {
+            PyTriMesh3dData::F32(mesh) => compute_normals_generic(py, mesh),
+            PyTriMesh3dData::F64(mesh) => compute_normals_generic(py, mesh),
+        }
+    }
+
+    /// Computes the vertex-vertex connectivity of the mesh
     pub fn vertex_vertex_connectivity(&self) -> PyVertexVertexConnectivity {
         let connectivity = match &self.inner {
             PyTriMesh3dData::F32(mesh) => mesh.vertex_vertex_connectivity(),

@@ -433,9 +433,13 @@ class TriMesh3d:
         r"""
         The `Mx3` array of vertex indices per triangle
         """
+    def vertex_normals_parallel(self) -> numpy.typing.NDArray[typing.Any]:
+        r"""
+        Computes the vertex normals of the mesh using an area weighted average of the adjacent triangle faces
+        """
     def vertex_vertex_connectivity(self) -> VertexVertexConnectivity:
         r"""
-        Returns the vertex-vertex connectivity of the mesh
+        Computes the vertex-vertex connectivity of the mesh
         """
 
 class TriMesh3dF32:
