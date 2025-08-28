@@ -1,94 +1,89 @@
 use ndarray::ArrayViewMut2;
 use numpy::{PyArray2, PyArrayMethods};
+use pyo3::IntoPyObjectExt;
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3_stub_gen::derive::gen_stub_pyfunction;
 use splashsurf_lib::nalgebra::Vector3;
 
 use crate::mesh::{
-    MeshType, MixedTriQuadMesh3dF32, MixedTriQuadMesh3dF64, MixedTriQuadMeshWithDataF32,
-    MixedTriQuadMeshWithDataF64, PyMeshWithData, PyTriMesh3d, TriMesh3dF32, TriMesh3dF64,
+    MeshType, PyMeshWithData, PyMixedTriQuadMesh3d, PyTriMesh3d, TriMesh3dF32, TriMesh3dF64,
     TriMeshWithDataF32, TriMeshWithDataF64,
 };
 use crate::uniform_grid::PyUniformGrid;
 
+/// Merges triangles sharing an edge to quads if they fulfill the given criteria
+#[gen_stub_pyfunction]
 #[pyfunction]
-#[pyo3(name = "convert_tris_to_quads_f64")]
-#[pyo3(signature = (mesh, *, non_squareness_limit, normal_angle_limit_rad, max_interior_angle))]
-pub fn convert_tris_to_quads_py_f64<'py>(
-    mesh: PyObject,
-    py: Python<'py>,
+#[pyo3(name = "convert_tris_to_quads")]
+#[pyo3(signature = (mesh, *, non_squareness_limit = 1.75, normal_angle_limit = 10.0, max_interior_angle = 135.0))]
+#[gen_stub(override_return_type(type_repr="typing.Union[TriMesh3d, MixedTriQuadMesh3d]", imports=()))]
+pub fn convert_tris_to_quads<'py>(
+    #[gen_stub(override_type(type_repr="typing.Union[MixedTriQuadMesh3d, MeshWithData]", imports=()))]
+    mesh: Bound<'py, PyAny>,
     non_squareness_limit: f64,
-    normal_angle_limit_rad: f64,
+    normal_angle_limit: f64,
     max_interior_angle: f64,
-) -> PyResult<PyObject> {
-    if mesh.downcast_bound::<TriMesh3dF64>(py).is_ok() {
-        let mesh = mesh.downcast_bound::<TriMesh3dF64>(py).unwrap();
-        let quad_mesh =
-            MixedTriQuadMesh3dF64::new(splashsurf_lib::postprocessing::convert_tris_to_quads(
-                &mesh.borrow().inner,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py = mesh.py();
+
+    let normal_angle_limit = normal_angle_limit.to_radians();
+    let max_interior_angle = max_interior_angle.to_radians();
+
+    if let Ok(mesh) = mesh.downcast::<PyTriMesh3d>() {
+        let mesh = mesh.borrow();
+        if let Some(mesh) = mesh.as_f32() {
+            let quad_mesh = splashsurf_lib::postprocessing::convert_tris_to_quads(
+                mesh,
+                non_squareness_limit as f32,
+                normal_angle_limit as f32,
+                max_interior_angle as f32,
+            );
+            PyMixedTriQuadMesh3d::from(quad_mesh).into_bound_py_any(py)
+        } else if let Some(mesh) = mesh.as_f64() {
+            let quad_mesh = splashsurf_lib::postprocessing::convert_tris_to_quads(
+                mesh,
                 non_squareness_limit,
-                normal_angle_limit_rad,
+                normal_angle_limit,
                 max_interior_angle,
-            ));
-        Ok(quad_mesh.into_pyobject(py).unwrap().into())
-    } else if mesh.downcast_bound::<TriMeshWithDataF64>(py).is_ok() {
-        let mesh = mesh.downcast_bound::<TriMeshWithDataF64>(py).unwrap();
-        let mut quad_mesh =
-            MixedTriQuadMeshWithDataF64::new(splashsurf_lib::mesh::MeshWithData::new(
-                splashsurf_lib::postprocessing::convert_tris_to_quads(
-                    &mesh.borrow().inner.mesh,
-                    non_squareness_limit,
-                    normal_angle_limit_rad,
-                    max_interior_angle,
-                ),
-            ));
-
-        quad_mesh.inner.point_attributes = mesh.borrow().inner.point_attributes.clone();
-
-        Ok(quad_mesh.into_pyobject(py).unwrap().into())
-    } else {
-        Err(PyErr::new::<PyValueError, _>("Invalid mesh type"))
-    }
-}
-
-#[pyfunction]
-#[pyo3(name = "convert_tris_to_quads_f32")]
-#[pyo3(signature = (mesh, *, non_squareness_limit, normal_angle_limit_rad, max_interior_angle))]
-pub fn convert_tris_to_quads_py_f32<'py>(
-    py: Python<'py>,
-    mesh: PyObject,
-    non_squareness_limit: f32,
-    normal_angle_limit_rad: f32,
-    max_interior_angle: f32,
-) -> PyResult<PyObject> {
-    if mesh.downcast_bound::<TriMesh3dF32>(py).is_ok() {
-        let mesh = mesh.downcast_bound::<TriMesh3dF32>(py).unwrap();
-        let quad_mesh =
-            MixedTriQuadMesh3dF32::new(splashsurf_lib::postprocessing::convert_tris_to_quads(
-                &mesh.borrow().inner,
+            );
+            PyMixedTriQuadMesh3d::from(quad_mesh).into_bound_py_any(py)
+        } else {
+            Err(PyTypeError::new_err(
+                "unsupported mesh scalar data type, only f32 and f64 are supported",
+            ))
+        }
+    } else if let Ok(mesh) = mesh.downcast::<PyMeshWithData>() {
+        let mesh = mesh.borrow();
+        if let Some(mesh) = mesh.as_tri_f32() {
+            let quad_mesh = splashsurf_lib::postprocessing::convert_tris_to_quads(
+                &mesh.mesh,
+                non_squareness_limit as f32,
+                normal_angle_limit as f32,
+                max_interior_angle as f32,
+            );
+            let mut quad_mesh = splashsurf_lib::mesh::MeshWithData::new(quad_mesh);
+            quad_mesh.point_attributes = mesh.point_attributes.clone();
+            PyMeshWithData::from(quad_mesh).into_bound_py_any(py)
+        } else if let Some(mesh) = mesh.as_tri_f64() {
+            let quad_mesh = splashsurf_lib::postprocessing::convert_tris_to_quads(
+                &mesh.mesh,
                 non_squareness_limit,
-                normal_angle_limit_rad,
+                normal_angle_limit,
                 max_interior_angle,
-            ));
-        Ok(quad_mesh.into_pyobject(py).unwrap().into())
-    } else if mesh.downcast_bound::<TriMeshWithDataF32>(py).is_ok() {
-        let mesh = mesh.downcast_bound::<TriMeshWithDataF32>(py).unwrap();
-        let mut quad_mesh =
-            MixedTriQuadMeshWithDataF32::new(splashsurf_lib::mesh::MeshWithData::new(
-                splashsurf_lib::postprocessing::convert_tris_to_quads(
-                    &mesh.borrow().inner.mesh,
-                    non_squareness_limit,
-                    normal_angle_limit_rad,
-                    max_interior_angle,
-                ),
-            ));
-
-        quad_mesh.inner.point_attributes = mesh.borrow().inner.point_attributes.clone();
-
-        Ok(quad_mesh.into_pyobject(py).unwrap().into())
+            );
+            let mut quad_mesh = splashsurf_lib::mesh::MeshWithData::new(quad_mesh);
+            quad_mesh.point_attributes = mesh.point_attributes.clone();
+            PyMeshWithData::from(quad_mesh).into_bound_py_any(py)
+        } else {
+            Err(PyTypeError::new_err(
+                "unsupported mesh scalar data type, only f32 and f64 are supported",
+            ))
+        }
     } else {
-        Err(PyErr::new::<PyValueError, _>("Invalid mesh type"))
+        Err(PyTypeError::new_err(
+            "unsupported mesh type, only triangle meshes are supported",
+        ))
     }
 }
 
@@ -302,7 +297,7 @@ pub fn marching_cubes_cleanup<'py>(
         }
     } else {
         return Err(PyTypeError::new_err(
-            "unsupported mesh type for marching cubes clean up, only triangle meshes are supported",
+            "unsupported mesh type for, only triangle meshes are supported",
         ));
     }
 

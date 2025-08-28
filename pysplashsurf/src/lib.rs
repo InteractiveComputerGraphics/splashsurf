@@ -51,28 +51,17 @@ fn pysplashsurf(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<aabb::Aabb3dF32>()?;
     m.add_class::<aabb::Aabb3dF64>()?;
 
-    m.add_function(wrap_pyfunction!(reconstruction::reconstruct_surface, m)?)?;
+    use wrap_pyfunction as wrap;
 
-    m.add_function(wrap_pyfunction!(
-        post_processing::convert_tris_to_quads_py_f32,
-        m
-    )?)?;
-    m.add_function(wrap_pyfunction!(
-        post_processing::convert_tris_to_quads_py_f64,
-        m
-    )?)?;
+    m.add_function(wrap!(reconstruction::reconstruct_surface, m)?)?;
+    m.add_function(wrap!(marching_cubes::check_mesh_consistency, m)?)?;
+    m.add_function(wrap!(post_processing::marching_cubes_cleanup, m)?)?;
+    m.add_function(wrap!(post_processing::convert_tris_to_quads, m)?)?;
 
-    m.add_function(wrap_pyfunction!(
-        post_processing::marching_cubes_cleanup,
-        m
-    )?)?;
+    m.add_function(wrap!(post_processing::decimation_py_f32, m)?)?;
+    m.add_function(wrap!(post_processing::decimation_py_f64, m)?)?;
 
-    m.add_function(wrap_pyfunction!(marching_cubes::check_mesh_consistency, m)?)?;
-
-    m.add_function(wrap_pyfunction!(post_processing::decimation_py_f32, m)?)?;
-    m.add_function(wrap_pyfunction!(post_processing::decimation_py_f64, m)?)?;
-
-    m.add_function(wrap_pyfunction!(
+    m.add_function(wrap!(
         post_processing::par_laplacian_smoothing_inplace_py_f32,
         m
     )?)?;
@@ -81,27 +70,27 @@ fn pysplashsurf(m: &Bound<'_, PyModule>) -> PyResult<()> {
         m
     )?)?;
 
-    m.add_function(wrap_pyfunction!(
+    m.add_function(wrap!(
         post_processing::par_laplacian_smoothing_normals_inplace_py_f32,
         m
     )?)?;
-    m.add_function(wrap_pyfunction!(
+    m.add_function(wrap!(
         post_processing::par_laplacian_smoothing_normals_inplace_py_f64,
         m
     )?)?;
 
-    m.add_function(wrap_pyfunction!(
+    m.add_function(wrap!(
         neighborhood_search::neighborhood_search_spatial_hashing_parallel_py_f32,
         m
     )?)?;
-    m.add_function(wrap_pyfunction!(
+    m.add_function(wrap!(
         neighborhood_search::neighborhood_search_spatial_hashing_parallel_py_f64,
         m
     )?)?;
 
-    m.add_function(wrap_pyfunction!(pipeline::reconstruction_pipeline, m)?)?;
+    m.add_function(wrap!(pipeline::reconstruction_pipeline, m)?)?;
 
-    m.add_function(wrap_pyfunction!(run_splashsurf_py, m)?)?;
+    m.add_function(wrap!(run_splashsurf_py, m)?)?;
 
     Ok(())
 }

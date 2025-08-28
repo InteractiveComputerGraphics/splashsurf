@@ -632,6 +632,11 @@ def check_mesh_consistency(mesh:typing.Union[TriMesh3d, MeshWithData], grid:Unif
     Checks the consistency of a reconstructed surface mesh (watertightness, manifoldness), optionally returns a string with details if problems are found
     """
 
+def convert_tris_to_quads(mesh:typing.Union[TriMesh3d, MeshWithData], *, non_squareness_limit:builtins.float=1.75, normal_angle_limit:builtins.float=10.0, max_interior_angle:builtins.float=135.0) -> typing.Any:
+    r"""
+    Merges triangles sharing an edge to quads if they fulfill the given criteria
+    """
+
 def marching_cubes_cleanup(mesh:typing.Union[TriMesh3d, MeshWithData], grid:UniformGrid, *, max_rel_snap_dist:typing.Optional[builtins.float]=None, max_iter:builtins.int=5, keep_vertices:builtins.bool=False) -> None:
     r"""
     Mesh simplification designed for marching cubes surfaces meshes inspired by the "Compact Contouring"/"Mesh displacement" approach by Doug Moore and Joe Warren
