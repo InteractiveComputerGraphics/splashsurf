@@ -1,6 +1,6 @@
 use crate::mesh::{MeshType, PyMeshWithData, PyTriMesh3d};
 use crate::uniform_grid::PyUniformGrid;
-use pyo3::exceptions::PyTypeError;
+use crate::utils::*;
 use pyo3::prelude::*;
 use pyo3_stub_gen::derive::*;
 
@@ -38,9 +38,7 @@ pub fn check_mesh_consistency<'py>(
             )
             .err())
         } else {
-            Err(PyTypeError::new_err(
-                "invalid combination of grid and mesh scalar data types",
-            ))
+            Err(pyerr_mesh_grid_scalar_mismatch())
         }
     } else if let Ok(mesh) = mesh.downcast::<PyMeshWithData>()
         && let mesh = mesh.borrow()
@@ -65,13 +63,9 @@ pub fn check_mesh_consistency<'py>(
             )
             .err())
         } else {
-            Err(PyTypeError::new_err(
-                "invalid combination of grid and mesh scalar data types",
-            ))
+            Err(pyerr_mesh_grid_scalar_mismatch())
         }
     } else {
-        Err(PyTypeError::new_err(
-            "unsupported mesh type for consistency check, only triangle meshes are supported",
-        ))
+        Err(pyerr_only_triangle_mesh())
     }
 }

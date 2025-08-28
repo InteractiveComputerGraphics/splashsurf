@@ -161,7 +161,7 @@ pub fn reconstruct_surface<'py>(
 
     let element_type = particles.dtype();
     if element_type.is_equiv_to(&np::dtype::<f32>(py)) {
-        let particles = particles.downcast::<PyArray2<f32>>()?.readonly();
+        let particles = particles.downcast::<PyArray2<f32>>()?.try_readonly()?;
         let particle_positions: &[Vector3<f32>] = bytemuck::cast_slice(particles.as_slice()?);
         let reconstruction = splashsurf_lib::reconstruct_surface::<u64, _>(
             particle_positions,
@@ -172,16 +172,13 @@ pub fn reconstruct_surface<'py>(
         .map_err(|e| anyhow!(e))?;
         PySurfaceReconstruction::try_from_generic(reconstruction)
     } else if element_type.is_equiv_to(&np::dtype::<f64>(py)) {
-        let particles = particles.downcast::<PyArray2<f64>>()?.readonly();
+        let particles = particles.downcast::<PyArray2<f64>>()?.try_readonly()?;
         let particle_positions: &[Vector3<f64>] = bytemuck::cast_slice(particles.as_slice()?);
         let reconstruction =
             splashsurf_lib::reconstruct_surface::<u64, _>(particle_positions, &parameters)
                 .map_err(|e| anyhow!(e))?;
         PySurfaceReconstruction::try_from_generic(reconstruction)
     } else {
-        Err(PyTypeError::new_err(format!(
-            "unsupported scalar type {} for reconstruction, only float32 and float64 are supported",
-            element_type
-        )))
+        Err(pyerr_unsupported_scalar())
     }
 }

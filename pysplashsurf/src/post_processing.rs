@@ -2,29 +2,15 @@ use numpy as np;
 use numpy::prelude::*;
 use numpy::{PyArray1, PyArray2, PyArrayMethods, PyUntypedArray};
 use pyo3::IntoPyObjectExt;
-use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 use pyo3_stub_gen::derive::gen_stub_pyfunction;
 use splashsurf_lib::nalgebra::Vector3;
 
+use crate::utils::*;
 use crate::mesh::{
     MeshType, PyMeshWithData, PyMixedTriQuadMesh3d, PyTriMesh3d, PyVertexVertexConnectivity,
 };
 use crate::uniform_grid::PyUniformGrid;
-
-fn pyerr_unsupported_scalar() -> PyErr {
-    PyTypeError::new_err("unsupported mesh scalar data type, only f32 and f64 are supported")
-}
-
-fn pyerr_mesh_grid_scalar_mismatch() -> PyErr {
-    PyTypeError::new_err(
-        "unsupported mesh and grid scalar data type combination, both have to be either f32 or f64",
-    )
-}
-
-fn pyerr_only_triangle_mesh() -> PyErr {
-    PyTypeError::new_err("unsupported mesh type, only triangle meshes are supported")
-}
 
 /// Converts triangles to quads by merging triangles sharing an edge if they fulfill the given criteria
 ///
