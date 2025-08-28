@@ -182,29 +182,24 @@ pub fn laplacian_smoothing_normals_parallel<'py>(
     vertex_connectivity: &Bound<'py, PyVertexVertexConnectivity>,
     iterations: usize,
 ) -> PyResult<()> {
-    // TODO: Avoid copy to temporary Vec
     let py = normals.py();
     let element_type = normals.dtype();
     if element_type.is_equiv_to(&np::dtype::<f32>(py)) {
         let mut normals = normals.downcast::<PyArray2<f32>>()?.try_readwrite()?;
         let normals_vec3: &mut [Vector3<f32>] = bytemuck::cast_slice_mut(normals.as_slice_mut()?);
-        let mut normals_vec3_copy = normals_vec3.to_vec();
         splashsurf_lib::postprocessing::par_laplacian_smoothing_normals_inplace(
-            &mut normals_vec3_copy,
+            normals_vec3,
             &vertex_connectivity.borrow().connectivity,
             iterations,
         );
-        normals_vec3.copy_from_slice(&normals_vec3_copy);
     } else if element_type.is_equiv_to(&np::dtype::<f64>(py)) {
         let mut normals = normals.downcast::<PyArray2<f64>>()?.try_readwrite()?;
         let normals_vec3: &mut [Vector3<f64>] = bytemuck::cast_slice_mut(normals.as_slice_mut()?);
-        let mut normals_vec3_copy = normals_vec3.to_vec();
         splashsurf_lib::postprocessing::par_laplacian_smoothing_normals_inplace(
-            &mut normals_vec3_copy,
+            normals_vec3,
             &vertex_connectivity.borrow().connectivity,
             iterations,
         );
-        normals_vec3.copy_from_slice(&normals_vec3_copy);
     } else {
         return Err(pyerr_unsupported_scalar());
     }

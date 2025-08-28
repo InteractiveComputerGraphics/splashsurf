@@ -53,30 +53,42 @@ pub fn par_laplacian_smoothing_inplace<R: Real>(
 
 /// Laplacian smoothing of a normal field
 pub fn par_laplacian_smoothing_normals_inplace<R: Real>(
-    normals: &mut Vec<Vector3<R>>,
+    normals: &mut [Vector3<R>],
     vertex_connectivity: &[Vec<usize>],
     iterations: usize,
 ) {
     profile!("par_laplacian_smoothing_normals_inplace");
 
-    let mut normal_buffer = normals.clone();
+    let mut normals_buffer_vec = vec![Vector3::zeros(); normals.len()];
+    let mut normals_old = normals_buffer_vec.as_mut_slice();
+    let mut normals_smoothed = normals;
 
+    let mut buffer_contains_output = false;
     for _ in 0..iterations {
         profile!("smoothing iteration");
 
-        std::mem::swap(&mut normal_buffer, normals);
+        std::mem::swap(&mut normals_old, &mut normals_smoothed);
+        buffer_contains_output = !buffer_contains_output;
 
-        normals
+        // After the first swap, normals_smoothed points to the temporary buffer which will be used
+        // to store the smoothed normals below. This alternates every iteration.
+
+        normals_smoothed
             .par_iter_mut()
-            .enumerate()
-            .for_each(|(i, normal_i)| {
+            .zip(vertex_connectivity.par_iter())
+            .for_each(|(normal_i, connectivity_i)| {
                 *normal_i = Vector3::zeros();
-                for j in vertex_connectivity[i].iter().copied() {
-                    let normal_j = normal_buffer[j];
+                for j in connectivity_i.iter().copied() {
+                    let normal_j = normals_old[j];
                     *normal_i += normal_j;
                 }
                 normal_i.normalize_mut();
             });
+    }
+
+    if buffer_contains_output {
+        // normals_smoothed points to temporary buffer, copy back to original slice
+        normals_old.copy_from_slice(normals_smoothed);
     }
 }
 
