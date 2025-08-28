@@ -1,4 +1,5 @@
 use crate::mesh::PyMeshWithData;
+use crate::utils::IndexT;
 use numpy as np;
 use numpy::{
     Element, PyArray1, PyArray2, PyArrayDescr, PyArrayDescrMethods, PyArrayMethods,
@@ -155,7 +156,7 @@ pub fn reconstruction_pipeline<'py>(
 
     if element_type.is_equiv_to(&np::dtype::<f32>(py)) {
         let particles = particles.downcast::<PyArray2<f32>>()?;
-        let reconstruction = reconstruction_pipeline_generic_impl::<u64, _>(
+        let reconstruction = reconstruction_pipeline_generic_impl::<IndexT, _>(
             particles,
             attributes_to_interpolate,
             &parameters
@@ -166,7 +167,7 @@ pub fn reconstruction_pipeline<'py>(
         reconstruction_to_pymesh(reconstruction)
     } else if element_type.is_equiv_to(&np::dtype::<f64>(py)) {
         let particles = particles.downcast::<PyArray2<f64>>()?;
-        let reconstruction = reconstruction_pipeline_generic_impl::<u64, _>(
+        let reconstruction = reconstruction_pipeline_generic_impl::<IndexT, _>(
             particles,
             attributes_to_interpolate,
             &parameters,

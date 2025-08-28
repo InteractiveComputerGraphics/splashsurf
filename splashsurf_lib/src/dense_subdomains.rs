@@ -19,6 +19,7 @@ use crate::neighborhood_search::{
     FlatNeighborhoodList, neighborhood_search_spatial_hashing_flat_filtered,
     neighborhood_search_spatial_hashing_parallel,
 };
+use crate::topology::Direction;
 use crate::uniform_grid::{EdgeIndex, GridConstructionError, UniformCartesianCubeGrid3d};
 use crate::{
     Aabb3d, MapType, Parameters, RealConvert, SpatialDecomposition, SurfaceReconstruction, new_map,
@@ -28,7 +29,7 @@ use crate::{Index, Real};
 
 // TODO: Implement single-threaded processing
 
-type GlobalIndex = u64;
+type GlobalIndex = i64;
 
 pub(crate) struct ParametersSubdomainGrid<I: Index, R: Real> {
     /// SPH particle radius (in simulation units)
@@ -842,6 +843,8 @@ pub(crate) fn reconstruction<I: Index, R: Real>(
                 .copied()
                 .zip(subdomain_particle_densities.iter().copied())
             {
+                // Note: this loop assumes that enclosing_cell can return negative indices for ghost particles
+
                 // Get grid cell containing particle
                 let particle_cell = mc_grid.enclosing_cell(&p_i);
 
@@ -849,9 +852,9 @@ pub(crate) fn reconstruction<I: Index, R: Real>(
                 // We want to loop over the vertices of the enclosing cells plus all points in `cube_radius` distance from the cell
 
                 let lower = [
-                    (particle_cell[0] - cube_radius).max(I::zero()),
-                    (particle_cell[1] - cube_radius).max(I::zero()),
-                    (particle_cell[2] - cube_radius).max(I::zero()),
+                    particle_cell[0].saturating_sub(&cube_radius).max(I::zero()),
+                    particle_cell[1].saturating_sub(&cube_radius).max(I::zero()),
+                    particle_cell[2].saturating_sub(&cube_radius).max(I::zero()),
                 ];
 
                 let upper = [
@@ -870,6 +873,8 @@ pub(crate) fn reconstruction<I: Index, R: Real>(
                             let point_ijk = [i, j, k];
                             let local_point = mc_grid
                                 .get_point(point_ijk)
+                                // TODO: Can this fail if the ghost margin is too large such that upper
+                                //  falls outside of the subdomain grid?
                                 .expect("point has to be part of the subdomain grid");
                             //let point_coordinates = mc_grid.point_coordinates(&point);
 
@@ -1095,6 +1100,8 @@ pub(crate) fn reconstruction<I: Index, R: Real>(
                 .copied()
                 .zip(subdomain_particle_densities.iter().copied())
             {
+                // Note: this loop assumes that enclosing_cell can return negative indices for ghost particles
+
                 // Get grid cell containing particle
                 let particle_cell = mc_grid.enclosing_cell(&p_i);
 
@@ -1102,9 +1109,9 @@ pub(crate) fn reconstruction<I: Index, R: Real>(
                 // We want to loop over the vertices of the enclosing cells plus all points in `cube_radius` distance from the cell
 
                 let lower = [
-                    (particle_cell[0] - cube_radius).max(I::zero()),
-                    (particle_cell[1] - cube_radius).max(I::zero()),
-                    (particle_cell[2] - cube_radius).max(I::zero()),
+                    particle_cell[0].saturating_sub(&cube_radius).max(I::zero()),
+                    particle_cell[1].saturating_sub(&cube_radius).max(I::zero()),
+                    particle_cell[2].saturating_sub(&cube_radius).max(I::zero()),
                 ];
 
                 let upper = [
@@ -1570,7 +1577,27 @@ pub(crate) mod subdomain_classification {
                 && is_in_ghost_margin_single_dim(z_step, 2)
         };
 
-        // Loop over all 27 subdomains around and including the owning subdomain
+        let checked_apply_step = |index: I, step: i8| -> Option<I> {
+            let direction = match step {
+                -1 => Some(Direction::Negative),
+                0 => None,
+                1 => Some(Direction::Positive),
+                _ => unsafe { std::hint::unreachable_unchecked() },
+            };
+            direction
+                .map(|d| d.checked_apply_step(index, I::one()))
+                .unwrap_or(Some(index))
+        };
+
+        let checked_apply_step_ijk =
+            |ijk: [I; 3], x_step: i8, y_step: i8, z_step: i8| -> Option<[I; 3]> {
+                Some([
+                    checked_apply_step(ijk[0], x_step)?,
+                    checked_apply_step(ijk[1], y_step)?,
+                    checked_apply_step(ijk[2], z_step)?,
+                ])
+            };
+
         for &i in &[-1, 0, 1] {
             for &j in &[-1, 0, 1] {
                 for &k in &[-1, 0, 1] {
@@ -1578,14 +1605,10 @@ pub(crate) mod subdomain_classification {
                     let in_ghost_margin = is_in_ghost_margin(i, j, k);
 
                     if in_ghost_margin {
-                        let neighbor_subdomain_ijk = [
-                            subdomain_ijk[0] + I::from(i).unwrap(),
-                            subdomain_ijk[1] + I::from(j).unwrap(),
-                            subdomain_ijk[2] + I::from(k).unwrap(),
-                        ];
-                        // The potential neighbor subdomain might not even be part of our computation domain
-                        if let Some(cell) = subdomain_grid.get_cell(neighbor_subdomain_ijk) {
-                            // If it is, it can be added as a subdomain of the particle
+                        if let Some(neighbor_subdomain_ijk) =
+                            checked_apply_step_ijk(subdomain_ijk, i, j, k)
+                            && let Some(cell) = subdomain_grid.get_cell(neighbor_subdomain_ijk)
+                        {
                             subdomains.push(subdomain_grid.flatten_cell_index(&cell));
                         }
                     }

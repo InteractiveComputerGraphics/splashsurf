@@ -435,6 +435,9 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
     }
 
     /// Returns the grid cell index triplet of the cell enclosing a point with the given coordinates in space
+    ///
+    /// Note that this function does not check if the point is part of the grid and thus might also
+    /// return negative indices or indices larger than the number of cells per dimension.
     #[inline(always)]
     pub fn enclosing_cell(&self, coord: &Vector3<R>) -> [I; 3] {
         let normalized_coord = (coord - self.aabb.min()) / self.cell_size;

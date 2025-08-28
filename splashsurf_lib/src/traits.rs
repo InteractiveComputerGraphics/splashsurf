@@ -2,7 +2,8 @@ use bytemuck::Pod;
 use nalgebra::{RealField, SMatrix};
 use num_integer::Integer;
 use num_traits::{
-    Bounded, CheckedAdd, CheckedMul, CheckedSub, FromPrimitive, NumCast, SaturatingSub, ToPrimitive,
+    Bounded, CheckedAdd, CheckedMul, CheckedSub, FromPrimitive, NumCast, SaturatingSub, Signed,
+    ToPrimitive,
 };
 use simba::scalar::SupersetOf;
 use std::fmt::{Debug, Display};
@@ -44,6 +45,7 @@ pub trait Index:
     Copy
     + Hash
     + Integer
+    + Signed
     + Bounded
     + CheckedAdd
     + CheckedSub
@@ -153,6 +155,7 @@ impl<I> Index for I where
     I: Copy
         + Hash
         + Integer
+        + Signed
         + Bounded
         + CheckedAdd
         + CheckedSub

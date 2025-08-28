@@ -518,6 +518,12 @@ pub(crate) fn compute_kernel_evaluation_radius<I: Index, R: Real>(
     compact_support_radius: R,
     cube_size: R,
 ) -> GridKernelExtents<I, R> {
+    assert!(
+        compact_support_radius >= R::zero(),
+        "compact support radius must be non-negative"
+    );
+    assert!(cube_size > R::zero(), "cube size must be positive");
+
     // The number of cells in each direction from a particle that can be affected by its compact support
     let half_supported_cells_real = (compact_support_radius / cube_size).ceil();
     // Convert to index type for cell and point indexing

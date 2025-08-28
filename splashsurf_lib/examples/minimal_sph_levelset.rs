@@ -22,7 +22,7 @@ use thread_local::ThreadLocal;
 // The real type used for the reconstruction, can be changed to f64 if higher precision is needed
 type R = f32;
 // The index type used for the grid
-type I = usize;
+type I = i64;
 
 #[derive(Clone, Debug, clap::Parser)]
 struct CommandlineArgs {
@@ -172,7 +172,7 @@ impl MarchingCubesLevelSet<f32> for MarchingCubesGrid {
         ];
 
         if let Some(index) = self.grid.get_point(ijk) {
-            let index = self.grid.flatten_point_index(&index);
+            let index: usize = self.grid.flatten_point_index(&index).try_into().unwrap();
             if self.values[index] < self.threshold {
                 LevelSetSign::Outside
             } else {
@@ -196,6 +196,7 @@ impl MarchingCubesLevelSet<f32> for MarchingCubesGrid {
             .get_point(ijk)
             .map(|p| self.grid.flatten_point_index(&p))
         {
+            let index: usize = index.try_into().unwrap();
             self.values[index] - self.threshold
         } else {
             f32::MIN // or some other value indicating outside
@@ -278,8 +279,9 @@ fn reconstruct() -> Result<(), anyhow::Error> {
         densities
     };
 
-    let mut function_values = vec![0.0; grid.points_per_dim().iter().product()];
-    let mut function_values_vol_frac = vec![0.0; grid.points_per_dim().iter().product()];
+    let n_grid_points = grid.points_per_dim().iter().product::<I>() as usize;
+    let mut function_values = vec![0.0; n_grid_points];
+    let mut function_values_vol_frac = vec![0.0; n_grid_points];
     {
         profile!("evaluate_levelset_function");
 
@@ -326,7 +328,10 @@ fn reconstruct() -> Result<(), anyhow::Error> {
                                     let r = dx.norm();
 
                                     if r <= kernel_evaluation_radius {
-                                        let index = grid.flatten_point_index(&point_index);
+                                        let index: usize = grid
+                                            .flatten_point_index(&point_index)
+                                            .try_into()
+                                            .unwrap();
 
                                         //let vol = particle_rest_volume;
                                         let vol =
@@ -370,7 +375,7 @@ fn reconstruct() -> Result<(), anyhow::Error> {
 
         let [ni, nj, nk] = grid.points_per_dim().clone();
 
-        let mut points_flat = Vec::with_capacity(3 * ni * nj * nk);
+        let mut points_flat = Vec::with_capacity(3 * (ni * nj * nk) as usize);
         for i in 0..ni {
             for j in 0..nj {
                 for k in 0..nk {

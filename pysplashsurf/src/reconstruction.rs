@@ -14,8 +14,8 @@ use splashsurf_lib::{
 };
 
 enum PySurfaceReconstructionData {
-    F32(SurfaceReconstruction<u64, f32>),
-    F64(SurfaceReconstruction<u64, f64>),
+    F32(SurfaceReconstruction<IndexT, f32>),
+    F64(SurfaceReconstruction<IndexT, f64>),
 }
 
 /// Struct containing results of the surface reconstruction including the mesh, grid parameters and optional particle data
@@ -26,18 +26,18 @@ pub struct PySurfaceReconstruction {
     inner: PySurfaceReconstructionData,
 }
 
-impl_from_mesh!(PySurfaceReconstruction, SurfaceReconstruction<u64, f32> => PySurfaceReconstructionData::F32);
-impl_from_mesh!(PySurfaceReconstruction, SurfaceReconstruction<u64, f64> => PySurfaceReconstructionData::F64);
+impl_from_mesh!(PySurfaceReconstruction, SurfaceReconstruction<IndexT, f32> => PySurfaceReconstructionData::F32);
+impl_from_mesh!(PySurfaceReconstruction, SurfaceReconstruction<IndexT, f64> => PySurfaceReconstructionData::F64);
 
 impl PySurfaceReconstruction {
     pub fn try_from_generic<R: Real + Element>(
-        mut reconstruction: SurfaceReconstruction<u64, R>,
+        mut reconstruction: SurfaceReconstruction<IndexT, R>,
     ) -> PyResult<Self> {
-        transmute_take_into::<_, SurfaceReconstruction<u64, f32>, _>(&mut reconstruction)
+        transmute_take_into::<_, SurfaceReconstruction<IndexT, f32>, _>(&mut reconstruction)
             .or_else(|| {
-                transmute_take_into::<_, SurfaceReconstruction<u64, f64>, _>(&mut reconstruction)
+                transmute_take_into::<_, SurfaceReconstruction<IndexT, f64>, _>(&mut reconstruction)
             })
-            .ok_or_else(|| PyTypeError::new_err("unsupported type of reconstruction, only u64 for Index and f32 and f64 for Real type are supported"))
+            .ok_or_else(|| PyTypeError::new_err("unsupported type of reconstruction, only i64 for Index and f32 and f64 for Real type are supported"))
     }
 }
 
@@ -163,7 +163,7 @@ pub fn reconstruct_surface<'py>(
     if element_type.is_equiv_to(&np::dtype::<f32>(py)) {
         let particles = particles.downcast::<PyArray2<f32>>()?.try_readonly()?;
         let particle_positions: &[Vector3<f32>] = bytemuck::cast_slice(particles.as_slice()?);
-        let reconstruction = splashsurf_lib::reconstruct_surface::<u64, _>(
+        let reconstruction = splashsurf_lib::reconstruct_surface::<IndexT, _>(
             particle_positions,
             &parameters
                 .try_convert()
@@ -175,7 +175,7 @@ pub fn reconstruct_surface<'py>(
         let particles = particles.downcast::<PyArray2<f64>>()?.try_readonly()?;
         let particle_positions: &[Vector3<f64>] = bytemuck::cast_slice(particles.as_slice()?);
         let reconstruction =
-            splashsurf_lib::reconstruct_surface::<u64, _>(particle_positions, &parameters)
+            splashsurf_lib::reconstruct_surface::<IndexT, _>(particle_positions, &parameters)
                 .map_err(|e| anyhow!(e))?;
         PySurfaceReconstruction::try_from_generic(reconstruction)
     } else {

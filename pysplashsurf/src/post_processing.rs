@@ -6,11 +6,11 @@ use pyo3::prelude::*;
 use pyo3_stub_gen::derive::gen_stub_pyfunction;
 use splashsurf_lib::nalgebra::Vector3;
 
-use crate::utils::*;
 use crate::mesh::{
     MeshType, PyMeshWithData, PyMixedTriQuadMesh3d, PyTriMesh3d, PyVertexVertexConnectivity,
 };
 use crate::uniform_grid::PyUniformGrid;
+use crate::utils::*;
 
 /// Converts triangles to quads by merging triangles sharing an edge if they fulfill the given criteria
 ///
