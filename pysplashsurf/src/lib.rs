@@ -57,9 +57,7 @@ fn pysplashsurf(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap!(marching_cubes::check_mesh_consistency, m)?)?;
     m.add_function(wrap!(post_processing::marching_cubes_cleanup, m)?)?;
     m.add_function(wrap!(post_processing::convert_tris_to_quads, m)?)?;
-
-    m.add_function(wrap!(post_processing::decimation_py_f32, m)?)?;
-    m.add_function(wrap!(post_processing::decimation_py_f64, m)?)?;
+    m.add_function(wrap!(post_processing::barnacle_decimation, m)?)?;
 
     m.add_function(wrap!(
         post_processing::par_laplacian_smoothing_inplace_py_f32,

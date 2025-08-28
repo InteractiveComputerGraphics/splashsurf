@@ -627,12 +627,17 @@ class MeshType(Enum):
     3D mixed triangle and quad mesh
     """
 
+def barnacle_decimation(mesh:typing.Union[TriMesh3d, MeshWithData], *, keep_vertices:builtins.bool) -> typing.Union[TriMesh3d, MeshWithData]:
+    r"""
+    Decimation to prevent "barnacles" when applying weighted Laplacian smoothing
+    """
+
 def check_mesh_consistency(mesh:typing.Union[TriMesh3d, MeshWithData], grid:UniformGrid, *, check_closed:builtins.bool=True, check_manifold:builtins.bool=True, debug:builtins.bool=False) -> typing.Optional[builtins.str]:
     r"""
     Checks the consistency of a reconstructed surface mesh (watertightness, manifoldness), optionally returns a string with details if problems are found
     """
 
-def convert_tris_to_quads(mesh:typing.Union[TriMesh3d, MeshWithData], *, non_squareness_limit:builtins.float=1.75, normal_angle_limit:builtins.float=10.0, max_interior_angle:builtins.float=135.0) -> typing.Any:
+def convert_tris_to_quads(mesh:typing.Union[MixedTriQuadMesh3d, MeshWithData], *, non_squareness_limit:builtins.float=1.75, normal_angle_limit:builtins.float=10.0, max_interior_angle:builtins.float=135.0) -> typing.Union[TriMesh3d, MeshWithData]:
     r"""
     Merges triangles sharing an edge to quads if they fulfill the given criteria
     """

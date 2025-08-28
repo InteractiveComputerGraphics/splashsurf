@@ -12,12 +12,30 @@ use crate::mesh::{
 };
 use crate::uniform_grid::PyUniformGrid;
 
+fn pyerr_unsupported_scalar<T>() -> PyResult<T> {
+    Err(PyTypeError::new_err(
+        "unsupported mesh scalar data type, only f32 and f64 are supported",
+    ))
+}
+
+fn pyerr_mesh_grid_scalar_mismatch<T>() -> PyResult<T> {
+    Err(PyTypeError::new_err(
+        "unsupported mesh and grid scalar data type combination, both have to be either f32 or f64",
+    ))
+}
+
+fn pyerr_only_triangle_mesh<T>() -> PyResult<T> {
+    Err(PyTypeError::new_err(
+        "unsupported mesh type, only triangle meshes are supported",
+    ))
+}
+
 /// Merges triangles sharing an edge to quads if they fulfill the given criteria
 #[gen_stub_pyfunction]
 #[pyfunction]
 #[pyo3(name = "convert_tris_to_quads")]
 #[pyo3(signature = (mesh, *, non_squareness_limit = 1.75, normal_angle_limit = 10.0, max_interior_angle = 135.0))]
-#[gen_stub(override_return_type(type_repr="typing.Union[TriMesh3d, MixedTriQuadMesh3d]", imports=()))]
+#[gen_stub(override_return_type(type_repr="typing.Union[TriMesh3d, MeshWithData]", imports=()))]
 pub fn convert_tris_to_quads<'py>(
     #[gen_stub(override_type(type_repr="typing.Union[MixedTriQuadMesh3d, MeshWithData]", imports=()))]
     mesh: Bound<'py, PyAny>,
@@ -49,12 +67,12 @@ pub fn convert_tris_to_quads<'py>(
             );
             PyMixedTriQuadMesh3d::from(quad_mesh).into_bound_py_any(py)
         } else {
-            Err(PyTypeError::new_err(
-                "unsupported mesh scalar data type, only f32 and f64 are supported",
-            ))
+            pyerr_unsupported_scalar()
         }
-    } else if let Ok(mesh) = mesh.downcast::<PyMeshWithData>() {
-        let mesh = mesh.borrow();
+    } else if let Ok(mesh) = mesh.downcast::<PyMeshWithData>()
+        && let mesh = mesh.borrow()
+        && mesh.mesh_cell_type() == MeshType::Tri3d
+    {
         if let Some(mesh) = mesh.as_tri_f32() {
             let quad_mesh = splashsurf_lib::postprocessing::convert_tris_to_quads(
                 &mesh.mesh,
@@ -76,14 +94,10 @@ pub fn convert_tris_to_quads<'py>(
             quad_mesh.point_attributes = mesh.point_attributes.clone();
             PyMeshWithData::from(quad_mesh).into_bound_py_any(py)
         } else {
-            Err(PyTypeError::new_err(
-                "unsupported mesh scalar data type, only f32 and f64 are supported",
-            ))
+            pyerr_unsupported_scalar()
         }
     } else {
-        Err(PyTypeError::new_err(
-            "unsupported mesh type, only triangle meshes are supported",
-        ))
+        pyerr_only_triangle_mesh()
     }
 }
 
@@ -203,53 +217,41 @@ pub fn par_laplacian_smoothing_normals_inplace_py_f64<'py>(
         .copy_from_slice(&bytemuck::cast_slice(normals_vec.as_slice())); // Copy back to numpy array
 }
 
+/// Decimation to prevent "barnacles" when applying weighted Laplacian smoothing
+#[gen_stub_pyfunction]
 #[pyfunction]
-#[pyo3(name = "decimation_f64")]
+#[pyo3(name = "barnacle_decimation")]
 #[pyo3(signature = (mesh, *, keep_vertices))]
-pub fn decimation_py_f64<'py>(
-    py: Python,
-    mesh: PyObject,
+#[gen_stub(override_return_type(type_repr="typing.Union[TriMesh3d, MeshWithData]", imports=()))]
+pub fn barnacle_decimation<'py>(
+    #[gen_stub(override_type(type_repr="typing.Union[TriMesh3d, MeshWithData]", imports=()))]
+    mesh: Bound<'py, PyAny>,
     keep_vertices: bool,
 ) -> PyResult<Vec<Vec<usize>>> {
-    if mesh.downcast_bound::<TriMesh3dF64>(py).is_ok() {
-        let mesh = mesh.downcast_bound::<TriMesh3dF64>(py).unwrap();
-        Ok(splashsurf_lib::postprocessing::decimation(
-            &mut mesh.borrow_mut().inner,
-            keep_vertices,
-        ))
-    } else if mesh.downcast_bound::<TriMeshWithDataF64>(py).is_ok() {
-        let mesh = mesh.downcast_bound::<TriMeshWithDataF64>(py).unwrap();
-        Ok(splashsurf_lib::postprocessing::decimation(
-            &mut mesh.borrow_mut().inner.mesh,
-            keep_vertices,
-        ))
-    } else {
-        Err(PyErr::new::<PyValueError, _>("Invalid mesh type"))
-    }
-}
+    use splashsurf_lib::postprocessing::decimation;
 
-#[pyfunction]
-#[pyo3(name = "decimation_f32")]
-#[pyo3(signature = (mesh, *, keep_vertices))]
-pub fn decimation_py_f32<'py>(
-    py: Python,
-    mesh: PyObject,
-    keep_vertices: bool,
-) -> PyResult<Vec<Vec<usize>>> {
-    if mesh.downcast_bound::<TriMesh3dF32>(py).is_ok() {
-        let mesh = mesh.downcast_bound::<TriMesh3dF32>(py).unwrap();
-        Ok(splashsurf_lib::postprocessing::decimation(
-            &mut mesh.borrow_mut().inner,
-            keep_vertices,
-        ))
-    } else if mesh.downcast_bound::<TriMeshWithDataF32>(py).is_ok() {
-        let mesh = mesh.downcast_bound::<TriMeshWithDataF32>(py).unwrap();
-        Ok(splashsurf_lib::postprocessing::decimation(
-            &mut mesh.borrow_mut().inner.mesh,
-            keep_vertices,
-        ))
+    if let Ok(mesh) = mesh.downcast::<PyTriMesh3d>() {
+        let mut mesh = mesh.borrow_mut();
+        if let Some(mesh) = mesh.as_f32_mut() {
+            Ok(decimation(mesh, keep_vertices))
+        } else if let Some(mesh) = mesh.as_f64_mut() {
+            Ok(decimation(mesh, keep_vertices))
+        } else {
+            pyerr_unsupported_scalar()
+        }
+    } else if let Ok(mesh) = mesh.downcast::<PyMeshWithData>() {
+        let mut mesh = mesh.borrow_mut();
+        if let Some(mesh) = mesh.as_tri_f32_mut() {
+            let mesh = &mut mesh.mesh;
+            Ok(decimation(mesh, keep_vertices))
+        } else if let Some(mesh) = mesh.as_tri_f64_mut() {
+            let mesh = &mut mesh.mesh;
+            Ok(decimation(mesh, keep_vertices))
+        } else {
+            pyerr_unsupported_scalar()
+        }
     } else {
-        Err(PyErr::new::<PyValueError, _>("Invalid mesh type"))
+        pyerr_only_triangle_mesh()
     }
 }
 
@@ -276,9 +278,7 @@ pub fn marching_cubes_cleanup<'py>(
         } else if let (Some(grid), Some(mesh)) = (grid.as_f64(), mesh.as_f64_mut()) {
             cleanup(mesh, grid, max_rel_snap_dist, max_iter, keep_vertices);
         } else {
-            return Err(PyTypeError::new_err(
-                "invalid combination of grid and mesh scalar data types",
-            ));
+            return pyerr_mesh_grid_scalar_mismatch();
         }
     } else if let Ok(mesh) = mesh.downcast::<PyMeshWithData>()
         && let mut mesh = mesh.borrow_mut()
@@ -291,14 +291,10 @@ pub fn marching_cubes_cleanup<'py>(
             let mesh = &mut mesh.mesh;
             cleanup(mesh, grid, max_rel_snap_dist, max_iter, keep_vertices);
         } else {
-            return Err(PyTypeError::new_err(
-                "invalid combination of grid and mesh scalar data types",
-            ));
+            return pyerr_mesh_grid_scalar_mismatch();
         }
     } else {
-        return Err(PyTypeError::new_err(
-            "unsupported mesh type for, only triangle meshes are supported",
-        ));
+        return pyerr_only_triangle_mesh();
     }
 
     Ok(())

@@ -199,36 +199,6 @@ def create_aabb_object_from_points(points):
         return Aabb3dF64.from_points(points)
     else:
         raise ValueError("Invalid data type (only float32 and float64 are supported, consider explicitly specifying the dtype for points)")
-    
-def decimation(
-    mesh,
-    keep_vertices: bool = False
-):
-    """Barnacle decimation
-    
-    For details see “Weighted Laplacian Smoothing for Surface Reconstruction of Particle-based Fluids” (Löschner, Böttcher, Jeske, Bender; 2023).
-    
-    Parameters
-    ----------
-    mesh: TriMesh3dF32 | TriMesh3dF64 | TriMeshWithDataF32 | TriMeshWithDataF64
-        Mesh object to simplify
-    
-    keep_vertices: bool
-        Flag to keep vertices
-    
-    Returns
-    -------
-    list
-        vertex connectivity list of the simplified mesh
-    """
-    if type(mesh) is TriMesh3dF32 or type(mesh) is TriMeshWithDataF32:
-        return decimation_f32(mesh, keep_vertices=keep_vertices)
-    
-    elif type(mesh) is TriMesh3dF64 or type(mesh) is TriMeshWithDataF64:
-        return decimation_f64(mesh, keep_vertices=keep_vertices)
-    
-    else:
-        raise ValueError("Invalid mesh type")
 
 def par_laplacian_smoothing_inplace(
     mesh,
