@@ -1,43 +1,42 @@
-use ndarray::ArrayViewMut2;
-use numpy::{PyArray2, PyArrayMethods};
+use numpy as np;
+use numpy::prelude::*;
+use numpy::{PyArray1, PyArray2, PyArrayMethods, PyUntypedArray};
 use pyo3::IntoPyObjectExt;
-use pyo3::exceptions::{PyTypeError, PyValueError};
+use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 use pyo3_stub_gen::derive::gen_stub_pyfunction;
 use splashsurf_lib::nalgebra::Vector3;
 
 use crate::mesh::{
-    MeshType, PyMeshWithData, PyMixedTriQuadMesh3d, PyTriMesh3d, TriMesh3dF32, TriMesh3dF64,
-    TriMeshWithDataF32, TriMeshWithDataF64,
+    MeshType, PyMeshWithData, PyMixedTriQuadMesh3d, PyTriMesh3d, PyVertexVertexConnectivity,
 };
 use crate::uniform_grid::PyUniformGrid;
 
-fn pyerr_unsupported_scalar<T>() -> PyResult<T> {
-    Err(PyTypeError::new_err(
-        "unsupported mesh scalar data type, only f32 and f64 are supported",
-    ))
+fn pyerr_unsupported_scalar() -> PyErr {
+    PyTypeError::new_err("unsupported mesh scalar data type, only f32 and f64 are supported")
 }
 
-fn pyerr_mesh_grid_scalar_mismatch<T>() -> PyResult<T> {
-    Err(PyTypeError::new_err(
+fn pyerr_mesh_grid_scalar_mismatch() -> PyErr {
+    PyTypeError::new_err(
         "unsupported mesh and grid scalar data type combination, both have to be either f32 or f64",
-    ))
+    )
 }
 
-fn pyerr_only_triangle_mesh<T>() -> PyResult<T> {
-    Err(PyTypeError::new_err(
-        "unsupported mesh type, only triangle meshes are supported",
-    ))
+fn pyerr_only_triangle_mesh() -> PyErr {
+    PyTypeError::new_err("unsupported mesh type, only triangle meshes are supported")
 }
 
-/// Merges triangles sharing an edge to quads if they fulfill the given criteria
+/// Converts triangles to quads by merging triangles sharing an edge if they fulfill the given criteria
+///
+/// This operation creates a new mesh and does not modify the input mesh.
+/// Angles are specified in degrees.
 #[gen_stub_pyfunction]
 #[pyfunction]
 #[pyo3(name = "convert_tris_to_quads")]
 #[pyo3(signature = (mesh, *, non_squareness_limit = 1.75, normal_angle_limit = 10.0, max_interior_angle = 135.0))]
-#[gen_stub(override_return_type(type_repr="typing.Union[TriMesh3d, MeshWithData]", imports=()))]
+#[gen_stub(override_return_type(type_repr="typing.Union[MixedTriQuadMesh3d, MeshWithData]", imports=()))]
 pub fn convert_tris_to_quads<'py>(
-    #[gen_stub(override_type(type_repr="typing.Union[MixedTriQuadMesh3d, MeshWithData]", imports=()))]
+    #[gen_stub(override_type(type_repr="typing.Union[TriMesh3d, MeshWithData]", imports=()))]
     mesh: Bound<'py, PyAny>,
     non_squareness_limit: f64,
     normal_angle_limit: f64,
@@ -67,7 +66,7 @@ pub fn convert_tris_to_quads<'py>(
             );
             PyMixedTriQuadMesh3d::from(quad_mesh).into_bound_py_any(py)
         } else {
-            pyerr_unsupported_scalar()
+            Err(pyerr_unsupported_scalar())
         }
     } else if let Ok(mesh) = mesh.downcast::<PyMeshWithData>()
         && let mesh = mesh.borrow()
@@ -94,130 +93,130 @@ pub fn convert_tris_to_quads<'py>(
             quad_mesh.point_attributes = mesh.point_attributes.clone();
             PyMeshWithData::from(quad_mesh).into_bound_py_any(py)
         } else {
-            pyerr_unsupported_scalar()
+            Err(pyerr_unsupported_scalar())
         }
     } else {
-        pyerr_only_triangle_mesh()
+        Err(pyerr_only_triangle_mesh())
     }
 }
 
+/// Laplacian smoothing of mesh vertices with feature weights
+///
+/// The smoothing is performed inplace and modifies the vertices of the given mesh.
+#[gen_stub_pyfunction]
 #[pyfunction]
-#[pyo3(name = "par_laplacian_smoothing_inplace_f64")]
-#[pyo3(signature = (mesh, vertex_connectivity, iterations, beta, weights))]
-pub fn par_laplacian_smoothing_inplace_py_f64<'py>(
-    py: Python,
-    mesh: PyObject,
-    vertex_connectivity: Vec<Vec<usize>>, // ToDo: only take reference to data here
+#[pyo3(name = "laplacian_smoothing_parallel")]
+#[pyo3(signature = (mesh, vertex_connectivity, *, iterations, beta = 1.0, weights))]
+pub fn laplacian_smoothing_parallel<'py>(
+    #[gen_stub(override_type(type_repr="typing.Union[TriMesh3d, MeshWithData]", imports=()))]
+    mesh: &Bound<'py, PyAny>,
+    vertex_connectivity: &Bound<'py, PyVertexVertexConnectivity>,
     iterations: usize,
     beta: f64,
-    weights: Vec<f64>, // ToDo: Same here
+    weights: &Bound<'py, PyUntypedArray>,
 ) -> PyResult<()> {
-    if mesh.downcast_bound::<TriMesh3dF64>(py).is_ok() {
-        let mesh = mesh.downcast_bound::<TriMesh3dF64>(py).unwrap();
-        splashsurf_lib::postprocessing::par_laplacian_smoothing_inplace(
-            &mut mesh.borrow_mut().inner,
-            &vertex_connectivity,
-            iterations,
-            beta,
-            &weights,
-        );
-        Ok(())
-    } else if mesh.downcast_bound::<TriMeshWithDataF64>(py).is_ok() {
-        let mesh = mesh.downcast_bound::<TriMeshWithDataF64>(py).unwrap();
-        splashsurf_lib::postprocessing::par_laplacian_smoothing_inplace(
-            &mut mesh.borrow_mut().inner.mesh,
-            &vertex_connectivity,
-            iterations,
-            beta,
-            &weights,
-        );
-        Ok(())
+    if let Ok(mesh) = mesh.downcast::<PyTriMesh3d>() {
+        let mut mesh = mesh.borrow_mut();
+        if let Some(mesh) = mesh.as_f32_mut() {
+            let weights = weights.downcast::<PyArray1<f32>>()?.try_readonly()?;
+            splashsurf_lib::postprocessing::par_laplacian_smoothing_inplace(
+                mesh,
+                &vertex_connectivity.borrow().connectivity,
+                iterations,
+                beta as f32,
+                weights.as_slice()?,
+            );
+        } else if let Some(mesh) = mesh.as_f64_mut() {
+            let weights = weights.downcast::<PyArray1<f64>>()?.try_readonly()?;
+            splashsurf_lib::postprocessing::par_laplacian_smoothing_inplace(
+                mesh,
+                &vertex_connectivity.borrow().connectivity,
+                iterations,
+                beta,
+                weights.as_slice()?,
+            );
+        } else {
+            return Err(pyerr_unsupported_scalar());
+        }
+    } else if let Ok(mesh) = mesh.downcast::<PyMeshWithData>()
+        && let mut mesh = mesh.borrow_mut()
+        && mesh.mesh_cell_type() == MeshType::Tri3d
+    {
+        if let Some(mesh) = mesh.as_tri_f32_mut() {
+            let weights = weights.downcast::<PyArray1<f32>>()?.try_readonly()?;
+            splashsurf_lib::postprocessing::par_laplacian_smoothing_inplace(
+                &mut mesh.mesh,
+                &vertex_connectivity.borrow().connectivity,
+                iterations,
+                beta as f32,
+                weights.as_slice()?,
+            );
+        } else if let Some(mesh) = mesh.as_tri_f64_mut() {
+            let weights = weights.downcast::<PyArray1<f64>>()?.try_readonly()?;
+            splashsurf_lib::postprocessing::par_laplacian_smoothing_inplace(
+                &mut mesh.mesh,
+                &vertex_connectivity.borrow().connectivity,
+                iterations,
+                beta,
+                weights.as_slice()?,
+            );
+        } else {
+            return Err(pyerr_unsupported_scalar());
+        }
     } else {
-        Err(PyErr::new::<PyValueError, _>("Invalid mesh type"))
+        return Err(pyerr_only_triangle_mesh());
     }
+
+    Ok(())
 }
 
+/// Laplacian smoothing of a normal field
+///
+/// The smoothing is performed inplace and modifies the given normal array.
+#[gen_stub_pyfunction]
 #[pyfunction]
-#[pyo3(name = "par_laplacian_smoothing_inplace_f32")]
-#[pyo3(signature = (mesh, vertex_connectivity, iterations, beta, weights))]
-pub fn par_laplacian_smoothing_inplace_py_f32<'py>(
-    py: Python,
-    mesh: PyObject,
-    vertex_connectivity: Vec<Vec<usize>>, // ToDo: only take reference to data here
+#[pyo3(name = "laplacian_smoothing_normals_parallel")]
+#[pyo3(signature = (normals, vertex_connectivity, *, iterations))]
+pub fn laplacian_smoothing_normals_parallel<'py>(
+    normals: &Bound<'py, PyUntypedArray>,
+    vertex_connectivity: &Bound<'py, PyVertexVertexConnectivity>,
     iterations: usize,
-    beta: f32,
-    weights: Vec<f32>, // ToDo: Same here
 ) -> PyResult<()> {
-    if mesh.downcast_bound::<TriMesh3dF32>(py).is_ok() {
-        let mesh = mesh.downcast_bound::<TriMesh3dF32>(py).unwrap();
-        splashsurf_lib::postprocessing::par_laplacian_smoothing_inplace(
-            &mut mesh.borrow_mut().inner,
-            &vertex_connectivity,
+    // TODO: Avoid copy to temporary Vec
+    let py = normals.py();
+    let element_type = normals.dtype();
+    if element_type.is_equiv_to(&np::dtype::<f32>(py)) {
+        let mut normals = normals.downcast::<PyArray2<f32>>()?.try_readwrite()?;
+        let normals_vec3: &mut [Vector3<f32>] = bytemuck::cast_slice_mut(normals.as_slice_mut()?);
+        let mut normals_vec3_copy = normals_vec3.to_vec();
+        splashsurf_lib::postprocessing::par_laplacian_smoothing_normals_inplace(
+            &mut normals_vec3_copy,
+            &vertex_connectivity.borrow().connectivity,
             iterations,
-            beta,
-            &weights,
         );
-        Ok(())
-    } else if mesh.downcast_bound::<TriMeshWithDataF32>(py).is_ok() {
-        let mesh = mesh.downcast_bound::<TriMeshWithDataF32>(py).unwrap();
-        splashsurf_lib::postprocessing::par_laplacian_smoothing_inplace(
-            &mut mesh.borrow_mut().inner.mesh,
-            &vertex_connectivity,
+        normals_vec3.copy_from_slice(&normals_vec3_copy);
+    } else if element_type.is_equiv_to(&np::dtype::<f64>(py)) {
+        let mut normals = normals.downcast::<PyArray2<f64>>()?.try_readwrite()?;
+        let normals_vec3: &mut [Vector3<f64>] = bytemuck::cast_slice_mut(normals.as_slice_mut()?);
+        let mut normals_vec3_copy = normals_vec3.to_vec();
+        splashsurf_lib::postprocessing::par_laplacian_smoothing_normals_inplace(
+            &mut normals_vec3_copy,
+            &vertex_connectivity.borrow().connectivity,
             iterations,
-            beta,
-            &weights,
         );
-        Ok(())
+        normals_vec3.copy_from_slice(&normals_vec3_copy);
     } else {
-        Err(PyErr::new::<PyValueError, _>("Invalid mesh type"))
+        return Err(pyerr_unsupported_scalar());
     }
+
+    Ok(())
 }
 
-#[pyfunction]
-#[pyo3(name = "par_laplacian_smoothing_normals_inplace_f32")]
-#[pyo3(signature = (normals, vertex_connectivity, iterations))]
-pub fn par_laplacian_smoothing_normals_inplace_py_f32<'py>(
-    normals: &Bound<'py, PyArray2<f32>>,
-    vertex_connectivity: Vec<Vec<usize>>,
-    iterations: usize,
-) {
-    let mut normals: ArrayViewMut2<f32> = unsafe { normals.as_array_mut() };
-    let mut normals_vec: Vec<Vector3<f32>> =
-        bytemuck::cast_vec(normals.as_slice().unwrap().to_vec()); // Copies data temporarily into a vec
-    splashsurf_lib::postprocessing::par_laplacian_smoothing_normals_inplace(
-        &mut normals_vec,
-        &vertex_connectivity,
-        iterations,
-    );
-    normals
-        .as_slice_mut()
-        .unwrap()
-        .copy_from_slice(&bytemuck::cast_slice(normals_vec.as_slice())); // Copy back to numpy array
-}
-
-#[pyfunction]
-#[pyo3(name = "par_laplacian_smoothing_normals_inplace_f64")]
-#[pyo3(signature = (normals, vertex_connectivity, iterations))]
-pub fn par_laplacian_smoothing_normals_inplace_py_f64<'py>(
-    normals: &Bound<'py, PyArray2<f64>>,
-    vertex_connectivity: Vec<Vec<usize>>,
-    iterations: usize,
-) {
-    let mut normals: ArrayViewMut2<f64> = unsafe { normals.as_array_mut() };
-    let mut normals_vec: Vec<Vector3<f64>> =
-        bytemuck::cast_vec(normals.as_slice().unwrap().to_vec()); // Copies data temporarily into a vec
-    splashsurf_lib::postprocessing::par_laplacian_smoothing_normals_inplace(
-        &mut normals_vec,
-        &vertex_connectivity,
-        iterations,
-    );
-    normals
-        .as_slice_mut()
-        .unwrap()
-        .copy_from_slice(&bytemuck::cast_slice(normals_vec.as_slice())); // Copy back to numpy array
-}
-
-/// Decimation to prevent "barnacles" when applying weighted Laplacian smoothing
+/// Performs specialized decimation on the given mesh to prevent "barnacles" when applying weighted Laplacian smoothing
+///
+/// The decimation is performed inplace and modifies the given mesh.
+/// Returns the vertex-vertex connectivity of the decimated mesh which can be used for other
+/// post-processing steps.
 #[gen_stub_pyfunction]
 #[pyfunction]
 #[pyo3(name = "barnacle_decimation")]
@@ -227,42 +226,57 @@ pub fn barnacle_decimation<'py>(
     #[gen_stub(override_type(type_repr="typing.Union[TriMesh3d, MeshWithData]", imports=()))]
     mesh: Bound<'py, PyAny>,
     keep_vertices: bool,
-) -> PyResult<Vec<Vec<usize>>> {
+) -> PyResult<PyVertexVertexConnectivity> {
     use splashsurf_lib::postprocessing::decimation;
 
     if let Ok(mesh) = mesh.downcast::<PyTriMesh3d>() {
         let mut mesh = mesh.borrow_mut();
         if let Some(mesh) = mesh.as_f32_mut() {
-            Ok(decimation(mesh, keep_vertices))
+            Ok(PyVertexVertexConnectivity::new(decimation(
+                mesh,
+                keep_vertices,
+            )))
         } else if let Some(mesh) = mesh.as_f64_mut() {
-            Ok(decimation(mesh, keep_vertices))
+            Ok(PyVertexVertexConnectivity::new(decimation(
+                mesh,
+                keep_vertices,
+            )))
         } else {
-            pyerr_unsupported_scalar()
+            Err(pyerr_unsupported_scalar())
         }
     } else if let Ok(mesh) = mesh.downcast::<PyMeshWithData>() {
         let mut mesh = mesh.borrow_mut();
         if let Some(mesh) = mesh.as_tri_f32_mut() {
             let mesh = &mut mesh.mesh;
-            Ok(decimation(mesh, keep_vertices))
+            Ok(PyVertexVertexConnectivity::new(decimation(
+                mesh,
+                keep_vertices,
+            )))
         } else if let Some(mesh) = mesh.as_tri_f64_mut() {
             let mesh = &mut mesh.mesh;
-            Ok(decimation(mesh, keep_vertices))
+            Ok(PyVertexVertexConnectivity::new(decimation(
+                mesh,
+                keep_vertices,
+            )))
         } else {
-            pyerr_unsupported_scalar()
+            Err(pyerr_unsupported_scalar())
         }
     } else {
-        pyerr_only_triangle_mesh()
+        Err(pyerr_only_triangle_mesh())
     }
 }
 
-/// Mesh simplification designed for marching cubes surfaces meshes inspired by the "Compact Contouring"/"Mesh displacement" approach by Doug Moore and Joe Warren
+/// Performs simplification on the given mesh designed for marching cubes reconstructions inspired by the "Compact Contouring"/"Mesh displacement" approach by Doug Moore and Joe Warren
+///
+/// The simplification is performed inplace and modifies the given mesh.
 #[gen_stub_pyfunction]
 #[pyfunction]
 #[pyo3(name = "marching_cubes_cleanup")]
 #[pyo3(signature = (mesh, grid, *, max_rel_snap_dist = None, max_iter = 5, keep_vertices = false))]
+#[gen_stub(override_return_type(type_repr="typing.Union[TriMesh3d, MeshWithData]", imports=()))]
 pub fn marching_cubes_cleanup<'py>(
     #[gen_stub(override_type(type_repr="typing.Union[TriMesh3d, MeshWithData]", imports=()))]
-    mesh: Bound<'py, PyAny>,
+    mesh: &Bound<'py, PyAny>,
     grid: &PyUniformGrid,
     max_rel_snap_dist: Option<f64>,
     max_iter: usize,
@@ -278,7 +292,7 @@ pub fn marching_cubes_cleanup<'py>(
         } else if let (Some(grid), Some(mesh)) = (grid.as_f64(), mesh.as_f64_mut()) {
             cleanup(mesh, grid, max_rel_snap_dist, max_iter, keep_vertices);
         } else {
-            return pyerr_mesh_grid_scalar_mismatch();
+            return Err(pyerr_mesh_grid_scalar_mismatch());
         }
     } else if let Ok(mesh) = mesh.downcast::<PyMeshWithData>()
         && let mut mesh = mesh.borrow_mut()
@@ -291,10 +305,10 @@ pub fn marching_cubes_cleanup<'py>(
             let mesh = &mut mesh.mesh;
             cleanup(mesh, grid, max_rel_snap_dist, max_iter, keep_vertices);
         } else {
-            return pyerr_mesh_grid_scalar_mismatch();
+            return Err(pyerr_mesh_grid_scalar_mismatch());
         }
     } else {
-        return pyerr_only_triangle_mesh();
+        return Err(pyerr_only_triangle_mesh());
     }
 
     Ok(())

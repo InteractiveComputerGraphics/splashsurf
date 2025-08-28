@@ -473,6 +473,34 @@ macro_rules! create_tri_quad_mesh_interface {
     };
 }
 
+/// Vertex-vertex connectivity of a mesh
+#[gen_stub_pyclass]
+#[pyclass]
+#[pyo3(name = "VertexVertexConnectivity")]
+pub struct PyVertexVertexConnectivity {
+    pub(crate) connectivity: Vec<Vec<usize>>,
+}
+
+impl PyVertexVertexConnectivity {
+    pub fn new(connectivity: Vec<Vec<usize>>) -> Self {
+        Self { connectivity }
+    }
+}
+
+#[gen_stub_pymethods]
+impl PyVertexVertexConnectivity {
+    /// Returns a copy of the contained connectivity data
+    pub fn copy_connectivity(&self) -> Vec<Vec<usize>> {
+        self.connectivity.clone()
+    }
+
+    /// Returns the contained connectivity data by moving it out of this object (zero copy)
+    pub fn take_connectivity(&mut self) -> Vec<Vec<usize>> {
+        // TODO: Check if this is actually zero-copy with the conversion to Python lists
+        std::mem::take(&mut self.connectivity)
+    }
+}
+
 enum PyTriMesh3dData {
     F32(TriMesh3d<f32>),
     F64(TriMesh3d<f64>),
@@ -559,6 +587,15 @@ impl PyTriMesh3d {
             PyTriMesh3dData::F32(mesh) => get_triangles(py, mesh.cells()),
             PyTriMesh3dData::F64(mesh) => get_triangles(py, mesh.cells()),
         }
+    }
+
+    /// Returns the vertex-vertex connectivity of the mesh
+    pub fn vertex_vertex_connectivity(&self) -> PyVertexVertexConnectivity {
+        let connectivity = match &self.inner {
+            PyTriMesh3dData::F32(mesh) => mesh.vertex_vertex_connectivity(),
+            PyTriMesh3dData::F64(mesh) => mesh.vertex_vertex_connectivity(),
+        };
+        PyVertexVertexConnectivity::new(connectivity)
     }
 }
 

@@ -429,6 +429,10 @@ class TriMesh3d:
         r"""
         Returns a copy of the `Mx3` array of vertex indices per triangle
         """
+    def vertex_vertex_connectivity(self) -> VertexVertexConnectivity:
+        r"""
+        Returns the vertex-vertex connectivity of the mesh
+        """
 
 class TriMesh3dF32:
     r"""
@@ -614,6 +618,19 @@ class UniformGrid:
     """
     ...
 
+class VertexVertexConnectivity:
+    r"""
+    Vertex-vertex connectivity of a mesh
+    """
+    def copy_connectivity(self) -> builtins.list[builtins.list[builtins.int]]:
+        r"""
+        Returns a copy of the contained connectivity data
+        """
+    def take_connectivity(self) -> builtins.list[builtins.list[builtins.int]]:
+        r"""
+        Returns the contained connectivity data by moving it out of this object (zero copy)
+        """
+
 class MeshType(Enum):
     r"""
     Enum specifying the type of mesh contained in a `MeshWithData`
@@ -629,7 +646,11 @@ class MeshType(Enum):
 
 def barnacle_decimation(mesh:typing.Union[TriMesh3d, MeshWithData], *, keep_vertices:builtins.bool) -> typing.Union[TriMesh3d, MeshWithData]:
     r"""
-    Decimation to prevent "barnacles" when applying weighted Laplacian smoothing
+    Performs specialized decimation on the given mesh to prevent "barnacles" when applying weighted Laplacian smoothing
+    
+    The decimation is performed inplace and modifies the given mesh.
+    Returns the vertex-vertex connectivity of the decimated mesh which can be used for other
+    post-processing steps.
     """
 
 def check_mesh_consistency(mesh:typing.Union[TriMesh3d, MeshWithData], grid:UniformGrid, *, check_closed:builtins.bool=True, check_manifold:builtins.bool=True, debug:builtins.bool=False) -> typing.Optional[builtins.str]:
@@ -637,14 +658,33 @@ def check_mesh_consistency(mesh:typing.Union[TriMesh3d, MeshWithData], grid:Unif
     Checks the consistency of a reconstructed surface mesh (watertightness, manifoldness), optionally returns a string with details if problems are found
     """
 
-def convert_tris_to_quads(mesh:typing.Union[MixedTriQuadMesh3d, MeshWithData], *, non_squareness_limit:builtins.float=1.75, normal_angle_limit:builtins.float=10.0, max_interior_angle:builtins.float=135.0) -> typing.Union[TriMesh3d, MeshWithData]:
+def convert_tris_to_quads(mesh:typing.Union[TriMesh3d, MeshWithData], *, non_squareness_limit:builtins.float=1.75, normal_angle_limit:builtins.float=10.0, max_interior_angle:builtins.float=135.0) -> typing.Union[MixedTriQuadMesh3d, MeshWithData]:
     r"""
-    Merges triangles sharing an edge to quads if they fulfill the given criteria
+    Converts triangles to quads by merging triangles sharing an edge if they fulfill the given criteria
+    
+    This operation creates a new mesh and does not modify the input mesh.
+    Angles are specified in degrees.
     """
 
-def marching_cubes_cleanup(mesh:typing.Union[TriMesh3d, MeshWithData], grid:UniformGrid, *, max_rel_snap_dist:typing.Optional[builtins.float]=None, max_iter:builtins.int=5, keep_vertices:builtins.bool=False) -> None:
+def laplacian_smoothing_normals_parallel(normals:numpy.typing.NDArray[typing.Any], vertex_connectivity:VertexVertexConnectivity, *, iterations:builtins.int) -> None:
     r"""
-    Mesh simplification designed for marching cubes surfaces meshes inspired by the "Compact Contouring"/"Mesh displacement" approach by Doug Moore and Joe Warren
+    Laplacian smoothing of a normal field
+    
+    The smoothing is performed inplace and modifies the given normal array.
+    """
+
+def laplacian_smoothing_parallel(mesh:typing.Union[TriMesh3d, MeshWithData], vertex_connectivity:VertexVertexConnectivity, *, iterations:builtins.int, beta:builtins.float=1.0, weights:numpy.typing.NDArray[typing.Any]) -> None:
+    r"""
+    Laplacian smoothing of mesh vertices with feature weights
+    
+    The smoothing is performed inplace and modifies the vertices of the given mesh.
+    """
+
+def marching_cubes_cleanup(mesh:typing.Union[TriMesh3d, MeshWithData], grid:UniformGrid, *, max_rel_snap_dist:typing.Optional[builtins.float]=None, max_iter:builtins.int=5, keep_vertices:builtins.bool=False) -> typing.Union[TriMesh3d, MeshWithData]:
+    r"""
+    Performs simplification on the given mesh designed for marching cubes reconstructions inspired by the "Compact Contouring"/"Mesh displacement" approach by Doug Moore and Joe Warren
+    
+    The simplification is performed inplace and modifies the given mesh.
     """
 
 def reconstruct_surface(particles:numpy.typing.NDArray[typing.Any], *, particle_radius:builtins.float, rest_density:builtins.float=1000.0, smoothing_length:builtins.float, cube_size:builtins.float, iso_surface_threshold:builtins.float=0.6, multi_threading:builtins.bool=True, global_neighborhood_list:builtins.bool=False, subdomain_grid:builtins.bool=True, subdomain_grid_auto_disable:builtins.bool=True, subdomain_num_cubes_per_dim:builtins.int=64, aabb_min:typing.Optional[typing.Sequence[builtins.float]]=None, aabb_max:typing.Optional[typing.Sequence[builtins.float]]=None) -> SurfaceReconstruction:
