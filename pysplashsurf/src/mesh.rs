@@ -1,6 +1,7 @@
 use crate::NumpyUsize;
 use crate::aabb::{Aabb3dF32, Aabb3dF64};
 use crate::utils::*;
+use bytemuck::{NoUninit, Pod};
 use ndarray::{Array2, ArrayView, ArrayView2};
 use numpy as np;
 use numpy::{
@@ -701,6 +702,53 @@ impl PyMixedTriQuadMesh3d {
             }
         }
     }
+
+    /// Returns a copy of all triangle cells of the mesh as an `Nx3` array of vertex indices
+    pub fn get_triangles<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<Bound<'py, PyArray2<NumpyUsize>>> {
+        let cells = match &self.inner {
+            PyMixedTriQuadMesh3dData::F32(mesh) => mesh.cells.as_slice(),
+            PyMixedTriQuadMesh3dData::F64(mesh) => mesh.cells.as_slice(),
+        };
+
+        filter_cells(py, cells, |cell| match cell {
+            TriangleOrQuadCell::Tri(tri) => Some(tri.map(|v| v as NumpyUsize)),
+            _ => None,
+        })
+    }
+
+    /// Returns a copy of all quad cells of the mesh as an `Nx3` array of vertex indices
+    pub fn get_quads<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyArray2<NumpyUsize>>> {
+        let cells = match &self.inner {
+            PyMixedTriQuadMesh3dData::F32(mesh) => mesh.cells.as_slice(),
+            PyMixedTriQuadMesh3dData::F64(mesh) => mesh.cells.as_slice(),
+        };
+
+        filter_cells(py, cells, |cell| match cell {
+            TriangleOrQuadCell::Quad(quad) => Some(quad.map(|v| v as NumpyUsize)),
+            _ => None,
+        })
+    }
+}
+
+pub fn filter_cells<'py, C, const N: usize, F>(
+    py: Python<'py>,
+    cells: &[C],
+    filter: F,
+) -> PyResult<Bound<'py, PyArray2<NumpyUsize>>>
+where
+    [NumpyUsize; N]: Pod + NoUninit,
+    F: Fn(&C) -> Option<[NumpyUsize; N]>,
+{
+    let filtered_cells: Vec<[NumpyUsize; N]> = cells.iter().filter_map(filter).collect();
+    let n_triangles = filtered_cells.len();
+    let vertex_indices: Vec<NumpyUsize> = bytemuck::cast_vec(filtered_cells);
+    let array: Array2<NumpyUsize> =
+        Array2::from_shape_vec((n_triangles, N), vertex_indices).map_err(anyhow::Error::new)?;
+    let pyarray = array.into_pyarray(py);
+    Ok(pyarray)
 }
 
 /// Enum specifying the type of mesh contained in a `MeshWithData`

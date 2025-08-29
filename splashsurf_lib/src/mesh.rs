@@ -232,7 +232,7 @@ impl TriangleOrQuadCell {
 pub struct MixedTriQuadMesh3d<R: Real> {
     /// Coordinates of all vertices of the mesh
     pub vertices: Vec<Vector3<R>>,
-    /// All triangle cells of the mesh
+    /// All triangle and quad cells of the mesh
     pub cells: Vec<TriangleOrQuadCell>,
 }
 

@@ -229,6 +229,14 @@ class MixedTriQuadMesh3d:
         r"""
         The `Nx3` array of vertex positions of the mesh
         """
+    def get_triangles(self) -> numpy.typing.NDArray[numpy.uint64]:
+        r"""
+        Extracts the triangles of the mesh as an `Nx3` array of vertex indices
+        """
+    def get_quads(self) -> numpy.typing.NDArray[numpy.uint64]:
+        r"""
+        Extracts the quads of the mesh as an `Nx3` array of vertex indices
+        """
 
 class MixedTriQuadMesh3dF32:
     r"""
