@@ -42,26 +42,6 @@ def push_cell_attribute(self, name: str, data: np.ndarray, real_type):
     else:
         raise ValueError("Not a valid data array")
 
-TriMeshWithDataF64.push_point_attribute = lambda self, name, data: push_point_attribute(self, name, data, np.float64)
-TriMeshWithDataF64.push_point_attribute.__doc__ = push_point_attribute.__doc__
-TriMeshWithDataF32.push_point_attribute = lambda self, name, data: push_point_attribute(self, name, data, np.float32)
-TriMeshWithDataF32.push_point_attribute.__doc__ = push_point_attribute.__doc__
-
-TriMeshWithDataF64.push_cell_attribute = lambda self, name, data: push_cell_attribute(self, name, data, np.float64)
-TriMeshWithDataF64.push_cell_attribute.__doc__ = push_cell_attribute.__doc__
-TriMeshWithDataF32.push_cell_attribute = lambda self, name, data: push_cell_attribute(self, name, data, np.float32)
-TriMeshWithDataF32.push_cell_attribute.__doc__ = push_cell_attribute.__doc__
-
-MixedTriQuadMeshWithDataF64.push_point_attribute = lambda self, name, data: push_point_attribute(self, name, data, np.float64)
-MixedTriQuadMeshWithDataF64.push_point_attribute.__doc__ = push_point_attribute.__doc__
-MixedTriQuadMeshWithDataF32.push_point_attribute = lambda self, name, data: push_point_attribute(self, name, data, np.float32)
-MixedTriQuadMeshWithDataF32.push_point_attribute.__doc__ = push_point_attribute.__doc__
-
-MixedTriQuadMeshWithDataF64.push_cell_attribute = lambda self, name, data: push_cell_attribute(self, name, data, np.float64)
-MixedTriQuadMeshWithDataF64.push_cell_attribute.__doc__ = push_cell_attribute.__doc__
-MixedTriQuadMeshWithDataF32.push_cell_attribute = lambda self, name, data: push_cell_attribute(self, name, data, np.float32)
-MixedTriQuadMeshWithDataF32.push_cell_attribute.__doc__ = push_cell_attribute.__doc__
-
 def write_to_file(mesh_with_data, filename, file_format=None, consume_object=False):
     """Write the mesh and its attributes to a file using meshio
     

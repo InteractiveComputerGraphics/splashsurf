@@ -7,192 +7,26 @@ import numpy.typing
 import typing
 from enum import Enum
 
-class Aabb3dF32:
-    r"""
-    Aabb3d wrapper
-    """
-    def __new__(cls, min:typing.Sequence[builtins.float], max:typing.Sequence[builtins.float]) -> Aabb3dF32: ...
-    @staticmethod
-    def from_points(points:numpy.typing.NDArray[numpy.float32]) -> Aabb3dF32:
-        r"""
-        Constructs the smallest AABB fitting around all the given points
-        """
-    @staticmethod
-    def par_from_points(points:numpy.typing.NDArray[numpy.float32]) -> Aabb3dF32:
-        r"""
-        Constructs the smallest AABB fitting around all the given points, parallel version
-        """
-    @staticmethod
-    def zeros() -> Aabb3dF32:
-        r"""
-        Constructs a degenerate AABB with min and max set to zero
-        """
-    @staticmethod
-    def from_point(point:typing.Sequence[builtins.float]) -> Aabb3dF32:
-        r"""
-        Constructs a degenerate AABB with zero extents centered at the given point
-        """
-    def min(self) -> numpy.typing.NDArray[numpy.float32]:
-        r"""
-        Returns the min coordinate of the bounding box
-        """
-    def max(self) -> numpy.typing.NDArray[numpy.float32]:
-        r"""
-        Returns the max coordinate of the bounding box
-        """
-    def is_consistent(self) -> builtins.bool:
-        r"""
-        Returns whether the AABB is consistent, i.e. `aabb.min()[i] <= aabb.max()[i]` for all `i`
-        """
-    def is_degenerate(self) -> builtins.bool:
-        r"""
-        Returns whether the AABB is degenerate in any dimension, i.e. `aabb.min()[i] == aabb.max()[i]` for any `i`
-        """
-    def extents(self) -> numpy.typing.NDArray[numpy.float32]:
-        r"""
-        Returns the extents of the bounding box (vector connecting min and max point of the box)
-        """
-    def min_extent(self) -> builtins.float:
-        r"""
-        Returns the smallest scalar extent of the AABB over all of its dimensions
-        """
-    def max_extent(self) -> builtins.float:
-        r"""
-        Returns the largest scalar extent of the AABB over all of its dimensions
-        """
-    def centroid(self) -> numpy.typing.NDArray[numpy.float32]:
-        r"""
-        Returns the geometric centroid of the AABB (mean of the corner points)
-        """
-    def contains_aabb(self, other:Aabb3dF32) -> builtins.bool:
-        r"""
-        Checks if the given AABB is inside of the AABB, the AABB is considered to be half-open to its max coordinate
-        """
-    def contains_point(self, point:typing.Sequence[builtins.float]) -> builtins.bool:
-        r"""
-        Checks if the given point is inside of the AABB, the AABB is considered to be half-open to its max coordinate
-        """
-    def translate(self, vector:typing.Sequence[builtins.float]) -> None:
-        r"""
-        Translates the AABB by the given vector
-        """
-    def center_at_origin(self) -> None:
-        r"""
-        Translates the AABB to center it at the coordinate origin (moves the centroid to the coordinate origin)
-        """
-    def scale_uniformly(self, scaling:builtins.float) -> None:
-        r"""
-        Multiplies a uniform, local scaling to the AABB (i.e. multiplying its extents as if it was centered at the origin)
-        """
-    def join(self, other:Aabb3dF32) -> None:
-        r"""
-        Enlarges this AABB to the smallest AABB enclosing both itself and another AABB
-        """
-    def join_with_point(self, point:typing.Sequence[builtins.float]) -> None:
-        r"""
-        Enlarges this AABB to the smallest AABB enclosing both itself and another point
-        """
-    def grow_uniformly(self, margin:builtins.float) -> None:
-        r"""
-        Grows this AABB uniformly in all directions by the given scalar margin (i.e. adding the margin to min/max extents)
-        """
-    def enclosing_cube(self) -> Aabb3dF32:
-        r"""
-        Returns the smallest cubical AABB with the same center that encloses this AABB
-        """
-
-class Aabb3dF64:
-    r"""
-    Aabb3d wrapper
-    """
-    def __new__(cls, min:typing.Sequence[builtins.float], max:typing.Sequence[builtins.float]) -> Aabb3dF64: ...
-    @staticmethod
-    def from_points(points:numpy.typing.NDArray[numpy.float64]) -> Aabb3dF64:
-        r"""
-        Constructs the smallest AABB fitting around all the given points
-        """
-    @staticmethod
-    def par_from_points(points:numpy.typing.NDArray[numpy.float64]) -> Aabb3dF64:
-        r"""
-        Constructs the smallest AABB fitting around all the given points, parallel version
-        """
-    @staticmethod
-    def zeros() -> Aabb3dF64:
-        r"""
-        Constructs a degenerate AABB with min and max set to zero
-        """
-    @staticmethod
-    def from_point(point:typing.Sequence[builtins.float]) -> Aabb3dF64:
-        r"""
-        Constructs a degenerate AABB with zero extents centered at the given point
-        """
+class Aabb3d:
+    @property
     def min(self) -> numpy.typing.NDArray[numpy.float64]:
         r"""
-        Returns the min coordinate of the bounding box
+        The min coordinate of the AABB
         """
+    @property
     def max(self) -> numpy.typing.NDArray[numpy.float64]:
         r"""
-        Returns the max coordinate of the bounding box
+        The max coordinate of the AABB
         """
-    def is_consistent(self) -> builtins.bool:
+    @staticmethod
+    def from_min_max(min:typing.Sequence[builtins.float], max:typing.Sequence[builtins.float]) -> Aabb3d:
         r"""
-        Returns whether the AABB is consistent, i.e. `aabb.min()[i] <= aabb.max()[i]` for all `i`
+        Constructs an AABB with the given min and max coordinates
         """
-    def is_degenerate(self) -> builtins.bool:
+    @staticmethod
+    def from_points(points:numpy.typing.NDArray[typing.Any]) -> Aabb3d:
         r"""
-        Returns whether the AABB is degenerate in any dimension, i.e. `aabb.min()[i] == aabb.max()[i]` for any `i`
-        """
-    def extents(self) -> numpy.typing.NDArray[numpy.float64]:
-        r"""
-        Returns the extents of the bounding box (vector connecting min and max point of the box)
-        """
-    def min_extent(self) -> builtins.float:
-        r"""
-        Returns the smallest scalar extent of the AABB over all of its dimensions
-        """
-    def max_extent(self) -> builtins.float:
-        r"""
-        Returns the largest scalar extent of the AABB over all of its dimensions
-        """
-    def centroid(self) -> numpy.typing.NDArray[numpy.float64]:
-        r"""
-        Returns the geometric centroid of the AABB (mean of the corner points)
-        """
-    def contains_aabb(self, other:Aabb3dF64) -> builtins.bool:
-        r"""
-        Checks if the given AABB is inside of the AABB, the AABB is considered to be half-open to its max coordinate
-        """
-    def contains_point(self, point:typing.Sequence[builtins.float]) -> builtins.bool:
-        r"""
-        Checks if the given point is inside of the AABB, the AABB is considered to be half-open to its max coordinate
-        """
-    def translate(self, vector:typing.Sequence[builtins.float]) -> None:
-        r"""
-        Translates the AABB by the given vector
-        """
-    def center_at_origin(self) -> None:
-        r"""
-        Translates the AABB to center it at the coordinate origin (moves the centroid to the coordinate origin)
-        """
-    def scale_uniformly(self, scaling:builtins.float) -> None:
-        r"""
-        Multiplies a uniform, local scaling to the AABB (i.e. multiplying its extents as if it was centered at the origin)
-        """
-    def join(self, other:Aabb3dF64) -> None:
-        r"""
-        Enlarges this AABB to the smallest AABB enclosing both itself and another AABB
-        """
-    def join_with_point(self, point:typing.Sequence[builtins.float]) -> None:
-        r"""
-        Enlarges this AABB to the smallest AABB enclosing both itself and another point
-        """
-    def grow_uniformly(self, margin:builtins.float) -> None:
-        r"""
-        Grows this AABB uniformly in all directions by the given scalar margin (i.e. adding the margin to min/max extents)
-        """
-    def enclosing_cube(self) -> Aabb3dF64:
-        r"""
-        Returns the smallest cubical AABB with the same center that encloses this AABB
+        Constructs the smallest AABB fitting around all the given points
         """
 
 class MeshAttribute:
@@ -259,135 +93,8 @@ class MixedTriQuadMesh3d:
         Returns a copy of all quad cells of the mesh as an `Nx3` array of vertex indices
         """
 
-class MixedTriQuadMesh3dF32:
-    r"""
-    MixedTriQuadMesh3d wrapper
-    """
-    def get_vertices(self) -> numpy.typing.NDArray[numpy.float32]:
-        r"""
-        Returns a copy of the `Nx3` array of vertex positions
-        """
-    def get_cells(self) -> builtins.list[builtins.list[builtins.int]]:
-        r"""
-        Returns a 2D list specifying the vertex indices either for a triangle or a quad
-        """
-    def take_vertices(self) -> numpy.typing.NDArray[numpy.float32]:
-        r"""
-        Returns the `Nx3` array of vertex positions by moving it out of the mesh (zero copy)
-        """
-
-class MixedTriQuadMesh3dF64:
-    r"""
-    MixedTriQuadMesh3d wrapper
-    """
-    def get_vertices(self) -> numpy.typing.NDArray[numpy.float64]:
-        r"""
-        Returns a copy of the `Nx3` array of vertex positions
-        """
-    def get_cells(self) -> builtins.list[builtins.list[builtins.int]]:
-        r"""
-        Returns a 2D list specifying the vertex indices either for a triangle or a quad
-        """
-    def take_vertices(self) -> numpy.typing.NDArray[numpy.float64]:
-        r"""
-        Returns the `Nx3` array of vertex positions by moving it out of the mesh (zero copy)
-        """
-
-class MixedTriQuadMeshWithDataF32:
-    r"""
-    MeshWithData wrapper
-    """
-    def __new__(cls, mesh:MixedTriQuadMesh3dF32) -> MixedTriQuadMeshWithDataF32: ...
-    def get_mesh(self) -> MixedTriQuadMesh3dF32:
-        r"""
-        Returns a copy of the contained mesh
-        """
-    def take_mesh(self) -> MixedTriQuadMesh3dF32:
-        r"""
-        Returns the contained mesh by moving it out of this object (zero copy)
-        """
-    def par_clamp_with_aabb(self, aabb:Aabb3dF32, clamp_vertices:builtins.bool, keep_vertices:builtins.bool) -> MixedTriQuadMeshWithDataF32:
-        r"""
-        Removes all cells from the mesh that are completely outside of the given AABB and clamps the remaining cells to the boundary
-        """
-    def push_point_attribute_scalar_u64(self, name:builtins.str, data:typing.Sequence[builtins.int]) -> None: ...
-    def push_point_attribute_scalar_real(self, name:builtins.str, data:typing.Sequence[builtins.float]) -> None: ...
-    def push_point_attribute_vector_real(self, name:builtins.str, data:numpy.typing.NDArray[numpy.float32]) -> None: ...
-    def push_cell_attribute_scalar_u64(self, name:builtins.str, data:typing.Sequence[builtins.int]) -> None: ...
-    def push_cell_attribute_scalar_real(self, name:builtins.str, data:typing.Sequence[builtins.float]) -> None: ...
-    def push_cell_attribute_vector_real(self, name:builtins.str, data:numpy.typing.NDArray[numpy.float32]) -> None: ...
-    def get_point_attribute(self, name:builtins.str) -> typing.Any:
-        r"""
-        Get mesh vertex attribute by name
-        """
-    def get_cell_attribute(self, name:builtins.str) -> typing.Any:
-        r"""
-        Get mesh cell attribute by name
-        """
-    def get_point_attributes(self) -> dict:
-        r"""
-        Get all point attributes in a python dictionary
-        """
-    def get_cell_attributes(self) -> dict:
-        r"""
-        Get all cell attributes in a python dictionary
-        """
-    def get_point_attribute_keys(self) -> list:
-        r"""
-        Get all registered point attribute names
-        """
-    def get_cell_attribute_keys(self) -> list:
-        r"""
-        Get all registered cell attribute names
-        """
-
-class MixedTriQuadMeshWithDataF64:
-    r"""
-    MeshWithData wrapper
-    """
-    def __new__(cls, mesh:MixedTriQuadMesh3dF64) -> MixedTriQuadMeshWithDataF64: ...
-    def get_mesh(self) -> MixedTriQuadMesh3dF64:
-        r"""
-        Returns a copy of the contained mesh
-        """
-    def take_mesh(self) -> MixedTriQuadMesh3dF64:
-        r"""
-        Returns the contained mesh by moving it out of this object (zero copy)
-        """
-    def par_clamp_with_aabb(self, aabb:Aabb3dF64, clamp_vertices:builtins.bool, keep_vertices:builtins.bool) -> MixedTriQuadMeshWithDataF64:
-        r"""
-        Removes all cells from the mesh that are completely outside of the given AABB and clamps the remaining cells to the boundary
-        """
-    def push_point_attribute_scalar_u64(self, name:builtins.str, data:typing.Sequence[builtins.int]) -> None: ...
-    def push_point_attribute_scalar_real(self, name:builtins.str, data:typing.Sequence[builtins.float]) -> None: ...
-    def push_point_attribute_vector_real(self, name:builtins.str, data:numpy.typing.NDArray[numpy.float64]) -> None: ...
-    def push_cell_attribute_scalar_u64(self, name:builtins.str, data:typing.Sequence[builtins.int]) -> None: ...
-    def push_cell_attribute_scalar_real(self, name:builtins.str, data:typing.Sequence[builtins.float]) -> None: ...
-    def push_cell_attribute_vector_real(self, name:builtins.str, data:numpy.typing.NDArray[numpy.float64]) -> None: ...
-    def get_point_attribute(self, name:builtins.str) -> typing.Any:
-        r"""
-        Get mesh vertex attribute by name
-        """
-    def get_cell_attribute(self, name:builtins.str) -> typing.Any:
-        r"""
-        Get mesh cell attribute by name
-        """
-    def get_point_attributes(self) -> dict:
-        r"""
-        Get all point attributes in a python dictionary
-        """
-    def get_cell_attributes(self) -> dict:
-        r"""
-        Get all cell attributes in a python dictionary
-        """
-    def get_point_attribute_keys(self) -> list:
-        r"""
-        Get all registered point attribute names
-        """
-    def get_cell_attribute_keys(self) -> list:
-        r"""
-        Get all registered cell attribute names
-        """
+class NeighborhoodLists:
+    ...
 
 class SphInterpolatorF32:
     r"""
@@ -473,184 +180,6 @@ class TriMesh3d:
         Computes the vertex-vertex connectivity of the mesh
         """
 
-class TriMesh3dF32:
-    r"""
-    TriMesh3d wrapper
-    """
-    def get_vertices(self) -> numpy.typing.NDArray[numpy.float32]:
-        r"""
-        Returns a copy of the `Nx3` array of vertex positions
-        """
-    def get_triangles(self) -> numpy.typing.NDArray[numpy.uint64]:
-        r"""
-        Returns a copy of the `Mx3` array of the vertex indices that make up a triangle
-        """
-    def get_cells(self) -> numpy.typing.NDArray[numpy.uint64]:
-        r"""
-        Alias for `get_triangles`
-        """
-    def take_vertices(self) -> numpy.typing.NDArray[numpy.float32]:
-        r"""
-        Returns the `Nx3` array of vertex positions by moving it out of the mesh (zero copy)
-        """
-    def take_triangles(self) -> numpy.typing.NDArray[numpy.uint64]:
-        r"""
-        Returns the `Mx3` array of the vertex indices that make up the triangles by moving it out of the mesh (zero copy)
-        """
-    def take_cells(self) -> numpy.typing.NDArray[numpy.uint64]:
-        r"""
-        Alias for `take_triangles`
-        """
-    def take_vertices_and_triangles(self) -> tuple:
-        r"""
-        Returns a tuple containing the vertices and triangles of the mesh by moving them out of the mesh (zero copy)
-        """
-    def par_vertex_normals(self) -> numpy.typing.NDArray[numpy.float32]:
-        r"""
-        Computes the mesh's vertex normals using an area weighted average of the adjacent triangle faces (parallelized version)
-        """
-    def vertex_vertex_connectivity(self) -> builtins.list[builtins.list[builtins.int]]:
-        r"""
-        Returns a mapping of all mesh vertices to the set of their connected neighbor vertices
-        """
-
-class TriMesh3dF64:
-    r"""
-    TriMesh3d wrapper
-    """
-    def get_vertices(self) -> numpy.typing.NDArray[numpy.float64]:
-        r"""
-        Returns a copy of the `Nx3` array of vertex positions
-        """
-    def get_triangles(self) -> numpy.typing.NDArray[numpy.uint64]:
-        r"""
-        Returns a copy of the `Mx3` array of the vertex indices that make up a triangle
-        """
-    def get_cells(self) -> numpy.typing.NDArray[numpy.uint64]:
-        r"""
-        Alias for `get_triangles`
-        """
-    def take_vertices(self) -> numpy.typing.NDArray[numpy.float64]:
-        r"""
-        Returns the `Nx3` array of vertex positions by moving it out of the mesh (zero copy)
-        """
-    def take_triangles(self) -> numpy.typing.NDArray[numpy.uint64]:
-        r"""
-        Returns the `Mx3` array of the vertex indices that make up the triangles by moving it out of the mesh (zero copy)
-        """
-    def take_cells(self) -> numpy.typing.NDArray[numpy.uint64]:
-        r"""
-        Alias for `take_triangles`
-        """
-    def take_vertices_and_triangles(self) -> tuple:
-        r"""
-        Returns a tuple containing the vertices and triangles of the mesh by moving them out of the mesh (zero copy)
-        """
-    def par_vertex_normals(self) -> numpy.typing.NDArray[numpy.float64]:
-        r"""
-        Computes the mesh's vertex normals using an area weighted average of the adjacent triangle faces (parallelized version)
-        """
-    def vertex_vertex_connectivity(self) -> builtins.list[builtins.list[builtins.int]]:
-        r"""
-        Returns a mapping of all mesh vertices to the set of their connected neighbor vertices
-        """
-
-class TriMeshWithDataF32:
-    r"""
-    MeshWithData wrapper
-    """
-    def __new__(cls, mesh:TriMesh3dF32) -> TriMeshWithDataF32: ...
-    def get_mesh(self) -> TriMesh3dF32:
-        r"""
-        Returns a copy of the contained mesh
-        """
-    def take_mesh(self) -> TriMesh3dF32:
-        r"""
-        Returns the contained mesh by moving it out of this object (zero copy)
-        """
-    def par_clamp_with_aabb(self, aabb:Aabb3dF32, clamp_vertices:builtins.bool, keep_vertices:builtins.bool) -> TriMeshWithDataF32:
-        r"""
-        Removes all cells from the mesh that are completely outside of the given AABB and clamps the remaining cells to the boundary
-        """
-    def push_point_attribute_scalar_u64(self, name:builtins.str, data:typing.Sequence[builtins.int]) -> None: ...
-    def push_point_attribute_scalar_real(self, name:builtins.str, data:typing.Sequence[builtins.float]) -> None: ...
-    def push_point_attribute_vector_real(self, name:builtins.str, data:numpy.typing.NDArray[numpy.float32]) -> None: ...
-    def push_cell_attribute_scalar_u64(self, name:builtins.str, data:typing.Sequence[builtins.int]) -> None: ...
-    def push_cell_attribute_scalar_real(self, name:builtins.str, data:typing.Sequence[builtins.float]) -> None: ...
-    def push_cell_attribute_vector_real(self, name:builtins.str, data:numpy.typing.NDArray[numpy.float32]) -> None: ...
-    def get_point_attribute(self, name:builtins.str) -> typing.Any:
-        r"""
-        Get mesh vertex attribute by name
-        """
-    def get_cell_attribute(self, name:builtins.str) -> typing.Any:
-        r"""
-        Get mesh cell attribute by name
-        """
-    def get_point_attributes(self) -> dict:
-        r"""
-        Get all point attributes in a python dictionary
-        """
-    def get_cell_attributes(self) -> dict:
-        r"""
-        Get all cell attributes in a python dictionary
-        """
-    def get_point_attribute_keys(self) -> list:
-        r"""
-        Get all registered point attribute names
-        """
-    def get_cell_attribute_keys(self) -> list:
-        r"""
-        Get all registered cell attribute names
-        """
-
-class TriMeshWithDataF64:
-    r"""
-    MeshWithData wrapper
-    """
-    def __new__(cls, mesh:TriMesh3dF64) -> TriMeshWithDataF64: ...
-    def get_mesh(self) -> TriMesh3dF64:
-        r"""
-        Returns a copy of the contained mesh
-        """
-    def take_mesh(self) -> TriMesh3dF64:
-        r"""
-        Returns the contained mesh by moving it out of this object (zero copy)
-        """
-    def par_clamp_with_aabb(self, aabb:Aabb3dF64, clamp_vertices:builtins.bool, keep_vertices:builtins.bool) -> TriMeshWithDataF64:
-        r"""
-        Removes all cells from the mesh that are completely outside of the given AABB and clamps the remaining cells to the boundary
-        """
-    def push_point_attribute_scalar_u64(self, name:builtins.str, data:typing.Sequence[builtins.int]) -> None: ...
-    def push_point_attribute_scalar_real(self, name:builtins.str, data:typing.Sequence[builtins.float]) -> None: ...
-    def push_point_attribute_vector_real(self, name:builtins.str, data:numpy.typing.NDArray[numpy.float64]) -> None: ...
-    def push_cell_attribute_scalar_u64(self, name:builtins.str, data:typing.Sequence[builtins.int]) -> None: ...
-    def push_cell_attribute_scalar_real(self, name:builtins.str, data:typing.Sequence[builtins.float]) -> None: ...
-    def push_cell_attribute_vector_real(self, name:builtins.str, data:numpy.typing.NDArray[numpy.float64]) -> None: ...
-    def get_point_attribute(self, name:builtins.str) -> typing.Any:
-        r"""
-        Get mesh vertex attribute by name
-        """
-    def get_cell_attribute(self, name:builtins.str) -> typing.Any:
-        r"""
-        Get mesh cell attribute by name
-        """
-    def get_point_attributes(self) -> dict:
-        r"""
-        Get all point attributes in a python dictionary
-        """
-    def get_cell_attributes(self) -> dict:
-        r"""
-        Get all cell attributes in a python dictionary
-        """
-    def get_point_attribute_keys(self) -> list:
-        r"""
-        Get all registered point attribute names
-        """
-    def get_cell_attribute_keys(self) -> list:
-        r"""
-        Get all registered cell attribute names
-        """
-
 class UniformGrid:
     r"""
     Struct containing the parameters of the uniform grid used for the surface reconstruction
@@ -726,6 +255,11 @@ def marching_cubes_cleanup(mesh:typing.Union[TriMesh3d, MeshWithData], grid:Unif
     The simplification is performed inplace and modifies the given mesh.
     """
 
+def neighborhood_search_spatial_hashing_parallel(particle_positions:numpy.typing.NDArray[typing.Any], domain:Aabb3d, search_radius:builtins.float) -> NeighborhoodLists:
+    r"""
+    Performs a neighborhood search using spatial hashing (multi-threaded implementation)
+    """
+
 def reconstruct_surface(particles:numpy.typing.NDArray[typing.Any], *, particle_radius:builtins.float, rest_density:builtins.float=1000.0, smoothing_length:builtins.float, cube_size:builtins.float, iso_surface_threshold:builtins.float=0.6, multi_threading:builtins.bool=True, global_neighborhood_list:builtins.bool=False, subdomain_grid:builtins.bool=True, subdomain_grid_auto_disable:builtins.bool=True, subdomain_num_cubes_per_dim:builtins.int=64, aabb_min:typing.Optional[typing.Sequence[builtins.float]]=None, aabb_max:typing.Optional[typing.Sequence[builtins.float]]=None) -> SurfaceReconstruction:
     r"""
     Performs a surface reconstruction from the given particles without additional post-processing
@@ -739,4 +273,6 @@ def reconstruction_pipeline(particles:numpy.typing.NDArray[typing.Any], *, attri
     
     Note that smoothing length and cube size are given in multiples of the particle radius.
     """
+
+def triangulate_density_map(values:numpy.typing.NDArray[typing.Any], grid:UniformGrid, *, iso_surface_threshold:builtins.float) -> TriMesh3d: ...
 

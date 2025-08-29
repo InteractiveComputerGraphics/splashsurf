@@ -28,16 +28,6 @@ pub(crate) mod utils;
 /// Support reconstructing Level-Set surfaces from particle clouds or from regular grids.
 #[pymodule]
 fn pysplashsurf(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_class::<mesh::TriMesh3dF32>()?;
-    m.add_class::<mesh::TriMesh3dF64>()?;
-    m.add_class::<mesh::MixedTriQuadMesh3dF32>()?;
-    m.add_class::<mesh::MixedTriQuadMesh3dF64>()?;
-
-    m.add_class::<mesh::TriMeshWithDataF32>()?;
-    m.add_class::<mesh::TriMeshWithDataF64>()?;
-    m.add_class::<mesh::MixedTriQuadMeshWithDataF32>()?;
-    m.add_class::<mesh::MixedTriQuadMeshWithDataF64>()?;
-
     m.add_class::<mesh::PyTriMesh3d>()?;
     m.add_class::<mesh::PyMixedTriQuadMesh3d>()?;
     m.add_class::<mesh::PyMeshWithData>()?;
@@ -51,8 +41,6 @@ fn pysplashsurf(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<sph_interpolation::SphInterpolatorF64>()?;
 
     m.add_class::<aabb::PyAabb3d>()?;
-    m.add_class::<aabb::Aabb3dF32>()?;
-    m.add_class::<aabb::Aabb3dF64>()?;
 
     m.add_class::<neighborhood_search::PyNeighborhoodLists>()?;
 
