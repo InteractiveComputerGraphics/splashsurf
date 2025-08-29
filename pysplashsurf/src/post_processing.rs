@@ -61,7 +61,7 @@ pub fn convert_tris_to_quads<'py>(
 
     if let Ok(mesh) = mesh.downcast::<PyMeshWithData>() {
         let mut data_mesh = PyMeshWithData::try_from_pymesh(py, quad_mesh)?;
-        // TODO: transfer of point attributes not implemented yet
+        // TODO: transfer of point attributes not implemented yet, has to clone the data
         unimplemented!("transfer of point attributes not implemented yet");
     } else {
         quad_mesh.into_bound_py_any(py)

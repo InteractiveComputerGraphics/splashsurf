@@ -195,17 +195,38 @@ class Aabb3dF64:
         Returns the smallest cubical AABB with the same center that encloses this AABB
         """
 
+class MeshAttribute:
+    @property
+    def dtype(self) -> numpy.dtype:
+        r"""
+        Numpy dtype of the data stored in the attribute
+        """
+    @property
+    def name(self) -> builtins.str:
+        r"""
+        Name of the attribute
+        """
+    @property
+    def data(self) -> None:
+        r"""
+        View of the attribute data as a numpy array
+        """
+
 class MeshWithData:
     @property
     def dtype(self) -> numpy.dtype:
         r"""
-        Returns the numpy dtype of the underlying scalar type (either `np.float32` or `np.float64`)
+        Numpy dtype of the underlying scalar type (either `np.float32` or `np.float64`)
         """
     @property
     def mesh_type(self) -> MeshType:
         r"""
         Returns the type of the underlying mesh
         """
+    @property
+    def point_attributes(self) -> typing.List[MeshAttribute]: ...
+    @property
+    def cell_attributes(self) -> typing.List[MeshAttribute]: ...
     @property
     def mesh(self) -> typing.Union[TriMesh3d, MixedTriQuadMesh3d]:
         r"""
@@ -222,7 +243,7 @@ class MixedTriQuadMesh3d:
     @property
     def dtype(self) -> numpy.dtype:
         r"""
-        Returns the numpy dtype of the underlying scalar type (either `np.float32` or `np.float64`)
+        Numpy dtype of the underlying scalar type (either `np.float32` or `np.float64`)
         """
     @property
     def vertices(self) -> numpy.typing.NDArray[typing.Any]:
@@ -231,11 +252,11 @@ class MixedTriQuadMesh3d:
         """
     def get_triangles(self) -> numpy.typing.NDArray[numpy.uint64]:
         r"""
-        Extracts the triangles of the mesh as an `Nx3` array of vertex indices
+        Returns a copy of all triangle cells of the mesh as an `Nx3` array of vertex indices
         """
     def get_quads(self) -> numpy.typing.NDArray[numpy.uint64]:
         r"""
-        Extracts the quads of the mesh as an `Nx3` array of vertex indices
+        Returns a copy of all quad cells of the mesh as an `Nx3` array of vertex indices
         """
 
 class MixedTriQuadMesh3dF32:
@@ -431,7 +452,7 @@ class TriMesh3d:
     @property
     def dtype(self) -> numpy.dtype:
         r"""
-        Returns the numpy dtype of the underlying scalar type (either `np.float32` or `np.float64`)
+        Numpy dtype of the underlying scalar type (either `np.float32` or `np.float64`)
         """
     @property
     def vertices(self) -> numpy.typing.NDArray[typing.Any]:

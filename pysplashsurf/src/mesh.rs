@@ -601,7 +601,7 @@ impl PyTriMesh3d {
 #[gen_stub_pymethods]
 #[pymethods]
 impl PyTriMesh3d {
-    /// Returns the numpy dtype of the underlying scalar type (either `np.float32` or `np.float64`)
+    /// Numpy dtype of the underlying scalar type (either `np.float32` or `np.float64`)
     #[getter]
     pub fn dtype<'py>(&self, py: Python<'py>) -> Bound<'py, PyArrayDescr> {
         match &self.inner {
@@ -681,7 +681,7 @@ impl PyMixedTriQuadMesh3d {
 #[gen_stub_pymethods]
 #[pymethods]
 impl PyMixedTriQuadMesh3d {
-    /// Returns the numpy dtype of the underlying scalar type (either `np.float32` or `np.float64`)
+    /// Numpy dtype of the underlying scalar type (either `np.float32` or `np.float64`)
     #[getter]
     pub fn dtype<'py>(&self, py: Python<'py>) -> Bound<'py, PyArrayDescr> {
         match &self.inner {
@@ -777,6 +777,7 @@ enum PyMeshAttributeData {
 
 #[gen_stub_pyclass]
 #[pyclass]
+#[pyo3(name = "MeshAttribute")]
 pub struct PyMeshAttribute {
     inner: PyMeshAttributeData,
 }
@@ -784,15 +785,49 @@ pub struct PyMeshAttribute {
 enum_wrapper_impl_from!(PyMeshAttribute, OwnedMeshAttribute<f32> => PyMeshAttributeData::F32);
 enum_wrapper_impl_from!(PyMeshAttribute, OwnedMeshAttribute<f64> => PyMeshAttributeData::F64);
 
-impl PyMeshAttribute {}
+#[gen_stub_pymethods]
+#[pymethods]
+impl PyMeshAttribute {
+    /// Numpy dtype of the data stored in the attribute
+    #[getter]
+    pub fn dtype<'py>(&self, py: Python<'py>) -> Bound<'py, PyArrayDescr> {
+        match &self.inner {
+            PyMeshAttributeData::F32(attr) => match attr.data {
+                OwnedAttributeData::ScalarU64(_) => np::dtype::<u64>(py),
+                OwnedAttributeData::ScalarReal(_) => np::dtype::<f32>(py),
+                OwnedAttributeData::Vector3Real(_) => np::dtype::<f32>(py),
+            },
+            PyMeshAttributeData::F64(attr) => match attr.data {
+                OwnedAttributeData::ScalarU64(_) => np::dtype::<u64>(py),
+                OwnedAttributeData::ScalarReal(_) => np::dtype::<f64>(py),
+                OwnedAttributeData::Vector3Real(_) => np::dtype::<f64>(py),
+            },
+        }
+    }
+
+    /// Name of the attribute
+    #[getter]
+    pub fn name(&self) -> String {
+        match &self.inner {
+            PyMeshAttributeData::F32(attr) => attr.name.clone(),
+            PyMeshAttributeData::F64(attr) => attr.name.clone(),
+        }
+    }
+
+    /// View of the attribute data as a numpy array
+    #[getter]
+    pub fn data<'py>(&self, _py: Python<'py>) -> PyResult<()> {
+        unimplemented!()
+    }
+}
 
 #[gen_stub_pyclass]
 #[pyclass]
 #[pyo3(name = "MeshWithData")]
 pub struct PyMeshWithData {
     mesh: PyMesh3dData,
-    point_attributes: Vec<PyMeshAttribute>,
-    cell_attributes: Vec<PyMeshAttribute>,
+    point_attributes: Vec<Py<PyMeshAttribute>>,
+    cell_attributes: Vec<Py<PyMeshAttribute>>,
 }
 
 impl PyMeshWithData {
@@ -826,26 +861,76 @@ impl PyMeshWithData {
             mut cell_attributes,
         } = mesh_with_data;
 
-        // TODO: Convert attributes
+        // Convert the inner mesh
+        let mut mesh_with_data =
+            if let Some(mesh) = transmute_same_take::<M, TriMesh3d<R>>(&mut mesh) {
+                PyTriMesh3d::try_from_generic(mesh)
+                    .and_then(|tri_mesh| Self::try_from_pymesh(py, tri_mesh))
+            } else if let Some(mesh) = transmute_same_take::<M, MixedTriQuadMesh3d<R>>(&mut mesh) {
+                PyMixedTriQuadMesh3d::try_from_generic(mesh)
+                    .and_then(|quad_mesh| Self::try_from_pymesh(py, quad_mesh))
+            } else {
+                Err(pyerr_only_tri_and_tri_quad_mesh())
+            }?;
 
-        if let Some(mesh) = transmute_if_same::<M, TriMesh3d<R>>(&mut mesh).map(std::mem::take) {
-            let tri_mesh = PyTriMesh3d::try_from_generic(mesh)?;
-            Self::try_from_pymesh(py, tri_mesh)
-        } else if let Some(mesh) =
-            transmute_if_same::<M, MixedTriQuadMesh3d<R>>(&mut mesh).map(std::mem::take)
+        fn try_convert_attribute_vec<'a, In: Real + Element, Out: Real + Element>(
+            py: Python<'_>,
+            attributes: &mut Vec<OwnedMeshAttribute<In>>,
+            dest: &mut Vec<Py<PyMeshAttribute>>,
+        ) -> Option<()>
+        where
+            PyMeshAttribute: From<OwnedMeshAttribute<Out>>,
         {
-            let quad_mesh = PyMixedTriQuadMesh3d::try_from_generic(mesh)?;
-            Self::try_from_pymesh(py, quad_mesh)
-        } else {
-            Err(pyerr_only_tri_and_tri_quad_mesh())
+            transmute_same_take::<Vec<OwnedMeshAttribute<In>>, Vec<OwnedMeshAttribute<Out>>>(
+                attributes,
+            )
+            .map(|a| {
+                a.into_iter()
+                    .map(|a| {
+                        PyMeshAttribute::from(a)
+                            .into_pyobject(py)
+                            .expect("allocation should not fail")
+                            .into()
+                    })
+                    .collect::<Vec<Py<PyMeshAttribute>>>()
+            })
+            .and_then(|a| Some(*dest = a))
         }
+
+        if std::any::TypeId::of::<R>() == std::any::TypeId::of::<f32>() {
+            try_convert_attribute_vec::<R, f32>(
+                py,
+                &mut point_attributes,
+                &mut mesh_with_data.point_attributes,
+            );
+            try_convert_attribute_vec::<R, f32>(
+                py,
+                &mut cell_attributes,
+                &mut mesh_with_data.cell_attributes,
+            );
+        } else if std::any::TypeId::of::<R>() == std::any::TypeId::of::<f64>() {
+            try_convert_attribute_vec::<R, f64>(
+                py,
+                &mut point_attributes,
+                &mut mesh_with_data.point_attributes,
+            );
+            try_convert_attribute_vec::<R, f64>(
+                py,
+                &mut cell_attributes,
+                &mut mesh_with_data.cell_attributes,
+            );
+        } else {
+            return Err(pyerr_unsupported_scalar());
+        }
+
+        Ok(mesh_with_data)
     }
 }
 
 #[gen_stub_pymethods]
 #[pymethods]
 impl PyMeshWithData {
-    /// Returns the numpy dtype of the underlying scalar type (either `np.float32` or `np.float64`)
+    /// Numpy dtype of the underlying scalar type (either `np.float32` or `np.float64`)
     #[getter]
     pub fn dtype<'py>(&self, py: Python<'py>) -> Bound<'py, PyArrayDescr> {
         match &self.mesh {
@@ -861,6 +946,24 @@ impl PyMeshWithData {
             PyMesh3dData::Tri3d(_) => MeshType::Tri3d,
             PyMesh3dData::MixedTriQuad3d(_) => MeshType::MixedTriQuad3d,
         }
+    }
+
+    #[getter]
+    #[gen_stub(override_return_type(type_repr="typing.List[MeshAttribute]", imports=()))]
+    pub fn point_attributes<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
+        PyList::new(
+            py,
+            self.point_attributes.iter().map(|attr| attr.clone_ref(py)),
+        )
+    }
+
+    #[getter]
+    #[gen_stub(override_return_type(type_repr="typing.List[MeshAttribute]", imports=()))]
+    pub fn cell_attributes<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
+        PyList::new(
+            py,
+            self.cell_attributes.iter().map(|attr| attr.clone_ref(py)),
+        )
     }
 
     pub fn as_tri3d<'py, 'a>(&'a self, py: Python<'py>) -> Option<Py<PyTriMesh3d>> {
