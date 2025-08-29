@@ -202,15 +202,17 @@ class MeshWithData:
         Returns the numpy dtype of the underlying scalar type (either `np.float32` or `np.float64`)
         """
     @property
-    def mesh_cell_type(self) -> MeshType:
+    def mesh_type(self) -> MeshType:
         r"""
         Returns the type of the underlying mesh
         """
     @property
-    def vertices(self) -> numpy.typing.NDArray[typing.Any]:
+    def mesh(self) -> typing.Union[TriMesh3d, MixedTriQuadMesh3d]:
         r"""
-        The `Nx3` array of vertex positions of the mesh
+        The contained mesh without associated data and attributes
         """
+    def as_tri3d(self) -> typing.Optional[TriMesh3d]: ...
+    def as_mixed_tri_quad3d(self) -> typing.Optional[MixedTriQuadMesh3d]: ...
     def copy_mesh(self) -> typing.Union[TriMesh3d, MixedTriQuadMesh3d]:
         r"""
         Returns a copy of the contained mesh without associated data and attributes

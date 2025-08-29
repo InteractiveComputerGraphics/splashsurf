@@ -1,11 +1,11 @@
 use crate::mesh::PyMeshWithData;
-use crate::utils::IndexT;
+use crate::utils::{IndexT, pyerr_unsupported_scalar};
 use numpy as np;
 use numpy::{
     Element, PyArray1, PyArray2, PyArrayDescr, PyArrayDescrMethods, PyArrayMethods,
     PyReadonlyArray1, PyReadonlyArray2, PyUntypedArray, PyUntypedArrayMethods,
 };
-use pyo3::exceptions::{PyRuntimeError, PyTypeError};
+use pyo3::exceptions::PyRuntimeError;
 use pyo3::{
     prelude::*,
     types::{PyDict, PyString},
@@ -140,13 +140,15 @@ pub fn reconstruction_pipeline<'py>(
         mesh_aabb_clamp_vertices,
     };
 
-    fn reconstruction_to_pymesh<I: Index, R: Real + Element>(
+    // TODO: Support transfer of attributes
+    fn reconstruction_to_pymesh<'py, I: Index, R: Real + Element>(
+        py: Python<'py>,
         reconstruction: splashsurf::reconstruct::ReconstructionResult<I, R>,
     ) -> PyResult<PyMeshWithData> {
         if let Some(tri_mesh) = reconstruction.tri_mesh {
-            PyMeshWithData::try_from_generic(tri_mesh)
+            PyMeshWithData::try_from_mesh_with_data(py, tri_mesh)
         } else if let Some(tri_quad_mesh) = reconstruction.tri_quad_mesh {
-            PyMeshWithData::try_from_generic(tri_quad_mesh)
+            PyMeshWithData::try_from_mesh_with_data(py, tri_quad_mesh)
         } else {
             Err(PyRuntimeError::new_err(
                 "Reconstruction resulted in no mesh",
@@ -164,7 +166,7 @@ pub fn reconstruction_pipeline<'py>(
                 .expect("failed to convert reconstruction parameters to f32"),
             &postprocessing_args,
         )?;
-        reconstruction_to_pymesh(reconstruction)
+        reconstruction_to_pymesh(py, reconstruction)
     } else if element_type.is_equiv_to(&np::dtype::<f64>(py)) {
         let particles = particles.downcast::<PyArray2<f64>>()?;
         let reconstruction = reconstruction_pipeline_generic_impl::<IndexT, _>(
@@ -173,12 +175,9 @@ pub fn reconstruction_pipeline<'py>(
             &parameters,
             &postprocessing_args,
         )?;
-        reconstruction_to_pymesh(reconstruction)
+        reconstruction_to_pymesh(py, reconstruction)
     } else {
-        Err(PyTypeError::new_err(format!(
-            "Unsupported scalar type {} for reconstruction, only float32 and float64 are supported",
-            element_type
-        )))
+        Err(pyerr_unsupported_scalar())
     }
 }
 

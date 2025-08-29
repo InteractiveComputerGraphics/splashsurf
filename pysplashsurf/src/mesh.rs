@@ -108,6 +108,19 @@ fn compute_normals_generic<'py, R: Real + Element>(
         .expect("downcast should not fail"))
 }
 
+pub fn get_triangle_mesh_generic<'py>(mesh: &Bound<'py, PyAny>) -> Option<Py<PyTriMesh3d>> {
+    let py = mesh.py();
+    if let Ok(mesh) = mesh.downcast::<PyTriMesh3d>() {
+        Some(mesh.as_unbound().clone_ref(py))
+    } else if let Ok(data_mesh) = mesh.downcast::<PyMeshWithData>()
+        && data_mesh.borrow().mesh_type() == MeshType::Tri3d
+    {
+        data_mesh.borrow().as_tri3d(py)
+    } else {
+        None
+    }
+}
+
 macro_rules! create_mesh_data_interface {
     ($name: ident, $type: ident, $mesh_class: ident, $pymesh_class: ident, $aabb_class: ident) => {
         /// MeshWithData wrapper
@@ -519,6 +532,7 @@ impl PyVertexVertexConnectivity {
     }
 }
 
+#[derive(Clone)]
 enum PyTriMesh3dData {
     F32(TriMesh3d<f32>),
     F64(TriMesh3d<f64>),
@@ -527,12 +541,21 @@ enum PyTriMesh3dData {
 #[gen_stub_pyclass]
 #[pyclass]
 #[pyo3(name = "TriMesh3d")]
+#[derive(Clone)]
 pub struct PyTriMesh3d {
     inner: PyTriMesh3dData,
 }
 
 impl_from_mesh!(PyTriMesh3d, TriMesh3d<f32> => PyTriMesh3dData::F32);
 impl_from_mesh!(PyTriMesh3d, TriMesh3d<f64> => PyTriMesh3dData::F64);
+
+impl Default for PyTriMesh3d {
+    fn default() -> Self {
+        Self {
+            inner: PyTriMesh3dData::F32(TriMesh3d::default()),
+        }
+    }
+}
 
 impl PyTriMesh3d {
     pub fn try_from_generic<R: Real + Element>(mut mesh: TriMesh3d<R>) -> PyResult<Self> {
@@ -625,6 +648,7 @@ impl PyTriMesh3d {
     }
 }
 
+#[derive(Clone)]
 enum PyMixedTriQuadMesh3dData {
     F32(MixedTriQuadMesh3d<f32>),
     F64(MixedTriQuadMesh3d<f64>),
@@ -633,6 +657,7 @@ enum PyMixedTriQuadMesh3dData {
 #[gen_stub_pyclass]
 #[pyclass]
 #[pyo3(name = "MixedTriQuadMesh3d")]
+#[derive(Clone)]
 pub struct PyMixedTriQuadMesh3d {
     inner: PyMixedTriQuadMesh3dData,
 }
@@ -678,20 +703,6 @@ impl PyMixedTriQuadMesh3d {
     }
 }
 
-enum PyMeshWithDataData {
-    Tri3dF32(MeshWithData<f32, TriMesh3d<f32>>),
-    Tri3dF64(MeshWithData<f64, TriMesh3d<f64>>),
-    MixedTriQuadF32(MeshWithData<f32, MixedTriQuadMesh3d<f32>>),
-    MixedTriQuadF64(MeshWithData<f64, MixedTriQuadMesh3d<f64>>),
-}
-
-#[gen_stub_pyclass]
-#[pyclass]
-#[pyo3(name = "MeshWithData")]
-pub struct PyMeshWithData {
-    inner: PyMeshWithDataData,
-}
-
 /// Enum specifying the type of mesh contained in a `MeshWithData`
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 #[gen_stub_pyclass_enum]
@@ -703,49 +714,74 @@ pub enum MeshType {
     MixedTriQuad3d,
 }
 
-impl_from_mesh!(PyMeshWithData, MeshWithData<f32, TriMesh3d<f32>> => PyMeshWithDataData::Tri3dF32);
-impl_from_mesh!(PyMeshWithData, MeshWithData<f64, TriMesh3d<f64>> => PyMeshWithDataData::Tri3dF64);
-impl_from_mesh!(PyMeshWithData, MeshWithData<f32, MixedTriQuadMesh3d<f32>> => PyMeshWithDataData::MixedTriQuadF32);
-impl_from_mesh!(PyMeshWithData, MeshWithData<f64, MixedTriQuadMesh3d<f64>> => PyMeshWithDataData::MixedTriQuadF64);
+pub enum PyMesh3dData {
+    Tri3d(Py<PyTriMesh3d>),
+    MixedTriQuad3d(Py<PyMixedTriQuadMesh3d>),
+}
+
+enum_impl_from!(PyMesh3dData, Py<PyTriMesh3d> => PyMesh3dData::Tri3d);
+enum_impl_from!(PyMesh3dData, Py<PyMixedTriQuadMesh3d> => PyMesh3dData::MixedTriQuad3d);
+
+enum PyMeshAttribute {
+    F32(OwnedMeshAttribute<f32>),
+    F64(OwnedMeshAttribute<f64>),
+}
+
+#[gen_stub_pyclass]
+#[pyclass]
+#[pyo3(name = "MeshWithData")]
+pub struct PyMeshWithData {
+    mesh: PyMesh3dData,
+    point_attributes: Vec<PyMeshAttribute>,
+    cell_attributes: Vec<PyMeshAttribute>,
+}
 
 impl PyMeshWithData {
-    pub fn try_from_generic<R: Real + Element, M: Mesh3d<R> + 'static>(
-        mut mesh: MeshWithData<R, M>,
+    /// Constructs a new mesh with data from an existing mesh object (either `TriMesh3d` or `MixedTriQuadMesh3d`)
+    pub fn try_from_pymesh<'py, T>(py: Python<'py>, mesh: T) -> PyResult<Self>
+    where
+        T: IntoPyObject<'py>,
+        T::Output: Into<Py<T::Target>>,
+        Py<T::Target>: Into<PyMesh3dData>,
+        PyErr: From<T::Error>,
+    {
+        let mesh_bound = mesh.into_pyobject(py)?;
+        let mesh_py: Py<T::Target> = mesh_bound.into();
+        let mesh: PyMesh3dData = mesh_py.into();
+
+        Ok(Self {
+            mesh,
+            point_attributes: vec![],
+            cell_attributes: vec![],
+        })
+    }
+
+    pub fn try_from_mesh_with_data<'py, R: Real + Element, M: Mesh3d<R> + 'static>(
+        py: Python<'_>,
+        mesh_with_data: MeshWithData<R, M>,
     ) -> PyResult<Self> {
-        transmute_take_into::<_, MeshWithData<f32, TriMesh3d<f32>>, _>(&mut mesh)
-            .or_else(|| transmute_take_into::<_, MeshWithData<f64, TriMesh3d<f64>>, _>(&mut mesh))
-            .or_else(|| transmute_take_into::<_, MeshWithData<f32, MixedTriQuadMesh3d<f32>>, _>(&mut mesh))
-            .or_else(|| transmute_take_into::<_, MeshWithData<f64, MixedTriQuadMesh3d<f64>>, _>(&mut mesh))
-            .ok_or_else(|| PyTypeError::new_err(
-            "Unsupported mesh type for MeshWithData. Only TriMesh3d and MixedTriQuadMesh3d with f32 or f64 scalar types are supported.",
-        ))
-    }
+        // Deconstruct the input mesh
+        let MeshWithData {
+            mut mesh,
+            point_attributes: _,
+            cell_attributes: _,
+        } = mesh_with_data;
 
-    pub fn as_tri_f32(&self) -> Option<&MeshWithData<f32, TriMesh3d<f32>>> {
-        match &self.inner {
-            PyMeshWithDataData::Tri3dF32(mesh) => Some(mesh),
-            _ => None,
-        }
-    }
+        // TODO: Convert attributes
 
-    pub fn as_tri_f64(&self) -> Option<&MeshWithData<f64, TriMesh3d<f64>>> {
-        match &self.inner {
-            PyMeshWithDataData::Tri3dF64(mesh) => Some(mesh),
-            _ => None,
-        }
-    }
-
-    pub fn as_tri_f32_mut(&mut self) -> Option<&mut MeshWithData<f32, TriMesh3d<f32>>> {
-        match &mut self.inner {
-            PyMeshWithDataData::Tri3dF32(mesh) => Some(mesh),
-            _ => None,
-        }
-    }
-
-    pub fn as_tri_f64_mut(&mut self) -> Option<&mut MeshWithData<f64, TriMesh3d<f64>>> {
-        match &mut self.inner {
-            PyMeshWithDataData::Tri3dF64(mesh) => Some(mesh),
-            _ => None,
+        use std::any::TypeId;
+        if TypeId::of::<M>() == TypeId::of::<TriMesh3d<R>>() {
+            let mesh_ref = unsafe { std::mem::transmute::<&mut M, &mut TriMesh3d<R>>(&mut mesh) };
+            let mesh = std::mem::take(mesh_ref);
+            let tri_mesh = PyTriMesh3d::try_from_generic(mesh)?;
+            Self::try_from_pymesh(py, tri_mesh)
+        } else if TypeId::of::<M>() == TypeId::of::<MixedTriQuadMesh3d<R>>() {
+            let mesh_ref = unsafe { std::mem::transmute::<&mut M, &mut TriMesh3d<R>>(&mut mesh) };
+            let mesh = std::mem::take(mesh_ref);
+            let tri_mesh = PyTriMesh3d::try_from_generic(mesh)?;
+            Self::try_from_pymesh(py, tri_mesh)
+        } else {
+            Err(pyerr_only_tri_and_tri_quad_mesh())
         }
     }
 }
@@ -756,62 +792,51 @@ impl PyMeshWithData {
     /// Returns the numpy dtype of the underlying scalar type (either `np.float32` or `np.float64`)
     #[getter]
     pub fn dtype<'py>(&self, py: Python<'py>) -> Bound<'py, PyArrayDescr> {
-        match &self.inner {
-            PyMeshWithDataData::Tri3dF32(_) | PyMeshWithDataData::MixedTriQuadF32(_) => {
-                np::dtype::<f32>(py)
-            }
-            PyMeshWithDataData::Tri3dF64(_) | PyMeshWithDataData::MixedTriQuadF64(_) => {
-                np::dtype::<f64>(py)
-            }
+        match &self.mesh {
+            PyMesh3dData::Tri3d(mesh) => mesh.borrow(py).dtype(py),
+            PyMesh3dData::MixedTriQuad3d(mesh) => mesh.borrow(py).dtype(py),
         }
     }
 
     /// Returns the type of the underlying mesh
     #[getter]
-    pub fn mesh_cell_type(&self) -> MeshType {
-        match &self.inner {
-            PyMeshWithDataData::Tri3dF32(_) | PyMeshWithDataData::Tri3dF64(_) => MeshType::Tri3d,
-            PyMeshWithDataData::MixedTriQuadF32(_) | PyMeshWithDataData::MixedTriQuadF64(_) => {
-                MeshType::MixedTriQuad3d
-            }
+    pub fn mesh_type(&self) -> MeshType {
+        match &self.mesh {
+            PyMesh3dData::Tri3d(_) => MeshType::Tri3d,
+            PyMesh3dData::MixedTriQuad3d(_) => MeshType::MixedTriQuad3d,
+        }
+    }
+
+    pub fn as_tri3d<'py, 'a>(&'a self, py: Python<'py>) -> Option<Py<PyTriMesh3d>> {
+        match &self.mesh {
+            PyMesh3dData::Tri3d(mesh) => Some(mesh.clone_ref(py)),
+            _ => None,
+        }
+    }
+
+    pub fn as_mixed_tri_quad3d<'py>(&self, py: Python<'py>) -> Option<Py<PyMixedTriQuadMesh3d>> {
+        match &self.mesh {
+            PyMesh3dData::MixedTriQuad3d(mesh) => Some(mesh.clone_ref(py)),
+            _ => None,
+        }
+    }
+
+    /// The contained mesh without associated data and attributes
+    #[getter]
+    #[gen_stub(override_return_type(type_repr="typing.Union[TriMesh3d, MixedTriQuadMesh3d]", imports=()))]
+    pub fn mesh<'py>(&self, py: Python<'py>) -> Py<PyAny> {
+        match &self.mesh {
+            PyMesh3dData::Tri3d(mesh) => mesh.clone_ref(py).into_any(),
+            PyMesh3dData::MixedTriQuad3d(mesh) => mesh.clone_ref(py).into_any(),
         }
     }
 
     /// Returns a copy of the contained mesh without associated data and attributes
     #[gen_stub(override_return_type(type_repr="typing.Union[TriMesh3d, MixedTriQuadMesh3d]", imports=()))]
     pub fn copy_mesh<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        match &self.inner {
-            PyMeshWithDataData::Tri3dF32(mesh) => {
-                PyTriMesh3d::from(mesh.mesh.clone()).into_bound_py_any(py)
-            }
-            PyMeshWithDataData::Tri3dF64(mesh) => {
-                PyTriMesh3d::from(mesh.mesh.clone()).into_bound_py_any(py)
-            }
-            PyMeshWithDataData::MixedTriQuadF32(mesh) => {
-                PyMixedTriQuadMesh3d::from(mesh.mesh.clone()).into_bound_py_any(py)
-            }
-            PyMeshWithDataData::MixedTriQuadF64(mesh) => {
-                PyMixedTriQuadMesh3d::from(mesh.mesh.clone()).into_bound_py_any(py)
-            }
-        }
-    }
-
-    /// The `Nx3` array of vertex positions of the mesh
-    #[getter]
-    pub fn vertices<'py>(this: Bound<'py, Self>) -> PyResult<Bound<'py, PyUntypedArray>> {
-        match &this.borrow().inner {
-            PyMeshWithDataData::Tri3dF32(mesh) => {
-                get_vertices_generic(mesh.vertices(), this.into_any())
-            }
-            PyMeshWithDataData::Tri3dF64(mesh) => {
-                get_vertices_generic(mesh.vertices(), this.into_any())
-            }
-            PyMeshWithDataData::MixedTriQuadF32(mesh) => {
-                get_vertices_generic(mesh.vertices(), this.into_any())
-            }
-            PyMeshWithDataData::MixedTriQuadF64(mesh) => {
-                get_vertices_generic(mesh.vertices(), this.into_any())
-            }
+        match &self.mesh {
+            PyMesh3dData::Tri3d(mesh) => mesh.borrow(py).clone().into_bound_py_any(py),
+            PyMesh3dData::MixedTriQuad3d(mesh) => mesh.borrow(py).clone().into_bound_py_any(py),
         }
     }
 }

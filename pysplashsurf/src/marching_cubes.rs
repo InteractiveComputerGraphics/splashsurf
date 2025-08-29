@@ -1,4 +1,4 @@
-use crate::mesh::{MeshType, PyMeshWithData, PyTriMesh3d};
+use crate::mesh::get_triangle_mesh_generic;
 use crate::uniform_grid::PyUniformGrid;
 use crate::utils::*;
 use pyo3::prelude::*;
@@ -17,55 +17,31 @@ pub fn check_mesh_consistency<'py>(
     check_manifold: bool,
     debug: bool,
 ) -> PyResult<Option<String>> {
-    if let Ok(mesh) = mesh.downcast::<PyTriMesh3d>() {
-        let mesh = mesh.borrow();
-        if let (Some(grid), Some(mesh)) = (grid.as_f32(), mesh.as_f32()) {
-            Ok(splashsurf_lib::marching_cubes::check_mesh_consistency(
-                grid,
-                mesh,
-                check_closed,
-                check_manifold,
-                debug,
-            )
-            .err())
-        } else if let (Some(grid), Some(mesh)) = (grid.as_f64(), mesh.as_f64()) {
-            Ok(splashsurf_lib::marching_cubes::check_mesh_consistency(
-                grid,
-                mesh,
-                check_closed,
-                check_manifold,
-                debug,
-            )
-            .err())
-        } else {
-            Err(pyerr_mesh_grid_scalar_mismatch())
-        }
-    } else if let Ok(mesh) = mesh.downcast::<PyMeshWithData>()
-        && let mesh = mesh.borrow()
-        && mesh.mesh_cell_type() == MeshType::Tri3d
-    {
-        if let (Some(grid), Some(mesh)) = (grid.as_f32(), mesh.as_tri_f32()) {
-            Ok(splashsurf_lib::marching_cubes::check_mesh_consistency(
-                grid,
-                &mesh.mesh,
-                check_closed,
-                check_manifold,
-                debug,
-            )
-            .err())
-        } else if let (Some(grid), Some(mesh)) = (grid.as_f64(), mesh.as_tri_f64()) {
-            Ok(splashsurf_lib::marching_cubes::check_mesh_consistency(
-                grid,
-                &mesh.mesh,
-                check_closed,
-                check_manifold,
-                debug,
-            )
-            .err())
-        } else {
-            Err(pyerr_mesh_grid_scalar_mismatch())
-        }
+    let py = mesh.py();
+
+    // Try to extract the triangle mesh;
+    let mesh = get_triangle_mesh_generic(&mesh).ok_or_else(pyerr_only_triangle_mesh)?;
+    let mesh = mesh.borrow(py);
+
+    if let (Some(grid), Some(mesh)) = (grid.as_f32(), mesh.as_f32()) {
+        Ok(splashsurf_lib::marching_cubes::check_mesh_consistency(
+            grid,
+            mesh,
+            check_closed,
+            check_manifold,
+            debug,
+        )
+        .err())
+    } else if let (Some(grid), Some(mesh)) = (grid.as_f64(), mesh.as_f64()) {
+        Ok(splashsurf_lib::marching_cubes::check_mesh_consistency(
+            grid,
+            mesh,
+            check_closed,
+            check_manifold,
+            debug,
+        )
+        .err())
     } else {
-        Err(pyerr_only_triangle_mesh())
+        Err(pyerr_mesh_grid_scalar_mismatch())
     }
 }

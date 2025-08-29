@@ -7,7 +7,7 @@ use pyo3_stub_gen::derive::gen_stub_pyfunction;
 use splashsurf_lib::nalgebra::Vector3;
 
 use crate::mesh::{
-    MeshType, PyMeshWithData, PyMixedTriQuadMesh3d, PyTriMesh3d, PyVertexVertexConnectivity,
+    PyMeshWithData, PyMixedTriQuadMesh3d, PyVertexVertexConnectivity, get_triangle_mesh_generic,
 };
 use crate::uniform_grid::PyUniformGrid;
 use crate::utils::*;
@@ -33,8 +33,11 @@ pub fn convert_tris_to_quads<'py>(
     let normal_angle_limit = normal_angle_limit.to_radians();
     let max_interior_angle = max_interior_angle.to_radians();
 
-    if let Ok(mesh) = mesh.downcast::<PyTriMesh3d>() {
-        let mesh = mesh.borrow();
+    let quad_mesh = {
+        // Try to extract the triangle mesh;
+        let mesh = get_triangle_mesh_generic(&mesh).ok_or_else(pyerr_only_triangle_mesh)?;
+        let mesh = mesh.borrow(py);
+
         if let Some(mesh) = mesh.as_f32() {
             let quad_mesh = splashsurf_lib::postprocessing::convert_tris_to_quads(
                 mesh,
@@ -42,7 +45,7 @@ pub fn convert_tris_to_quads<'py>(
                 normal_angle_limit as f32,
                 max_interior_angle as f32,
             );
-            PyMixedTriQuadMesh3d::from(quad_mesh).into_bound_py_any(py)
+            Ok(PyMixedTriQuadMesh3d::from(quad_mesh))
         } else if let Some(mesh) = mesh.as_f64() {
             let quad_mesh = splashsurf_lib::postprocessing::convert_tris_to_quads(
                 mesh,
@@ -50,39 +53,18 @@ pub fn convert_tris_to_quads<'py>(
                 normal_angle_limit,
                 max_interior_angle,
             );
-            PyMixedTriQuadMesh3d::from(quad_mesh).into_bound_py_any(py)
+            Ok(PyMixedTriQuadMesh3d::from(quad_mesh))
         } else {
             Err(pyerr_unsupported_scalar())
         }
-    } else if let Ok(mesh) = mesh.downcast::<PyMeshWithData>()
-        && let mesh = mesh.borrow()
-        && mesh.mesh_cell_type() == MeshType::Tri3d
-    {
-        if let Some(mesh) = mesh.as_tri_f32() {
-            let quad_mesh = splashsurf_lib::postprocessing::convert_tris_to_quads(
-                &mesh.mesh,
-                non_squareness_limit as f32,
-                normal_angle_limit as f32,
-                max_interior_angle as f32,
-            );
-            let mut quad_mesh = splashsurf_lib::mesh::MeshWithData::new(quad_mesh);
-            quad_mesh.point_attributes = mesh.point_attributes.clone();
-            PyMeshWithData::from(quad_mesh).into_bound_py_any(py)
-        } else if let Some(mesh) = mesh.as_tri_f64() {
-            let quad_mesh = splashsurf_lib::postprocessing::convert_tris_to_quads(
-                &mesh.mesh,
-                non_squareness_limit,
-                normal_angle_limit,
-                max_interior_angle,
-            );
-            let mut quad_mesh = splashsurf_lib::mesh::MeshWithData::new(quad_mesh);
-            quad_mesh.point_attributes = mesh.point_attributes.clone();
-            PyMeshWithData::from(quad_mesh).into_bound_py_any(py)
-        } else {
-            Err(pyerr_unsupported_scalar())
-        }
+    }?;
+
+    if let Ok(mesh) = mesh.downcast::<PyMeshWithData>() {
+        let mut data_mesh = PyMeshWithData::try_from_pymesh(py, quad_mesh)?;
+        // TODO: transfer of point attributes not implemented yet
+        unimplemented!("transfer of point attributes not implemented yet");
     } else {
-        Err(pyerr_only_triangle_mesh())
+        quad_mesh.into_bound_py_any(py)
     }
 }
 
@@ -101,56 +83,32 @@ pub fn laplacian_smoothing_parallel<'py>(
     beta: f64,
     weights: &Bound<'py, PyUntypedArray>,
 ) -> PyResult<()> {
-    if let Ok(mesh) = mesh.downcast::<PyTriMesh3d>() {
-        let mut mesh = mesh.borrow_mut();
-        if let Some(mesh) = mesh.as_f32_mut() {
-            let weights = weights.downcast::<PyArray1<f32>>()?.try_readonly()?;
-            splashsurf_lib::postprocessing::par_laplacian_smoothing_inplace(
-                mesh,
-                &vertex_connectivity.borrow().connectivity,
-                iterations,
-                beta as f32,
-                weights.as_slice()?,
-            );
-        } else if let Some(mesh) = mesh.as_f64_mut() {
-            let weights = weights.downcast::<PyArray1<f64>>()?.try_readonly()?;
-            splashsurf_lib::postprocessing::par_laplacian_smoothing_inplace(
-                mesh,
-                &vertex_connectivity.borrow().connectivity,
-                iterations,
-                beta,
-                weights.as_slice()?,
-            );
-        } else {
-            return Err(pyerr_unsupported_scalar());
-        }
-    } else if let Ok(mesh) = mesh.downcast::<PyMeshWithData>()
-        && let mut mesh = mesh.borrow_mut()
-        && mesh.mesh_cell_type() == MeshType::Tri3d
-    {
-        if let Some(mesh) = mesh.as_tri_f32_mut() {
-            let weights = weights.downcast::<PyArray1<f32>>()?.try_readonly()?;
-            splashsurf_lib::postprocessing::par_laplacian_smoothing_inplace(
-                &mut mesh.mesh,
-                &vertex_connectivity.borrow().connectivity,
-                iterations,
-                beta as f32,
-                weights.as_slice()?,
-            );
-        } else if let Some(mesh) = mesh.as_tri_f64_mut() {
-            let weights = weights.downcast::<PyArray1<f64>>()?.try_readonly()?;
-            splashsurf_lib::postprocessing::par_laplacian_smoothing_inplace(
-                &mut mesh.mesh,
-                &vertex_connectivity.borrow().connectivity,
-                iterations,
-                beta,
-                weights.as_slice()?,
-            );
-        } else {
-            return Err(pyerr_unsupported_scalar());
-        }
+    let py = mesh.py();
+
+    // Try to extract the triangle mesh;
+    let mesh = get_triangle_mesh_generic(&mesh).ok_or_else(pyerr_only_triangle_mesh)?;
+    let mut mesh = mesh.borrow_mut(py);
+
+    if let Some(mesh) = mesh.as_f32_mut() {
+        let weights = weights.downcast::<PyArray1<f32>>()?.try_readonly()?;
+        splashsurf_lib::postprocessing::par_laplacian_smoothing_inplace(
+            mesh,
+            &vertex_connectivity.borrow().connectivity,
+            iterations,
+            beta as f32,
+            weights.as_slice()?,
+        );
+    } else if let Some(mesh) = mesh.as_f64_mut() {
+        let weights = weights.downcast::<PyArray1<f64>>()?.try_readonly()?;
+        splashsurf_lib::postprocessing::par_laplacian_smoothing_inplace(
+            mesh,
+            &vertex_connectivity.borrow().connectivity,
+            iterations,
+            beta,
+            weights.as_slice()?,
+        );
     } else {
-        return Err(pyerr_only_triangle_mesh());
+        return Err(pyerr_unsupported_scalar());
     }
 
     Ok(())
@@ -209,41 +167,24 @@ pub fn barnacle_decimation<'py>(
     keep_vertices: bool,
 ) -> PyResult<PyVertexVertexConnectivity> {
     use splashsurf_lib::postprocessing::decimation;
+    let py = mesh.py();
 
-    if let Ok(mesh) = mesh.downcast::<PyTriMesh3d>() {
-        let mut mesh = mesh.borrow_mut();
-        if let Some(mesh) = mesh.as_f32_mut() {
-            Ok(PyVertexVertexConnectivity::new(decimation(
-                mesh,
-                keep_vertices,
-            )))
-        } else if let Some(mesh) = mesh.as_f64_mut() {
-            Ok(PyVertexVertexConnectivity::new(decimation(
-                mesh,
-                keep_vertices,
-            )))
-        } else {
-            Err(pyerr_unsupported_scalar())
-        }
-    } else if let Ok(mesh) = mesh.downcast::<PyMeshWithData>() {
-        let mut mesh = mesh.borrow_mut();
-        if let Some(mesh) = mesh.as_tri_f32_mut() {
-            let mesh = &mut mesh.mesh;
-            Ok(PyVertexVertexConnectivity::new(decimation(
-                mesh,
-                keep_vertices,
-            )))
-        } else if let Some(mesh) = mesh.as_tri_f64_mut() {
-            let mesh = &mut mesh.mesh;
-            Ok(PyVertexVertexConnectivity::new(decimation(
-                mesh,
-                keep_vertices,
-            )))
-        } else {
-            Err(pyerr_unsupported_scalar())
-        }
+    // Try to extract the triangle mesh;
+    let mesh = get_triangle_mesh_generic(&mesh).ok_or_else(pyerr_only_triangle_mesh)?;
+    let mut mesh = mesh.borrow_mut(py);
+
+    if let Some(mesh) = mesh.as_f32_mut() {
+        Ok(PyVertexVertexConnectivity::new(decimation(
+            mesh,
+            keep_vertices,
+        )))
+    } else if let Some(mesh) = mesh.as_f64_mut() {
+        Ok(PyVertexVertexConnectivity::new(decimation(
+            mesh,
+            keep_vertices,
+        )))
     } else {
-        Err(pyerr_only_triangle_mesh())
+        Err(pyerr_unsupported_scalar())
     }
 }
 
@@ -263,33 +204,20 @@ pub fn marching_cubes_cleanup<'py>(
     max_iter: usize,
     keep_vertices: bool,
 ) -> PyResult<()> {
-    let max_rel_snap_dist_f32 = max_rel_snap_dist.map(|d| d as f32);
     use splashsurf_lib::postprocessing::marching_cubes_cleanup as cleanup;
+    let py = mesh.py();
+    let max_rel_snap_dist_f32 = max_rel_snap_dist.map(|d| d as f32);
 
-    if let Ok(mesh) = mesh.downcast::<PyTriMesh3d>() {
-        let mut mesh = mesh.borrow_mut();
-        if let (Some(grid), Some(mesh)) = (grid.as_f32(), mesh.as_f32_mut()) {
-            cleanup(mesh, grid, max_rel_snap_dist_f32, max_iter, keep_vertices);
-        } else if let (Some(grid), Some(mesh)) = (grid.as_f64(), mesh.as_f64_mut()) {
-            cleanup(mesh, grid, max_rel_snap_dist, max_iter, keep_vertices);
-        } else {
-            return Err(pyerr_mesh_grid_scalar_mismatch());
-        }
-    } else if let Ok(mesh) = mesh.downcast::<PyMeshWithData>()
-        && let mut mesh = mesh.borrow_mut()
-        && mesh.mesh_cell_type() == MeshType::Tri3d
-    {
-        if let (Some(grid), Some(mesh)) = (grid.as_f32(), mesh.as_tri_f32_mut()) {
-            let mesh = &mut mesh.mesh;
-            cleanup(mesh, grid, max_rel_snap_dist_f32, max_iter, keep_vertices);
-        } else if let (Some(grid), Some(mesh)) = (grid.as_f64(), mesh.as_tri_f64_mut()) {
-            let mesh = &mut mesh.mesh;
-            cleanup(mesh, grid, max_rel_snap_dist, max_iter, keep_vertices);
-        } else {
-            return Err(pyerr_mesh_grid_scalar_mismatch());
-        }
+    // Try to extract the triangle mesh;
+    let mesh = get_triangle_mesh_generic(&mesh).ok_or_else(pyerr_only_triangle_mesh)?;
+    let mut mesh = mesh.borrow_mut(py);
+
+    if let (Some(grid), Some(mesh)) = (grid.as_f32(), mesh.as_f32_mut()) {
+        cleanup(mesh, grid, max_rel_snap_dist_f32, max_iter, keep_vertices);
+    } else if let (Some(grid), Some(mesh)) = (grid.as_f64(), mesh.as_f64_mut()) {
+        cleanup(mesh, grid, max_rel_snap_dist, max_iter, keep_vertices);
     } else {
-        return Err(pyerr_only_triangle_mesh());
+        return Err(pyerr_mesh_grid_scalar_mismatch());
     }
 
     Ok(())
