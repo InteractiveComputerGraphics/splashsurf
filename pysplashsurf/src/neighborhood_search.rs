@@ -1,12 +1,15 @@
 use numpy as np;
 use numpy::prelude::*;
 use numpy::{PyArray2, PyUntypedArray};
+use pyo3::exceptions::PyIndexError;
 use pyo3::prelude::*;
 use pyo3_stub_gen::derive::*;
 use splashsurf_lib::nalgebra::Vector3;
 
 use crate::aabb::PyAabb3d;
 use crate::utils::*;
+
+// TODO: Bindings for flat neighborhood search
 
 #[gen_stub_pyclass]
 #[pyclass]
@@ -21,7 +24,32 @@ impl From<Vec<Vec<usize>>> for PyNeighborhoodLists {
     }
 }
 
-/// Performs a neighborhood search using spatial hashing (multi-threaded implementation)
+#[gen_stub_pymethods]
+#[pymethods]
+impl PyNeighborhoodLists {
+    /// Returns the number of particles for which neighborhood lists are stored
+    pub fn __len__(&self) -> usize {
+        self.inner.len()
+    }
+
+    /// Returns the neighborhood list for the particle at the given index
+    pub fn __getitem__(&self, idx: isize) -> PyResult<Vec<usize>> {
+        let len = self.inner.len() as isize;
+        let idx = if idx < 0 { len + idx } else { idx };
+        if idx < 0 || idx >= len {
+            Err(PyIndexError::new_err("index out of bounds"))
+        } else {
+            Ok(self.inner[idx as usize].clone())
+        }
+    }
+
+    /// Returns all stored neighborhood lists as a list of lists
+    pub fn get_neighborhood_lists(&self) -> Vec<Vec<usize>> {
+        self.inner.clone()
+    }
+}
+
+/// Performs a neighborhood search using spatial hashing (multithreaded implementation)
 #[gen_stub_pyfunction]
 #[pyfunction]
 #[pyo3(name = "neighborhood_search_spatial_hashing_parallel")]
