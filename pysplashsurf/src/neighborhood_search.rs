@@ -4,6 +4,32 @@ use splashsurf_lib::{nalgebra::Vector3, neighborhood_search::*};
 
 use crate::aabb::{Aabb3dF32, Aabb3dF64};
 
+/*
+#[gen_stub_pyfunction]
+#[pyfunction]
+#[pyo3(name = "neighborhood_search_spatial_hashing_parallel")]
+#[pyo3(signature = (domain, particle_positions, search_radius))]
+pub fn neighborhood_search_spatial_hashing_parallel<'py>(
+    domain: &Aabb3dF64,
+    particle_positions: &Bound<'py, PyArray2<f64>>,
+    search_radius: f64,
+) -> PyResult<Vec<Vec<usize>>> {
+    let mut nl: Vec<Vec<usize>> = Vec::new();
+
+    let particle_positions: PyReadonlyArray2<f64> = particle_positions.extract()?;
+    let particle_positions = particle_positions.as_slice()?;
+    let particle_positions: &[Vector3<f64>] = bytemuck::cast_slice(particle_positions);
+
+    neighborhood_search_spatial_hashing_parallel::<i64, f64>(
+        &domain.inner,
+        particle_positions,
+        search_radius,
+        &mut nl,
+    );
+
+    Ok(nl)
+}*/
+
 #[pyfunction]
 #[pyo3(name = "neighborhood_search_spatial_hashing_parallel_f64")]
 #[pyo3(signature = (domain, particle_positions, search_radius))]

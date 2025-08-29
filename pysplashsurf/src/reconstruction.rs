@@ -26,8 +26,8 @@ pub struct PySurfaceReconstruction {
     inner: PySurfaceReconstructionData,
 }
 
-impl_from_mesh!(PySurfaceReconstruction, SurfaceReconstruction<IndexT, f32> => PySurfaceReconstructionData::F32);
-impl_from_mesh!(PySurfaceReconstruction, SurfaceReconstruction<IndexT, f64> => PySurfaceReconstructionData::F64);
+enum_wrapper_impl_from!(PySurfaceReconstruction, SurfaceReconstruction<IndexT, f32> => PySurfaceReconstructionData::F32);
+enum_wrapper_impl_from!(PySurfaceReconstruction, SurfaceReconstruction<IndexT, f64> => PySurfaceReconstructionData::F64);
 
 impl PySurfaceReconstruction {
     pub fn try_from_generic<R: Real + Element>(

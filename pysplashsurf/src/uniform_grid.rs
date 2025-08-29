@@ -16,8 +16,8 @@ pub struct PyUniformGrid {
     inner: PyUniformGridData,
 }
 
-impl_from_mesh!(PyUniformGrid, UniformGrid<IndexT, f32> => PyUniformGridData::F32);
-impl_from_mesh!(PyUniformGrid, UniformGrid<IndexT, f64> => PyUniformGridData::F64);
+enum_wrapper_impl_from!(PyUniformGrid, UniformGrid<IndexT, f32> => PyUniformGridData::F32);
+enum_wrapper_impl_from!(PyUniformGrid, UniformGrid<IndexT, f64> => PyUniformGridData::F64);
 
 impl PyUniformGrid {
     pub(crate) fn as_f32(&self) -> Option<&UniformGrid<IndexT, f32>> {

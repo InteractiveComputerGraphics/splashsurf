@@ -23,7 +23,7 @@ pub(crate) fn pyerr_only_tri_and_tri_quad_mesh() -> PyErr {
     )
 }
 
-macro_rules! impl_from_mesh {
+macro_rules! enum_wrapper_impl_from {
     ($pyclass:ident, $mesh:ty => $target_enum:path) => {
         impl From<$mesh> for $pyclass {
             fn from(mesh: $mesh) -> Self {
@@ -46,20 +46,26 @@ macro_rules! enum_impl_from {
 }
 
 pub(crate) use enum_impl_from;
-pub(crate) use impl_from_mesh;
+pub(crate) use enum_wrapper_impl_from;
+
+pub(crate) fn transmute_if_same<GenericSrc: 'static, ConcreteSrc: 'static>(
+    value: &mut GenericSrc,
+) -> Option<&mut ConcreteSrc> {
+    if std::any::TypeId::of::<GenericSrc>() == std::any::TypeId::of::<ConcreteSrc>() {
+        Some(unsafe { std::mem::transmute::<&mut GenericSrc, &mut ConcreteSrc>(value) })
+    } else {
+        None
+    }
+}
 
 /// Transmutes from a generic type to a concrete type if they are identical, takes the value and converts it into the target type
-pub fn transmute_take_into<
+pub(crate) fn transmute_take_into<
     GenericSrc: 'static,
     ConcreteSrc: Default + Into<Target> + 'static,
     Target,
 >(
     value: &mut GenericSrc,
 ) -> Option<Target> {
-    if std::any::TypeId::of::<GenericSrc>() == std::any::TypeId::of::<ConcreteSrc>() {
-        let value_ref = unsafe { std::mem::transmute::<&mut GenericSrc, &mut ConcreteSrc>(value) };
-        Some(std::mem::take(value_ref).into())
-    } else {
-        None
-    }
+    transmute_if_same::<GenericSrc, ConcreteSrc>(value)
+        .map(|value_ref| std::mem::take(value_ref).into())
 }

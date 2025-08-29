@@ -547,8 +547,8 @@ pub struct PyTriMesh3d {
     inner: PyTriMesh3dData,
 }
 
-impl_from_mesh!(PyTriMesh3d, TriMesh3d<f32> => PyTriMesh3dData::F32);
-impl_from_mesh!(PyTriMesh3d, TriMesh3d<f64> => PyTriMesh3dData::F64);
+enum_wrapper_impl_from!(PyTriMesh3d, TriMesh3d<f32> => PyTriMesh3dData::F32);
+enum_wrapper_impl_from!(PyTriMesh3d, TriMesh3d<f64> => PyTriMesh3dData::F64);
 
 impl Default for PyTriMesh3d {
     fn default() -> Self {
@@ -663,8 +663,8 @@ pub struct PyMixedTriQuadMesh3d {
     inner: PyMixedTriQuadMesh3dData,
 }
 
-impl_from_mesh!(PyMixedTriQuadMesh3d, MixedTriQuadMesh3d<f32> => PyMixedTriQuadMesh3dData::F32);
-impl_from_mesh!(PyMixedTriQuadMesh3d, MixedTriQuadMesh3d<f64> => PyMixedTriQuadMesh3dData::F64);
+enum_wrapper_impl_from!(PyMixedTriQuadMesh3d, MixedTriQuadMesh3d<f32> => PyMixedTriQuadMesh3dData::F32);
+enum_wrapper_impl_from!(PyMixedTriQuadMesh3d, MixedTriQuadMesh3d<f64> => PyMixedTriQuadMesh3dData::F64);
 
 impl PyMixedTriQuadMesh3d {
     pub fn try_from_generic<R: Real + Element>(mut mesh: MixedTriQuadMesh3d<R>) -> PyResult<Self> {
@@ -770,10 +770,21 @@ pub enum PyMesh3dData {
 enum_impl_from!(PyMesh3dData, Py<PyTriMesh3d> => PyMesh3dData::Tri3d);
 enum_impl_from!(PyMesh3dData, Py<PyMixedTriQuadMesh3d> => PyMesh3dData::MixedTriQuad3d);
 
-enum PyMeshAttribute {
+enum PyMeshAttributeData {
     F32(OwnedMeshAttribute<f32>),
     F64(OwnedMeshAttribute<f64>),
 }
+
+#[gen_stub_pyclass]
+#[pyclass]
+pub struct PyMeshAttribute {
+    inner: PyMeshAttributeData,
+}
+
+enum_wrapper_impl_from!(PyMeshAttribute, OwnedMeshAttribute<f32> => PyMeshAttributeData::F32);
+enum_wrapper_impl_from!(PyMeshAttribute, OwnedMeshAttribute<f64> => PyMeshAttributeData::F64);
+
+impl PyMeshAttribute {}
 
 #[gen_stub_pyclass]
 #[pyclass]
@@ -811,23 +822,20 @@ impl PyMeshWithData {
         // Deconstruct the input mesh
         let MeshWithData {
             mut mesh,
-            point_attributes: _,
-            cell_attributes: _,
+            mut point_attributes,
+            mut cell_attributes,
         } = mesh_with_data;
 
         // TODO: Convert attributes
 
-        use std::any::TypeId;
-        if TypeId::of::<M>() == TypeId::of::<TriMesh3d<R>>() {
-            let mesh_ref = unsafe { std::mem::transmute::<&mut M, &mut TriMesh3d<R>>(&mut mesh) };
-            let mesh = std::mem::take(mesh_ref);
+        if let Some(mesh) = transmute_if_same::<M, TriMesh3d<R>>(&mut mesh).map(std::mem::take) {
             let tri_mesh = PyTriMesh3d::try_from_generic(mesh)?;
             Self::try_from_pymesh(py, tri_mesh)
-        } else if TypeId::of::<M>() == TypeId::of::<MixedTriQuadMesh3d<R>>() {
-            let mesh_ref = unsafe { std::mem::transmute::<&mut M, &mut TriMesh3d<R>>(&mut mesh) };
-            let mesh = std::mem::take(mesh_ref);
-            let tri_mesh = PyTriMesh3d::try_from_generic(mesh)?;
-            Self::try_from_pymesh(py, tri_mesh)
+        } else if let Some(mesh) =
+            transmute_if_same::<M, MixedTriQuadMesh3d<R>>(&mut mesh).map(std::mem::take)
+        {
+            let quad_mesh = PyMixedTriQuadMesh3d::try_from_generic(mesh)?;
+            Self::try_from_pymesh(py, quad_mesh)
         } else {
             Err(pyerr_only_tri_and_tri_quad_mesh())
         }
