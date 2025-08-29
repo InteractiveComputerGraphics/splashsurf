@@ -139,7 +139,7 @@ pub fn reconstruction_pipeline<'py>(
         mesh_aabb,
         mesh_aabb_clamp_vertices,
     };
-    
+
     fn reconstruction_to_pymesh<'py, I: Index, R: Real + Element>(
         py: Python<'py>,
         reconstruction: splashsurf::reconstruct::ReconstructionResult<I, R>,
@@ -186,7 +186,7 @@ fn reconstruction_pipeline_generic_impl<'py, I: Index, R: Real + Element>(
     parameters: &splashsurf_lib::Parameters<R>,
     postprocessing_args: &splashsurf::reconstruct::ReconstructionPostprocessingParameters,
 ) -> Result<splashsurf::reconstruct::ReconstructionResult<I, R>, anyhow::Error> {
-    let particles: PyReadonlyArray2<R> = particles.readonly();
+    let particles: PyReadonlyArray2<R> = particles.try_readonly()?;
     let particle_positions: &[Vector3<R>] = bytemuck::cast_slice(particles.as_slice()?);
 
     enum AttributePyView<'a, R: Real + Element> {

@@ -1,8 +1,10 @@
-use crate::mesh::get_triangle_mesh_generic;
-use crate::uniform_grid::PyUniformGrid;
-use crate::utils::*;
+use numpy::PyUntypedArray;
 use pyo3::prelude::*;
 use pyo3_stub_gen::derive::*;
+
+use crate::mesh::{PyTriMesh3d, get_triangle_mesh_generic};
+use crate::uniform_grid::PyUniformGrid;
+use crate::utils::*;
 
 /// Checks the consistency of a reconstructed surface mesh (watertightness, manifoldness), optionally returns a string with details if problems are found
 #[gen_stub_pyfunction]
@@ -11,7 +13,7 @@ use pyo3_stub_gen::derive::*;
 #[pyo3(signature = (mesh, grid, *, check_closed = true, check_manifold = true, debug = false))]
 pub fn check_mesh_consistency<'py>(
     #[gen_stub(override_type(type_repr="typing.Union[TriMesh3d, MeshWithData]", imports=()))]
-    mesh: Bound<'py, PyAny>,
+    mesh: &Bound<'py, PyAny>,
     grid: &PyUniformGrid,
     check_closed: bool,
     check_manifold: bool,

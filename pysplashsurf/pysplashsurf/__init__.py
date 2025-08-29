@@ -199,33 +199,3 @@ def create_aabb_object_from_points(points):
         return Aabb3dF64.from_points(points)
     else:
         raise ValueError("Invalid data type (only float32 and float64 are supported, consider explicitly specifying the dtype for points)")
-
-def neighborhood_search_spatial_hashing_parallel(
-    domain,
-    particle_positions: np.ndarray,
-    search_radius: float
-):
-    """Performs a neighborhood search (multi-threaded implementation)
-    
-    Returns the indices of all neighboring particles in the given search radius per particle as a `list[list[int]]`.
-
-    Parameters
-    ----------
-    domain: Aabb3dF32 | Aabb3dF64
-        Axis-aligned bounding box of the domain
-        
-    particle_positions: np.ndarray
-        2D-Array of particle positions
-        
-    search_radius: float
-        Search radius
-    """
-    
-    if type(domain) is Aabb3dF32:
-        return neighborhood_search_spatial_hashing_parallel_f32(domain, particle_positions, search_radius)
-    
-    elif type(domain) is Aabb3dF64:
-        return neighborhood_search_spatial_hashing_parallel_f64(domain, particle_positions, search_radius)
-    
-    else:
-        raise ValueError("Invalid domain type")

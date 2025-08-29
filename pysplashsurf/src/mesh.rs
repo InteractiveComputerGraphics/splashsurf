@@ -548,6 +548,7 @@ impl PyVertexVertexConnectivity {
 }
 
 #[gen_stub_pymethods]
+#[pymethods]
 impl PyVertexVertexConnectivity {
     /// Returns a copy of the contained connectivity data
     pub fn copy_connectivity(&self) -> Vec<Vec<usize>> {

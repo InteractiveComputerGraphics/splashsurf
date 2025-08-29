@@ -50,8 +50,11 @@ fn pysplashsurf(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<sph_interpolation::SphInterpolatorF32>()?;
     m.add_class::<sph_interpolation::SphInterpolatorF64>()?;
 
+    m.add_class::<aabb::PyAabb3d>()?;
     m.add_class::<aabb::Aabb3dF32>()?;
     m.add_class::<aabb::Aabb3dF64>()?;
+
+    m.add_class::<neighborhood_search::PyNeighborhoodLists>()?;
 
     use wrap_pyfunction as wrap;
 
@@ -67,11 +70,7 @@ fn pysplashsurf(m: &Bound<'_, PyModule>) -> PyResult<()> {
     )?)?;
 
     m.add_function(wrap!(
-        neighborhood_search::neighborhood_search_spatial_hashing_parallel_py_f32,
-        m
-    )?)?;
-    m.add_function(wrap!(
-        neighborhood_search::neighborhood_search_spatial_hashing_parallel_py_f64,
+        neighborhood_search::neighborhood_search_spatial_hashing_parallel,
         m
     )?)?;
 
