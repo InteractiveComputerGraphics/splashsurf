@@ -63,8 +63,7 @@ pub(crate) fn transmute_same_mut<GenericSrc: 'static, ConcreteSrc: 'static>(
 pub(crate) fn transmute_same_take<GenericSrc: 'static, ConcreteSrc: Default + 'static>(
     value: &mut GenericSrc,
 ) -> Option<ConcreteSrc> {
-    transmute_same_mut::<GenericSrc, ConcreteSrc>(value)
-        .map(|value_ref| std::mem::take(value_ref))
+    transmute_same_mut::<GenericSrc, ConcreteSrc>(value).map(|value_ref| std::mem::take(value_ref))
 }
 
 /// Transmutes from a generic type to a concrete type if they are identical, takes the value and converts it into the target type

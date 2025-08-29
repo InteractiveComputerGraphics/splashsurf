@@ -207,7 +207,7 @@ class MeshAttribute:
         Name of the attribute
         """
     @property
-    def data(self) -> None:
+    def data(self) -> numpy.typing.NDArray[typing.Any]:
         r"""
         View of the attribute data as a numpy array
         """

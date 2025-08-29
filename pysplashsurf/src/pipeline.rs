@@ -139,8 +139,7 @@ pub fn reconstruction_pipeline<'py>(
         mesh_aabb,
         mesh_aabb_clamp_vertices,
     };
-
-    // TODO: Support transfer of attributes
+    
     fn reconstruction_to_pymesh<'py, I: Index, R: Real + Element>(
         py: Python<'py>,
         reconstruction: splashsurf::reconstruct::ReconstructionResult<I, R>,

@@ -2,11 +2,11 @@ use crate::NumpyUsize;
 use crate::aabb::{Aabb3dF32, Aabb3dF64};
 use crate::utils::*;
 use bytemuck::{NoUninit, Pod};
-use ndarray::{Array2, ArrayView, ArrayView2};
+use ndarray::{Array2, ArrayView, ArrayView1, ArrayView2};
 use numpy as np;
 use numpy::{
-    Element, IntoPyArray, PyArray, PyArray2, PyArrayDescr, PyArrayMethods, PyReadonlyArray2,
-    PyUntypedArray, ToPyArray,
+    Element, IntoPyArray, PyArray, PyArray1, PyArray2, PyArrayDescr, PyArrayMethods,
+    PyReadonlyArray2, PyUntypedArray, ToPyArray,
 };
 use pyo3::exceptions::PyTypeError;
 use pyo3::{
@@ -70,18 +70,48 @@ fn add_attribute_with_name<'py, R: Real + Element>(
     }
 }
 
-fn get_vertices_generic<'py, R: Real + Element>(
-    vertices: &[Vector3<R>],
+fn get_vec_generic<'py, R: Element>(
+    values: &[R],
+    shape: (usize, usize),
     container: Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyUntypedArray>> {
-    let coordinates: &[R] = bytemuck::cast_slice(vertices);
-    let array: ArrayView2<R> =
-        ArrayView::from_shape((vertices.len(), 3), coordinates).map_err(anyhow::Error::new)?;
-    let pyarray = unsafe { PyArray2::borrow_from_array(&array, container) };
-    Ok(pyarray
-        .into_any()
-        .downcast_into::<PyUntypedArray>()
-        .expect("downcast should not fail"))
+    assert_eq!(
+        shape.0 * shape.1,
+        values.len(),
+        "shape does not match values length"
+    );
+    if shape.1 == 1 {
+        let array: ArrayView1<R> =
+            ArrayView::from_shape((values.len(),), values).map_err(anyhow::Error::new)?;
+        let pyarray = unsafe { PyArray1::borrow_from_array(&array, container) };
+        Ok(pyarray
+            .into_any()
+            .downcast_into::<PyUntypedArray>()
+            .expect("downcast should not fail"))
+    } else {
+        let array: ArrayView2<R> =
+            ArrayView::from_shape(shape, values).map_err(anyhow::Error::new)?;
+        let pyarray = unsafe { PyArray2::borrow_from_array(&array, container) };
+        Ok(pyarray
+            .into_any()
+            .downcast_into::<PyUntypedArray>()
+            .expect("downcast should not fail"))
+    }
+}
+
+fn get_scalar_generic<'py, R: Element>(
+    values: &[R],
+    container: Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyUntypedArray>> {
+    get_vec_generic(values, (values.len(), 1), container)
+}
+
+fn get_vec3f_generic<'py, R: Real + Element>(
+    values: &[Vector3<R>],
+    container: Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyUntypedArray>> {
+    let coordinates: &[R] = bytemuck::cast_slice(values);
+    get_vec_generic(coordinates, (values.len(), 3), container)
 }
 
 fn get_triangles_generic<'py>(
@@ -89,10 +119,8 @@ fn get_triangles_generic<'py>(
     container: Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyArray2<NumpyUsize>>> {
     let vertex_indices: &[NumpyUsize] = bytemuck::cast_slice(triangles);
-    let array: ArrayView2<NumpyUsize> =
-        ArrayView::from_shape((triangles.len(), 3), vertex_indices).map_err(anyhow::Error::new)?;
-    let pyarray = unsafe { PyArray2::borrow_from_array(&array, container) };
-    Ok(pyarray)
+    let view = get_vec_generic(vertex_indices, (triangles.len(), 3), container)?.into_any();
+    Ok(view.downcast_into::<PyArray2<NumpyUsize>>()?)
 }
 
 fn compute_normals_generic<'py, R: Real + Element>(
@@ -614,8 +642,8 @@ impl PyTriMesh3d {
     #[getter]
     pub fn vertices<'py>(this: Bound<'py, Self>) -> PyResult<Bound<'py, PyUntypedArray>> {
         match &this.borrow().inner {
-            PyTriMesh3dData::F32(mesh) => get_vertices_generic(mesh.vertices(), this.into_any()),
-            PyTriMesh3dData::F64(mesh) => get_vertices_generic(mesh.vertices(), this.into_any()),
+            PyTriMesh3dData::F32(mesh) => get_vec3f_generic(mesh.vertices(), this.into_any()),
+            PyTriMesh3dData::F64(mesh) => get_vec3f_generic(mesh.vertices(), this.into_any()),
         }
     }
 
@@ -695,10 +723,10 @@ impl PyMixedTriQuadMesh3d {
     pub fn vertices<'py>(this: Bound<'py, Self>) -> PyResult<Bound<'py, PyUntypedArray>> {
         match &this.borrow().inner {
             PyMixedTriQuadMesh3dData::F32(mesh) => {
-                get_vertices_generic(mesh.vertices(), this.into_any())
+                get_vec3f_generic(mesh.vertices(), this.into_any())
             }
             PyMixedTriQuadMesh3dData::F64(mesh) => {
-                get_vertices_generic(mesh.vertices(), this.into_any())
+                get_vec3f_generic(mesh.vertices(), this.into_any())
             }
         }
     }
@@ -770,6 +798,7 @@ pub enum PyMesh3dData {
 enum_impl_from!(PyMesh3dData, Py<PyTriMesh3d> => PyMesh3dData::Tri3d);
 enum_impl_from!(PyMesh3dData, Py<PyMixedTriQuadMesh3d> => PyMesh3dData::MixedTriQuad3d);
 
+#[derive(Clone)]
 enum PyMeshAttributeData {
     F32(OwnedMeshAttribute<f32>),
     F64(OwnedMeshAttribute<f64>),
@@ -778,6 +807,7 @@ enum PyMeshAttributeData {
 #[gen_stub_pyclass]
 #[pyclass]
 #[pyo3(name = "MeshAttribute")]
+#[derive(Clone)]
 pub struct PyMeshAttribute {
     inner: PyMeshAttributeData,
 }
@@ -816,8 +846,19 @@ impl PyMeshAttribute {
 
     /// View of the attribute data as a numpy array
     #[getter]
-    pub fn data<'py>(&self, _py: Python<'py>) -> PyResult<()> {
-        unimplemented!()
+    pub fn data<'py>(this: Bound<'py, Self>) -> PyResult<Bound<'py, PyUntypedArray>> {
+        match &this.borrow().inner {
+            PyMeshAttributeData::F32(attr) => match &attr.data {
+                OwnedAttributeData::ScalarU64(data) => get_scalar_generic(data, this.into_any()),
+                OwnedAttributeData::ScalarReal(data) => get_scalar_generic(data, this.into_any()),
+                OwnedAttributeData::Vector3Real(data) => get_vec3f_generic(data, this.into_any()),
+            },
+            PyMeshAttributeData::F64(attr) => match &attr.data {
+                OwnedAttributeData::ScalarU64(data) => get_scalar_generic(data, this.into_any()),
+                OwnedAttributeData::ScalarReal(data) => get_scalar_generic(data, this.into_any()),
+                OwnedAttributeData::Vector3Real(data) => get_vec3f_generic(data, this.into_any()),
+            },
+        }
     }
 }
 
@@ -826,8 +867,8 @@ impl PyMeshAttribute {
 #[pyo3(name = "MeshWithData")]
 pub struct PyMeshWithData {
     mesh: PyMesh3dData,
-    point_attributes: Vec<Py<PyMeshAttribute>>,
-    cell_attributes: Vec<Py<PyMeshAttribute>>,
+    pub(crate) point_attributes: Vec<Py<PyMeshAttribute>>,
+    pub(crate) cell_attributes: Vec<Py<PyMeshAttribute>>,
 }
 
 impl PyMeshWithData {

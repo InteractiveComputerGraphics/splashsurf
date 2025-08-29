@@ -7,7 +7,8 @@ use pyo3_stub_gen::derive::gen_stub_pyfunction;
 use splashsurf_lib::nalgebra::Vector3;
 
 use crate::mesh::{
-    PyMeshWithData, PyMixedTriQuadMesh3d, PyVertexVertexConnectivity, get_triangle_mesh_generic,
+    PyMeshAttribute, PyMeshWithData, PyMixedTriQuadMesh3d, PyVertexVertexConnectivity,
+    get_triangle_mesh_generic,
 };
 use crate::uniform_grid::PyUniformGrid;
 use crate::utils::*;
@@ -61,8 +62,16 @@ pub fn convert_tris_to_quads<'py>(
 
     if let Ok(mesh) = mesh.downcast::<PyMeshWithData>() {
         let mut data_mesh = PyMeshWithData::try_from_pymesh(py, quad_mesh)?;
-        // TODO: transfer of point attributes not implemented yet, has to clone the data
-        unimplemented!("transfer of point attributes not implemented yet");
+        data_mesh.point_attributes = mesh
+            .borrow()
+            .point_attributes
+            .iter()
+            .map(|attr| {
+                let attr_clone: PyMeshAttribute = attr.borrow(py).clone();
+                attr_clone.into_pyobject(py).map(Py::from)
+            })
+            .collect::<Result<_, _>>()?;
+        data_mesh.into_bound_py_any(py)
     } else {
         quad_mesh.into_bound_py_any(py)
     }
