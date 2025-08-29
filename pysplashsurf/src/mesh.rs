@@ -5,7 +5,7 @@ use numpy::prelude::*;
 use numpy::{Element, PyArray, PyArray1, PyArray2, PyArrayDescr, PyUntypedArray};
 use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
-use pyo3::{IntoPyObjectExt, exceptions::PyValueError, types::PyList};
+use pyo3::{IntoPyObjectExt, types::PyList};
 use pyo3_stub_gen::derive::*;
 use splashsurf_lib::mesh::TriangleCell;
 use splashsurf_lib::{
