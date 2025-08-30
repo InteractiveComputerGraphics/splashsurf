@@ -87,13 +87,18 @@ impl PySphInterpolator {
         interpolation_points: &Bound<'py, PyUntypedArray>,
         first_order_correction: bool,
     ) -> PyResult<Bound<'py, PyUntypedArray>> {
-        let shape = particle_quantity.shape();
-        if ![1, 2].contains(&shape.len()) || shape[0] != interpolator.size() {
+        let shape_in = particle_quantity.shape();
+        if ![1, 2].contains(&shape_in.len()) || shape_in[0] != interpolator.size() {
             return Err(PyValueError::new_err(
                 "unsupported shape of per particle quantity",
             ));
         }
-        let n_components = shape.get(1).copied().unwrap_or(1);
+        let n_components = shape_in.get(1).copied().unwrap_or(1);
+        let shape_out = {
+            let mut s = shape_in.to_vec();
+            s[0] = interpolation_points.shape()[0];
+            s
+        };
 
         // Get the per-particle quantity as a read-only contiguous slice
         let quantity = if let Ok(q) = particle_quantity.downcast::<PyArray1<R>>() {
@@ -105,11 +110,10 @@ impl PySphInterpolator {
         }?;
         let quantity = quantity.as_slice()?;
 
-        let points = if let Ok(p) = interpolation_points.downcast::<PyArray2<R>>() {
-            p.try_readonly()?
-        } else {
-            return Err(pyerr_scalar_type_mismatch());
-        };
+        let points = interpolation_points
+            .downcast::<PyArray2<R>>()
+            .map_err(|_| pyerr_scalar_type_mismatch())?
+            .try_readonly()?;
         let points: &[Vector3<R>] = bytemuck::cast_slice(points.as_slice()?);
 
         fn interpolate_ndim<'py, const D: usize, R: Real + Element>(
@@ -133,6 +137,7 @@ impl PySphInterpolator {
 
         let py = particle_quantity.py();
         let i = interpolator;
+        let shape = &shape_out;
         match n_components {
             1 => interpolate_ndim::<1, R>(py, i, points, quantity, first_order_correction, shape),
             2 => interpolate_ndim::<2, R>(py, i, points, quantity, first_order_correction, shape),
@@ -153,7 +158,7 @@ impl PySphInterpolator {
 #[gen_stub_pymethods]
 #[pymethods]
 impl PySphInterpolator {
-    /// Constructs an SPH interpolator for the given particles
+    /// Constructs an SPH interpolator (with cubic kernels) for the given particles
     #[new]
     fn py_new<'py>(
         particle_positions: &Bound<'py, PyUntypedArray>,
@@ -184,6 +189,7 @@ impl PySphInterpolator {
     }
 
     /// Interpolates a scalar or vectorial per particle quantity to the given points
+    #[pyo3(signature = (particle_quantity, interpolation_points, *, first_order_correction = false))]
     fn interpolate_quantity<'py>(
         &self,
         particle_quantity: &Bound<'py, PyUntypedArray>,
