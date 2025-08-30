@@ -1,6 +1,6 @@
 use crate::mesh::PyTriMesh3d;
 use crate::uniform_grid::PyUniformGrid;
-use crate::utils::*;
+use crate::utils;
 use anyhow::anyhow;
 use numpy as np;
 use numpy::prelude::*;
@@ -12,6 +12,7 @@ use splashsurf_lib::{
     Aabb3d, GridDecompositionParameters, Real, SpatialDecomposition, SurfaceReconstruction,
     nalgebra::Vector3,
 };
+use utils::{IndexT, enum_wrapper_impl_from};
 
 enum PySurfaceReconstructionData {
     F32(SurfaceReconstruction<IndexT, f32>),
@@ -33,9 +34,9 @@ impl PySurfaceReconstruction {
     pub fn try_from_generic<R: Real + Element>(
         mut reconstruction: SurfaceReconstruction<IndexT, R>,
     ) -> PyResult<Self> {
-        transmute_take_into::<_, SurfaceReconstruction<IndexT, f32>, _>(&mut reconstruction)
+        utils::transmute_take_into::<_, SurfaceReconstruction<IndexT, f32>, _>(&mut reconstruction)
             .or_else(|| {
-                transmute_take_into::<_, SurfaceReconstruction<IndexT, f64>, _>(&mut reconstruction)
+                utils::transmute_take_into::<_, SurfaceReconstruction<IndexT, f64>, _>(&mut reconstruction)
             })
             .ok_or_else(|| PyTypeError::new_err("unsupported type of reconstruction, only i64 for Index and f32 and f64 for Real type are supported"))
     }
@@ -68,25 +69,20 @@ impl PySurfaceReconstruction {
         }
     }
 
-    /// Returns a copy of the particle densities computed during the reconstruction
-    fn copy_particle_densities<'py>(&self, py: Python<'py>) -> Option<Bound<'py, PyUntypedArray>> {
-        match &self.inner {
-            PySurfaceReconstructionData::F32(reconstruction) => Some(
-                reconstruction
-                    .particle_densities()?
-                    .to_pyarray(py)
-                    .into_any()
-                    .downcast_into::<PyUntypedArray>()
-                    .expect("downcasting should not fail"),
-            ),
-            PySurfaceReconstructionData::F64(reconstruction) => Some(
-                reconstruction
-                    .particle_densities()?
-                    .to_pyarray(py)
-                    .into_any()
-                    .downcast_into::<PyUntypedArray>()
-                    .expect("downcasting should not fail"),
-            ),
+    /// The particle densities computed during the reconstruction if available
+    #[getter]
+    fn particle_densities<'py>(
+        this: Bound<'py, Self>,
+    ) -> PyResult<Option<Bound<'py, PyUntypedArray>>> {
+        match &this.borrow().inner {
+            PySurfaceReconstructionData::F32(reconstruction) => reconstruction
+                .particle_densities()
+                .map(|densities| utils::view_scalar_generic(densities.as_slice(), this.into_any()))
+                .transpose(),
+            PySurfaceReconstructionData::F64(reconstruction) => reconstruction
+                .particle_densities()
+                .map(|densities| utils::view_scalar_generic(densities.as_slice(), this.into_any()))
+                .transpose(),
         }
     }
 
@@ -179,6 +175,6 @@ pub fn reconstruct_surface<'py>(
                 .map_err(|e| anyhow!(e))?;
         PySurfaceReconstruction::try_from_generic(reconstruction)
     } else {
-        Err(pyerr_unsupported_scalar())
+        Err(utils::pyerr_unsupported_scalar())
     }
 }
