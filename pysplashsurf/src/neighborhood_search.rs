@@ -10,6 +10,7 @@ use crate::aabb::PyAabb3d;
 use crate::utils::*;
 
 // TODO: Bindings for flat neighborhood search
+// TODO: Bindings for computing particle densities
 
 #[gen_stub_pyclass]
 #[pyclass]

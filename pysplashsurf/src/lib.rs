@@ -36,12 +36,8 @@ fn pysplashsurf(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     m.add_class::<uniform_grid::PyUniformGrid>()?;
     m.add_class::<reconstruction::PySurfaceReconstruction>()?;
-
-    m.add_class::<sph_interpolation::SphInterpolatorF32>()?;
-    m.add_class::<sph_interpolation::SphInterpolatorF64>()?;
-
+    m.add_class::<sph_interpolation::PySphInterpolator>()?;
     m.add_class::<aabb::PyAabb3d>()?;
-
     m.add_class::<neighborhood_search::PyNeighborhoodLists>()?;
 
     use wrap_pyfunction as wrap;
