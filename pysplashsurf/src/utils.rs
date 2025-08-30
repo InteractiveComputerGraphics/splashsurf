@@ -1,6 +1,12 @@
-use pyo3::PyErr;
+use ndarray::{ArrayView, IxDyn};
+use numpy::{Element, PyArray, PyUntypedArray};
 use pyo3::exceptions::PyTypeError;
+use pyo3::prelude::*;
+use pyo3::{Bound, PyAny, PyErr, PyResult};
+use splashsurf_lib::Real;
+use splashsurf_lib::nalgebra::SVector;
 
+/// The index type used for all grids and reconstructions in this crate
 pub(crate) type IndexT = i64;
 
 pub(crate) fn pyerr_unsupported_scalar() -> PyErr {
@@ -76,4 +82,38 @@ pub(crate) fn transmute_take_into<
 ) -> Option<Target> {
     transmute_same_mut::<GenericSrc, ConcreteSrc>(value)
         .map(|value_ref| std::mem::take(value_ref).into())
+}
+
+pub(crate) fn view_generic<'py, R: Element>(
+    values: &[R],
+    shape: &[usize],
+    container: Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyUntypedArray>> {
+    assert_eq!(
+        shape.iter().product::<usize>(),
+        values.len(),
+        "shape does not match values length"
+    );
+    let array: ArrayView<R, IxDyn> =
+        ArrayView::from_shape(shape, values).map_err(anyhow::Error::new)?;
+    let pyarray = unsafe { PyArray::borrow_from_array(&array, container) };
+    Ok(pyarray
+        .into_any()
+        .downcast_into::<PyUntypedArray>()
+        .expect("downcast should not fail"))
+}
+
+pub(crate) fn view_scalar_generic<'py, R: Element>(
+    values: &[R],
+    container: Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyUntypedArray>> {
+    view_generic(values, &[values.len()], container)
+}
+
+pub(crate) fn view_vec_generic<'py, R: Real + Element, const D: usize>(
+    values: &[SVector<R, D>],
+    container: Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyUntypedArray>> {
+    let coordinates: &[R] = bytemuck::cast_slice(values);
+    view_generic(coordinates, &[values.len(), D], container)
 }

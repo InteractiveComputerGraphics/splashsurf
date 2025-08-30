@@ -72,7 +72,7 @@ impl<R: Real> SphInterpolator<R> {
             tree,
         }
     }
-    
+
     /// Returns the number of particles stored in the interpolator
     pub fn size(&self) -> usize {
         self.tree.size()
