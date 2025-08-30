@@ -440,8 +440,8 @@ pub struct ReconstructionResult<I: Index, R: Real> {
     pub tri_mesh: Option<MeshWithData<R, TriMesh3d<R>>>,
     /// Holds the reconstructed mixed triangle/quad mesh (only if [`generate_quads`](ReconstructionPostprocessingParameters::generate_quads) was enabled)
     pub tri_quad_mesh: Option<MeshWithData<R, MixedTriQuadMesh3d<R>>>,
-    /// Holds the initial [`SurfaceReconstruction`] with no post-processing applied (only if [`output_raw_mesh`](ReconstructionPostprocessingParameters::output_raw_mesh) was enabled)
-    pub raw_reconstruction: Option<SurfaceReconstruction<I, R>>,
+    /// Holds the initial [`SurfaceReconstruction`] with no post-processing applied (the unprocessed mesh is only contained if [`output_raw_mesh`](ReconstructionPostprocessingParameters::output_raw_mesh) was enabled)
+    pub raw_reconstruction: SurfaceReconstruction<I, R>,
 }
 
 /// Parameters for the post-processing steps in the reconstruction pipeline
@@ -1040,12 +1040,6 @@ pub fn reconstruction_pipeline<'a, I: Index, R: Real>(
         }
     }
 
-    let reconstruction_output = if postprocessing.output_raw_mesh {
-        Some(reconstruction.clone())
-    } else {
-        None
-    };
-
     let grid = reconstruction.grid();
     let mut mesh_with_data = MeshWithData::new(Cow::Borrowed(reconstruction.mesh()));
 
@@ -1396,7 +1390,7 @@ pub fn reconstruction_pipeline<'a, I: Index, R: Real>(
     };
 
     // Convert triangles to quads
-    let (mut tri_mesh, tri_quad_mesh) = if postprocessing.generate_quads {
+    let (tri_mesh, mut tri_quad_mesh) = if postprocessing.generate_quads {
         info!("Post-processing: Convert triangles to quads...");
         let non_squareness_limit = R::from_float(postprocessing.quad_max_edge_diag_ratio);
         let normal_angle_limit = R::from_float(postprocessing.quad_max_normal_angle.to_radians());
@@ -1432,7 +1426,7 @@ pub fn reconstruction_pipeline<'a, I: Index, R: Real>(
     // TODO: Option to continue processing sequences even if checks fail. Maybe return special error type?
 
     if postprocessing.check_mesh_closed || postprocessing.check_mesh_manifold {
-        if let Err(err) = match (&tri_mesh, &tri_quad_mesh) {
+        if let Err(err) = match (&tri_mesh, &mut tri_quad_mesh) {
             (Some(mesh), None) => splashsurf_lib::marching_cubes::check_mesh_consistency(
                 grid,
                 &mesh.mesh,
@@ -1440,12 +1434,12 @@ pub fn reconstruction_pipeline<'a, I: Index, R: Real>(
                 postprocessing.check_mesh_manifold,
                 postprocessing.check_mesh_debug,
             ),
-            (None, Some(_mesh)) => {
+            (None, Some(mesh)) => {
                 info!("Checking for mesh consistency not implemented for quad mesh at the moment.");
                 return Ok(ReconstructionResult {
                     tri_mesh: None,
-                    tri_quad_mesh: Some(_mesh.to_owned()),
-                    raw_reconstruction: reconstruction_output,
+                    tri_quad_mesh: Some(std::mem::take(mesh)),
+                    raw_reconstruction: reconstruction,
                 });
             }
             _ => unreachable!(),
@@ -1529,23 +1523,45 @@ pub fn reconstruction_pipeline<'a, I: Index, R: Real>(
         }
     }
 
-    match (&mut tri_mesh, &tri_quad_mesh) {
+    match (tri_mesh, tri_quad_mesh) {
         (Some(mesh), None) => {
-            let mut res: MeshWithData<R, TriMesh3d<R>> =
-                MeshWithData::new(mesh.to_owned().mesh.into_owned());
-            res.point_attributes = std::mem::take(&mut mesh.point_attributes);
-            res.cell_attributes = std::mem::take(&mut mesh.cell_attributes);
+            let MeshWithData {
+                mesh,
+                point_attributes,
+                cell_attributes,
+            } = mesh;
+
+            // Avoid copy if original mesh was not modified
+            let (mesh, take_mesh) = if std::ptr::eq(mesh.as_ref(), reconstruction.mesh())
+                && !postprocessing.output_raw_mesh
+            {
+                // Ensure that borrow of reconstruction is dropped
+                (Default::default(), true)
+            } else {
+                (mesh.into_owned(), false)
+            };
+
+            let mut reconstruction = reconstruction;
+            let mesh = if take_mesh {
+                std::mem::take(&mut reconstruction.mesh)
+            } else {
+                mesh
+            };
 
             Ok(ReconstructionResult {
-                tri_mesh: Some(res),
+                tri_mesh: Some(MeshWithData {
+                    mesh,
+                    point_attributes,
+                    cell_attributes,
+                }),
                 tri_quad_mesh: None,
-                raw_reconstruction: reconstruction_output,
+                raw_reconstruction: reconstruction,
             })
         }
-        (None, Some(_mesh)) => Ok(ReconstructionResult {
+        (None, Some(mesh)) => Ok(ReconstructionResult {
             tri_mesh: None,
-            tri_quad_mesh: Some(_mesh.to_owned()),
-            raw_reconstruction: reconstruction_output,
+            tri_quad_mesh: Some(mesh),
+            raw_reconstruction: reconstruction,
         }),
         _ => unreachable!(),
     }
@@ -1586,9 +1602,6 @@ pub(crate) fn reconstruction_pipeline_from_path<I: Index, R: Real>(
     if postprocessing.output_raw_mesh {
         profile!("write surface mesh to file");
 
-        let reconstruction = reconstruction.expect(
-            "reconstruction_pipeline_from_data did not return a SurfaceReconstruction object",
-        );
         let mesh = reconstruction.mesh();
 
         let output_path = paths

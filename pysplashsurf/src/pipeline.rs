@@ -1,9 +1,7 @@
-use crate::mesh::PyMeshWithData;
-use crate::utils::{IndexT, pyerr_unsupported_scalar};
 use numpy as np;
+use numpy::prelude::*;
 use numpy::{
-    Element, PyArray1, PyArray2, PyArrayDescr, PyArrayDescrMethods, PyArrayMethods,
-    PyReadonlyArray1, PyReadonlyArray2, PyUntypedArray, PyUntypedArrayMethods,
+    Element, PyArray1, PyArray2, PyArrayDescr, PyReadonlyArray1, PyReadonlyArray2, PyUntypedArray,
 };
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::{
@@ -17,6 +15,10 @@ use splashsurf_lib::{
     nalgebra::Vector3,
 };
 use std::borrow::Cow;
+
+use crate::mesh::PyMeshWithData;
+use crate::reconstruction::PySurfaceReconstruction;
+use crate::utils::{IndexT, pyerr_unsupported_scalar};
 
 /// Runs the surface reconstruction pipeline for the given particle positions with optional post-processing
 ///
@@ -74,7 +76,7 @@ pub fn reconstruction_pipeline<'py>(
     mesh_aabb_max: Option<[f64; 3]>,
     mesh_aabb_clamp_vertices: bool,
     dtype: Option<Bound<'py, PyArrayDescr>>,
-) -> PyResult<PyMeshWithData> {
+) -> PyResult<(PyMeshWithData, PySurfaceReconstruction)> {
     let py = particles.py();
     let element_type = particles.dtype();
 
@@ -140,19 +142,19 @@ pub fn reconstruction_pipeline<'py>(
         mesh_aabb_clamp_vertices,
     };
 
-    fn reconstruction_to_pymesh<'py, I: Index, R: Real + Element>(
+    fn reconstruction_to_pymesh<'py, R: Real + Element>(
         py: Python<'py>,
-        reconstruction: splashsurf::reconstruct::ReconstructionResult<I, R>,
-    ) -> PyResult<PyMeshWithData> {
-        if let Some(tri_mesh) = reconstruction.tri_mesh {
-            PyMeshWithData::try_from_mesh_with_data(py, tri_mesh)
+        reconstruction: splashsurf::reconstruct::ReconstructionResult<IndexT, R>,
+    ) -> PyResult<(PyMeshWithData, PySurfaceReconstruction)> {
+        let mesh_with_data = if let Some(tri_mesh) = reconstruction.tri_mesh {
+            PyMeshWithData::try_from_mesh_with_data(py, tri_mesh)?
         } else if let Some(tri_quad_mesh) = reconstruction.tri_quad_mesh {
-            PyMeshWithData::try_from_mesh_with_data(py, tri_quad_mesh)
+            PyMeshWithData::try_from_mesh_with_data(py, tri_quad_mesh)?
         } else {
-            Err(PyRuntimeError::new_err(
-                "Reconstruction resulted in no mesh",
-            ))
-        }
+            return Err(PyRuntimeError::new_err("reconstruction returned no mesh"));
+        };
+        let rec = PySurfaceReconstruction::try_from_generic(reconstruction.raw_reconstruction)?;
+        Ok((mesh_with_data, rec))
     }
 
     if element_type.is_equiv_to(&np::dtype::<f32>(py)) {
