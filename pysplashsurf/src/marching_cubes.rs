@@ -44,6 +44,6 @@ pub fn check_mesh_consistency<'py>(
         )
         .err())
     } else {
-        Err(pyerr_mesh_grid_scalar_mismatch())
+        Err(pyerr_scalar_type_mismatch())
     }
 }

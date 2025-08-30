@@ -94,42 +94,31 @@ class MixedTriQuadMesh3d:
         """
 
 class NeighborhoodLists:
-    ...
-
-class SphInterpolatorF32:
-    r"""
-    SphInterpolator wrapper
-    """
-    def __new__(cls, particle_positions:numpy.typing.NDArray[numpy.float32], particle_densities:typing.Sequence[builtins.float], particle_rest_mass:builtins.float, compact_support_radius:builtins.float) -> SphInterpolatorF32: ...
-    def interpolate_scalar_quantity(self, particle_quantity:typing.Sequence[builtins.float], interpolation_points:numpy.typing.NDArray[numpy.float32], first_order_correction:builtins.bool) -> builtins.list[builtins.float]:
+    def __len__(self) -> builtins.int:
         r"""
-        Interpolates a scalar per particle quantity to the given points, panics if the there are less per-particles values than particles
+        Returns the number of particles for which neighborhood lists are stored
         """
-    def interpolate_normals(self, interpolation_points:numpy.typing.NDArray[numpy.float32]) -> numpy.typing.NDArray[numpy.float32]:
+    def __getitem__(self, idx:builtins.int) -> builtins.list[builtins.int]:
         r"""
-        Interpolates surface normals (i.e. normalized SPH gradient of the indicator function) of the fluid to the given points using SPH interpolation
+        Returns the neighborhood list for the particle at the given index
         """
-    def interpolate_vector_quantity(self, particle_quantity:numpy.typing.NDArray[numpy.float32], interpolation_points:numpy.typing.NDArray[numpy.float32], first_order_correction:builtins.bool) -> numpy.typing.NDArray[numpy.float32]:
+    def get_neighborhood_lists(self) -> builtins.list[builtins.list[builtins.int]]:
         r"""
-        Interpolates a vectorial per particle quantity to the given points, panics if the there are less per-particles values than particles
+        Returns all stored neighborhood lists as a list of lists
         """
 
-class SphInterpolatorF64:
-    r"""
-    SphInterpolator wrapper
-    """
-    def __new__(cls, particle_positions:numpy.typing.NDArray[numpy.float64], particle_densities:typing.Sequence[builtins.float], particle_rest_mass:builtins.float, compact_support_radius:builtins.float) -> SphInterpolatorF64: ...
-    def interpolate_scalar_quantity(self, particle_quantity:typing.Sequence[builtins.float], interpolation_points:numpy.typing.NDArray[numpy.float64], first_order_correction:builtins.bool) -> builtins.list[builtins.float]:
+class SphInterpolator:
+    def __new__(cls, particle_positions:numpy.typing.NDArray[typing.Any], particle_densities:numpy.typing.NDArray[typing.Any], particle_rest_mass:builtins.float, compact_support_radius:builtins.float) -> SphInterpolator:
         r"""
-        Interpolates a scalar per particle quantity to the given points, panics if the there are less per-particles values than particles
+        Constructs an SPH interpolator for the given particles
         """
-    def interpolate_normals(self, interpolation_points:numpy.typing.NDArray[numpy.float64]) -> numpy.typing.NDArray[numpy.float64]:
+    def interpolate_quantity(self, particle_quantity:numpy.typing.NDArray[typing.Any], interpolation_points:numpy.typing.NDArray[typing.Any], first_order_correction:builtins.bool) -> numpy.typing.NDArray[typing.Any]:
+        r"""
+        Interpolates a scalar or vectorial per particle quantity to the given points
+        """
+    def interpolate_normals(self, interpolation_points:numpy.typing.NDArray[typing.Any]) -> numpy.typing.NDArray[typing.Any]:
         r"""
         Interpolates surface normals (i.e. normalized SPH gradient of the indicator function) of the fluid to the given points using SPH interpolation
-        """
-    def interpolate_vector_quantity(self, particle_quantity:numpy.typing.NDArray[numpy.float64], interpolation_points:numpy.typing.NDArray[numpy.float64], first_order_correction:builtins.bool) -> numpy.typing.NDArray[numpy.float64]:
-        r"""
-        Interpolates a vectorial per particle quantity to the given points, panics if the there are less per-particles values than particles
         """
 
 class SurfaceReconstruction:
@@ -257,7 +246,7 @@ def marching_cubes_cleanup(mesh:typing.Union[TriMesh3d, MeshWithData], grid:Unif
 
 def neighborhood_search_spatial_hashing_parallel(particle_positions:numpy.typing.NDArray[typing.Any], domain:Aabb3d, search_radius:builtins.float) -> NeighborhoodLists:
     r"""
-    Performs a neighborhood search using spatial hashing (multi-threaded implementation)
+    Performs a neighborhood search using spatial hashing (multithreaded implementation)
     """
 
 def reconstruct_surface(particles:numpy.typing.NDArray[typing.Any], *, particle_radius:builtins.float, rest_density:builtins.float=1000.0, smoothing_length:builtins.float, cube_size:builtins.float, iso_surface_threshold:builtins.float=0.6, multi_threading:builtins.bool=True, global_neighborhood_list:builtins.bool=False, subdomain_grid:builtins.bool=True, subdomain_grid_auto_disable:builtins.bool=True, subdomain_num_cubes_per_dim:builtins.int=64, aabb_min:typing.Optional[typing.Sequence[builtins.float]]=None, aabb_max:typing.Optional[typing.Sequence[builtins.float]]=None) -> SurfaceReconstruction:

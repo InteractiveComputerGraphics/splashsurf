@@ -7,9 +7,9 @@ pub(crate) fn pyerr_unsupported_scalar() -> PyErr {
     PyTypeError::new_err("unsupported mesh scalar data type, only f32 and f64 are supported")
 }
 
-pub(crate) fn pyerr_mesh_grid_scalar_mismatch() -> PyErr {
+pub(crate) fn pyerr_scalar_type_mismatch() -> PyErr {
     PyTypeError::new_err(
-        "unsupported mesh and grid scalar data type combination, both have to be either f32 or f64",
+        "unsupported combination of scalar data types, all parameters must have the same type (f32 or f64)",
     )
 }
 

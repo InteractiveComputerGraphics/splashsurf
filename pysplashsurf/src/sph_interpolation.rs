@@ -1,128 +1,223 @@
-use ndarray::{ArrayView, ArrayView2};
-use numpy::{PyArray2, PyReadonlyArray2, ToPyArray};
-use pyo3::{PyResult, prelude::*};
+use numpy as np;
+use numpy::prelude::*;
+use numpy::{Element, PyArray1, PyArray2, PyUntypedArray};
+use pyo3::PyResult;
+use pyo3::exceptions::PyValueError;
+use pyo3::prelude::*;
 use pyo3_stub_gen::derive::*;
+use splashsurf_lib::nalgebra::SVector;
 use splashsurf_lib::{
+    Real,
     nalgebra::{Unit, Vector3},
     sph_interpolation::SphInterpolator,
 };
 
-macro_rules! create_sph_interpolator_interface {
-    ($name: ident, $type: ident) => {
-        /// SphInterpolator wrapper
-        #[gen_stub_pyclass]
-        #[pyclass]
-        pub struct $name {
-            pub inner: SphInterpolator<$type>,
-        }
+use crate::utils::*;
 
-        impl $name {
-            pub fn new(data: SphInterpolator<$type>) -> Self {
-                Self { inner: data }
-            }
-        }
-
-        #[gen_stub_pymethods]
-        #[pymethods]
-        impl $name {
-            #[new]
-            fn py_new<'py>(
-                particle_positions: &Bound<'py, PyArray2<$type>>,
-                particle_densities: Vec<$type>,
-                particle_rest_mass: $type,
-                compact_support_radius: $type,
-            ) -> PyResult<Self> {
-                let particle_positions: PyReadonlyArray2<$type> =
-                    particle_positions.extract().unwrap();
-                let particle_positions = particle_positions.as_slice().unwrap();
-                let particle_positions: &[Vector3<$type>] =
-                    bytemuck::cast_slice(particle_positions);
-
-                Ok($name::new(SphInterpolator::new(
-                    particle_positions,
-                    particle_densities.as_slice(),
-                    particle_rest_mass,
-                    compact_support_radius,
-                )))
-            }
-
-            /// Interpolates a scalar per particle quantity to the given points, panics if the there are less per-particles values than particles
-            fn interpolate_scalar_quantity<'py>(
-                &self,
-                particle_quantity: Vec<$type>,
-                interpolation_points: &Bound<'py, PyArray2<$type>>,
-                first_order_correction: bool,
-            ) -> PyResult<Vec<$type>> {
-                let interpolation_points: PyReadonlyArray2<$type> =
-                    interpolation_points.extract()?;
-                let interpolation_points = interpolation_points.as_slice()?;
-                let interpolation_points: &[Vector3<$type>] =
-                    bytemuck::cast_slice(interpolation_points);
-
-                Ok(self.inner.interpolate_scalar_quantity(
-                    particle_quantity.as_slice(),
-                    interpolation_points,
-                    first_order_correction,
-                ))
-            }
-
-            /// Interpolates surface normals (i.e. normalized SPH gradient of the indicator function) of the fluid to the given points using SPH interpolation
-            fn interpolate_normals<'py>(
-                &self,
-                py: Python<'py>,
-                interpolation_points: &Bound<'py, PyArray2<$type>>,
-            ) -> PyResult<Bound<'py, PyArray2<$type>>> {
-                let interpolation_points: PyReadonlyArray2<$type> =
-                    interpolation_points.extract()?;
-                let interpolation_points = interpolation_points.as_slice()?;
-                let interpolation_points: &[Vector3<$type>] =
-                    bytemuck::cast_slice(interpolation_points);
-
-                let normals_vec = self.inner.interpolate_normals(interpolation_points);
-                let normals_vec =
-                    bytemuck::allocation::cast_vec::<Unit<Vector3<$type>>, $type>(normals_vec);
-
-                let normals: &[$type] = normals_vec.as_slice();
-                let normals: ArrayView2<$type> =
-                    ArrayView::from_shape((normals.len() / 3, 3), normals).unwrap();
-
-                Ok(normals.to_pyarray(py))
-            }
-
-            /// Interpolates a vectorial per particle quantity to the given points, panics if the there are less per-particles values than particles
-            fn interpolate_vector_quantity<'py>(
-                &self,
-                py: Python<'py>,
-                particle_quantity: &Bound<'py, PyArray2<$type>>,
-                interpolation_points: &Bound<'py, PyArray2<$type>>,
-                first_order_correction: bool,
-            ) -> PyResult<Bound<'py, PyArray2<$type>>> {
-                let interpolation_points: PyReadonlyArray2<$type> =
-                    interpolation_points.extract()?;
-                let interpolation_points = interpolation_points.as_slice()?;
-                let interpolation_points: &[Vector3<$type>] =
-                    bytemuck::cast_slice(interpolation_points);
-
-                let particle_quantity: PyReadonlyArray2<$type> = particle_quantity.extract()?;
-                let particle_quantity = particle_quantity.as_slice()?;
-                let particle_quantity: &[Vector3<$type>] = bytemuck::cast_slice(particle_quantity);
-
-                let res_vec = self.inner.interpolate_vector_quantity(
-                    particle_quantity,
-                    interpolation_points,
-                    first_order_correction,
-                );
-                let res_vec = bytemuck::allocation::cast_vec::<Vector3<$type>, $type>(res_vec);
-
-                let res: &[$type] = res_vec.as_slice();
-                let res: ArrayView2<$type> =
-                    ArrayView::from_shape((res.len() / 3, 3), res).unwrap();
-
-                Ok(res.to_pyarray(py))
-            }
-        }
-    };
+enum PySphInterpolatorWrapper {
+    F32(SphInterpolator<f32>),
+    F64(SphInterpolator<f64>),
 }
 
-create_sph_interpolator_interface!(SphInterpolatorF64, f64);
-create_sph_interpolator_interface!(SphInterpolatorF32, f32);
+#[gen_stub_pyclass]
+#[pyclass]
+#[pyo3(name = "SphInterpolator")]
+pub struct PySphInterpolator {
+    inner: PySphInterpolatorWrapper,
+}
+
+enum_wrapper_impl_from!(PySphInterpolator, SphInterpolator<f32> => PySphInterpolatorWrapper::F32);
+enum_wrapper_impl_from!(PySphInterpolator, SphInterpolator<f64> => PySphInterpolatorWrapper::F64);
+
+impl PySphInterpolator {
+    fn new_generic<'py, R: Real + Element>(
+        particle_positions: &Bound<'py, PyUntypedArray>,
+        particle_densities: &Bound<'py, PyUntypedArray>,
+        particle_rest_mass: f64,
+        compact_support_radius: f64,
+    ) -> PyResult<PySphInterpolator>
+    where
+        PySphInterpolator: From<SphInterpolator<R>>,
+    {
+        if let (Ok(particles), Ok(densities)) = (
+            particle_positions.downcast::<PyArray2<R>>(),
+            particle_densities.downcast::<PyArray1<R>>(),
+        ) {
+            let particles = particles.try_readonly()?;
+            let particles: &[Vector3<R>] = bytemuck::cast_slice(particles.as_slice()?);
+
+            let densities = densities.try_readonly()?;
+            let densities = densities.as_slice()?;
+
+            Ok(PySphInterpolator::from(SphInterpolator::new(
+                particles,
+                densities,
+                R::from_float(particle_rest_mass),
+                R::from_float(compact_support_radius),
+            )))
+        } else {
+            Err(pyerr_scalar_type_mismatch())
+        }
+    }
+
+    fn interpolate_normals_generic<'py, R: Real + Element>(
+        interpolator: &SphInterpolator<R>,
+        interpolation_points: &Bound<'py, PyUntypedArray>,
+    ) -> PyResult<Bound<'py, PyUntypedArray>> {
+        let py = interpolation_points.py();
+        if let Ok(points) = interpolation_points.downcast::<PyArray2<R>>() {
+            let points = points.try_readonly()?;
+            let points: &[Vector3<R>] = bytemuck::cast_slice(points.as_slice()?);
+
+            let normals_vec = interpolator.interpolate_normals(points);
+            Ok(bytemuck::cast_vec::<Unit<Vector3<R>>, R>(normals_vec)
+                .into_pyarray(py)
+                .reshape((points.len(), 3))?
+                .into_any()
+                .downcast_into::<PyUntypedArray>()
+                .expect("downcast should not fail"))
+        } else {
+            Err(pyerr_unsupported_scalar())
+        }
+    }
+
+    fn interpolate_vector_generic<'py, R: Real + Element>(
+        interpolator: &SphInterpolator<R>,
+        particle_quantity: &Bound<'py, PyUntypedArray>,
+        interpolation_points: &Bound<'py, PyUntypedArray>,
+        first_order_correction: bool,
+    ) -> PyResult<Bound<'py, PyUntypedArray>> {
+        let shape = particle_quantity.shape();
+        if ![1, 2].contains(&shape.len()) || shape[0] != interpolator.size() {
+            return Err(PyValueError::new_err(
+                "unsupported shape of per particle quantity",
+            ));
+        }
+        let n_components = shape.get(1).copied().unwrap_or(1);
+
+        // Get the per-particle quantity as a read-only contiguous slice
+        let quantity = if let Ok(q) = particle_quantity.downcast::<PyArray1<R>>() {
+            q.to_dyn().try_readonly()
+        } else if let Ok(q) = particle_quantity.downcast::<PyArray2<R>>() {
+            q.to_dyn().try_readonly()
+        } else {
+            return Err(pyerr_scalar_type_mismatch());
+        }?;
+        let quantity = quantity.as_slice()?;
+
+        let points = if let Ok(p) = interpolation_points.downcast::<PyArray2<R>>() {
+            p.try_readonly()?
+        } else {
+            return Err(pyerr_scalar_type_mismatch());
+        };
+        let points: &[Vector3<R>] = bytemuck::cast_slice(points.as_slice()?);
+
+        fn interpolate_ndim<'py, const D: usize, R: Real + Element>(
+            py: Python<'py>,
+            interpolator: &SphInterpolator<R>,
+            points: &[Vector3<R>],
+            quantity: &[R],
+            first_order_correction: bool,
+            shape: &[usize],
+        ) -> PyResult<Bound<'py, PyUntypedArray>> {
+            let quantity: &[SVector<R, D>] = bytemuck::cast_slice(quantity);
+            let interpolated =
+                interpolator.interpolate_vector_quantity(quantity, points, first_order_correction);
+            Ok(bytemuck::cast_vec::<_, R>(interpolated)
+                .into_pyarray(py)
+                .reshape(shape)?
+                .into_any()
+                .downcast_into::<PyUntypedArray>()
+                .expect("downcast should not fail"))
+        }
+
+        let py = particle_quantity.py();
+        let i = interpolator;
+        match n_components {
+            1 => interpolate_ndim::<1, R>(py, i, points, quantity, first_order_correction, shape),
+            2 => interpolate_ndim::<2, R>(py, i, points, quantity, first_order_correction, shape),
+            3 => interpolate_ndim::<3, R>(py, i, points, quantity, first_order_correction, shape),
+            4 => interpolate_ndim::<4, R>(py, i, points, quantity, first_order_correction, shape),
+            5 => interpolate_ndim::<5, R>(py, i, points, quantity, first_order_correction, shape),
+            6 => interpolate_ndim::<6, R>(py, i, points, quantity, first_order_correction, shape),
+            7 => interpolate_ndim::<7, R>(py, i, points, quantity, first_order_correction, shape),
+            8 => interpolate_ndim::<8, R>(py, i, points, quantity, first_order_correction, shape),
+            9 => interpolate_ndim::<9, R>(py, i, points, quantity, first_order_correction, shape),
+            _ => Err(PyValueError::new_err(
+                "only vector quantities with up to 9 dimensions are supported",
+            )),
+        }
+    }
+}
+
+#[gen_stub_pymethods]
+#[pymethods]
+impl PySphInterpolator {
+    /// Constructs an SPH interpolator for the given particles
+    #[new]
+    fn py_new<'py>(
+        particle_positions: &Bound<'py, PyUntypedArray>,
+        particle_densities: &Bound<'py, PyUntypedArray>,
+        particle_rest_mass: f64,
+        compact_support_radius: f64,
+    ) -> PyResult<Self> {
+        let py = particle_positions.py();
+        let element_type = particle_positions.dtype();
+
+        if element_type.is_equiv_to(&np::dtype::<f32>(py)) {
+            Self::new_generic::<f32>(
+                particle_positions,
+                particle_densities,
+                particle_rest_mass,
+                compact_support_radius,
+            )
+        } else if element_type.is_equiv_to(&np::dtype::<f64>(py)) {
+            Self::new_generic::<f64>(
+                particle_positions,
+                particle_densities,
+                particle_rest_mass,
+                compact_support_radius,
+            )
+        } else {
+            Err(pyerr_unsupported_scalar())
+        }
+    }
+
+    /// Interpolates a scalar or vectorial per particle quantity to the given points
+    fn interpolate_quantity<'py>(
+        &self,
+        particle_quantity: &Bound<'py, PyUntypedArray>,
+        interpolation_points: &Bound<'py, PyUntypedArray>,
+        first_order_correction: bool,
+    ) -> PyResult<Bound<'py, PyUntypedArray>> {
+        match &self.inner {
+            PySphInterpolatorWrapper::F32(interp) => Self::interpolate_vector_generic::<f32>(
+                interp,
+                particle_quantity,
+                interpolation_points,
+                first_order_correction,
+            ),
+            PySphInterpolatorWrapper::F64(interp) => Self::interpolate_vector_generic::<f64>(
+                interp,
+                particle_quantity,
+                interpolation_points,
+                first_order_correction,
+            ),
+        }
+    }
+
+    /// Interpolates surface normals (i.e. normalized SPH gradient of the indicator function) of the fluid to the given points using SPH interpolation
+    fn interpolate_normals<'py>(
+        &self,
+        interpolation_points: &Bound<'py, PyUntypedArray>,
+    ) -> PyResult<Bound<'py, PyUntypedArray>> {
+        match &self.inner {
+            PySphInterpolatorWrapper::F32(interp) => {
+                Self::interpolate_normals_generic::<f32>(interp, interpolation_points)
+            }
+            PySphInterpolatorWrapper::F64(interp) => {
+                Self::interpolate_normals_generic::<f64>(interp, interpolation_points)
+            }
+        }
+    }
+}

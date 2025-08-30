@@ -226,7 +226,7 @@ pub fn marching_cubes_cleanup<'py>(
     } else if let (Some(grid), Some(mesh)) = (grid.as_f64(), mesh.as_f64_mut()) {
         cleanup(mesh, grid, max_rel_snap_dist, max_iter, keep_vertices);
     } else {
-        return Err(pyerr_mesh_grid_scalar_mismatch());
+        return Err(pyerr_scalar_type_mismatch());
     }
 
     Ok(())
