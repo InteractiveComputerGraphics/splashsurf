@@ -1,7 +1,10 @@
-use crate::utils::*;
+use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 use pyo3_stub_gen::derive::*;
-use splashsurf_lib::UniformGrid;
+use splashsurf_lib::{Real, UniformGrid};
+
+use crate::utils;
+use crate::utils::{IndexT, enum_wrapper_impl_from};
 
 enum PyUniformGridData {
     F32(UniformGrid<IndexT, f32>),
@@ -20,6 +23,14 @@ enum_wrapper_impl_from!(PyUniformGrid, UniformGrid<IndexT, f32> => PyUniformGrid
 enum_wrapper_impl_from!(PyUniformGrid, UniformGrid<IndexT, f64> => PyUniformGridData::F64);
 
 impl PyUniformGrid {
+    pub(crate) fn try_from_generic<R: Real>(mut grid: UniformGrid<IndexT, R>) -> PyResult<Self> {
+        utils::transmute_replace_into::<_, UniformGrid<IndexT, f32>, _>(&mut grid, UniformGrid::new_zero())
+            .or_else(|| {
+                utils::transmute_replace_into::<_, UniformGrid<IndexT, f64>, _>(&mut grid, UniformGrid::new_zero())
+            })
+            .ok_or_else(|| PyTypeError::new_err("unsupported type of grid, only i64 for Index and f32 and f64 for Real type are supported"))
+    }
+
     pub(crate) fn as_f32(&self) -> Option<&UniformGrid<IndexT, f32>> {
         match &self.inner {
             PyUniformGridData::F32(grid) => Some(grid),

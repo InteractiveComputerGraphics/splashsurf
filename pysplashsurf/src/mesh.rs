@@ -1,11 +1,8 @@
-use crate::NumpyUsize;
-use crate::utils::*;
 use bytemuck::{NoUninit, Pod};
 use ndarray::Array2;
 use numpy as np;
 use numpy::prelude::*;
 use numpy::{Element, PyArray, PyArray2, PyArrayDescr, PyUntypedArray};
-use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 use pyo3::{IntoPyObjectExt, types::PyList};
 use pyo3_stub_gen::derive::*;
@@ -19,12 +16,16 @@ use splashsurf_lib::{
     nalgebra::{Unit, Vector3},
 };
 
+use crate::NumpyUsize;
+use crate::utils;
+use crate::utils::{enum_impl_from, enum_wrapper_impl_from};
+
 fn view_triangles_generic<'py>(
     triangles: &[TriangleCell],
     container: Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyArray2<NumpyUsize>>> {
     let vertex_indices: &[NumpyUsize] = bytemuck::cast_slice(triangles);
-    let view = view_generic(vertex_indices, &[triangles.len(), 3], container)?.into_any();
+    let view = utils::view_generic(vertex_indices, &[triangles.len(), 3], container)?.into_any();
     Ok(view.downcast_into::<PyArray2<NumpyUsize>>()?)
 }
 
@@ -111,13 +112,9 @@ impl Default for PyTriMesh3d {
 
 impl PyTriMesh3d {
     pub fn try_from_generic<R: Real + Element>(mut mesh: TriMesh3d<R>) -> PyResult<Self> {
-        transmute_take_into::<_, TriMesh3d<f32>, _>(&mut mesh)
-            .or_else(|| transmute_take_into::<_, TriMesh3d<f64>, _>(&mut mesh))
-            .ok_or_else(|| {
-                PyTypeError::new_err(
-                    "Unsupported scalar type for TriMesh3d. Only f32 and f64 are supported.",
-                )
-            })
+        utils::transmute_take_into::<_, TriMesh3d<f32>, _>(&mut mesh)
+            .or_else(|| utils::transmute_take_into::<_, TriMesh3d<f64>, _>(&mut mesh))
+            .ok_or_else(utils::pyerr_unsupported_scalar)
     }
 
     pub fn as_f32(&self) -> Option<&TriMesh3d<f32>> {
@@ -165,8 +162,8 @@ impl PyTriMesh3d {
     #[getter]
     pub fn vertices<'py>(this: Bound<'py, Self>) -> PyResult<Bound<'py, PyUntypedArray>> {
         match &this.borrow().inner {
-            PyTriMesh3dData::F32(mesh) => view_vec_generic(mesh.vertices(), this.into_any()),
-            PyTriMesh3dData::F64(mesh) => view_vec_generic(mesh.vertices(), this.into_any()),
+            PyTriMesh3dData::F32(mesh) => utils::view_vec_generic(mesh.vertices(), this.into_any()),
+            PyTriMesh3dData::F64(mesh) => utils::view_vec_generic(mesh.vertices(), this.into_any()),
         }
     }
 
@@ -219,13 +216,9 @@ enum_wrapper_impl_from!(PyMixedTriQuadMesh3d, MixedTriQuadMesh3d<f64> => PyMixed
 
 impl PyMixedTriQuadMesh3d {
     pub fn try_from_generic<R: Real + Element>(mut mesh: MixedTriQuadMesh3d<R>) -> PyResult<Self> {
-        transmute_take_into::<_, MixedTriQuadMesh3d<f32>, _>(&mut mesh)
-            .or_else(|| transmute_take_into::<_, MixedTriQuadMesh3d<f64>, _>(&mut mesh))
-            .ok_or_else(|| {
-                PyTypeError::new_err(
-                    "Unsupported scalar type for MixedTriQuadMesh3d. Only f32 and f64 are supported.",
-                )
-            })
+        utils::transmute_take_into::<_, MixedTriQuadMesh3d<f32>, _>(&mut mesh)
+            .or_else(|| utils::transmute_take_into::<_, MixedTriQuadMesh3d<f64>, _>(&mut mesh))
+            .ok_or_else(utils::pyerr_unsupported_scalar)
     }
 }
 
@@ -246,10 +239,10 @@ impl PyMixedTriQuadMesh3d {
     pub fn vertices<'py>(this: Bound<'py, Self>) -> PyResult<Bound<'py, PyUntypedArray>> {
         match &this.borrow().inner {
             PyMixedTriQuadMesh3dData::F32(mesh) => {
-                view_vec_generic(mesh.vertices(), this.into_any())
+                utils::view_vec_generic(mesh.vertices(), this.into_any())
             }
             PyMixedTriQuadMesh3dData::F64(mesh) => {
-                view_vec_generic(mesh.vertices(), this.into_any())
+                utils::view_vec_generic(mesh.vertices(), this.into_any())
             }
         }
     }
@@ -370,6 +363,7 @@ impl PyMeshAttribute {
     /// View of the attribute data as a numpy array
     #[getter]
     pub fn data<'py>(this: Bound<'py, Self>) -> PyResult<Bound<'py, PyUntypedArray>> {
+        use utils::{view_scalar_generic, view_vec_generic};
         match &this.borrow().inner {
             PyMeshAttributeData::F32(attr) => match &attr.data {
                 OwnedAttributeData::ScalarU64(data) => view_scalar_generic(data, this.into_any()),
@@ -426,16 +420,18 @@ impl PyMeshWithData {
         } = mesh_with_data;
 
         // Convert the inner mesh
-        let mut mesh_with_data =
-            if let Some(mesh) = transmute_same_take::<M, TriMesh3d<R>>(&mut mesh) {
-                PyTriMesh3d::try_from_generic(mesh)
-                    .and_then(|tri_mesh| Self::try_from_pymesh(py, tri_mesh))
-            } else if let Some(mesh) = transmute_same_take::<M, MixedTriQuadMesh3d<R>>(&mut mesh) {
-                PyMixedTriQuadMesh3d::try_from_generic(mesh)
-                    .and_then(|quad_mesh| Self::try_from_pymesh(py, quad_mesh))
-            } else {
-                Err(pyerr_only_tri_and_tri_quad_mesh())
-            }?;
+        let mut mesh_with_data = if let Some(mesh) =
+            utils::transmute_same_take::<M, TriMesh3d<R>>(&mut mesh)
+        {
+            PyTriMesh3d::try_from_generic(mesh)
+                .and_then(|tri_mesh| Self::try_from_pymesh(py, tri_mesh))
+        } else if let Some(mesh) = utils::transmute_same_take::<M, MixedTriQuadMesh3d<R>>(&mut mesh)
+        {
+            PyMixedTriQuadMesh3d::try_from_generic(mesh)
+                .and_then(|quad_mesh| Self::try_from_pymesh(py, quad_mesh))
+        } else {
+            Err(utils::pyerr_only_tri_and_tri_quad_mesh())
+        }?;
 
         fn try_convert_attribute_vec<'a, In: Real + Element, Out: Real + Element>(
             py: Python<'_>,
@@ -445,7 +441,7 @@ impl PyMeshWithData {
         where
             PyMeshAttribute: From<OwnedMeshAttribute<Out>>,
         {
-            transmute_same_take::<Vec<OwnedMeshAttribute<In>>, Vec<OwnedMeshAttribute<Out>>>(
+            utils::transmute_same_take::<Vec<OwnedMeshAttribute<In>>, Vec<OwnedMeshAttribute<Out>>>(
                 attributes,
             )
             .map(|a| {
@@ -484,7 +480,7 @@ impl PyMeshWithData {
                 &mut mesh_with_data.cell_attributes,
             );
         } else {
-            return Err(pyerr_unsupported_scalar());
+            return Err(utils::pyerr_unsupported_scalar());
         }
 
         Ok(mesh_with_data)

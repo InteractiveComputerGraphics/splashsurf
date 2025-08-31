@@ -54,6 +54,32 @@ macro_rules! enum_impl_from {
 pub(crate) use enum_impl_from;
 pub(crate) use enum_wrapper_impl_from;
 
+pub enum PyFloatVecWrapper {
+    F32(Vec<f32>),
+    F64(Vec<f64>),
+}
+
+enum_impl_from!(PyFloatVecWrapper, Vec<f32> => PyFloatVecWrapper::F32);
+enum_impl_from!(PyFloatVecWrapper, Vec<f64> => PyFloatVecWrapper::F64);
+
+impl PyFloatVecWrapper {
+    pub fn try_from_generic<R: Real + 'static>(mut vec: Vec<R>) -> PyResult<Self> {
+        transmute_same_take::<Vec<R>, Vec<f32>>(&mut vec)
+            .map(PyFloatVecWrapper::F32)
+            .or_else(|| {
+                transmute_same_take::<Vec<R>, Vec<f64>>(&mut vec).map(PyFloatVecWrapper::F64)
+            })
+            .ok_or_else(pyerr_unsupported_scalar)
+    }
+
+    pub fn view<'py>(&self, container: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyUntypedArray>> {
+        match self {
+            PyFloatVecWrapper::F32(v) => view_scalar_generic(v, container),
+            PyFloatVecWrapper::F64(v) => view_scalar_generic(v, container),
+        }
+    }
+}
+
 /// Transmutes a mutable reference from a generic type to a concrete type if they are identical, otherwise returns None
 pub(crate) fn transmute_same_mut<GenericSrc: 'static, ConcreteSrc: 'static>(
     value: &mut GenericSrc,
@@ -82,6 +108,19 @@ pub(crate) fn transmute_take_into<
 ) -> Option<Target> {
     transmute_same_mut::<GenericSrc, ConcreteSrc>(value)
         .map(|value_ref| std::mem::take(value_ref).into())
+}
+
+/// Transmutes from a generic type to a concrete type if they are identical, replaces the value and converts it into the target type
+pub(crate) fn transmute_replace_into<
+    GenericSrc: 'static,
+    ConcreteSrc: Into<Target> + 'static,
+    Target,
+>(
+    value: &mut GenericSrc,
+    replacement: ConcreteSrc,
+) -> Option<Target> {
+    transmute_same_mut::<GenericSrc, ConcreteSrc>(value)
+        .map(|value_ref| std::mem::replace(value_ref, replacement).into())
 }
 
 pub(crate) fn view_generic<'py, R: Element>(

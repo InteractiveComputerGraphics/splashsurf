@@ -110,9 +110,9 @@ class NeighborhoodLists:
 class SphInterpolator:
     def __new__(cls, particle_positions:numpy.typing.NDArray[typing.Any], particle_densities:numpy.typing.NDArray[typing.Any], particle_rest_mass:builtins.float, compact_support_radius:builtins.float) -> SphInterpolator:
         r"""
-        Constructs an SPH interpolator for the given particles
+        Constructs an SPH interpolator (with cubic kernels) for the given particles
         """
-    def interpolate_quantity(self, particle_quantity:numpy.typing.NDArray[typing.Any], interpolation_points:numpy.typing.NDArray[typing.Any], first_order_correction:builtins.bool) -> numpy.typing.NDArray[typing.Any]:
+    def interpolate_quantity(self, particle_quantity:numpy.typing.NDArray[typing.Any], interpolation_points:numpy.typing.NDArray[typing.Any], *, first_order_correction:builtins.bool=False) -> numpy.typing.NDArray[typing.Any]:
         r"""
         Interpolates a scalar or vectorial per particle quantity to the given points
         """
@@ -122,27 +122,30 @@ class SphInterpolator:
         """
 
 class SurfaceReconstruction:
-    r"""
-    Struct containing results of the surface reconstruction including the mesh, grid parameters and optional particle data
-    """
+    @property
+    def grid(self) -> UniformGrid:
+        r"""
+        The marching cubes grid parameters used for the surface reconstruction
+        """
     @property
     def particle_densities(self) -> typing.Optional[numpy.typing.NDArray[typing.Any]]:
         r"""
-        The particle densities computed during the reconstruction if available
+        The global array of particle densities (`None` if they were only computed locally)
         """
-    def copy_mesh(self) -> TriMesh3d:
+    @property
+    def particle_inside_aabb(self) -> typing.Optional[numpy.typing.NDArray[typing.Any]]:
         r"""
-        Returns a copy of the surface mesh of the reconstruction
+        A boolean array indicating whether each particle was inside the AABB used for the reconstruction (`None` if no AABB was set)
         """
-    def copy_grid(self) -> UniformGrid:
+    @property
+    def particle_neighbors(self) -> typing.Optional[NeighborhoodLists]:
         r"""
-        Returns a copy of the uniform grid parameters used for the reconstruction
+        The global neighborhood lists per particle (`None` if they were only computed locally)
         """
-    def copy_particle_neighbors(self) -> typing.Optional[builtins.list[builtins.list[builtins.int]]]:
+    @property
+    def mesh(self) -> TriMesh3d:
         r"""
-        Returns a copy of the per-particle neighborhood lists computed during the reconstruction if available
-        
-        The neighborhood lists are only available if the flag for global neighborhood list was set in the reconstruction parameters.
+        The reconstructed triangle mesh
         """
 
 class TriMesh3d:

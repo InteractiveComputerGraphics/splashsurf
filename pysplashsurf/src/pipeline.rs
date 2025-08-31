@@ -153,7 +153,7 @@ pub fn reconstruction_pipeline<'py>(
         } else {
             return Err(PyRuntimeError::new_err("reconstruction returned no mesh"));
         };
-        let rec = PySurfaceReconstruction::try_from_generic(reconstruction.raw_reconstruction)?;
+        let rec = PySurfaceReconstruction::try_from_generic(py, reconstruction.raw_reconstruction)?;
         Ok((mesh_with_data, rec))
     }
 
