@@ -19,6 +19,7 @@ enum PySphInterpolatorWrapper {
     F64(SphInterpolator<f64>),
 }
 
+/// Interpolator of per-particle quantities to arbitrary points using SPH (cubic kernel) interpolation
 #[gen_stub_pyclass]
 #[pyclass]
 #[pyo3(name = "SphInterpolator")]

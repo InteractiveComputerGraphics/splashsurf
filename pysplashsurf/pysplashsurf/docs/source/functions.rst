@@ -1,7 +1,7 @@
-Methods
-=======
+Functions
+=========
 
-All methods infer float precision based on the input (32bit or 64bit).
+All functions infer float precision based on the input (32bit or 64bit).
 
 .. currentmodule:: pysplashsurf
 
@@ -30,5 +30,7 @@ All methods infer float precision based on the input (32bit or 64bit).
 .. autofunction:: reconstruct_surface
 
 .. autofunction:: reconstruction_pipeline
+
+.. autofunction:: reconstruction_pipeline_multi
 
 .. autofunction:: write_to_file

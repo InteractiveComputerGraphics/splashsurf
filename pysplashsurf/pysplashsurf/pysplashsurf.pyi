@@ -56,6 +56,9 @@ class MeshAttribute:
         """
 
 class MeshWithData:
+    r"""
+    Mesh with attached point and cell attributes
+    """
     @property
     def dtype(self) -> numpy.dtype:
         r"""
@@ -87,6 +90,9 @@ class MeshWithData:
         """
 
 class MixedTriQuadMesh3d:
+    r"""
+    Mixed triangle and quad surface mesh in 3D
+    """
     @property
     def dtype(self) -> numpy.dtype:
         r"""
@@ -107,6 +113,9 @@ class MixedTriQuadMesh3d:
         """
 
 class NeighborhoodLists:
+    r"""
+    Per particle neighborhood lists
+    """
     def __len__(self) -> builtins.int:
         r"""
         Returns the number of particles for which neighborhood lists are stored
@@ -121,6 +130,9 @@ class NeighborhoodLists:
         """
 
 class SphInterpolator:
+    r"""
+    Interpolator of per-particle quantities to arbitrary points using SPH (cubic kernel) interpolation
+    """
     def __new__(cls, particle_positions:numpy.typing.NDArray[typing.Any], particle_densities:numpy.typing.NDArray[typing.Any], particle_rest_mass:builtins.float, compact_support_radius:builtins.float) -> SphInterpolator:
         r"""
         Constructs an SPH interpolator (with cubic kernels) for the given particles
@@ -135,6 +147,9 @@ class SphInterpolator:
         """
 
 class SurfaceReconstruction:
+    r"""
+    Result returned by surface reconstruction functions with surface mesh and other data
+    """
     @property
     def grid(self) -> UniformGrid:
         r"""
@@ -162,6 +177,9 @@ class SurfaceReconstruction:
         """
 
 class TriMesh3d:
+    r"""
+    Triangle surface mesh in 3D
+    """
     @property
     def dtype(self) -> numpy.dtype:
         r"""

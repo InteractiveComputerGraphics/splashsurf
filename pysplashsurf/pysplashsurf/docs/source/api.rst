@@ -3,8 +3,8 @@ API
 
 .. currentmodule:: pysplashsurf
 
-Methods
--------
+Functions
+---------
 
 .. autosummary::
     check_mesh_consistency
@@ -20,17 +20,19 @@ Methods
     par_laplacian_smoothing_normals_inplace
     reconstruct_surface
     reconstruction_pipeline
+    reconstruction_pipeline_multi
     write_to_file
 
 Classes
 -------
 
 .. autosummary::
-    Aabb3dF32
-    MixedTriQuadMesh3dF32
-    MixedTriQuadMeshWithDataF32
-    SphInterpolatorF32
-    SurfaceReconstructionF32
-    TriMesh3dF32
-    TriMeshWithDataF32
-    UniformGridF32
+    Aabb3d
+    MixedTriQuadMesh3d
+    NeighborhoodLists
+    SphInterpolator
+    SurfaceReconstruction
+    TriMesh3d
+    TriMeshWithData
+    UniformGrid
+    VertexVertexConnectivity

@@ -15,6 +15,7 @@ use splashsurf_lib::{
 };
 use utils::{IndexT, PyFloatVecWrapper};
 
+/// Result returned by surface reconstruction functions with surface mesh and other data
 #[gen_stub_pyclass]
 #[pyclass]
 #[pyo3(name = "SurfaceReconstruction")]

@@ -92,6 +92,7 @@ enum PyTriMesh3dData {
     F64(TriMesh3d<f64>),
 }
 
+/// Triangle surface mesh in 3D
 #[gen_stub_pyclass]
 #[pyclass]
 #[pyo3(name = "TriMesh3d")]
@@ -204,6 +205,7 @@ enum PyMixedTriQuadMesh3dData {
     F64(MixedTriQuadMesh3d<f64>),
 }
 
+/// Mixed triangle and quad surface mesh in 3D
 #[gen_stub_pyclass]
 #[pyclass]
 #[pyo3(name = "MixedTriQuadMesh3d")]
@@ -380,6 +382,7 @@ impl PyMeshAttribute {
     }
 }
 
+/// Mesh with attached point and cell attributes
 #[gen_stub_pyclass]
 #[pyclass]
 #[pyo3(name = "MeshWithData")]

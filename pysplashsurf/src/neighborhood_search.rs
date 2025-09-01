@@ -12,6 +12,7 @@ use crate::utils::*;
 // TODO: Bindings for flat neighborhood search
 // TODO: Bindings for computing particle densities
 
+/// Per particle neighborhood lists
 #[gen_stub_pyclass]
 #[pyclass]
 #[pyo3(name = "NeighborhoodLists")]
