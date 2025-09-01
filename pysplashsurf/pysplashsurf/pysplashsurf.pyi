@@ -81,8 +81,6 @@ class MeshWithData:
         r"""
         The contained mesh without associated data and attributes
         """
-    def as_tri3d(self) -> typing.Optional[TriMesh3d]: ...
-    def as_mixed_tri_quad3d(self) -> typing.Optional[MixedTriQuadMesh3d]: ...
     def copy_mesh(self) -> typing.Union[TriMesh3d, MixedTriQuadMesh3d]:
         r"""
         Returns a copy of the contained mesh without associated data and attributes
@@ -105,7 +103,7 @@ class MixedTriQuadMesh3d:
         """
     def get_quads(self) -> numpy.typing.NDArray[numpy.uint64]:
         r"""
-        Returns a copy of all quad cells of the mesh as an `Nx3` array of vertex indices
+        Returns a copy of all quad cells of the mesh as an `Nx4` array of vertex indices
         """
 
 class NeighborhoodLists:

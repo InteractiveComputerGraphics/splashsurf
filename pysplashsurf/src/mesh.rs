@@ -264,7 +264,7 @@ impl PyMixedTriQuadMesh3d {
         })
     }
 
-    /// Returns a copy of all quad cells of the mesh as an `Nx3` array of vertex indices
+    /// Returns a copy of all quad cells of the mesh as an `Nx4` array of vertex indices
     pub fn get_quads<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyArray2<NumpyUsize>>> {
         let cells = match &self.inner {
             PyMixedTriQuadMesh3dData::F32(mesh) => mesh.cells.as_slice(),
@@ -486,6 +486,20 @@ impl PyMeshWithData {
 
         Ok(mesh_with_data)
     }
+
+    pub fn as_tri3d<'py, 'a>(&'a self, py: Python<'py>) -> Option<Py<PyTriMesh3d>> {
+        match &self.mesh {
+            PyMesh3dData::Tri3d(mesh) => Some(mesh.clone_ref(py)),
+            _ => None,
+        }
+    }
+
+    pub fn as_mixed_tri_quad3d<'py>(&self, py: Python<'py>) -> Option<Py<PyMixedTriQuadMesh3d>> {
+        match &self.mesh {
+            PyMesh3dData::MixedTriQuad3d(mesh) => Some(mesh.clone_ref(py)),
+            _ => None,
+        }
+    }
 }
 
 #[gen_stub_pymethods]
@@ -539,20 +553,6 @@ impl PyMeshWithData {
             })
             .collect::<Result<Vec<_>, _>>()?
             .into_py_dict(py)
-    }
-
-    pub fn as_tri3d<'py, 'a>(&'a self, py: Python<'py>) -> Option<Py<PyTriMesh3d>> {
-        match &self.mesh {
-            PyMesh3dData::Tri3d(mesh) => Some(mesh.clone_ref(py)),
-            _ => None,
-        }
-    }
-
-    pub fn as_mixed_tri_quad3d<'py>(&self, py: Python<'py>) -> Option<Py<PyMixedTriQuadMesh3d>> {
-        match &self.mesh {
-            PyMesh3dData::MixedTriQuad3d(mesh) => Some(mesh.clone_ref(py)),
-            _ => None,
-        }
     }
 
     /// The contained mesh without associated data and attributes
