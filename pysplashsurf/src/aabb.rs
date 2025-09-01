@@ -7,6 +7,7 @@ use splashsurf_lib::{Aabb3d, Real, nalgebra::Vector3};
 
 use crate::utils::*;
 
+/// Three-dimensional axis-aligned bounding box defined by its minimum and maximum corners
 #[gen_stub_pyclass]
 #[pyclass]
 #[pyo3(name = "Aabb3d")]
@@ -25,6 +26,7 @@ impl<R: Real> From<Aabb3d<R>> for PyAabb3d {
 }
 
 impl PyAabb3d {
+    /// Convert to an [`splashsurf_lib::Aabb3d`] with the given scalar type
     pub(crate) fn inner<R: Real>(&self) -> Aabb3d<R> {
         Aabb3d::new(
             self.min.map(|x| R::from_f64(x).unwrap()),
@@ -47,7 +49,6 @@ impl PyAabb3d {
     /// Constructs an AABB with the given min and max coordinates
     #[staticmethod]
     pub fn from_min_max<'py>(min: [f64; 3], max: [f64; 3]) -> Self {
-        // TODO: Check with numpy arrays as input
         Self {
             min: Vector3::from(min),
             max: Vector3::from(max),
@@ -78,5 +79,11 @@ impl PyAabb3d {
     #[getter]
     pub fn max<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray1<f64>> {
         PyArray::from_slice(py, self.max.as_slice())
+    }
+
+    /// Checks if the given point is inside the AABB, the AABB is considered to be half-open to its max coordinate
+    pub fn contains_point(&self, point: [f64; 3]) -> bool {
+        let point = &Vector3::from(point);
+        point >= &self.min && point < &self.max
     }
 }

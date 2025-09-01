@@ -8,6 +8,9 @@ import typing
 from enum import Enum
 
 class Aabb3d:
+    r"""
+    Three-dimensional axis-aligned bounding box defined by its minimum and maximum corners
+    """
     @property
     def min(self) -> numpy.typing.NDArray[numpy.float64]:
         r"""
@@ -27,6 +30,10 @@ class Aabb3d:
     def from_points(points:numpy.typing.NDArray[typing.Any]) -> Aabb3d:
         r"""
         Constructs the smallest AABB fitting around all the given points
+        """
+    def contains_point(self, point:typing.Sequence[builtins.float]) -> builtins.bool:
+        r"""
+        Checks if the given point is inside the AABB, the AABB is considered to be half-open to its max coordinate
         """
 
 class MeshAttribute:
