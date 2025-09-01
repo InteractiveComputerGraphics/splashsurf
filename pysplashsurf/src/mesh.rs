@@ -3,8 +3,9 @@ use ndarray::Array2;
 use numpy as np;
 use numpy::prelude::*;
 use numpy::{Element, PyArray, PyArray2, PyArrayDescr, PyUntypedArray};
+use pyo3::IntoPyObjectExt;
 use pyo3::prelude::*;
-use pyo3::{IntoPyObjectExt, types::PyList};
+use pyo3::types::{IntoPyDict, PyDict};
 use pyo3_stub_gen::derive::*;
 use splashsurf_lib::mesh::TriangleCell;
 use splashsurf_lib::{
@@ -499,7 +500,7 @@ impl PyMeshWithData {
         }
     }
 
-    /// Returns the type of the underlying mesh
+    /// Type of the underlying mesh
     #[getter]
     pub fn mesh_type(&self) -> MeshType {
         match &self.mesh {
@@ -508,22 +509,36 @@ impl PyMeshWithData {
         }
     }
 
+    /// The attributes attached points (vertices) of the mesh
     #[getter]
-    #[gen_stub(override_return_type(type_repr="typing.List[MeshAttribute]", imports=()))]
-    pub fn point_attributes<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
-        PyList::new(
-            py,
-            self.point_attributes.iter().map(|attr| attr.clone_ref(py)),
-        )
+    #[gen_stub(override_return_type(type_repr="dict[str, numpy.typing.NDArray]", imports=()))]
+    pub fn point_attributes<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        self.point_attributes
+            .iter()
+            .map(|attr| -> PyResult<_> {
+                let attr = attr.clone_ref(py).into_bound(py);
+                let name = attr.try_borrow()?.name();
+                let data = PyMeshAttribute::data(attr)?;
+                Ok((name, data))
+            })
+            .collect::<Result<Vec<_>, _>>()?
+            .into_py_dict(py)
     }
 
+    /// The attributes attached to the cells (triangles or quads) of the mesh
     #[getter]
-    #[gen_stub(override_return_type(type_repr="typing.List[MeshAttribute]", imports=()))]
-    pub fn cell_attributes<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
-        PyList::new(
-            py,
-            self.cell_attributes.iter().map(|attr| attr.clone_ref(py)),
-        )
+    #[gen_stub(override_return_type(type_repr="dict[str, numpy.typing.NDArray]", imports=()))]
+    pub fn cell_attributes<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        self.cell_attributes
+            .iter()
+            .map(|attr| -> PyResult<_> {
+                let attr = attr.clone_ref(py).into_bound(py);
+                let name = attr.try_borrow()?.name();
+                let data = PyMeshAttribute::data(attr)?;
+                Ok((name, data))
+            })
+            .collect::<Result<Vec<_>, _>>()?
+            .into_py_dict(py)
     }
 
     pub fn as_tri3d<'py, 'a>(&'a self, py: Python<'py>) -> Option<Py<PyTriMesh3d>> {

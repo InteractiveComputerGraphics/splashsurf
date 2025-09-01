@@ -62,12 +62,18 @@ class MeshWithData:
     @property
     def mesh_type(self) -> MeshType:
         r"""
-        Returns the type of the underlying mesh
+        Type of the underlying mesh
         """
     @property
-    def point_attributes(self) -> typing.List[MeshAttribute]: ...
+    def point_attributes(self) -> dict[str, numpy.typing.NDArray]:
+        r"""
+        The attributes attached points (vertices) of the mesh
+        """
     @property
-    def cell_attributes(self) -> typing.List[MeshAttribute]: ...
+    def cell_attributes(self) -> dict[str, numpy.typing.NDArray]:
+        r"""
+        The attributes attached to the cells (triangles or quads) of the mesh
+        """
     @property
     def mesh(self) -> typing.Union[TriMesh3d, MixedTriQuadMesh3d]:
         r"""
