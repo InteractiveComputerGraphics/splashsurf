@@ -29,7 +29,7 @@ jobs:
       - uses: actions/checkout@v3
       - uses: moonrepo/setup-rust@v1
       - run: |
-          cargo run --bin stub_gen
+          cargo run --bin stub_gen --no-default-features
         working-directory: pysplashsurf
       - name: Upload stub as artifact
         uses: actions/upload-artifact@v4
