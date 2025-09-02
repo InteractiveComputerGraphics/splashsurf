@@ -70,6 +70,11 @@ class MeshWithData:
         Type of the underlying mesh
         """
     @property
+    def mesh(self) -> typing.Union[TriMesh3d, MixedTriQuadMesh3d]:
+        r"""
+        The contained mesh without associated data and attributes
+        """
+    @property
     def point_attributes(self) -> dict[str, numpy.typing.NDArray]:
         r"""
         The attributes attached points (vertices) of the mesh
@@ -79,14 +84,13 @@ class MeshWithData:
         r"""
         The attributes attached to the cells (triangles or quads) of the mesh
         """
-    @property
-    def mesh(self) -> typing.Union[TriMesh3d, MixedTriQuadMesh3d]:
-        r"""
-        The contained mesh without associated data and attributes
-        """
     def copy_mesh(self) -> typing.Union[TriMesh3d, MixedTriQuadMesh3d]:
         r"""
         Returns a copy of the contained mesh without associated data and attributes
+        """
+    def write_to_file(self, path:builtins.str, *, file_format:typing.Optional[builtins.str]='vtk42') -> None:
+        r"""
+        Writes the mesh and its attributes to a file using `meshio.write_points_cells`
         """
 
 class MixedTriQuadMesh3d:
@@ -110,6 +114,10 @@ class MixedTriQuadMesh3d:
     def get_quads(self) -> numpy.typing.NDArray[numpy.uint64]:
         r"""
         Returns a copy of all quad cells of the mesh as an `Nx4` array of vertex indices
+        """
+    def write_to_file(self, path:builtins.str, *, file_format:typing.Optional[builtins.str]='vtk42') -> None:
+        r"""
+        Writes the mesh to a file using `meshio.write_points_cells`
         """
 
 class NeighborhoodLists:
@@ -202,6 +210,10 @@ class TriMesh3d:
     def vertex_vertex_connectivity(self) -> VertexVertexConnectivity:
         r"""
         Computes the vertex-vertex connectivity of the mesh
+        """
+    def write_to_file(self, path:builtins.str, *, file_format:typing.Optional[builtins.str]='vtk42') -> None:
+        r"""
+        Writes the mesh to a file using `meshio.write_points_cells`
         """
 
 class UniformGrid:

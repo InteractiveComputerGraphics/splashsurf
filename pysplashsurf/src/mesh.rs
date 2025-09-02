@@ -197,6 +197,19 @@ impl PyTriMesh3d {
         };
         PyVertexVertexConnectivity::new(connectivity)
     }
+
+    /// Writes the mesh to a file using `meshio.write_points_cells`
+    #[pyo3(signature = (path, *, file_format = Some("vtk42")))]
+    pub fn write_to_file<'py>(
+        this: Bound<'py, Self>,
+        path: &str,
+        file_format: Option<&str>,
+    ) -> PyResult<()> {
+        let py = this.py();
+        let mesh =
+            PyMeshWithData::try_from_pymesh(py, this.unbind().clone_ref(py))?.into_pyobject(py)?;
+        PyMeshWithData::write_to_file(mesh, path, file_format)
+    }
 }
 
 #[derive(Clone)]
@@ -277,6 +290,19 @@ impl PyMixedTriQuadMesh3d {
             TriangleOrQuadCell::Quad(quad) => Some(quad.map(|v| v as NumpyUsize)),
             _ => None,
         })
+    }
+
+    /// Writes the mesh to a file using `meshio.write_points_cells`
+    #[pyo3(signature = (path, *, file_format = Some("vtk42")))]
+    pub fn write_to_file<'py>(
+        this: Bound<'py, Self>,
+        path: &str,
+        file_format: Option<&str>,
+    ) -> PyResult<()> {
+        let py = this.py();
+        let mesh =
+            PyMeshWithData::try_from_pymesh(py, this.unbind().clone_ref(py))?.into_pyobject(py)?;
+        PyMeshWithData::write_to_file(mesh, path, file_format)
     }
 }
 
@@ -526,6 +552,16 @@ impl PyMeshWithData {
         }
     }
 
+    /// The contained mesh without associated data and attributes
+    #[getter]
+    #[gen_stub(override_return_type(type_repr="typing.Union[TriMesh3d, MixedTriQuadMesh3d]", imports=()))]
+    pub fn mesh<'py>(&self, py: Python<'py>) -> Py<PyAny> {
+        match &self.mesh {
+            PyMesh3dData::Tri3d(mesh) => mesh.clone_ref(py).into_any(),
+            PyMesh3dData::MixedTriQuad3d(mesh) => mesh.clone_ref(py).into_any(),
+        }
+    }
+
     /// The attributes attached points (vertices) of the mesh
     #[getter]
     #[gen_stub(override_return_type(type_repr="dict[str, numpy.typing.NDArray]", imports=()))]
@@ -558,16 +594,6 @@ impl PyMeshWithData {
             .into_py_dict(py)
     }
 
-    /// The contained mesh without associated data and attributes
-    #[getter]
-    #[gen_stub(override_return_type(type_repr="typing.Union[TriMesh3d, MixedTriQuadMesh3d]", imports=()))]
-    pub fn mesh<'py>(&self, py: Python<'py>) -> Py<PyAny> {
-        match &self.mesh {
-            PyMesh3dData::Tri3d(mesh) => mesh.clone_ref(py).into_any(),
-            PyMesh3dData::MixedTriQuad3d(mesh) => mesh.clone_ref(py).into_any(),
-        }
-    }
-
     /// Returns a copy of the contained mesh without associated data and attributes
     #[gen_stub(override_return_type(type_repr="typing.Union[TriMesh3d, MixedTriQuadMesh3d]", imports=()))]
     pub fn copy_mesh<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
@@ -575,5 +601,63 @@ impl PyMeshWithData {
             PyMesh3dData::Tri3d(mesh) => mesh.borrow(py).clone().into_bound_py_any(py),
             PyMesh3dData::MixedTriQuad3d(mesh) => mesh.borrow(py).clone().into_bound_py_any(py),
         }
+    }
+
+    /// Writes the mesh and its attributes to a file using `meshio.write_points_cells`
+    #[pyo3(signature = (path, *, file_format = Some("vtk42")))]
+    pub fn write_to_file<'py>(
+        this: Bound<'py, Self>,
+        path: &str,
+        file_format: Option<&str>,
+    ) -> PyResult<()> {
+        let py = this.py();
+        let meshio = PyModule::import(py, "meshio")?;
+        let write_points_cells = meshio.getattr("write_points_cells")?;
+
+        let this = this.borrow();
+
+        let filename = path.into_py_any(py)?;
+        let points = match &this.mesh {
+            PyMesh3dData::Tri3d(mesh) => PyTriMesh3d::vertices(mesh.clone_ref(py).into_bound(py))?,
+            PyMesh3dData::MixedTriQuad3d(mesh) => {
+                PyMixedTriQuadMesh3d::vertices(mesh.clone_ref(py).into_bound(py))?
+            }
+        }
+        .into_py_any(py)?;
+        let cells = match &this.mesh {
+            PyMesh3dData::Tri3d(mesh) => {
+                let triangles = PyTriMesh3d::triangles(mesh.clone_ref(py).into_bound(py))?;
+                let dict = [("triangle", triangles)].into_py_dict(py)?;
+                dict.into_py_any(py)?
+            }
+            PyMesh3dData::MixedTriQuad3d(mesh) => {
+                let triangles = mesh.borrow(py).get_triangles(py)?;
+                let quads = mesh.borrow(py).get_quads(py)?;
+                let dict = [("triangle", triangles), ("quad", quads)].into_py_dict(py)?;
+                dict.into_py_any(py)?
+            }
+        };
+        let point_data = this.point_attributes(py)?.into_py_any(py)?;
+        let cell_data = this.cell_attributes(py)?.into_py_any(py)?;
+        let field_data = py.None();
+        let point_sets = py.None();
+        let cell_sets = py.None();
+        let file_format = file_format.into_py_any(py)?;
+
+        let args_vec: Vec<(&str, Py<PyAny>)> = vec![
+            ("filename", filename),
+            ("points", points),
+            ("cells", cells),
+            ("point_data", point_data),
+            ("cell_data", cell_data),
+            ("field_data", field_data),
+            ("point_sets", point_sets),
+            ("cell_sets", cell_sets),
+            ("file_format", file_format),
+        ];
+        let args = args_vec.into_py_dict(py)?;
+
+        let _ = write_points_cells.call((), Some(&args))?;
+        Ok(())
     }
 }

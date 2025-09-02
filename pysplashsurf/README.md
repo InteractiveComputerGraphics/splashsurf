@@ -45,9 +45,10 @@ import meshio
 import numpy as np
 import pysplashsurf
 
+# Load particles from mesh file
 mesh = meshio.read("input.vtk")
 particles = np.array(mesh.points, dtype=np.float64)
-
+# Reconstruct the points/particles with some post-processing
 mesh_with_data, reconstruction = pysplashsurf.reconstruction_pipeline(
     particles,
     particle_radius=0.025,
@@ -65,8 +66,8 @@ mesh_with_data, reconstruction = pysplashsurf.reconstruction_pipeline(
     subdomain_num_cubes_per_dim=64,
     output_mesh_smoothing_weights=True
 )
-    
-pysplashsurf.write_to_file(mesh_with_data, "output.vtk")
+# Write the mesh with attributes to a file using meshio
+mesh_with_data.write_to_file("surface.vtk")
 ```
 The `reconstruction_pipeline` method provides (mostly) the same arguments as the splashsurf binary CLI.
 It may be necessary to specify the `dtype` of a function input (as done for `particles` in the example) so that the bindings know what data type to use internally.
