@@ -14,32 +14,34 @@ Functions
 ---------
 
 .. autosummary::
+    barnacle_decimation
     check_mesh_consistency
     convert_tris_to_quads
-    create_aabb_object
-    create_aabb_object_from_points
-    create_mesh_with_data_object
-    create_sph_interpolator_object
-    decimation
+    laplacian_smoothing_normals_parallel
+    laplacian_smoothing_parallel
     marching_cubes_cleanup
     neighborhood_search_spatial_hashing_parallel
-    par_laplacian_smoothing_inplace
-    par_laplacian_smoothing_normals_inplace
     reconstruct_surface
     reconstruction_pipeline
-    write_to_file
+    triangulate_density_map
 
 Classes
 -------
 
 .. autosummary::
     Aabb3d
+    MeshAttribute
     MeshWithData
     MixedTriQuadMesh3d
     NeighborhoodLists
     SphInterpolator
     SurfaceReconstruction
     TriMesh3d
-    TriMeshWithData
     UniformGrid
     VertexVertexConnectivity
+
+Enums
+-----
+
+.. autosummary::
+    MeshType

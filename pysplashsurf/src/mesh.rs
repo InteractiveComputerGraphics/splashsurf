@@ -76,12 +76,12 @@ impl PyVertexVertexConnectivity {
 #[gen_stub_pymethods]
 #[pymethods]
 impl PyVertexVertexConnectivity {
-    /// Returns a copy of the contained connectivity data
+    /// Returns a copy of the wrapped connectivity data
     pub fn copy_connectivity(&self) -> Vec<Vec<usize>> {
         self.connectivity.clone()
     }
 
-    /// Returns the contained connectivity data by moving it out of this object (zero copy)
+    /// Returns the wrapped connectivity data by moving it out of this object (zero copy)
     pub fn take_connectivity(&mut self) -> Vec<Vec<usize>> {
         // TODO: Check if this is actually zero-copy with the conversion to Python lists
         std::mem::take(&mut self.connectivity)
@@ -205,7 +205,7 @@ impl PyTriMesh3d {
         PyVertexVertexConnectivity::new(connectivity)
     }
 
-    /// Writes the mesh to a file using `meshio.write_points_cells`
+    /// Writes the mesh to a file using ``meshio.write_points_cells``
     #[pyo3(signature = (path, *, file_format = Some("vtk42")))]
     pub fn write_to_file<'py>(
         this: Bound<'py, Self>,
@@ -304,7 +304,7 @@ impl PyMixedTriQuadMesh3d {
         })
     }
 
-    /// Writes the mesh to a file using `meshio.write_points_cells`
+    /// Writes the mesh to a file using ``meshio.write_points_cells``
     #[pyo3(signature = (path, *, file_format = Some("vtk42")))]
     pub fn write_to_file<'py>(
         this: Bound<'py, Self>,
@@ -336,7 +336,7 @@ where
     Ok(pyarray)
 }
 
-/// Enum specifying the type of mesh contained in a `MeshWithData`
+/// Enum specifying the type of mesh wrapped by a ``MeshWithData``
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 #[gen_stub_pyclass_enum]
 #[pyclass]
@@ -644,7 +644,7 @@ impl PyMeshWithData {
         }
     }
 
-    /// The contained mesh without associated data and attributes
+    /// The wrapped mesh without associated data and attributes
     #[getter]
     #[gen_stub(override_return_type(type_repr="typing.Union[TriMesh3d, MixedTriQuadMesh3d]", imports=()))]
     pub fn mesh<'py>(&self, py: Python<'py>) -> Py<PyAny> {
@@ -686,7 +686,7 @@ impl PyMeshWithData {
             .into_py_dict(py)
     }
 
-    /// Returns a copy of the contained mesh without associated data and attributes
+    /// Returns a copy of the wrapped mesh without associated data and attributes
     #[gen_stub(override_return_type(type_repr="typing.Union[TriMesh3d, MixedTriQuadMesh3d]", imports=()))]
     pub fn copy_mesh<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         match &self.mesh {
@@ -795,7 +795,7 @@ impl PyMeshWithData {
         Ok(())
     }
 
-    /// Writes the mesh and its attributes to a file using `meshio.write_points_cells`
+    /// Writes the mesh and its attributes to a file using ``meshio.write_points_cells``
     #[pyo3(signature = (path, *, file_format = Some("vtk42")))]
     pub fn write_to_file<'py>(
         this: Bound<'py, Self>,

@@ -5,32 +5,22 @@ All functions infer float precision based on the input (``np.float32`` or ``np.f
 
 .. currentmodule:: pysplashsurf
 
+.. autofunction:: barnacle_decimation
+
 .. autofunction:: check_mesh_consistency
 
 .. autofunction:: convert_tris_to_quads
 
-.. autofunction:: create_aabb_object
+.. autofunction:: laplacian_smoothing_normals_parallel
 
-.. autofunction:: create_aabb_object_from_points
-
-.. autofunction:: create_mesh_with_data_object
-
-.. autofunction:: create_sph_interpolator_object
-
-.. autofunction:: decimation
+.. autofunction:: laplacian_smoothing_parallel
 
 .. autofunction:: marching_cubes_cleanup
 
 .. autofunction:: neighborhood_search_spatial_hashing_parallel
 
-.. autofunction:: par_laplacian_smoothing_inplace
-
-.. autofunction:: par_laplacian_smoothing_normals_inplace
-
 .. autofunction:: reconstruct_surface
 
 .. autofunction:: reconstruction_pipeline
 
-.. autofunction:: reconstruction_pipeline_multi
-
-.. autofunction:: write_to_file
+.. autofunction:: triangulate_density_map

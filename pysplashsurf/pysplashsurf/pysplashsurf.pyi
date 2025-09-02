@@ -84,7 +84,7 @@ class MeshWithData:
     @property
     def mesh(self) -> typing.Union[TriMesh3d, MixedTriQuadMesh3d]:
         r"""
-        The contained mesh without associated data and attributes
+        The wrapped mesh without associated data and attributes
         """
     @property
     def point_attributes(self) -> dict[str, numpy.typing.NDArray]:
@@ -102,7 +102,7 @@ class MeshWithData:
         """
     def copy_mesh(self) -> typing.Union[TriMesh3d, MixedTriQuadMesh3d]:
         r"""
-        Returns a copy of the contained mesh without associated data and attributes
+        Returns a copy of the wrapped mesh without associated data and attributes
         """
     def copy(self) -> MeshWithData:
         r"""
@@ -132,7 +132,7 @@ class MeshWithData:
         """
     def write_to_file(self, path:builtins.str | os.PathLike | pathlib.Path, *, file_format:typing.Optional[builtins.str]='vtk42') -> None:
         r"""
-        Writes the mesh and its attributes to a file using `meshio.write_points_cells`
+        Writes the mesh and its attributes to a file using ``meshio.write_points_cells``
         """
 
 class MixedTriQuadMesh3d:
@@ -163,7 +163,7 @@ class MixedTriQuadMesh3d:
         """
     def write_to_file(self, path:builtins.str | os.PathLike | pathlib.Path, *, file_format:typing.Optional[builtins.str]='vtk42') -> None:
         r"""
-        Writes the mesh to a file using `meshio.write_points_cells`
+        Writes the mesh to a file using ``meshio.write_points_cells``
         """
 
 class NeighborhoodLists:
@@ -263,7 +263,7 @@ class TriMesh3d:
         """
     def write_to_file(self, path:builtins.str | os.PathLike | pathlib.Path, *, file_format:typing.Optional[builtins.str]='vtk42') -> None:
         r"""
-        Writes the mesh to a file using `meshio.write_points_cells`
+        Writes the mesh to a file using ``meshio.write_points_cells``
         """
 
 class UniformGrid:
@@ -278,16 +278,16 @@ class VertexVertexConnectivity:
     """
     def copy_connectivity(self) -> builtins.list[builtins.list[builtins.int]]:
         r"""
-        Returns a copy of the contained connectivity data
+        Returns a copy of the wrapped connectivity data
         """
     def take_connectivity(self) -> builtins.list[builtins.list[builtins.int]]:
         r"""
-        Returns the contained connectivity data by moving it out of this object (zero copy)
+        Returns the wrapped connectivity data by moving it out of this object (zero copy)
         """
 
 class MeshType(Enum):
     r"""
-    Enum specifying the type of mesh contained in a `MeshWithData`
+    Enum specifying the type of mesh wrapped by a ``MeshWithData``
     """
     Tri3d = ...
     r"""
