@@ -108,7 +108,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [x86_64, x86, aarch64, armv7]
+        target: [x86_64, i686, aarch64, armv7]
     steps:
       - uses: actions/checkout@v4
       - name: Download stub artifact
@@ -265,11 +265,14 @@ jobs:
       matrix:
         include:
           - runner: windows-latest
-            target: x64
+            target: x86_64
+            py-arch: x64
           - runner: windows-latest
-            target: x86
+            target: i686
+            py-arch: x86
           - runner: windows-11-arm
-            target: arm64
+            target: aarch64
+            py-arch: arm64
     steps:
       - uses: actions/checkout@v4
       - name: Download stub artifact
@@ -280,7 +283,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: 3.12
-          architecture: ${{ matrix.target }}
+          architecture: ${{ matrix.py-arch }}
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
