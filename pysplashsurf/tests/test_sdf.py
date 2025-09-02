@@ -21,7 +21,7 @@ def test_sphere_sdf_mc():
 
     # Note: Currently this reconstruction assumes that inside the surface values get bigger (like a density function)
     mesh, grid = pysplashsurf.marching_cubes(
-        sdf, cube_size=dx, iso_surface_threshold=0.0, translation=[translation] * 3
+        sdf, iso_surface_threshold=0.0, cube_size=dx, translation=[translation] * 3, return_grid=True
     )
 
     assert len(mesh.vertices) > 0

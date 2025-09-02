@@ -353,9 +353,28 @@ def laplacian_smoothing_parallel(mesh:typing.Union[TriMesh3d, MeshWithData], ver
     The smoothing is performed inplace and modifies the vertices of the given mesh.
     """
 
-def marching_cubes(values:numpy.typing.NDArray[typing.Any], *, cube_size:builtins.float, iso_surface_threshold:builtins.float, translation:typing.Optional[typing.Sequence[builtins.float]]=None) -> tuple[TriMesh3d, UniformGrid]:
+def marching_cubes(values:numpy.typing.NDArray[typing.Any], *, iso_surface_threshold:builtins.float, cube_size:builtins.float, translation:typing.Optional[typing.Sequence[builtins.float]]=None, return_grid:builtins.bool=False) -> typing.Union[TriMesh3d, tuple[TriMesh3d, UniformGrid]]:
     r"""
     Performs a standard marching cubes triangulation of a 3D array of values
+    
+    The array of values has to be a contiguous array with shape ``(nx, ny, nz)``.
+    The iso-surface threshold defines which value is considered to be "on" the surface.
+    The cube size and translation parameters define the scaling and translation of the resulting
+    mesh. Without translation, the value ``values[0, 0, 0]`` is located at coordinates ``(0, 0, 0)``.
+    
+    The values are interpreted as a "density field", meaning that values higher than the iso-surface
+    threshold are considered to be "inside" the surface and values lower than the threshold are
+    considered to be "outside" the surface. This is the opposite convention to an SDF (signed distance field).
+    However, even if values of an SDF are provided as an input, the marching cubes algorithm
+    will still work and produce a watertight surface mesh (if the surface is fully contained in the
+    array).
+    
+    If ``return_grid`` is set to ``True``, the function will return a tuple of the mesh and the
+    uniform grid that was used for the triangulation. This can be used for other functions such as
+    :py:func:`check_mesh_consistency`. Otherwise, only the mesh is returned.
+    
+    The function is currently single-threaded. The SPH surface reconstruction functions :py:func:`reconstruction_pipeline`
+    and :py:func:`reconstruct_surface` improve performance by processing multiple patches in parallel.
     """
 
 def marching_cubes_cleanup(mesh:typing.Union[TriMesh3d, MeshWithData], grid:UniformGrid, *, max_rel_snap_dist:typing.Optional[builtins.float]=None, max_iter:builtins.int=5, keep_vertices:builtins.bool=False) -> typing.Union[TriMesh3d, MeshWithData]:

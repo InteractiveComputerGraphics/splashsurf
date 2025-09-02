@@ -1,5 +1,6 @@
 use numpy::prelude::*;
 use numpy::{Element, PyArray3, PyUntypedArray};
+use pyo3::IntoPyObjectExt;
 use pyo3::prelude::*;
 use pyo3_stub_gen::derive::*;
 use splashsurf_lib::nalgebra::Vector3;
@@ -53,24 +54,47 @@ pub fn check_mesh_consistency<'py>(
 }
 
 /// Performs a standard marching cubes triangulation of a 3D array of values
+///
+/// The array of values has to be a contiguous array with shape ``(nx, ny, nz)``.
+/// The iso-surface threshold defines which value is considered to be "on" the surface.
+/// The cube size and translation parameters define the scaling and translation of the resulting
+/// mesh. Without translation, the value ``values[0, 0, 0]`` is located at coordinates ``(0, 0, 0)``.
+///
+/// The values are interpreted as a "density field", meaning that values higher than the iso-surface
+/// threshold are considered to be "inside" the surface and values lower than the threshold are
+/// considered to be "outside" the surface. This is the opposite convention to an SDF (signed distance field).
+/// However, even if values of an SDF are provided as an input, the marching cubes algorithm
+/// will still work and produce a watertight surface mesh (if the surface is fully contained in the
+/// array).
+///
+/// If ``return_grid`` is set to ``True``, the function will return a tuple of the mesh and the
+/// uniform grid that was used for the triangulation. This can be used for other functions such as
+/// :py:func:`check_mesh_consistency`. Otherwise, only the mesh is returned.
+///
+/// The function is currently single-threaded. The SPH surface reconstruction functions :py:func:`reconstruction_pipeline`
+/// and :py:func:`reconstruct_surface` improve performance by processing multiple patches in parallel.
 #[gen_stub_pyfunction]
 #[pyfunction]
 #[pyo3(name = "marching_cubes")]
-#[pyo3(signature = (values, *, cube_size, iso_surface_threshold, translation = None))]
+#[pyo3(signature = (values, *, iso_surface_threshold, cube_size, translation = None, return_grid = false))]
+#[gen_stub(override_return_type(type_repr="typing.Union[TriMesh3d, tuple[TriMesh3d, UniformGrid]]", imports=()))]
 pub fn marching_cubes<'py>(
     values: &Bound<'py, PyUntypedArray>,
-    cube_size: f64,
     iso_surface_threshold: f64,
+    cube_size: f64,
     translation: Option<[f64; 3]>,
-) -> PyResult<(PyTriMesh3d, PyUniformGrid)> {
+    return_grid: bool,
+) -> PyResult<Py<PyAny>> {
     assert_eq!(values.shape().len(), 3, "values must be a 3D array");
 
     fn triangulate_density_map_generic<'py, R: Real + Element>(
         values: &Bound<'py, PyArray3<R>>,
-        cube_size: R,
         iso_surface_threshold: R,
+        cube_size: R,
         translation: Option<[R; 3]>,
-    ) -> PyResult<(PyTriMesh3d, PyUniformGrid)> {
+        return_grid: bool,
+    ) -> PyResult<Py<PyAny>> {
+        let py = values.py();
         let shape = values.shape();
         let translation = Vector3::from(translation.unwrap_or([R::zero(); 3]));
         let n_cells_per_dim = [
@@ -82,9 +106,8 @@ pub fn marching_cubes<'py>(
         let grid = UniformGrid::new(&translation, &n_cells_per_dim, cube_size)
             .map_err(anyhow::Error::from)?;
 
-        // TODO: Replace with borrow
-        let values = values.try_readonly()?.as_slice()?.to_vec();
-        let density_map = DensityMap::from(values);
+        let values = values.try_readonly()?;
+        let density_map = DensityMap::from(values.as_slice()?);
 
         let mesh = splashsurf_lib::marching_cubes::triangulate_density_map(
             &grid,
@@ -92,21 +115,33 @@ pub fn marching_cubes<'py>(
             iso_surface_threshold,
         )
         .map_err(anyhow::Error::from)?;
-        Ok((
-            PyTriMesh3d::try_from_generic(mesh)?,
-            PyUniformGrid::try_from_generic(grid)?,
-        ))
+
+        let mesh = PyTriMesh3d::try_from_generic(mesh)?;
+        let grid = PyUniformGrid::try_from_generic(grid)?;
+
+        if return_grid {
+            (mesh, grid).into_py_any(py)
+        } else {
+            mesh.into_py_any(py)
+        }
     }
 
     if let Ok(values) = values.downcast::<PyArray3<f32>>() {
         triangulate_density_map_generic(
             &values,
-            cube_size as f32,
             iso_surface_threshold as f32,
+            cube_size as f32,
             translation.map(|t| t.map(|t| t as f32)),
+            return_grid,
         )
     } else if let Ok(values) = values.downcast::<PyArray3<f64>>() {
-        triangulate_density_map_generic(&values, cube_size, iso_surface_threshold, translation)
+        triangulate_density_map_generic(
+            &values,
+            iso_surface_threshold,
+            cube_size,
+            translation,
+            return_grid,
+        )
     } else {
         Err(utils::pyerr_unsupported_scalar())
     }

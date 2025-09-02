@@ -19,6 +19,7 @@ Functions
     convert_tris_to_quads
     laplacian_smoothing_normals_parallel
     laplacian_smoothing_parallel
+    marching_cubes
     marching_cubes_cleanup
     neighborhood_search_spatial_hashing_parallel
     reconstruct_surface

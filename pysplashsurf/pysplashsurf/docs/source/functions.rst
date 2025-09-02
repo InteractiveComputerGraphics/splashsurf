@@ -15,6 +15,8 @@ All functions infer float precision based on the input (``np.float32`` or ``np.f
 
 .. autofunction:: laplacian_smoothing_parallel
 
+.. autofunction:: marching_cubes
+
 .. autofunction:: marching_cubes_cleanup
 
 .. autofunction:: neighborhood_search_spatial_hashing_parallel
