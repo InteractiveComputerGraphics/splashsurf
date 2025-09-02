@@ -3,7 +3,6 @@
 //! This module provides functions for the computation of per-particle densities and the discretization
 //! of the resulting fluid density field by mapping onto a discrete background grid.
 //!
-//! Currently, only sparse density maps are implemented.
 //!
 //! ## Sparse density maps
 //! The [`DensityMap`] stores fluid density values for each point of an implicit background grid
@@ -14,6 +13,12 @@
 //! analogous to multidimensional array index flattening. That means for a grid with dimensions
 //! `[n_x, n_y, n_z]`, the flat point index is given by the expression `i*n_y*n_z + j*n_z + k`.
 //! For these point index operations, the [`UniformGrid`] is used.
+//!
+//! ## Dense density maps
+//! For some applications, it might be desirable to allocate the storage for all grid points
+//! in a contiguous array. This is supported by the [`DensityMap::Dense`] variant. The values
+//! can either be borrowed (a slice) or owned (a vector). Background grid coordinates are mapped
+//! to indices in this array (and vice versa) using the same flattening scheme as for the sparse maps.
 //!
 //! Note that all density mapping functions always use the global background grid for flat point
 //! indices, even if the density map is only generated for a smaller subdomain.
