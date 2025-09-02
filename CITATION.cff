@@ -21,5 +21,5 @@ abstract: >-
   Splashsurf is a surface reconstruction tool and framework
   for reconstructing surfaces from particle data.
 license: MIT
-version: 0.12.0
-date-released: '2025-06-25'
+version: 0.13.0
+date-released: '2025-09-02'

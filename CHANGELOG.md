@@ -2,6 +2,10 @@
 
 The following changes are present in the `main` branch of the repository and are not yet part of a release:
 
+ - N/A
+
+## Version 0.13.0
+
  - Py: Major refactor of the Python bindings, interface is much simpler and more "pythonic"
    - Unified separate F64/F32 classes and functions and infer data type automatically
    - Nearly all inputs, outputs and attributes are now zero-copy (e.g. mesh vertices and faces can be accessed as attributes without copies)

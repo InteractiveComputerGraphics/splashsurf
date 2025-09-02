@@ -315,7 +315,7 @@ The file format is inferred from the extension of output filename.
 
 ### The `reconstruct` command
 ```
-splashsurf-reconstruct (v0.12.0) - Reconstruct a surface from particle data
+splashsurf-reconstruct (v0.13.0) - Reconstruct a surface from particle data
 
 Usage: splashsurf reconstruct [OPTIONS] --particle-radius <PARTICLE_RADIUS> --smoothing-length <SMOOTHING_LENGTH> --cube-size <CUBE_SIZE> <INPUT_FILE_OR_SEQUENCE>
 
@@ -356,7 +356,9 @@ Advanced parameters:
 
 Domain decomposition parameters:
       --subdomain-grid=<off|on>
-          Enable spatial decomposition using a regular grid-based approach (for efficient multithreading) [default: on] [possible values: off, on]
+          Enable automatic spatial decomposition using a regular grid-based approach (for efficient multithreading) if the domain is large enough [default: on] [possible values: off, on]
+      --subdomain-grid-auto-disable=<off|on>
+          Whether to automatically disable the spatial decomposition if the domain is too small [default: on] [possible values: off, on]
       --subdomain-cubes <SUBDOMAIN_CUBES>
           Each subdomain will be a cube consisting of this number of MC grid cells along each coordinate axis [default: 64]
 
@@ -429,7 +431,7 @@ Allows conversion between particle file formats and between mesh file formats. F
 is supported. For meshes only `VTK, PLY -> VTK, OBJ` is supported.
 
 ```
-splashsurf-convert (v0.11.0) - Convert particle or mesh files between different file formats
+splashsurf-convert (v0.13.0) - Convert particle or mesh files between different file formats
 
 Usage: splashsurf convert [OPTIONS] -o <OUTPUT_FILE>
 
@@ -454,7 +456,6 @@ Options:
           Print help
   -V, --version
           Print version
-
 ```
 
 ## Citation 

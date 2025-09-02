@@ -1,5 +1,6 @@
 # ![splashsurf logo](https://raw.githubusercontent.com/InteractiveComputerGraphics/splashsurf/main/logos/logo_small.svg "splashsurf")
 [![On crates.io](https://img.shields.io/crates/v/splashsurf)](https://crates.io/crates/splashsurf)
+[![On PyPI](https://img.shields.io/pypi/v/pysplashsurf)](https://pypi.org/project/pysplashsurf/)
 [![On docs.rs](https://docs.rs/splashsurf_lib/badge.svg)](https://docs.rs/splashsurf_lib)
 [![Commits since last release](https://img.shields.io/github/commits-since/InteractiveComputerGraphics/splashsurf/latest)](https://github.com/InteractiveComputerGraphics/splashsurf)
 [![License: MIT](https://img.shields.io/crates/l/splashsurf)](https://github.com/InteractiveComputerGraphics/splashsurf/blob/main/LICENSE)
@@ -123,16 +124,16 @@ Please see the [`README`](pysplashsurf/README.md) of the Python bindings for mor
 "Good" settings for the surface reconstruction depend on the original simulation and can be influenced by different conventions of different simulators.
 The following parameters appear to work well with simulations performed with [SPlisHSPlasH](https://github.com/InteractiveComputerGraphics/SPlisHSPlasH).
 A typical set of parameters for the reconstruction is:
- - `particle-radius`: the actual radius of the fluid particles in the simulation
- - `smoothing-length`: the smoothing length used for the SPH kernel, usually set to `2.0` times the particle radius (this will use a cubic kernel with a compact support radius of `4.0` times the particle radius)
- - `surface-threshold`: typically a value between `0.6` and `0.7` works well
- - `cube-size`: usually should not be chosen larger than `1.0` to avoid artifacts (e.g., single particles reconstructed a rhomboids), start with a value in the range of `0.75` to `0.5` and decrease/increase it if the result is too coarse or the reconstruction takes too long.
+- `particle-radius`: the actual radius of the fluid particles in the simulation
+- `smoothing-length`: the smoothing length used for the SPH kernel, usually set to `2.0` times the particle radius (this will use a cubic kernel with a compact support radius of `4.0` times the particle radius)
+- `surface-threshold`: typically a value between `0.6` and `0.7` works well
+- `cube-size`: usually should not be chosen larger than `1.0` to avoid artifacts (e.g., single particles reconstructed a rhomboids), start with a value in the range of `0.75` to `0.5` and decrease/increase it if the result is too coarse or the reconstruction takes too long.
 
 Without further post-processing, these parameters usually lead to quite "bumpy" surfaces.
 To obtain smoother surfaces, the parameters can be adjusted as follows:
- - `particle-radius`: can be chosen a bit larger than the particle radius of the actual simulation. A radius around 1.4 to 1.6 times larger than the original SPH particle radius seems appropriate.
- - `smoothing-length`: can be set around `1.2`. Larger values smooth out the surface more but also artificially increase the fluid volume.
- - `surface-threshold`: a good value depends on the selected `particle-radius` and `smoothing-length` and can be used to counteract a fluid volume increase e.g., due to a larger particle radius. In combination with the other recommended values a threshold of `0.6` seemed to work well.
+- `particle-radius`: can be chosen a bit larger than the particle radius of the actual simulation. A radius around 1.4 to 1.6 times larger than the original SPH particle radius seems appropriate.
+- `smoothing-length`: can be set around `1.2`. Larger values smooth out the surface more but also artificially increase the fluid volume.
+- `surface-threshold`: a good value depends on the selected `particle-radius` and `smoothing-length` and can be used to counteract a fluid volume increase e.g., due to a larger particle radius. In combination with the other recommended values a threshold of `0.6` seemed to work well.
 
 However, a much more effective way is to perform surface smoothing as described below.
 
@@ -146,10 +147,10 @@ The following images show a rendering of a typical surface reconstruction (on th
 
 You can see this rendering in motion in [this video](https://youtu.be/2bYvaUXlBQs).
 To apply this smoothing, we recommend the following settings:
- - `--mesh-smoothing-weights=on`: This enables the use of special weights during the smoothing process which preserve fluid details. For more information, we refer to the [paper](https://animation.rwth-aachen.de/publication/0583/).
- - `--mesh-smoothing-iters=25`: This enables smoothing of the output mesh. The individual iterations are relatively fast, and 25 iterations appeared to strike a good balance between an initially bumpy surface and potential over-smoothing.
- - `--mesh-cleanup=on`/`--decimate-barnacles=on`: One of the options should be used when applying smoothing, otherwise artifacts can appear on the surface (for more details see the paper). The `mesh-cleanup` flag enables a general purpose marching cubes mesh cleanup procedure that removes small sliver triangles everywhere on the mesh. The `decimate-barnacles` enables a more targeted decimation that only removes specific triangle configurations that are problematic for the smoothing. The former approach results in a "nicer" mesh overall but can be slower than the latter.
- - `--normals-smoothing-iters=10`: If normals are being exported (with `--normals=on`), this results in an even smoother appearance during rendering.
+- `--mesh-smoothing-weights=on`: This enables the use of special weights during the smoothing process which preserve fluid details. For more information, we refer to the [paper](https://animation.rwth-aachen.de/publication/0583/).
+- `--mesh-smoothing-iters=25`: This enables smoothing of the output mesh. The individual iterations are relatively fast, and 25 iterations appeared to strike a good balance between an initially bumpy surface and potential over-smoothing.
+- `--mesh-cleanup=on`/`--decimate-barnacles=on`: One of the options should be used when applying smoothing, otherwise artifacts can appear on the surface (for more details see the paper). The `mesh-cleanup` flag enables a general purpose marching cubes mesh cleanup procedure that removes small sliver triangles everywhere on the mesh. The `decimate-barnacles` enables a more targeted decimation that only removes specific triangle configurations that are problematic for the smoothing. The former approach results in a "nicer" mesh overall but can be slower than the latter.
+- `--normals-smoothing-iters=10`: If normals are being exported (with `--normals=on`), this results in an even smoother appearance during rendering.
 
 For the reconstruction parameters in conjunction with the weighted smoothing, we recommend parameters close to the simulation parameters.
 That means selecting the same particle radius as in the simulation, a corresponding smoothing length (e.g., for SPlisHSPlasH a value of `2.0`), a surface-threshold between `0.6` and `0.7` and a cube size usually between `0.5` and `1.0`.
@@ -241,8 +242,8 @@ The number of threads can be influenced using the `--num-threads`/`-n` argument 
 
 **NOTE:** Currently, some functions do not have a sequential implementation and always parallelize over the particles or the mesh/domain.
 This includes:
- - the new "subdomain-grid" domain decomposition approach, as an alternative to the previous octree-based approach
- - some post-processing functionality (interpolation of smoothing weights, interpolation of normals and other fluid attributes)
+- the new "subdomain-grid" domain decomposition approach, as an alternative to the previous octree-based approach
+- some post-processing functionality (interpolation of smoothing weights, interpolation of normals and other fluid attributes)
 
 Using the `--mt-particles=off` argument does not affect these parts of the surface reconstruction.
 For now, it is therefore recommended to not parallelize over multiple files if this functionality is used.
@@ -251,9 +252,9 @@ For now, it is therefore recommended to not parallelize over multiple files if t
 
 ### VTK
 
-Legacy VTK files with the "`.vtk`" extension are loaded using [`vtkio`](https://crates.io/crates/vtkio). 
-The VTK file is loaded as a big endian binary file and has to contain an "Unstructured Grid" with either `f32` or `f64` vertex coordinates. 
-Any other data or attributes are ignored except for those attributes that were specified with the ` --interpolate-attributes` command line argument. 
+Legacy VTK files with the "`.vtk`" extension are loaded using [`vtkio`](https://crates.io/crates/vtkio).
+The VTK file is loaded as a big endian binary file and has to contain an "Unstructured Grid" with either `f32` or `f64` vertex coordinates.
+Any other data or attributes are ignored except for those attributes that were specified with the ` --interpolate-attributes` command line argument.
 Currently supported attribute data types are scalar integers, floats, and three-component float vectors.
 Only the first "Unstructured Grid" is loaded, other entities are ignored.
 
@@ -268,27 +269,27 @@ Files using "raw" binary sections (i.e., a `<AppendedData encoding="raw">...</Ap
 
 ### BGEO
 
-Files with the "`.bgeo`" extension are loaded using a custom parser. 
-Note, that only the "old" `BGEOV` format is supported (which is the format supported by "Partio"). 
-Both uncompressed and (gzip) compressed files are supported. 
-Only points and their implicit position vector attributes are loaded from the file. 
-All other entities (e.g., vertices) and other attributes are ignored/discarded. 
-Notably, the parser supports BGEO files written by [SPlisHSPlasH](https://github.com/InteractiveComputerGraphics/SPlisHSPlasH) ("Partio export"). 
+Files with the "`.bgeo`" extension are loaded using a custom parser.
+Note, that only the "old" `BGEOV` format is supported (which is the format supported by "Partio").
+Both uncompressed and (gzip) compressed files are supported.
+Only points and their implicit position vector attributes are loaded from the file.
+All other entities (e.g., vertices) and other attributes are ignored/discarded.
+Notably, the parser supports BGEO files written by [SPlisHSPlasH](https://github.com/InteractiveComputerGraphics/SPlisHSPlasH) ("Partio export").
 
 ### PLY
 
-Files with the "`.ply`" extension are loaded using [`ply-rs`](https://crates.io/crates/ply-rs). 
-The PLY file has to contain an element called "`vertex`" with the properties `x`, `y` and `z` of type `f32`/["`Property::Float`"](https://docs.rs/ply-rs/0.1.3/ply_rs/ply/enum.Property.html#variant.Float). 
+Files with the "`.ply`" extension are loaded using [`ply-rs`](https://crates.io/crates/ply-rs).
+The PLY file has to contain an element called "`vertex`" with the properties `x`, `y` and `z` of type `f32`/["`Property::Float`"](https://docs.rs/ply-rs/0.1.3/ply_rs/ply/enum.Property.html#variant.Float).
 Any other properties or elements are ignored.
 
 ### XYZ
 
-Files with the "`.xyz`" extension are interpreted as raw bytes of `f32` values in native endianness of the system. 
+Files with the "`.xyz`" extension are interpreted as raw bytes of `f32` values in native endianness of the system.
 Three consecutive `f32`s represent a (x,y,z) coordinate triplet of a fluid particle.
 
 ### JSON
 
-Files with the "`.json`" extension are interpreted as serializations of a `Vec<[f32; 3]>` where each three component array represents a particle position. 
+Files with the "`.json`" extension are interpreted as serializations of a `Vec<[f32; 3]>` where each three component array represents a particle position.
 This corresponds to a JSON file with a structure like this, for example:
 ```json
 [
@@ -299,15 +300,15 @@ This corresponds to a JSON file with a structure like this, for example:
 
 ## Output file formats
 
-Currently, only VTK and OBJ formats are supported to store the reconstructed surface meshes. 
-Both formats support output of normals, but only VTK supports additional fields such as interpolated scalar or vector fields. 
+Currently, only VTK and OBJ formats are supported to store the reconstructed surface meshes.
+Both formats support output of normals, but only VTK supports additional fields such as interpolated scalar or vector fields.
 The file format is inferred from the extension of output filename.
 
 ## All command line options
 
 ### The `reconstruct` command
 ```
-splashsurf-reconstruct (v0.12.0) - Reconstruct a surface from particle data
+splashsurf-reconstruct (v0.13.0) - Reconstruct a surface from particle data
 
 Usage: splashsurf reconstruct [OPTIONS] --particle-radius <PARTICLE_RADIUS> --smoothing-length <SMOOTHING_LENGTH> --cube-size <CUBE_SIZE> <INPUT_FILE_OR_SEQUENCE>
 
@@ -348,7 +349,9 @@ Advanced parameters:
 
 Domain decomposition parameters:
       --subdomain-grid=<off|on>
-          Enable spatial decomposition using a regular grid-based approach (for efficient multithreading) [default: on] [possible values: off, on]
+          Enable automatic spatial decomposition using a regular grid-based approach (for efficient multithreading) if the domain is large enough [default: on] [possible values: off, on]
+      --subdomain-grid-auto-disable=<off|on>
+          Whether to automatically disable the spatial decomposition if the domain is too small [default: on] [possible values: off, on]
       --subdomain-cubes <SUBDOMAIN_CUBES>
           Each subdomain will be a cube consisting of this number of MC grid cells along each coordinate axis [default: 64]
 
@@ -417,11 +420,11 @@ Debug options:
 
 ### The `convert` subcommand
 
-Allows conversion between particle file formats and between mesh file formats. For particles `VTK, BGEO, PLY, XYZ, JSON -> VTK` 
+Allows conversion between particle file formats and between mesh file formats. For particles `VTK, BGEO, PLY, XYZ, JSON -> VTK`
 is supported. For meshes only `VTK, PLY -> VTK, OBJ` is supported.
 
 ```
-splashsurf-convert (v0.11.0) - Convert particle or mesh files between different file formats
+splashsurf-convert (v0.13.0) - Convert particle or mesh files between different file formats
 
 Usage: splashsurf convert [OPTIONS] -o <OUTPUT_FILE>
 
@@ -446,10 +449,9 @@ Options:
           Print help
   -V, --version
           Print version
-
 ```
 
-## Citation 
+## Citation
 
 To cite `splashsurf` you can use this BibTeX entry:
 
@@ -467,12 +469,12 @@ To cite `splashsurf` you can use this BibTeX entry:
 ## Acknowledgements
 
 This project contains notable contributions from the following people:
- - [Timna Böttcher](https://animation.rwth-aachen.de/person/80/) ([@timnaboettcher](https://github.com/timnaboettcher)): co-developed the [weighted smoothing approach](https://diglib.eg.org/handle/10.2312/vmv20231245)
- - [Felix Kern](https://github.com/Fek04) ([@Fek04](https://github.com/Fek04)): implemented the Python bindings for `splashsurf`
- - [Fabian Löschner](https://www.floeschner.de/) ([@w1th0utnam3](https://github.com/w1th0utnam3)): implemented most of the surface reconstruction library and CLI with the domain decomposition
+- [Timna Böttcher](https://animation.rwth-aachen.de/person/80/) ([@timnaboettcher](https://github.com/timnaboettcher)): co-developed the [weighted smoothing approach](https://diglib.eg.org/handle/10.2312/vmv20231245)
+- [Felix Kern](https://github.com/Fek04) ([@Fek04](https://github.com/Fek04)): implemented the Python bindings for `splashsurf`
+- [Fabian Löschner](https://www.floeschner.de/) ([@w1th0utnam3](https://github.com/w1th0utnam3)): implemented most of the surface reconstruction library and CLI with the domain decomposition
 
 # License
 
 For license information of this project, see the [LICENSE](LICENSE) file.
-The splashsurf logo is based on two graphics ([1](https://www.svgrepo.com/svg/295647/wave), [2](https://www.svgrepo.com/svg/295652/surfboard-surfboard)) published on SVG Repo under a CC0 ("No Rights Reserved") license. 
+The splashsurf logo is based on two graphics ([1](https://www.svgrepo.com/svg/295647/wave), [2](https://www.svgrepo.com/svg/295652/surfboard-surfboard)) published on SVG Repo under a CC0 ("No Rights Reserved") license.
 The dragon model shown in the images on this page is part of the ["Stanford 3D Scanning Repository"](https://graphics.stanford.edu/data/3Dscanrep/).
