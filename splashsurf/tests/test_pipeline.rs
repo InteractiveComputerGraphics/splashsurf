@@ -27,7 +27,7 @@ fn test_basic_pipeline() -> Result<(), Box<dyn std::error::Error>> {
         .as_ref()
         .expect("reconstruction should produce a triangle mesh")
         .mesh;
-    let raw_mesh = reconstruction.raw_reconstruction.mesh();
+    let raw_mesh = &reconstruction.raw_reconstruction.mesh;
     vtk_format::write_vtk(mesh, "../out/bunny_test_basic_pipeline.vtk", "mesh")?;
 
     // Compare raw and final mesh
@@ -203,7 +203,7 @@ fn test_basic_pipeline_postprocessing() -> Result<(), Box<dyn std::error::Error>
         .as_ref()
         .expect("reconstruction should produce a triangle mesh")
         .mesh;
-    let raw_mesh = reconstruction.raw_reconstruction.mesh();
+    let raw_mesh = &reconstruction.raw_reconstruction.mesh;
     vtk_format::write_vtk(
         mesh,
         "../out/bunny_test_basic_pipeline_postprocessing.vtk",
@@ -286,7 +286,7 @@ fn test_basic_pipeline_postprocessing_with_aabb() -> Result<(), Box<dyn std::err
         .as_ref()
         .expect("reconstruction should produce a triangle mesh")
         .mesh;
-    let raw_mesh = reconstruction.raw_reconstruction.mesh();
+    let raw_mesh = &reconstruction.raw_reconstruction.mesh;
     vtk_format::write_vtk(
         mesh,
         "../out/bunny_test_basic_pipeline_postprocessing_aabb.vtk",

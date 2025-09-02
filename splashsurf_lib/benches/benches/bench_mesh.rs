@@ -36,7 +36,7 @@ fn reconstruct_particles<P: AsRef<Path>>(particle_file: P) -> SurfaceReconstruct
 pub fn mesh_vertex_normals(c: &mut Criterion) {
     //let reconstruction = reconstruct_particles("../../canyon_13353401_particles.vtk");
     let reconstruction = reconstruct_particles("../data/hilbert_46843_particles.bgeo");
-    let mesh = reconstruction.mesh();
+    let mesh = &reconstruction.mesh;
 
     let mut group = c.benchmark_group("mesh");
     group.sample_size(50);
@@ -56,7 +56,7 @@ pub fn mesh_vertex_normals(c: &mut Criterion) {
 pub fn mesh_vertex_normals_parallel(c: &mut Criterion) {
     //let reconstruction = reconstruct_particles("../../canyon_13353401_particles.vtk");
     let reconstruction = reconstruct_particles("../data/hilbert_46843_particles.bgeo");
-    let mesh = reconstruction.mesh();
+    let mesh = &reconstruction.mesh;
 
     let mut group = c.benchmark_group("mesh");
     group.sample_size(50);

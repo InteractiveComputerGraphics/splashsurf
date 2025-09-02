@@ -104,33 +104,33 @@ macro_rules! generate_test {
             let reconstruction =
                 reconstruct_surface::<i64, _>(particle_positions.as_slice(), &parameters).unwrap();
 
-            write_vtk(reconstruction.mesh(), &output_file, "mesh").unwrap();
+            write_vtk(&reconstruction.mesh, &output_file, "mesh").unwrap();
 
             println!(
                 "Reconstructed mesh '{}' from particle file '{}' with {} particles has {} triangles.",
                 output_file.display(),
                 $input_file,
                 particle_positions.len(),
-                reconstruction.mesh().triangles.len()
+                reconstruction.mesh.triangles.len()
             );
 
             // Ensure that the number of triangles is roughly correct
             assert!(
-                reconstruction.mesh().triangles.len() > $min_triangles,
+                reconstruction.mesh.triangles.len() > $min_triangles,
                 "Mesh has probably too few triangles (min expected: {}, is: {})",
                 $min_triangles,
-                reconstruction.mesh().triangles.len()
+                reconstruction.mesh.triangles.len()
             );
             assert!(
-                reconstruction.mesh().triangles.len() < $max_triangles,
+                reconstruction.mesh.triangles.len() < $max_triangles,
                 "Mesh has probably too many triangles (max expected: {}, is: {})",
                 $max_triangles,
-                reconstruction.mesh().triangles.len()
+                reconstruction.mesh.triangles.len()
             );
 
             if test_for_boundary(&parameters) {
                 // Ensure that the mesh does not have a boundary
-                if let Err(e) = check_mesh_consistency(reconstruction.grid(), reconstruction.mesh(), true, true, true)
+                if let Err(e) = check_mesh_consistency(&reconstruction.grid, &reconstruction.mesh, true, true, true)
                 {
                     eprintln!("{}", e);
                     panic!("Mesh contains topological/manifold errors");

@@ -9,7 +9,7 @@ The following changes are present in the `main` branch of the repository and are
  - Lib: Add support for "dense" `DensityMap` (borrowed & owned) as input for the marching cubes triangulation, useful for the Python bindings
  - Lib: Replace usage of `DiscreteSquaredDistanceCubicKernel` by standard `CubicSplineKernel` for SPH interpolation (no noticeable performance difference)
  - Lib: Enforce that `Index` types are signed integers implementing the `num_traits::Signed` trait. Currently, the reconstruction does not work (correctly) with unsigned integers.
- - Lib: Make most fields of `SurfaceReconstruction` public
+ - Lib: Make most fields of `SurfaceReconstruction` public, remove previous getter functions
  - CLI: Add some tests for the `reconstruction_pipeline` function
  - CLI: Fix post-processing when particle AABB filtering is enabled
  - Lib: Support subdomain "ghost particle" margins to be up to the size of the subdomain itself (previously limited to half the size)

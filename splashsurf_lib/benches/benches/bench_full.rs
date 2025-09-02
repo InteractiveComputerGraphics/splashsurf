@@ -268,7 +268,7 @@ pub fn surface_reconstruction_double_dam_break_inplace(c: &mut Criterion) {
     group.finish();
 
     write_vtk(
-        reconstruction.mesh(),
+        reconstruction.mesh,
         "../out/reconstruct_surface_double_dam_break.vtk",
         "mesh",
     )

@@ -76,28 +76,20 @@ fn test_edge_above_threshold_to_outside_of_compact_support_global() {
     println!(
         "Reconstructed mesh from {} particles has {} triangles.",
         particle_positions.len(),
-        reconstruction.mesh().triangles.len()
+        reconstruction.mesh.triangles.len()
     );
 
+    assert_eq!(reconstruction.mesh.vertices.len(), 6, "Number of vertices");
     assert_eq!(
-        reconstruction.mesh().vertices.len(),
-        6,
-        "Number of vertices"
-    );
-    assert_eq!(
-        reconstruction.mesh().triangles.len(),
+        reconstruction.mesh.triangles.len(),
         8,
         "Number of triangles"
     );
 
     // Ensure that the mesh does not have a boundary
-    if let Err(e) = check_mesh_consistency(
-        reconstruction.grid(),
-        reconstruction.mesh(),
-        true,
-        true,
-        true,
-    ) {
+    if let Err(e) =
+        check_mesh_consistency(&reconstruction.grid, &reconstruction.mesh, true, true, true)
+    {
         eprintln!("{}", e);
         panic!("Mesh contains topological/manifold errors");
     }
@@ -113,28 +105,20 @@ fn test_edge_above_threshold_to_outside_of_compact_support_subdomains() {
     println!(
         "Reconstructed mesh from {} particles has {} triangles.",
         particle_positions.len(),
-        reconstruction.mesh().triangles.len()
+        reconstruction.mesh.triangles.len()
     );
 
+    assert_eq!(reconstruction.mesh.vertices.len(), 6, "Number of vertices");
     assert_eq!(
-        reconstruction.mesh().vertices.len(),
-        6,
-        "Number of vertices"
-    );
-    assert_eq!(
-        reconstruction.mesh().triangles.len(),
+        reconstruction.mesh.triangles.len(),
         8,
         "Number of triangles"
     );
 
     // Ensure that the mesh does not have a boundary
-    if let Err(e) = check_mesh_consistency(
-        reconstruction.grid(),
-        reconstruction.mesh(),
-        true,
-        true,
-        true,
-    ) {
+    if let Err(e) =
+        check_mesh_consistency(&reconstruction.grid, &reconstruction.mesh, true, true, true)
+    {
         eprintln!("{}", e);
         panic!("Mesh contains topological/manifold errors");
     }

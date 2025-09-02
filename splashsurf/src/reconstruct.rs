@@ -1040,8 +1040,8 @@ pub fn reconstruction_pipeline<'a, I: Index, R: Real>(
         }
     }
 
-    let grid = reconstruction.grid();
-    let mut mesh_with_data = MeshWithData::new(Cow::Borrowed(reconstruction.mesh()));
+    let grid = &reconstruction.grid;
+    let mut mesh_with_data = MeshWithData::new(Cow::Borrowed(&reconstruction.mesh));
 
     // Perform post-processing
     {
@@ -1054,7 +1054,7 @@ pub fn reconstruction_pipeline<'a, I: Index, R: Real>(
             let verts_before = mesh_with_data.mesh.vertices.len();
             vertex_connectivity = Some(splashsurf_lib::postprocessing::marching_cubes_cleanup(
                 mesh_with_data.mesh.to_mut(),
-                reconstruction.grid(),
+                &reconstruction.grid,
                 postprocessing
                     .mesh_cleanup_snap_dist
                     .map(|d| R::from_float(d)),
@@ -1092,7 +1092,10 @@ pub fn reconstruction_pipeline<'a, I: Index, R: Real>(
             // TODO: Re-use filtered particles from reconstruction?
             filtered_quantity(
                 particle_positions,
-                reconstruction.particle_inside_aabb().map(Vec::as_slice),
+                reconstruction
+                    .particle_inside_aabb
+                    .as_ref()
+                    .map(Vec::as_slice),
             )
         } else {
             Cow::Borrowed(particle_positions)
@@ -1114,7 +1117,7 @@ pub fn reconstruction_pipeline<'a, I: Index, R: Real>(
             let particle_rest_mass = particle_rest_volume * particle_rest_density;
 
             let particle_densities = reconstruction
-                .particle_densities()
+                .particle_densities.as_ref()
                 .ok_or_else(|| anyhow::anyhow!("Particle densities were not returned by surface reconstruction but are required for SPH normal computation"))?
                 .as_slice();
             assert_eq!(
@@ -1150,7 +1153,7 @@ pub fn reconstruction_pipeline<'a, I: Index, R: Real>(
 
             // Global neighborhood search
             let nl = reconstruction
-                .particle_neighbors()
+                .particle_neighbors.as_ref()
                 .map(Cow::Borrowed)
                 .unwrap_or_else(||
                     {
@@ -1337,7 +1340,10 @@ pub fn reconstruction_pipeline<'a, I: Index, R: Real>(
             {
                 info!("Interpolating attribute \"{}\"...", attribute.name);
 
-                let particles_inside = reconstruction.particle_inside_aabb().map(Vec::as_slice);
+                let particles_inside = reconstruction
+                    .particle_inside_aabb
+                    .as_ref()
+                    .map(Vec::as_slice);
                 match &attribute.data {
                     AttributeData::ScalarReal(values) => {
                         let filtered_values = filtered_quantity(&values, particles_inside);
@@ -1532,7 +1538,7 @@ pub fn reconstruction_pipeline<'a, I: Index, R: Real>(
             } = mesh;
 
             // Avoid copy if original mesh was not modified
-            let (mesh, take_mesh) = if std::ptr::eq(mesh.as_ref(), reconstruction.mesh())
+            let (mesh, take_mesh) = if std::ptr::eq(mesh.as_ref(), &reconstruction.mesh)
                 && !postprocessing.output_raw_mesh
             {
                 // Ensure that borrow of reconstruction is dropped
@@ -1602,7 +1608,7 @@ pub(crate) fn reconstruction_pipeline_from_path<I: Index, R: Real>(
     if postprocessing.output_raw_mesh {
         profile!("write surface mesh to file");
 
-        let mesh = reconstruction.mesh();
+        let mesh = &reconstruction.mesh;
 
         let output_path = paths
             .output_file

@@ -266,34 +266,6 @@ impl<I: Index, R: Real> Default for SurfaceReconstruction<I, R> {
     }
 }
 
-// TODO: Remove these functions
-impl<I: Index, R: Real> SurfaceReconstruction<I, R> {
-    /// Returns a reference to the surface mesh that is the result of the reconstruction
-    pub fn mesh(&self) -> &TriMesh3d<R> {
-        &self.mesh
-    }
-
-    /// Returns a reference to the global particle density vector if computed during the reconstruction (currently, all reconstruction approaches return this)
-    pub fn particle_densities(&self) -> Option<&Vec<R>> {
-        self.particle_densities.as_ref()
-    }
-
-    /// Returns a reference to the per input particle boolean vector indicating whether the particle was inside the specified AABB (if any)
-    pub fn particle_inside_aabb(&self) -> Option<&Vec<bool>> {
-        self.particle_inside_aabb.as_ref()
-    }
-
-    /// Returns a reference to the global list of per-particle neighborhood lists if computed during the reconstruction (`None` if not specified in the parameters)
-    pub fn particle_neighbors(&self) -> Option<&Vec<Vec<usize>>> {
-        self.particle_neighbors.as_ref()
-    }
-
-    /// Returns a reference to the virtual background grid that was used for marching cubes
-    pub fn grid(&self) -> &UniformGrid<I, R> {
-        &self.grid
-    }
-}
-
 impl<I: Index, R: Real> From<SurfaceReconstruction<I, R>> for TriMesh3d<R> {
     /// Extracts the reconstructed mesh
     fn from(result: SurfaceReconstruction<I, R>) -> Self {
