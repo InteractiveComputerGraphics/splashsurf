@@ -180,6 +180,11 @@ impl PyTriMesh3d {
         }
     }
 
+    /// Returns a copy (deep copy) of this mesh
+    pub fn copy(&self) -> Self {
+        self.clone()
+    }
+
     /// Computes the vertex normals of the mesh using an area weighted average of the adjacent triangle faces
     pub fn vertex_normals_parallel<'py>(
         &self,
@@ -263,6 +268,11 @@ impl PyMixedTriQuadMesh3d {
                 utils::view_vec_generic(mesh.vertices(), this.into_any())
             }
         }
+    }
+
+    /// Returns a copy (deep copy) of this mesh
+    pub fn copy(&self) -> Self {
+        self.clone()
     }
 
     /// Returns a copy of all triangle cells of the mesh as an `Nx3` array of vertex indices
@@ -567,6 +577,25 @@ impl PyMeshWithData {
 #[gen_stub_pymethods]
 #[pymethods]
 impl PyMeshWithData {
+    /// Wraps an existing mesh object (either `TriMesh3d` or `MixedTriQuadMesh3d`) such that data (point and cell attributes) can be attached to it
+    #[new]
+    fn py_new<'py>(
+        #[gen_stub(override_type(type_repr="typing.Union[TriMesh3d, MeshWithData]", imports=()))]
+        mesh: Bound<'py, PyAny>,
+    ) -> PyResult<Self> {
+        if mesh.is_instance_of::<PyTriMesh3d>() {
+            let mesh = mesh.downcast_into::<PyTriMesh3d>()?;
+            PyMeshWithData::try_from_pymesh(mesh.py(), mesh.unbind())
+        } else if mesh.is_instance_of::<PyMixedTriQuadMesh3d>() {
+            let mesh = mesh.downcast_into::<PyMixedTriQuadMesh3d>()?;
+            PyMeshWithData::try_from_pymesh(mesh.py(), mesh.unbind())
+        } else {
+            Err(PyTypeError::new_err(
+                "unsupported mesh type, expected TriMesh3d or MixedTriQuadMesh3d",
+            ))
+        }
+    }
+
     /// Numpy dtype of the underlying scalar type (either ``np.float32`` or ``np.float64``)
     #[getter]
     pub fn dtype<'py>(&self, py: Python<'py>) -> Bound<'py, PyArrayDescr> {
@@ -664,6 +693,34 @@ impl PyMeshWithData {
             PyMesh3dData::Tri3d(mesh) => mesh.borrow(py).clone().into_bound_py_any(py),
             PyMesh3dData::MixedTriQuad3d(mesh) => mesh.borrow(py).clone().into_bound_py_any(py),
         }
+    }
+
+    /// Returns a copy (deep copy) of this mesh with its data and attributes
+    pub fn copy<'py>(&self, py: Python<'py>) -> PyResult<Self> {
+        Ok(Self {
+            mesh: match &self.mesh {
+                PyMesh3dData::Tri3d(mesh) => {
+                    PyMesh3dData::from(mesh.borrow(py).clone().into_pyobject(py)?.unbind())
+                }
+                PyMesh3dData::MixedTriQuad3d(mesh) => {
+                    PyMesh3dData::from(mesh.borrow(py).clone().into_pyobject(py)?.unbind())
+                }
+            },
+            point_attributes: self
+                .point_attributes
+                .iter()
+                .map(|attr| -> PyResult<Py<PyMeshAttribute>> {
+                    Ok(attr.borrow(py).clone().into_pyobject(py)?.unbind())
+                })
+                .collect::<Result<Vec<_>, _>>()?,
+            cell_attributes: self
+                .cell_attributes
+                .iter()
+                .map(|attr| -> PyResult<Py<PyMeshAttribute>> {
+                    Ok(attr.borrow(py).clone().into_pyobject(py)?.unbind())
+                })
+                .collect::<Result<Vec<_>, _>>()?,
+        })
     }
 
     /// Attaches a point attribute to the mesh

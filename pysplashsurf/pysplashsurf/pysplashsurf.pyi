@@ -94,9 +94,17 @@ class MeshWithData:
         r"""
         The attributes attached to the cells (triangles or quads) of the mesh
         """
+    def __new__(cls, mesh:typing.Union[TriMesh3d, MeshWithData]) -> MeshWithData:
+        r"""
+        Wraps an existing mesh object (either `TriMesh3d` or `MixedTriQuadMesh3d`) such that data (point and cell attributes) can be attached to it
+        """
     def copy_mesh(self) -> typing.Union[TriMesh3d, MixedTriQuadMesh3d]:
         r"""
         Returns a copy of the contained mesh without associated data and attributes
+        """
+    def copy(self) -> MeshWithData:
+        r"""
+        Returns a copy (deep copy) of this mesh with its data and attributes
         """
     def add_point_attribute(self, name:builtins.str, attribute:numpy.typing.NDArray[typing.Any]) -> None:
         r"""
@@ -138,6 +146,10 @@ class MixedTriQuadMesh3d:
     def vertices(self) -> numpy.typing.NDArray[typing.Any]:
         r"""
         The `Nx3` array of vertex positions of the mesh
+        """
+    def copy(self) -> MixedTriQuadMesh3d:
+        r"""
+        Returns a copy (deep copy) of this mesh
         """
     def get_triangles(self) -> numpy.typing.NDArray[numpy.uint64]:
         r"""
@@ -234,6 +246,10 @@ class TriMesh3d:
     def triangles(self) -> numpy.typing.NDArray[numpy.uint64]:
         r"""
         The `Mx3` array of vertex indices per triangle
+        """
+    def copy(self) -> TriMesh3d:
+        r"""
+        Returns a copy (deep copy) of this mesh
         """
     def vertex_normals_parallel(self) -> numpy.typing.NDArray[typing.Any]:
         r"""
