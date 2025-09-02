@@ -2,11 +2,15 @@
 
 ![splashsurf logo](https://raw.githubusercontent.com/InteractiveComputerGraphics/splashsurf/main/logos/logo_small.svg "splashsurf")
 
+![PyPI - Version](https://img.shields.io/pypi/v/pysplashsurf) 
+![PyPI - Python Version](https://img.shields.io/pypi/pyversions/pysplashsurf)
+
+
 pySplashsurf provides Python bindings for `splashsurf`, an open source surface reconstruction library for particle data from SPH simulations.
 Detailed information on the surface reconstruction and library itself and its API can be found on the [project website (splashsurf.physics-simulation.org)](https://splashsurf.physics-simulation.org/) or the [main repository](https://github.com/InteractiveComputerGraphics/splashsurf).
 
 ## Installation
-Requires Python version 3.7+
+Requires Python version 3.10+
 ```
 pip install pysplashsurf
 ```
@@ -41,9 +45,11 @@ import meshio
 import numpy as np
 import pysplashsurf
 
+# Load particles from mesh file
 mesh = meshio.read("input.vtk")
 particles = np.array(mesh.points, dtype=np.float64)
 
+# Reconstruct the points/particles with some post-processing
 mesh_with_data, reconstruction = pysplashsurf.reconstruction_pipeline(
     particles,
     particle_radius=0.025,
@@ -61,8 +67,9 @@ mesh_with_data, reconstruction = pysplashsurf.reconstruction_pipeline(
     subdomain_num_cubes_per_dim=64,
     output_mesh_smoothing_weights=True
 )
-    
-pysplashsurf.write_to_file(mesh_with_data, "output.vtk")
+
+# Write the mesh with attributes to file using meshio
+mesh_with_data.write_to_file("surface.vtk")
 ```
 The `reconstruction_pipeline` method provides (mostly) the same arguments as the splashsurf binary CLI.
 It may be necessary to specify the `dtype` of a function input (as done for `particles` in the example) so that the bindings know what data type to use internally.
@@ -85,4 +92,4 @@ To generate the Sphinx documentation, make sure that the package is installed th
 The resulting HTML files will be in `pysplashsurf/pysplashsurf/docs/build/html`.
 
 ### Stub File Generation
-To automatically generate a stub file for the package, run `cargo run --bin stub_gen` from the root project folder (from `pysplashsurf/`).
+To automatically generate a stub file for the package, run `cargo run --bin stub_gen --no-default-features` from the root project folder (from `pysplashsurf/`).

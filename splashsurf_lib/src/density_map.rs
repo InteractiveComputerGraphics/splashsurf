@@ -3,7 +3,6 @@
 //! This module provides functions for the computation of per-particle densities and the discretization
 //! of the resulting fluid density field by mapping onto a discrete background grid.
 //!
-//! Currently, only sparse density maps are implemented.
 //!
 //! ## Sparse density maps
 //! The [`DensityMap`] stores fluid density values for each point of an implicit background grid
@@ -12,8 +11,14 @@
 //! In case of a sparse density map, the values are stored in a hashmap. The keys are so called
 //! "flat point indices". These are computed from the background grid point coordinates `(i,j,k)`
 //! analogous to multidimensional array index flattening. That means for a grid with dimensions
-//! `[n_x, n_y, n_z]`, the flat point index is given by the expression `i*n_x + j*n_y + k*n_z`.
+//! `[n_x, n_y, n_z]`, the flat point index is given by the expression `i*n_y*n_z + j*n_z + k`.
 //! For these point index operations, the [`UniformGrid`] is used.
+//!
+//! ## Dense density maps
+//! For some applications, it might be desirable to allocate the storage for all grid points
+//! in a contiguous array. This is supported by the [`DensityMap::Dense`] variant. The values
+//! can either be borrowed (a slice) or owned (a vector). Background grid coordinates are mapped
+//! to indices in this array (and vice versa) using the same flattening scheme as for the sparse maps.
 //!
 //! Note that all density mapping functions always use the global background grid for flat point
 //! indices, even if the density map is only generated for a smaller subdomain.
@@ -29,6 +34,7 @@ use dashmap::ReadOnlyView as ReadDashMap;
 use log::{info, trace, warn};
 use nalgebra::Vector3;
 use rayon::prelude::*;
+use std::borrow::Cow;
 use std::cell::RefCell;
 use thiserror::Error as ThisError;
 use thread_local::ThreadLocal;
@@ -217,37 +223,59 @@ pub fn parallel_compute_particle_densities<I: Index, R: Real>(
 /// A sparse density map
 ///
 /// The density map contains values for all points of the background grid where the density is not
-/// trivially zero (which is the case when a point is outside of the compact support of any particles).
+/// trivially zero (which is the case when a point is outside the compact support of any particles).
 #[derive(Clone, Debug)]
-pub enum DensityMap<I: Index, R: Real> {
+pub enum DensityMap<'a, I: Index, R: Real> {
     Standard(MapType<I, R>),
     DashMap(ReadDashMap<I, R, HashState>),
+    Dense(Cow<'a, [R]>),
 }
 
-impl<I: Index, R: Real> Default for DensityMap<I, R> {
+/// Owned version of [`DensityMap`] (with static lifetime)
+pub type OwnedDensityMap<I, R> = DensityMap<'static, I, R>;
+
+impl<I: Index, R: Real> Default for OwnedDensityMap<I, R> {
     fn default() -> Self {
         DensityMap::Standard(MapType::default())
     }
 }
 
-impl<I: Index, R: Real> From<MapType<I, R>> for DensityMap<I, R> {
+impl<I: Index, R: Real> From<MapType<I, R>> for OwnedDensityMap<I, R> {
     fn from(map: MapType<I, R>) -> Self {
         Self::Standard(map)
     }
 }
 
-impl<I: Index, R: Real> From<ParallelMapType<I, R>> for DensityMap<I, R> {
+impl<I: Index, R: Real> From<ParallelMapType<I, R>> for OwnedDensityMap<I, R> {
     fn from(map: ParallelMapType<I, R>) -> Self {
         Self::DashMap(map.into_read_only())
     }
 }
 
-impl<I: Index, R: Real> DensityMap<I, R> {
+impl<I: Index, R: Real> From<Vec<R>> for DensityMap<'static, I, R> {
+    fn from(values: Vec<R>) -> Self {
+        Self::Dense(values.into())
+    }
+}
+
+impl<'a, I: Index, R: Real> From<&'a [R]> for DensityMap<'a, I, R> {
+    fn from(values: &'a [R]) -> Self {
+        Self::Dense(values.into())
+    }
+}
+
+impl<'a, I: Index, R: Real> DensityMap<'a, I, R> {
     /// Converts the contained map into a vector of tuples of (flat_point_index, density)
     pub fn to_vec(&self) -> Vec<(I, R)> {
         match self {
             DensityMap::Standard(map) => map.iter().map(|(&i, &r)| (i, r)).collect(),
             DensityMap::DashMap(map) => map.iter().map(|(&i, &r)| (i, r)).collect(),
+            DensityMap::Dense(values) => values
+                .iter()
+                .copied()
+                .enumerate()
+                .map(|(i, r)| (I::from_usize(i).unwrap(), r))
+                .collect(),
         }
     }
 
@@ -256,6 +284,7 @@ impl<I: Index, R: Real> DensityMap<I, R> {
         match self {
             DensityMap::Standard(map) => map.len(),
             DensityMap::DashMap(map) => map.len(),
+            DensityMap::Dense(values) => values.len(),
         }
     }
 
@@ -264,6 +293,7 @@ impl<I: Index, R: Real> DensityMap<I, R> {
         match self {
             DensityMap::Standard(map) => map.get(&flat_point_index).copied(),
             DensityMap::DashMap(map) => map.get(&flat_point_index).copied(),
+            DensityMap::Dense(values) => values.get(flat_point_index.to_usize()?).copied(),
         }
     }
 
@@ -273,6 +303,9 @@ impl<I: Index, R: Real> DensityMap<I, R> {
         match self {
             DensityMap::Standard(map) => map.iter().for_each(|(&i, &r)| f(i, r)),
             DensityMap::DashMap(map) => map.iter().for_each(|(&i, &r)| f(i, r)),
+            DensityMap::Dense(values) => values.iter().copied().enumerate().for_each(|(i, r)| {
+                f(I::from_usize(i).unwrap(), r);
+            }),
         }
     }
 }
@@ -339,7 +372,7 @@ pub fn sequential_generate_sparse_density_map<I: Index, R: Real>(
     particle_rest_mass: R,
     compact_support_radius: R,
     cube_size: R,
-) -> Result<DensityMap<I, R>, DensityMapError<R>> {
+) -> Result<OwnedDensityMap<I, R>, DensityMapError<R>> {
     profile!("sequential_generate_sparse_density_map");
 
     let mut sparse_densities = new_map();
@@ -386,7 +419,7 @@ pub fn parallel_generate_sparse_density_map<I: Index, R: Real>(
     particle_rest_mass: R,
     compact_support_radius: R,
     cube_size: R,
-) -> Result<DensityMap<I, R>, DensityMapError<R>> {
+) -> Result<OwnedDensityMap<I, R>, DensityMapError<R>> {
     profile!("parallel_generate_sparse_density_map");
 
     // Each thread will write to its own local density map
@@ -518,6 +551,12 @@ pub(crate) fn compute_kernel_evaluation_radius<I: Index, R: Real>(
     compact_support_radius: R,
     cube_size: R,
 ) -> GridKernelExtents<I, R> {
+    assert!(
+        compact_support_radius >= R::zero(),
+        "compact support radius must be non-negative"
+    );
+    assert!(cube_size > R::zero(), "cube size must be positive");
+
     // The number of cells in each direction from a particle that can be affected by its compact support
     let half_supported_cells_real = (compact_support_radius / cube_size).ceil();
     // Convert to index type for cell and point indexing

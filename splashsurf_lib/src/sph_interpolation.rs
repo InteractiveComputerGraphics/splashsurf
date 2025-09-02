@@ -73,6 +73,11 @@ impl<R: Real> SphInterpolator<R> {
         }
     }
 
+    /// Returns the number of particles stored in the interpolator
+    pub fn size(&self) -> usize {
+        self.tree.size()
+    }
+
     /// Interpolates surface normals (i.e. normalized SPH gradient of the indicator function) of the fluid to the given points using SPH interpolation, appends to the given vector
     pub fn interpolate_normals_inplace(
         &self,

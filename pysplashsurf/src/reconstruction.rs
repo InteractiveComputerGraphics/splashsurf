@@ -1,184 +1,117 @@
-use numpy::{PyArray2, PyReadonlyArray2};
+use crate::mesh::PyTriMesh3d;
+use crate::neighborhood_search::PyNeighborhoodLists;
+use crate::uniform_grid::PyUniformGrid;
+use crate::utils;
+use anyhow::anyhow;
+use ndarray::ArrayView1;
+use numpy as np;
+use numpy::prelude::*;
+use numpy::{Element, PyArray1, PyArray2, PyUntypedArray};
 use pyo3::{Bound, prelude::*};
 use pyo3_stub_gen::derive::*;
 use splashsurf_lib::{
-    Aabb3d, GridDecompositionParameters, Index, Real, SpatialDecomposition, SurfaceReconstruction,
-    nalgebra::Vector3, reconstruct_surface,
+    Aabb3d, GridDecompositionParameters, Real, SpatialDecomposition, SurfaceReconstruction,
+    nalgebra::Vector3,
 };
+use utils::{IndexT, PyFloatVecWrapper};
 
-use crate::{
-    mesh::{TriMesh3dF32, TriMesh3dF64},
-    uniform_grid::{UniformGridF32, UniformGridF64},
-};
-
-macro_rules! create_reconstruction_interface {
-    ($name: ident, $type: ident, $mesh_class: ident, $grid_class: ident) => {
-        /// SurfaceReconstruction wrapper
-        #[gen_stub_pyclass]
-        #[pyclass]
-        pub struct $name {
-            pub inner: SurfaceReconstruction<i64, $type>,
-        }
-
-        impl $name {
-            pub fn new(data: SurfaceReconstruction<i64, $type>) -> Self {
-                Self { inner: data }
-            }
-        }
-
-        #[gen_stub_pymethods]
-        #[pymethods]
-        impl $name {
-            /// PyTrimesh3d clone of the contained mesh
-            #[getter]
-            fn mesh(&self) -> $mesh_class {
-                $mesh_class::new(self.inner.mesh().clone())
-            }
-
-            /// PyUniformGrid clone of the contained grid
-            #[getter]
-            fn grid(&self) -> $grid_class {
-                $grid_class::new(self.inner.grid().clone())
-            }
-
-            // Doesn't work because SurfaceReconstruction.mesh() only returns an immutable reference
-            // /// Returns PyTrimesh3dF32/F64 without copying the mesh data, removes the mesh from the object
-            // fn take_mesh(&mut self) -> $mesh_class {
-            //     let mesh = std::mem::take(&mut self.inner.mesh());
-            //     $mesh_class::new(mesh)
-            // }
-
-            /// Returns a reference to the global particle density vector if computed during the reconstruction (currently, all reconstruction approaches return this)
-            fn particle_densities(&self) -> &Vec<$type> {
-                self.inner
-                    .particle_densities()
-                    .ok_or_else(|| {
-                        anyhow::anyhow!("Surface Reconstruction did not return particle densities")
-                    })
-                    .unwrap()
-            }
-
-            /// Returns a reference to the global list of per-particle neighborhood lists if computed during the reconstruction (`None` if not specified in the parameters)
-            fn particle_neighbors(&self) -> Option<&Vec<Vec<usize>>> {
-                self.inner.particle_neighbors()
-            }
-        }
-    };
+/// Result returned by surface reconstruction functions with surface mesh and other data
+#[gen_stub_pyclass]
+#[pyclass]
+#[pyo3(name = "SurfaceReconstruction")]
+pub struct PySurfaceReconstruction {
+    grid: Py<PyUniformGrid>,
+    particle_densities: Option<PyFloatVecWrapper>,
+    particle_inside_aabb: Option<Vec<bool>>,
+    particle_neighbors: Option<Py<PyNeighborhoodLists>>,
+    mesh: Py<PyTriMesh3d>,
 }
 
-create_reconstruction_interface!(SurfaceReconstructionF64, f64, TriMesh3dF64, UniformGridF64);
-create_reconstruction_interface!(SurfaceReconstructionF32, f32, TriMesh3dF32, UniformGridF32);
+impl PySurfaceReconstruction {
+    pub fn try_from_generic<'py, R: Real + Element>(
+        py: Python<'py>,
+        reconstruction: SurfaceReconstruction<IndexT, R>,
+    ) -> PyResult<Self> {
+        Ok(Self {
+            grid: Py::new(py, PyUniformGrid::try_from_generic(reconstruction.grid)?)?,
+            particle_densities: reconstruction
+                .particle_densities
+                .map(PyFloatVecWrapper::try_from_generic)
+                .transpose()?,
+            particle_inside_aabb: reconstruction.particle_inside_aabb,
+            particle_neighbors: reconstruction
+                .particle_neighbors
+                .map(|n| Py::new(py, PyNeighborhoodLists::from(n)))
+                .transpose()?,
+            mesh: Py::new(py, PyTriMesh3d::try_from_generic(reconstruction.mesh)?)?,
+        })
+    }
+}
 
-/// Reconstruct the surface from only particle positions
-pub fn reconstruct_surface_py<I: Index, R: Real>(
-    particles: &[Vector3<R>],
-    particle_radius: R,
-    rest_density: R,
-    smoothing_length: R,
-    cube_size: R,
-    iso_surface_threshold: R,
-    multi_threading: bool,
-    global_neighborhood_list: bool,
-    subdomain_grid: bool,
-    subdomain_grid_auto_disable: bool,
-    subdomain_num_cubes_per_dim: u32,
-    aabb_min: Option<[R; 3]>,
-    aabb_max: Option<[R; 3]>,
-) -> SurfaceReconstruction<I, R> {
-    let aabb;
-    if let (Some(aabb_min), Some(aabb_max)) = (aabb_min, aabb_max) {
-        // Convert the min and max arrays to Vector3
-        aabb = Some(Aabb3d::new(
-            Vector3::from(aabb_min),
-            Vector3::from(aabb_max),
-        ));
-    } else {
-        aabb = None;
+#[gen_stub_pymethods]
+#[pymethods]
+impl PySurfaceReconstruction {
+    /// The marching cubes grid parameters used for the surface reconstruction
+    #[getter]
+    fn grid<'py>(this: Bound<'py, Self>) -> Py<PyUniformGrid> {
+        this.borrow().grid.clone_ref(this.py())
     }
 
-    let spatial_decomposition;
-    if subdomain_grid {
-        spatial_decomposition = SpatialDecomposition::UniformGrid(GridDecompositionParameters {
-            subdomain_num_cubes_per_dim,
-            auto_disable: subdomain_grid_auto_disable,
-        });
-    } else {
-        spatial_decomposition = SpatialDecomposition::None;
+    /// The global array of particle densities (`None` if they were only computed locally)
+    #[getter]
+    fn particle_densities<'py>(
+        this: Bound<'py, Self>,
+    ) -> PyResult<Option<Bound<'py, PyUntypedArray>>> {
+        this.borrow()
+            .particle_densities
+            .as_ref()
+            .map(|p| p.view(this.into_any()))
+            .transpose()
     }
 
-    let params = splashsurf_lib::Parameters {
-        particle_radius,
-        rest_density,
-        // Compact support is twice the smoothing length
-        compact_support_radius: (smoothing_length * particle_radius) * R::from_float(2.0),
-        cube_size: cube_size * particle_radius,
-        iso_surface_threshold,
-        particle_aabb: aabb,
-        enable_multi_threading: multi_threading,
-        spatial_decomposition,
-        global_neighborhood_list,
-    };
+    /// A boolean array indicating whether each particle was inside the AABB used for the reconstruction (`None` if no AABB was set)
+    #[getter]
+    fn particle_inside_aabb<'py>(this: Bound<'py, Self>) -> Option<Bound<'py, PyUntypedArray>> {
+        this.borrow().particle_inside_aabb.as_ref().map(|p| {
+            let array: ArrayView1<bool> = ArrayView1::from(p.as_slice());
+            let pyarray = unsafe { PyArray1::borrow_from_array(&array, this.into_any()) };
+            pyarray
+                .into_any()
+                .downcast_into::<PyUntypedArray>()
+                .expect("downcast should not fail")
+        })
+    }
 
-    let surface = reconstruct_surface(&particles, &params).unwrap();
+    /// The global neighborhood lists per particle (`None` if they were only computed locally)
+    #[getter]
+    fn particle_neighbors<'py>(this: Bound<'py, Self>) -> Option<Py<PyNeighborhoodLists>> {
+        this.borrow()
+            .particle_neighbors
+            .as_ref()
+            .map(|p| p.clone_ref(this.py()))
+    }
 
-    surface
+    /// The reconstructed triangle mesh
+    #[getter]
+    fn mesh<'py>(this: Bound<'py, Self>) -> Py<PyTriMesh3d> {
+        this.borrow().mesh.clone_ref(this.py())
+    }
 }
 
+/// Performs a surface reconstruction from the given particles without additional post-processing
+///
+/// Note that all parameters use absolute distance units and are not relative to the particle radius.
+#[gen_stub_pyfunction]
 #[pyfunction]
-#[pyo3(name = "reconstruct_surface_f32")]
-#[pyo3(signature = (particles, *, particle_radius, rest_density,
-    smoothing_length, cube_size, iso_surface_threshold, multi_threading=true,
-    global_neighborhood_list=false, subdomain_grid=true, subdomain_grid_auto_disable=true, subdomain_num_cubes_per_dim=64,
+#[pyo3(name = "reconstruct_surface")]
+#[pyo3(signature = (particles, *,
+    particle_radius, rest_density = 1000.0, smoothing_length, cube_size, iso_surface_threshold = 0.6,
+    multi_threading = true, global_neighborhood_list = false,
+    subdomain_grid = true, subdomain_grid_auto_disable = true, subdomain_num_cubes_per_dim = 64,
     aabb_min = None, aabb_max = None
 ))]
-pub fn reconstruct_surface_py_f32<'py>(
-    particles: &Bound<'py, PyArray2<f32>>,
-    particle_radius: f32,
-    rest_density: f32,
-    smoothing_length: f32,
-    cube_size: f32,
-    iso_surface_threshold: f32,
-    multi_threading: bool,
-    global_neighborhood_list: bool,
-    subdomain_grid: bool,
-    subdomain_grid_auto_disable: bool,
-    subdomain_num_cubes_per_dim: u32,
-    aabb_min: Option<[f32; 3]>,
-    aabb_max: Option<[f32; 3]>,
-) -> PyResult<SurfaceReconstructionF32> {
-    let particles: PyReadonlyArray2<f32> = particles.extract()?;
-
-    let particle_positions = particles.as_slice()?;
-    let particle_positions: &[Vector3<f32>] = bytemuck::cast_slice(particle_positions);
-
-    let reconstruction = reconstruct_surface_py::<i64, f32>(
-        particle_positions,
-        particle_radius,
-        rest_density,
-        smoothing_length,
-        cube_size,
-        iso_surface_threshold,
-        multi_threading,
-        global_neighborhood_list,
-        subdomain_grid,
-        subdomain_grid_auto_disable,
-        subdomain_num_cubes_per_dim,
-        aabb_min,
-        aabb_max,
-    );
-
-    Ok(SurfaceReconstructionF32::new(reconstruction.to_owned()))
-}
-
-#[pyfunction]
-#[pyo3(name = "reconstruct_surface_f64")]
-#[pyo3(signature = (particles, *, particle_radius, rest_density,
-    smoothing_length, cube_size, iso_surface_threshold, multi_threading=true,
-    global_neighborhood_list=false, subdomain_grid=true, subdomain_grid_auto_disable=true, subdomain_num_cubes_per_dim=64,
-    aabb_min = None, aabb_max = None
-))]
-pub fn reconstruct_surface_py_f64<'py>(
-    particles: &Bound<'py, PyArray2<f64>>,
+pub fn reconstruct_surface<'py>(
+    particles: &Bound<'py, PyUntypedArray>,
     particle_radius: f64,
     rest_density: f64,
     smoothing_length: f64,
@@ -191,27 +124,54 @@ pub fn reconstruct_surface_py_f64<'py>(
     subdomain_num_cubes_per_dim: u32,
     aabb_min: Option<[f64; 3]>,
     aabb_max: Option<[f64; 3]>,
-) -> PyResult<SurfaceReconstructionF64> {
-    let particles: PyReadonlyArray2<f64> = particles.extract()?;
+) -> PyResult<PySurfaceReconstruction> {
+    let py = particles.py();
 
-    let particle_positions = particles.as_slice()?;
-    let particle_positions: &[Vector3<f64>] = bytemuck::cast_slice(particle_positions);
+    let particle_aabb = aabb_min
+        .zip(aabb_max)
+        .map(|(min, max)| Aabb3d::new(Vector3::from(min), Vector3::from(max)));
 
-    let reconstruction = reconstruct_surface_py::<i64, f64>(
-        particle_positions,
+    let spatial_decomposition = if subdomain_grid {
+        SpatialDecomposition::UniformGrid(GridDecompositionParameters {
+            subdomain_num_cubes_per_dim,
+            auto_disable: subdomain_grid_auto_disable,
+        })
+    } else {
+        SpatialDecomposition::None
+    };
+
+    let parameters = splashsurf_lib::Parameters {
         particle_radius,
         rest_density,
-        smoothing_length,
-        cube_size,
+        compact_support_radius: 2.0 * smoothing_length * particle_radius,
+        cube_size: cube_size * particle_radius,
         iso_surface_threshold,
-        multi_threading,
+        particle_aabb,
+        enable_multi_threading: multi_threading,
+        spatial_decomposition,
         global_neighborhood_list,
-        subdomain_grid,
-        subdomain_grid_auto_disable,
-        subdomain_num_cubes_per_dim,
-        aabb_min,
-        aabb_max,
-    );
+    };
 
-    Ok(SurfaceReconstructionF64::new(reconstruction.to_owned()))
+    let element_type = particles.dtype();
+    if element_type.is_equiv_to(&np::dtype::<f32>(py)) {
+        let particles = particles.downcast::<PyArray2<f32>>()?.try_readonly()?;
+        let particle_positions: &[Vector3<f32>] = bytemuck::cast_slice(particles.as_slice()?);
+        let reconstruction = splashsurf_lib::reconstruct_surface::<IndexT, _>(
+            particle_positions,
+            &parameters
+                .try_convert()
+                .expect("failed to convert reconstruction parameters to f32"),
+        )
+        .map_err(|e| anyhow!(e))?;
+        PySurfaceReconstruction::try_from_generic(py, reconstruction)
+    } else if element_type.is_equiv_to(&np::dtype::<f64>(py)) {
+        let particles = particles.downcast::<PyArray2<f64>>()?.try_readonly()?;
+        let particle_positions: &[Vector3<f64>] = bytemuck::cast_slice(particles.as_slice()?);
+        let reconstruction =
+            splashsurf_lib::reconstruct_surface::<IndexT, _>(particle_positions, &parameters)
+                .map_err(|e| anyhow!(e))?;
+        PySurfaceReconstruction::try_from_generic(py, reconstruction)
+    } else {
+        Err(utils::pyerr_unsupported_scalar())
+    }
 }

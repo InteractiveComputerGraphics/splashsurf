@@ -10,10 +10,19 @@
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
-# import os
-# import sys
-# sys.path.insert(0, os.path.abspath('.'))
-import pysplashsurf
+#import pysplashsurf
+
+import os
+import sys
+# #sys.path.append(os.path.abspath('..'))
+
+from sphinx.ext.autodoc.importer import import_module
+rootpath = '/Users/floeschner/programming/splashsurf/pysplashsurf/pysplashsurf'
+sys_path = list(sys.path)
+sys.path.insert(0, str(rootpath))
+pysplashsurf = import_module('pysplashsurf')
+
+#import pysplashsurf
 
 # -- Project information -----------------------------------------------------
 
@@ -33,6 +42,7 @@ extensions = [
    'numpydoc',
    'myst_parser',
    'sphinx_rtd_theme',
+   'sphinx_autodoc_typehints'
 ]
 
 source_suffix = ['.rst', '.md']
@@ -59,3 +69,12 @@ html_theme = 'sphinx_rtd_theme'
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
 # html_static_path = ['_static']
+
+autodoc_typehints = "both"
+
+always_document_param_types = True
+always_use_bars_union = True
+typehints_document_rtype = False
+typehints_use_rtype = False
+typehints_use_signature = True
+typehints_use_signature_return = True

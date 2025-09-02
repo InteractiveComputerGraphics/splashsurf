@@ -239,15 +239,15 @@ impl<R: Real> Parameters<R> {
 #[derive(Clone, Debug)]
 pub struct SurfaceReconstruction<I: Index, R: Real> {
     /// Background grid that was used as a basis for generating the density map for marching cubes
-    grid: UniformGrid<I, R>,
+    pub grid: UniformGrid<I, R>,
     /// Per particle densities (contains only data of particles inside the domain)
-    particle_densities: Option<Vec<R>>,
+    pub particle_densities: Option<Vec<R>>,
     /// If an AABB was specified to restrict the reconstruction, this stores per input particle whether they were inside
-    particle_inside_aabb: Option<Vec<bool>>,
+    pub particle_inside_aabb: Option<Vec<bool>>,
     /// Per particles neighbor lists
-    particle_neighbors: Option<Vec<Vec<usize>>>,
+    pub particle_neighbors: Option<Vec<Vec<usize>>>,
     /// Surface mesh that is the result of the surface reconstruction
-    mesh: TriMesh3d<R>,
+    pub mesh: TriMesh3d<R>,
     /// Workspace with allocated memory for subsequent surface reconstructions
     workspace: ReconstructionWorkspace<R>,
 }
@@ -266,6 +266,7 @@ impl<I: Index, R: Real> Default for SurfaceReconstruction<I, R> {
     }
 }
 
+// TODO: Remove these functions
 impl<I: Index, R: Real> SurfaceReconstruction<I, R> {
     /// Returns a reference to the surface mesh that is the result of the reconstruction
     pub fn mesh(&self) -> &TriMesh3d<R> {

@@ -3,7 +3,7 @@
 
 ```{toctree}
 :caption: Table of Contents
-methods
-classes
 api
+functions
+classes
 ```

@@ -230,7 +230,7 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
     }
 
     /// Constructs a degenerate grid with zero extents, zero cells and zero points
-    pub(crate) fn new_zero() -> Self {
+    pub fn new_zero() -> Self {
         Self {
             aabb: Aabb3d::new(Vector3::zeros(), Vector3::zeros()),
             cell_size: R::zero(),
@@ -435,6 +435,9 @@ impl<I: Index, R: Real> UniformCartesianCubeGrid3d<I, R> {
     }
 
     /// Returns the grid cell index triplet of the cell enclosing a point with the given coordinates in space
+    ///
+    /// Note that this function does not check if the point is part of the grid and thus might also
+    /// return negative indices or indices larger than the number of cells per dimension.
     #[inline(always)]
     pub fn enclosing_cell(&self, coord: &Vector3<R>) -> [I; 3] {
         let normalized_coord = (coord - self.aabb.min()) / self.cell_size;

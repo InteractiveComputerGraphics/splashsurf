@@ -8,15 +8,18 @@ license.workspace = true
 [dependencies]
 splashsurf = { path = "../splashsurf" }
 splashsurf_lib = { path = "../splashsurf_lib" }
-pyo3 = { version = "0.25.0", features = ["anyhow"] }
-numpy = "0.25.0"
+pyo3 = { version = "0.26", features = ["anyhow"] }
+numpy = "0.26"
 ndarray = "0.16.1"
-bytemuck = { version = "1.23.0", features = ["extern_crate_alloc"] }
+bytemuck = { version = "1.23", features = ["extern_crate_alloc"] }
 anyhow = "1.0.98"
-pyo3-stub-gen = "0.12.0"
+pyo3-stub-gen = "0.13"
+
+[build-dependencies]
+pyo3-build-config = { version = "0.26" , features = ["resolve-config"] }
 
 [features]
-extension-module = ["pyo3/extension-module", "pyo3/abi3-py37"]
+extension-module = ["pyo3/extension-module", "pyo3/abi3-py310"]
 default = ["extension-module"]
 
 [lib]

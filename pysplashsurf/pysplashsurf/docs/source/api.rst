@@ -1,36 +1,47 @@
-API
-===
+API Overview
+============
 
 .. currentmodule:: pysplashsurf
 
-Methods
--------
+The main functionality of ``pysplashsurf`` is provided by the :py:func:`reconstruction_pipeline` function which implements all features of the ``splashsurf`` CLI including the surface reconstruction from particles and optional post-processing, and the :py:func:`reconstruct_surface` function which only performs the surface reconstruction itself.
+
+**Data types:** The functions of the package accept Python ``float`` for scalar parameters and Numpy arrays of data-type ``np.float32`` or ``np.float64`` for array inputs (e.g. particle positions).
+Outputs will be of the same float precision as the input arrays.
+Array-like inputs have to be contiguous (C-order) in memory.
+All array-like and object type (e.g. :py:class:`Aabb3d`) inputs to a function call have to use the same float data-type.
+
+Functions
+---------
 
 .. autosummary::
+    barnacle_decimation
     check_mesh_consistency
     convert_tris_to_quads
-    create_aabb_object
-    create_aabb_object_from_points
-    create_mesh_with_data_object
-    create_sph_interpolator_object
-    decimation
+    laplacian_smoothing_normals_parallel
+    laplacian_smoothing_parallel
+    marching_cubes
     marching_cubes_cleanup
     neighborhood_search_spatial_hashing_parallel
-    par_laplacian_smoothing_inplace
-    par_laplacian_smoothing_normals_inplace
     reconstruct_surface
     reconstruction_pipeline
-    write_to_file
 
 Classes
 -------
 
 .. autosummary::
-    Aabb3dF32
-    MixedTriQuadMesh3dF32
-    MixedTriQuadMeshWithDataF32
-    SphInterpolatorF32
-    SurfaceReconstructionF32
-    TriMesh3dF32
-    TriMeshWithDataF32
-    UniformGridF32
+    Aabb3d
+    MeshAttribute
+    MeshWithData
+    MixedTriQuadMesh3d
+    NeighborhoodLists
+    SphInterpolator
+    SurfaceReconstruction
+    TriMesh3d
+    UniformGrid
+    VertexVertexConnectivity
+
+Enums
+-----
+
+.. autosummary::
+    MeshType
