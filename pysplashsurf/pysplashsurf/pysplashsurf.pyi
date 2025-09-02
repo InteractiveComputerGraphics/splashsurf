@@ -65,6 +65,16 @@ class MeshWithData:
         Numpy dtype of the underlying scalar type (either ``np.float32`` or ``np.float64``)
         """
     @property
+    def nvertices(self) -> builtins.int:
+        r"""
+        Number of vertices in the mesh
+        """
+    @property
+    def ncells(self) -> builtins.int:
+        r"""
+        Number of cells (triangles or quads) in the mesh
+        """
+    @property
     def mesh_type(self) -> MeshType:
         r"""
         Type of the underlying mesh
@@ -87,6 +97,28 @@ class MeshWithData:
     def copy_mesh(self) -> typing.Union[TriMesh3d, MixedTriQuadMesh3d]:
         r"""
         Returns a copy of the contained mesh without associated data and attributes
+        """
+    def add_point_attribute(self, name:builtins.str, attribute:numpy.typing.NDArray[typing.Any]) -> None:
+        r"""
+        Attaches a point attribute to the mesh
+        
+        There has to be exactly one attribute value per vertex in the mesh.
+        As attribute data, the following numpy array types are supported:
+         - 1D array with shape (N,) of `np.uint64`
+         - 1D array with shape (N,) of the mesh scalar type (`np.float32` or `np.float64`)
+         - 2D array with shape (N,3) of the mesh scalar type (`np.float32` or `np.float64`)
+        The data is copied into the mesh object.
+        """
+    def add_cell_attribute(self, name:builtins.str, attribute:numpy.typing.NDArray[typing.Any]) -> None:
+        r"""
+        Attaches a cell attribute to the mesh
+        
+        There has to be exactly one attribute value per cell in the mesh.
+        As attribute data, the following numpy array types are supported:
+         - 1D array with shape (N,) of `np.uint64`
+         - 1D array with shape (N,) of the mesh scalar type (`np.float32` or `np.float64`)
+         - 2D array with shape (N,3) of the mesh scalar type (`np.float32` or `np.float64`)
+        The data is copied into the mesh object.
         """
     def write_to_file(self, path:builtins.str, *, file_format:typing.Optional[builtins.str]='vtk42') -> None:
         r"""

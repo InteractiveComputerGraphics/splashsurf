@@ -2,10 +2,11 @@ use bytemuck::{NoUninit, Pod};
 use ndarray::Array2;
 use numpy as np;
 use numpy::prelude::*;
-use numpy::{Element, PyArray, PyArray2, PyArrayDescr, PyUntypedArray};
+use numpy::{Element, PyArray, PyArray1, PyArray2, PyArrayDescr, PyUntypedArray};
 use pyo3::IntoPyObjectExt;
+use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::{IntoPyDict, PyDict};
+use pyo3::types::{IntoPyDict, PyDict, PyTuple};
 use pyo3_stub_gen::derive::*;
 use splashsurf_lib::mesh::TriangleCell;
 use splashsurf_lib::{
@@ -16,6 +17,7 @@ use splashsurf_lib::{
     },
     nalgebra::{Unit, Vector3},
 };
+use std::ops::Deref;
 
 use crate::NumpyUsize;
 use crate::utils;
@@ -360,6 +362,37 @@ pub struct PyMeshAttribute {
 enum_wrapper_impl_from!(PyMeshAttribute, OwnedMeshAttribute<f32> => PyMeshAttributeData::F32);
 enum_wrapper_impl_from!(PyMeshAttribute, OwnedMeshAttribute<f64> => PyMeshAttributeData::F64);
 
+impl PyMeshAttribute {
+    pub fn try_from_generic<'py, R: Real + Element>(
+        name: String,
+        data: Bound<'py, PyUntypedArray>,
+    ) -> PyResult<Self>
+    where
+        PyMeshAttribute: From<OwnedMeshAttribute<R>>,
+    {
+        let data = if let Ok(data) = data.downcast::<PyArray1<u64>>() {
+            OwnedAttributeData::ScalarU64(data.try_readonly()?.as_array().to_vec().into())
+        } else if let Ok(data) = data.downcast::<PyArray1<R>>() {
+            OwnedAttributeData::ScalarReal(data.try_readonly()?.as_array().to_vec().into())
+        } else if let Ok(data) = data.downcast::<PyArray2<R>>() {
+            let data_vec = data.try_readonly()?.as_slice()?.to_vec();
+            if data.shape()[1] == 1 {
+                OwnedAttributeData::ScalarReal(bytemuck::cast_vec(data_vec).into())
+            } else if data.shape()[1] == 3 {
+                OwnedAttributeData::Vector3Real(bytemuck::cast_vec(data_vec).into())
+            } else {
+                return Err(PyValueError::new_err(
+                    "expected Nx1 or Nx3 array for Vector3Real attribute data",
+                ));
+            }
+        } else {
+            return Err(PyTypeError::new_err("unsupported attribute data type"));
+        };
+
+        Ok(Self::from(OwnedMeshAttribute { name, data }))
+    }
+}
+
 #[gen_stub_pymethods]
 #[pymethods]
 impl PyMeshAttribute {
@@ -543,6 +576,36 @@ impl PyMeshWithData {
         }
     }
 
+    /// Number of vertices in the mesh
+    #[getter]
+    pub fn nvertices<'py>(&self, py: Python<'py>) -> usize {
+        match &self.mesh {
+            PyMesh3dData::Tri3d(mesh) => match &mesh.borrow(py).deref().inner {
+                PyTriMesh3dData::F32(mesh) => mesh.vertices.len(),
+                PyTriMesh3dData::F64(mesh) => mesh.vertices.len(),
+            },
+            PyMesh3dData::MixedTriQuad3d(mesh) => match &mesh.borrow(py).deref().inner {
+                PyMixedTriQuadMesh3dData::F32(mesh) => mesh.vertices.len(),
+                PyMixedTriQuadMesh3dData::F64(mesh) => mesh.vertices.len(),
+            },
+        }
+    }
+
+    /// Number of cells (triangles or quads) in the mesh
+    #[getter]
+    pub fn ncells<'py>(&self, py: Python<'py>) -> usize {
+        match &self.mesh {
+            PyMesh3dData::Tri3d(mesh) => match &mesh.borrow(py).deref().inner {
+                PyTriMesh3dData::F32(mesh) => mesh.triangles.len(),
+                PyTriMesh3dData::F64(mesh) => mesh.triangles.len(),
+            },
+            PyMesh3dData::MixedTriQuad3d(mesh) => match &mesh.borrow(py).deref().inner {
+                PyMixedTriQuadMesh3dData::F32(mesh) => mesh.cells.len(),
+                PyMixedTriQuadMesh3dData::F64(mesh) => mesh.cells.len(),
+            },
+        }
+    }
+
     /// Type of the underlying mesh
     #[getter]
     pub fn mesh_type(&self) -> MeshType {
@@ -601,6 +664,78 @@ impl PyMeshWithData {
             PyMesh3dData::Tri3d(mesh) => mesh.borrow(py).clone().into_bound_py_any(py),
             PyMesh3dData::MixedTriQuad3d(mesh) => mesh.borrow(py).clone().into_bound_py_any(py),
         }
+    }
+
+    /// Attaches a point attribute to the mesh
+    ///
+    /// There has to be exactly one attribute value per vertex in the mesh.
+    /// As attribute data, the following numpy array types are supported:
+    ///  - 1D array with shape (N,) of `np.uint64`
+    ///  - 1D array with shape (N,) of the mesh scalar type (`np.float32` or `np.float64`)
+    ///  - 2D array with shape (N,3) of the mesh scalar type (`np.float32` or `np.float64`)
+    /// The data is copied into the mesh object.
+    pub fn add_point_attribute<'py>(
+        &mut self,
+        py: Python<'py>,
+        name: String,
+        attribute: Bound<'py, PyUntypedArray>,
+    ) -> PyResult<()> {
+        assert_eq!(
+            attribute.shape()[0],
+            self.nvertices(py),
+            "number of attribute values must match number of vertices in the mesh"
+        );
+
+        let dtype = self.dtype(py);
+        let attribute = if dtype.is_equiv_to(&np::dtype::<f32>(py)) {
+            PyMeshAttribute::try_from_generic::<f32>(name, attribute)?
+        } else if dtype.is_equiv_to(&np::dtype::<f64>(py)) {
+            PyMeshAttribute::try_from_generic::<f64>(name, attribute)?
+        } else {
+            return Err(PyTypeError::new_err(
+                "unsupported dtype for mesh vertices (expected float32 or float64)",
+            ));
+        };
+
+        self.point_attributes
+            .push(attribute.into_pyobject(py)?.unbind());
+        Ok(())
+    }
+
+    /// Attaches a cell attribute to the mesh
+    ///
+    /// There has to be exactly one attribute value per cell in the mesh.
+    /// As attribute data, the following numpy array types are supported:
+    ///  - 1D array with shape (N,) of `np.uint64`
+    ///  - 1D array with shape (N,) of the mesh scalar type (`np.float32` or `np.float64`)
+    ///  - 2D array with shape (N,3) of the mesh scalar type (`np.float32` or `np.float64`)
+    /// The data is copied into the mesh object.
+    pub fn add_cell_attribute<'py>(
+        &mut self,
+        py: Python<'py>,
+        name: String,
+        attribute: Bound<'py, PyUntypedArray>,
+    ) -> PyResult<()> {
+        assert_eq!(
+            attribute.shape()[0],
+            self.ncells(py),
+            "number of attribute values must match number of cells in the mesh"
+        );
+
+        let dtype = self.dtype(py);
+        let attribute = if dtype.is_equiv_to(&np::dtype::<f32>(py)) {
+            PyMeshAttribute::try_from_generic::<f32>(name, attribute)?
+        } else if dtype.is_equiv_to(&np::dtype::<f64>(py)) {
+            PyMeshAttribute::try_from_generic::<f64>(name, attribute)?
+        } else {
+            return Err(PyTypeError::new_err(
+                "unsupported dtype for mesh vertices (expected float32 or float64)",
+            ));
+        };
+
+        self.cell_attributes
+            .push(attribute.into_pyobject(py)?.unbind());
+        Ok(())
     }
 
     /// Writes the mesh and its attributes to a file using `meshio.write_points_cells`
