@@ -151,7 +151,7 @@ impl PyTriMesh3d {
 #[gen_stub_pymethods]
 #[pymethods]
 impl PyTriMesh3d {
-    /// Numpy dtype of the underlying scalar type (either `np.float32` or `np.float64`)
+    /// Numpy dtype of the underlying scalar type (either ``np.float32`` or ``np.float64``)
     #[getter]
     pub fn dtype<'py>(&self, py: Python<'py>) -> Bound<'py, PyArrayDescr> {
         match &self.inner {
@@ -228,7 +228,7 @@ impl PyMixedTriQuadMesh3d {
 #[gen_stub_pymethods]
 #[pymethods]
 impl PyMixedTriQuadMesh3d {
-    /// Numpy dtype of the underlying scalar type (either `np.float32` or `np.float64`)
+    /// Numpy dtype of the underlying scalar type (either ``np.float32`` or ``np.float64``)
     #[getter]
     pub fn dtype<'py>(&self, py: Python<'py>) -> Bound<'py, PyArrayDescr> {
         match &self.inner {
@@ -508,7 +508,7 @@ impl PyMeshWithData {
 #[gen_stub_pymethods]
 #[pymethods]
 impl PyMeshWithData {
-    /// Numpy dtype of the underlying scalar type (either `np.float32` or `np.float64`)
+    /// Numpy dtype of the underlying scalar type (either ``np.float32`` or ``np.float64``)
     #[getter]
     pub fn dtype<'py>(&self, py: Python<'py>) -> Bound<'py, PyArrayDescr> {
         match &self.mesh {

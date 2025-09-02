@@ -62,7 +62,7 @@ class MeshWithData:
     @property
     def dtype(self) -> numpy.dtype:
         r"""
-        Numpy dtype of the underlying scalar type (either `np.float32` or `np.float64`)
+        Numpy dtype of the underlying scalar type (either ``np.float32`` or ``np.float64``)
         """
     @property
     def mesh_type(self) -> MeshType:
@@ -96,7 +96,7 @@ class MixedTriQuadMesh3d:
     @property
     def dtype(self) -> numpy.dtype:
         r"""
-        Numpy dtype of the underlying scalar type (either `np.float32` or `np.float64`)
+        Numpy dtype of the underlying scalar type (either ``np.float32`` or ``np.float64``)
         """
     @property
     def vertices(self) -> numpy.typing.NDArray[typing.Any]:
@@ -131,7 +131,7 @@ class NeighborhoodLists:
 
 class SphInterpolator:
     r"""
-    Interpolator of per-particle quantities to arbitrary points using SPH (cubic kernel) interpolation
+    Interpolator of per-particle quantities to arbitrary points using SPH interpolation (with cubic kernel)
     """
     def __new__(cls, particle_positions:numpy.typing.NDArray[typing.Any], particle_densities:numpy.typing.NDArray[typing.Any], particle_rest_mass:builtins.float, compact_support_radius:builtins.float) -> SphInterpolator:
         r"""
@@ -183,7 +183,7 @@ class TriMesh3d:
     @property
     def dtype(self) -> numpy.dtype:
         r"""
-        Numpy dtype of the underlying scalar type (either `np.float32` or `np.float64`)
+        Numpy dtype of the underlying scalar type (either ``np.float32`` or ``np.float64``)
         """
     @property
     def vertices(self) -> numpy.typing.NDArray[typing.Any]:

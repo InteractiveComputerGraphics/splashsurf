@@ -1,7 +1,7 @@
 Functions
 =========
 
-All functions infer float precision based on the input (32bit or 64bit).
+All functions infer float precision based on the input (``np.float32`` or ``np.float64``).
 
 .. currentmodule:: pysplashsurf
 
