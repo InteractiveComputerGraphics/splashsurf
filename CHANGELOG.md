@@ -2,7 +2,14 @@
 
 The following changes are present in the `main` branch of the repository and are not yet part of a release:
 
- - N/A
+ - Py: Major refactor of the Python bindings, interface is simplified and more "pythonic"
+   - Merged distinct F64/F32 classes and functions and infer data type automatically
+   - Nearly all inputs and outputs are now zero-copy (e.g. mesh vertices and faces can be accessed as attributes without copies)
+ - CLI: Add some tests for the `reconstruction_pipeline` function
+ - CLI: Fix post-processing when particle AABB filtering is enabled
+ - Lib: Support subdomain "ghost particle" margins to be up to the size of the subdomain itself (previously limited to half the size)
+ - CLI/Lib: Option to automatically disable subdomain decomposition for very small grids
+ - Lib: Support for non-owned data in `MeshAttribute`, avoids copies in CLI and Python package
 
 ## Version 0.12.0
 
