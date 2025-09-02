@@ -259,11 +259,17 @@ jobs:
   windows_wheels:
     name: Build wheels for Windows ${{ matrix.target }}
     needs: generate-stub
-    runs-on: windows-latest
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
-        target: [x64, x86]
+        include:
+          - runner: windows-latest
+            target: x64
+          - runner: windows-latest
+            target: x86
+          - runner: windows-11-arm
+            target: arm64
     steps:
       - uses: actions/checkout@v4
       - name: Download stub artifact
