@@ -353,6 +353,11 @@ def laplacian_smoothing_parallel(mesh:typing.Union[TriMesh3d, MeshWithData], ver
     The smoothing is performed inplace and modifies the vertices of the given mesh.
     """
 
+def marching_cubes(values:numpy.typing.NDArray[typing.Any], *, cube_size:builtins.float, iso_surface_threshold:builtins.float, translation:typing.Optional[typing.Sequence[builtins.float]]=None) -> tuple[TriMesh3d, UniformGrid]:
+    r"""
+    Performs a standard marching cubes triangulation of a 3D array of values
+    """
+
 def marching_cubes_cleanup(mesh:typing.Union[TriMesh3d, MeshWithData], grid:UniformGrid, *, max_rel_snap_dist:typing.Optional[builtins.float]=None, max_iter:builtins.int=5, keep_vertices:builtins.bool=False) -> typing.Union[TriMesh3d, MeshWithData]:
     r"""
     Performs simplification on the given mesh inspired by the "Compact Contouring"/"Mesh displacement" approach by Doug Moore and Joe Warren

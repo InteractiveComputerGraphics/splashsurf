@@ -205,6 +205,8 @@ def test_check_consistency():
         pysplashsurf.check_mesh_consistency(mesh_with_data, reconstruction.grid) is None
     )
 
+    # TODO: Delete some triangles and check for failure
+
 
 def test_tris_to_quads():
     particles = np.array(meshio.read(VTK_PATH).points, dtype=np.float32)

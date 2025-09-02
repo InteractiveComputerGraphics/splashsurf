@@ -217,11 +217,12 @@ pub fn parallel_compute_particle_densities<I: Index, R: Real>(
 /// A sparse density map
 ///
 /// The density map contains values for all points of the background grid where the density is not
-/// trivially zero (which is the case when a point is outside of the compact support of any particles).
+/// trivially zero (which is the case when a point is outside the compact support of any particles).
 #[derive(Clone, Debug)]
 pub enum DensityMap<I: Index, R: Real> {
     Standard(MapType<I, R>),
     DashMap(ReadDashMap<I, R, HashState>),
+    Dense(Vec<R>),
 }
 
 impl<I: Index, R: Real> Default for DensityMap<I, R> {
@@ -242,12 +243,24 @@ impl<I: Index, R: Real> From<ParallelMapType<I, R>> for DensityMap<I, R> {
     }
 }
 
+impl<I: Index, R: Real> From<Vec<R>> for DensityMap<I, R> {
+    fn from(values: Vec<R>) -> Self {
+        Self::Dense(values)
+    }
+}
+
 impl<I: Index, R: Real> DensityMap<I, R> {
     /// Converts the contained map into a vector of tuples of (flat_point_index, density)
     pub fn to_vec(&self) -> Vec<(I, R)> {
         match self {
             DensityMap::Standard(map) => map.iter().map(|(&i, &r)| (i, r)).collect(),
             DensityMap::DashMap(map) => map.iter().map(|(&i, &r)| (i, r)).collect(),
+            DensityMap::Dense(values) => values
+                .iter()
+                .copied()
+                .enumerate()
+                .map(|(i, r)| (I::from_usize(i).unwrap(), r))
+                .collect(),
         }
     }
 
@@ -256,6 +269,7 @@ impl<I: Index, R: Real> DensityMap<I, R> {
         match self {
             DensityMap::Standard(map) => map.len(),
             DensityMap::DashMap(map) => map.len(),
+            DensityMap::Dense(values) => values.len(),
         }
     }
 
@@ -264,6 +278,7 @@ impl<I: Index, R: Real> DensityMap<I, R> {
         match self {
             DensityMap::Standard(map) => map.get(&flat_point_index).copied(),
             DensityMap::DashMap(map) => map.get(&flat_point_index).copied(),
+            DensityMap::Dense(values) => values.get(flat_point_index.to_usize()?).copied(),
         }
     }
 
@@ -273,6 +288,9 @@ impl<I: Index, R: Real> DensityMap<I, R> {
         match self {
             DensityMap::Standard(map) => map.iter().for_each(|(&i, &r)| f(i, r)),
             DensityMap::DashMap(map) => map.iter().for_each(|(&i, &r)| f(i, r)),
+            DensityMap::Dense(values) => values.iter().copied().enumerate().for_each(|(i, r)| {
+                f(I::from_usize(i).unwrap(), r);
+            }),
         }
     }
 }
