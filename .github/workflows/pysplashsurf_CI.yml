@@ -426,7 +426,7 @@ jobs:
         path: dist/
     - run: pip install dist/${{ needs.build_wheel_dev.outputs.filename }}
     - name: Install splashsurf CLI
-      run: cargo install splashsurf
+      run: cargo install splashsurf --path ./splashsurf
     - name: Run pytest
       uses: pavelzw/pytest-action@v2
       with:
