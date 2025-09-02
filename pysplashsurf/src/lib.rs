@@ -32,6 +32,7 @@ fn pysplashsurf(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<mesh::PyMeshWithData>()?;
     m.add_class::<mesh::PyVertexVertexConnectivity>()?;
     m.add_class::<mesh::PyMeshAttribute>()?;
+    m.add_class::<mesh::MeshType>()?;
 
     m.add_class::<aabb::PyAabb3d>()?;
     m.add_class::<neighborhood_search::PyNeighborhoodLists>()?;

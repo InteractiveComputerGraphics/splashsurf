@@ -23,7 +23,6 @@ Functions
     neighborhood_search_spatial_hashing_parallel
     reconstruct_surface
     reconstruction_pipeline
-    triangulate_density_map
 
 Classes
 -------

@@ -22,5 +22,3 @@ All functions infer float precision based on the input (``np.float32`` or ``np.f
 .. autofunction:: reconstruct_surface
 
 .. autofunction:: reconstruction_pipeline
-
-.. autofunction:: triangulate_density_map

@@ -36,6 +36,9 @@ Helper and return types
     
     See `Aabb3d <https://docs.rs/splashsurf_lib/latest/splashsurf_lib/type.Aabb3d.html>`_ for more information.
 
+.. autoclass:: MeshType
+    :members:
+
 .. autoclass:: NeighborhoodLists
     :members:
 
