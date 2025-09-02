@@ -48,6 +48,7 @@ import pysplashsurf
 # Load particles from mesh file
 mesh = meshio.read("input.vtk")
 particles = np.array(mesh.points, dtype=np.float64)
+
 # Reconstruct the points/particles with some post-processing
 mesh_with_data, reconstruction = pysplashsurf.reconstruction_pipeline(
     particles,
@@ -66,7 +67,8 @@ mesh_with_data, reconstruction = pysplashsurf.reconstruction_pipeline(
     subdomain_num_cubes_per_dim=64,
     output_mesh_smoothing_weights=True
 )
-# Write the mesh with attributes to a file using meshio
+
+# Write the mesh with attributes to file using meshio
 mesh_with_data.write_to_file("surface.vtk")
 ```
 The `reconstruction_pipeline` method provides (mostly) the same arguments as the splashsurf binary CLI.

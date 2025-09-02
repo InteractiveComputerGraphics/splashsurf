@@ -6,6 +6,8 @@ from __future__ import annotations
 import builtins
 import numpy
 import numpy.typing
+import os
+import pathlib
 import typing
 from enum import Enum
 
@@ -112,9 +114,9 @@ class MeshWithData:
         
         There has to be exactly one attribute value per vertex in the mesh.
         As attribute data, the following numpy array types are supported:
-         - 1D array with shape (N,) of `np.uint64`
-         - 1D array with shape (N,) of the mesh scalar type (`np.float32` or `np.float64`)
-         - 2D array with shape (N,3) of the mesh scalar type (`np.float32` or `np.float64`)
+         - 1D array with shape (N,) of ``np.uint64``
+         - 1D array with shape (N,) of the mesh scalar type (``np.float32`` or ``np.float64``)
+         - 2D array with shape (N,3) of the mesh scalar type (``np.float32`` or ``np.float64``)
         The data is copied into the mesh object.
         """
     def add_cell_attribute(self, name:builtins.str, attribute:numpy.typing.NDArray[typing.Any]) -> None:
@@ -123,12 +125,12 @@ class MeshWithData:
         
         There has to be exactly one attribute value per cell in the mesh.
         As attribute data, the following numpy array types are supported:
-         - 1D array with shape (N,) of `np.uint64`
-         - 1D array with shape (N,) of the mesh scalar type (`np.float32` or `np.float64`)
-         - 2D array with shape (N,3) of the mesh scalar type (`np.float32` or `np.float64`)
+         - 1D array with shape (N,) of ``np.uint64``
+         - 1D array with shape (N,) of the mesh scalar type (``np.float32`` or ``np.float64``)
+         - 2D array with shape (N,3) of the mesh scalar type (``np.float32`` or ``np.float64``)
         The data is copied into the mesh object.
         """
-    def write_to_file(self, path:builtins.str, *, file_format:typing.Optional[builtins.str]='vtk42') -> None:
+    def write_to_file(self, path:builtins.str | os.PathLike | pathlib.Path, *, file_format:typing.Optional[builtins.str]='vtk42') -> None:
         r"""
         Writes the mesh and its attributes to a file using `meshio.write_points_cells`
         """
@@ -159,7 +161,7 @@ class MixedTriQuadMesh3d:
         r"""
         Returns a copy of all quad cells of the mesh as an `Nx4` array of vertex indices
         """
-    def write_to_file(self, path:builtins.str, *, file_format:typing.Optional[builtins.str]='vtk42') -> None:
+    def write_to_file(self, path:builtins.str | os.PathLike | pathlib.Path, *, file_format:typing.Optional[builtins.str]='vtk42') -> None:
         r"""
         Writes the mesh to a file using `meshio.write_points_cells`
         """
@@ -259,7 +261,7 @@ class TriMesh3d:
         r"""
         Computes the vertex-vertex connectivity of the mesh
         """
-    def write_to_file(self, path:builtins.str, *, file_format:typing.Optional[builtins.str]='vtk42') -> None:
+    def write_to_file(self, path:builtins.str | os.PathLike | pathlib.Path, *, file_format:typing.Optional[builtins.str]='vtk42') -> None:
         r"""
         Writes the mesh to a file using `meshio.write_points_cells`
         """

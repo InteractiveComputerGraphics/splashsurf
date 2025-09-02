@@ -1,3 +1,6 @@
+use crate::NumpyUsize;
+use crate::utils;
+use crate::utils::{enum_impl_from, enum_wrapper_impl_from};
 use bytemuck::{NoUninit, Pod};
 use ndarray::Array2;
 use numpy as np;
@@ -6,7 +9,7 @@ use numpy::{Element, PyArray, PyArray1, PyArray2, PyArrayDescr, PyUntypedArray};
 use pyo3::IntoPyObjectExt;
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::{IntoPyDict, PyDict, PyTuple};
+use pyo3::types::{IntoPyDict, PyDict};
 use pyo3_stub_gen::derive::*;
 use splashsurf_lib::mesh::TriangleCell;
 use splashsurf_lib::{
@@ -18,10 +21,7 @@ use splashsurf_lib::{
     nalgebra::{Unit, Vector3},
 };
 use std::ops::Deref;
-
-use crate::NumpyUsize;
-use crate::utils;
-use crate::utils::{enum_impl_from, enum_wrapper_impl_from};
+use std::path::PathBuf;
 
 fn view_triangles_generic<'py>(
     triangles: &[TriangleCell],
@@ -209,7 +209,7 @@ impl PyTriMesh3d {
     #[pyo3(signature = (path, *, file_format = Some("vtk42")))]
     pub fn write_to_file<'py>(
         this: Bound<'py, Self>,
-        path: &str,
+        path: PathBuf,
         file_format: Option<&str>,
     ) -> PyResult<()> {
         let py = this.py();
@@ -308,7 +308,7 @@ impl PyMixedTriQuadMesh3d {
     #[pyo3(signature = (path, *, file_format = Some("vtk42")))]
     pub fn write_to_file<'py>(
         this: Bound<'py, Self>,
-        path: &str,
+        path: PathBuf,
         file_format: Option<&str>,
     ) -> PyResult<()> {
         let py = this.py();
@@ -727,9 +727,9 @@ impl PyMeshWithData {
     ///
     /// There has to be exactly one attribute value per vertex in the mesh.
     /// As attribute data, the following numpy array types are supported:
-    ///  - 1D array with shape (N,) of `np.uint64`
-    ///  - 1D array with shape (N,) of the mesh scalar type (`np.float32` or `np.float64`)
-    ///  - 2D array with shape (N,3) of the mesh scalar type (`np.float32` or `np.float64`)
+    ///  - 1D array with shape (N,) of ``np.uint64``
+    ///  - 1D array with shape (N,) of the mesh scalar type (``np.float32`` or ``np.float64``)
+    ///  - 2D array with shape (N,3) of the mesh scalar type (``np.float32`` or ``np.float64``)
     /// The data is copied into the mesh object.
     pub fn add_point_attribute<'py>(
         &mut self,
@@ -763,9 +763,9 @@ impl PyMeshWithData {
     ///
     /// There has to be exactly one attribute value per cell in the mesh.
     /// As attribute data, the following numpy array types are supported:
-    ///  - 1D array with shape (N,) of `np.uint64`
-    ///  - 1D array with shape (N,) of the mesh scalar type (`np.float32` or `np.float64`)
-    ///  - 2D array with shape (N,3) of the mesh scalar type (`np.float32` or `np.float64`)
+    ///  - 1D array with shape (N,) of ``np.uint64``
+    ///  - 1D array with shape (N,) of the mesh scalar type (``np.float32`` or ``np.float64``)
+    ///  - 2D array with shape (N,3) of the mesh scalar type (``np.float32`` or ``np.float64``)
     /// The data is copied into the mesh object.
     pub fn add_cell_attribute<'py>(
         &mut self,
@@ -799,7 +799,7 @@ impl PyMeshWithData {
     #[pyo3(signature = (path, *, file_format = Some("vtk42")))]
     pub fn write_to_file<'py>(
         this: Bound<'py, Self>,
-        path: &str,
+        path: PathBuf,
         file_format: Option<&str>,
     ) -> PyResult<()> {
         let py = this.py();

@@ -38,7 +38,7 @@ impl PyAabb3d {
         points: &Bound<'py, PyArray2<R>>,
     ) -> PyResult<Self> {
         let points = points.try_readonly()?;
-        let points_vec: &[Vector3<f32>] = bytemuck::cast_slice(points.as_slice()?);
+        let points_vec: &[Vector3<R>] = bytemuck::cast_slice(points.as_slice()?);
         Ok(Self::from(Aabb3d::par_from_points(points_vec)))
     }
 }
