@@ -18,7 +18,7 @@ mod uniform_grid;
 mod marching_cubes;
 mod neighborhood_search;
 mod pipeline;
-mod post_processing;
+mod postprocessing;
 mod reconstruction;
 
 pub(crate) mod utils;
@@ -44,12 +44,12 @@ fn pysplashsurf(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     m.add_function(wrap!(reconstruction::reconstruct_surface, m)?)?;
     m.add_function(wrap!(marching_cubes::check_mesh_consistency, m)?)?;
-    m.add_function(wrap!(post_processing::marching_cubes_cleanup, m)?)?;
-    m.add_function(wrap!(post_processing::convert_tris_to_quads, m)?)?;
-    m.add_function(wrap!(post_processing::barnacle_decimation, m)?)?;
-    m.add_function(wrap!(post_processing::laplacian_smoothing_parallel, m)?)?;
+    m.add_function(wrap!(postprocessing::marching_cubes_cleanup, m)?)?;
+    m.add_function(wrap!(postprocessing::convert_tris_to_quads, m)?)?;
+    m.add_function(wrap!(postprocessing::barnacle_decimation, m)?)?;
+    m.add_function(wrap!(postprocessing::laplacian_smoothing_parallel, m)?)?;
     m.add_function(wrap!(
-        post_processing::laplacian_smoothing_normals_parallel,
+        postprocessing::laplacian_smoothing_normals_parallel,
         m
     )?)?;
 
