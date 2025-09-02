@@ -5,7 +5,9 @@ The following changes are present in the `main` branch of the repository and are
  - Py: Major refactor of the Python bindings, interface is simplified and more "pythonic"
    - Merged distinct F64/F32 classes and functions and infer data type automatically
    - Nearly all inputs and outputs are now zero-copy (e.g. mesh vertices and faces can be accessed as attributes without copies)
- - Lib: Enforce that `Index` types are signed integers implementing the `num_traits::Signed` trait. Currently the reconstruction does not work (correctly) with unsigned integers.
+ - Py: Add a function for a plain marching cubes reconstruction without any SPH interpolation
+ - Lib: Add support for "dense" density maps (borrowed & owned) as input for the marching cubes triangulation, useful for the Python bindings
+ - Lib: Enforce that `Index` types are signed integers implementing the `num_traits::Signed` trait. Currently, the reconstruction does not work (correctly) with unsigned integers.
  - Lib: Make most fields of `SurfaceReconstruction` public
  - CLI: Add some tests for the `reconstruction_pipeline` function
  - CLI: Fix post-processing when particle AABB filtering is enabled
