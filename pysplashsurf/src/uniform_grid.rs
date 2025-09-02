@@ -1,10 +1,10 @@
+use crate::aabb::PyAabb3d;
+use crate::utils;
+use crate::utils::{IndexT, enum_wrapper_impl_from};
 use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 use pyo3_stub_gen::derive::*;
 use splashsurf_lib::{Real, UniformGrid};
-
-use crate::utils;
-use crate::utils::{IndexT, enum_wrapper_impl_from};
 
 enum PyUniformGridData {
     F32(UniformGrid<IndexT, f32>),
@@ -42,6 +42,46 @@ impl PyUniformGrid {
         match &self.inner {
             PyUniformGridData::F64(grid) => Some(grid),
             _ => None,
+        }
+    }
+}
+
+#[gen_stub_pymethods]
+#[pymethods]
+impl PyUniformGrid {
+    /// The AABB of the grid containing all marching cubes vertices influenced by the particle kernels
+    #[getter]
+    pub fn aabb(&self) -> PyAabb3d {
+        match &self.inner {
+            PyUniformGridData::F32(grid) => PyAabb3d::from(grid.aabb().clone()),
+            PyUniformGridData::F64(grid) => PyAabb3d::from(grid.aabb().clone()),
+        }
+    }
+
+    /// Returns the cell size of the uniform grid (the marching cubes voxel size)
+    #[getter]
+    pub fn cell_size(&self) -> f64 {
+        match &self.inner {
+            PyUniformGridData::F32(grid) => grid.cell_size() as f64,
+            PyUniformGridData::F64(grid) => grid.cell_size(),
+        }
+    }
+
+    /// Returns the number of points (marching cubes vertices) per dimension in the uniform grid
+    #[getter]
+    pub fn npoints_per_dim(&self) -> [IndexT; 3] {
+        match &self.inner {
+            PyUniformGridData::F32(grid) => grid.points_per_dim().clone(),
+            PyUniformGridData::F64(grid) => grid.points_per_dim().clone(),
+        }
+    }
+
+    /// Returns the number of cells (marching cubes voxels) per dimension in the uniform grid
+    #[getter]
+    pub fn ncells_per_dim(&self) -> [IndexT; 3] {
+        match &self.inner {
+            PyUniformGridData::F32(grid) => grid.cells_per_dim().clone(),
+            PyUniformGridData::F64(grid) => grid.cells_per_dim().clone(),
         }
     }
 }

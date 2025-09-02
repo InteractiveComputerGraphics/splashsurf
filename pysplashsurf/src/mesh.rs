@@ -339,7 +339,7 @@ where
 /// Enum specifying the type of mesh wrapped by a ``MeshWithData``
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 #[gen_stub_pyclass_enum]
-#[pyclass]
+#[pyclass(eq)]
 pub enum MeshType {
     /// 3D triangle mesh
     Tri3d,

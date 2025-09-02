@@ -270,7 +270,26 @@ class UniformGrid:
     r"""
     Struct containing the parameters of the uniform grid used for the surface reconstruction
     """
-    ...
+    @property
+    def aabb(self) -> Aabb3d:
+        r"""
+        The AABB of the grid containing all marching cubes vertices influenced by the particle kernels
+        """
+    @property
+    def cell_size(self) -> builtins.float:
+        r"""
+        Returns the cell size of the uniform grid (the marching cubes voxel size)
+        """
+    @property
+    def npoints_per_dim(self) -> builtins.list[builtins.int]:
+        r"""
+        Returns the number of points (marching cubes vertices) per dimension in the uniform grid
+        """
+    @property
+    def ncells_per_dim(self) -> builtins.list[builtins.int]:
+        r"""
+        Returns the number of cells (marching cubes voxels) per dimension in the uniform grid
+        """
 
 class VertexVertexConnectivity:
     r"""
@@ -362,5 +381,3 @@ def reconstruction_pipeline(particles:numpy.typing.NDArray[typing.Any], *, attri
     
     Note that smoothing length and cube size are given in multiples of the particle radius.
     """
-
-def triangulate_density_map(values:numpy.typing.NDArray[typing.Any], grid:UniformGrid, *, iso_surface_threshold:builtins.float) -> TriMesh3d: ...
