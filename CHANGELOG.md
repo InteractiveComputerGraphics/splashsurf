@@ -2,18 +2,19 @@
 
 The following changes are present in the `main` branch of the repository and are not yet part of a release:
 
- - Py: Major refactor of the Python bindings, interface is simplified and more "pythonic"
-   - Merged distinct F64/F32 classes and functions and infer data type automatically
-   - Nearly all inputs and outputs are now zero-copy (e.g. mesh vertices and faces can be accessed as attributes without copies)
- - Py: Add a function for a plain marching cubes reconstruction without any SPH interpolation
- - Lib: Add support for "dense" density maps (borrowed & owned) as input for the marching cubes triangulation, useful for the Python bindings
+ - Py: Major refactor of the Python bindings, interface is much simpler and more "pythonic"
+   - Unified separate F64/F32 classes and functions and infer data type automatically
+   - Nearly all inputs, outputs and attributes are now zero-copy (e.g. mesh vertices and faces can be accessed as attributes without copies)
+ - Py: Add a function for a plain marching cubes reconstruction from a contiguous 3D array without any SPH interpolation
+ - Lib: Add support for "dense" `DensityMap` (borrowed & owned) as input for the marching cubes triangulation, useful for the Python bindings
+ - Lib: Replace usage of `DiscreteSquaredDistanceCubicKernel` by standard `CubicSplineKernel` for SPH interpolation (no noticeable performance difference)
  - Lib: Enforce that `Index` types are signed integers implementing the `num_traits::Signed` trait. Currently, the reconstruction does not work (correctly) with unsigned integers.
  - Lib: Make most fields of `SurfaceReconstruction` public
  - CLI: Add some tests for the `reconstruction_pipeline` function
  - CLI: Fix post-processing when particle AABB filtering is enabled
  - Lib: Support subdomain "ghost particle" margins to be up to the size of the subdomain itself (previously limited to half the size)
  - CLI/Lib: Option to automatically disable subdomain decomposition for very small grids
- - Lib: Support for non-owned data in `MeshAttribute`, avoids copies in CLI and Python package
+ - Lib: Support for borrowed data in `MeshAttribute`, avoids copies in CLI and Python package
 
 ## Version 0.12.0
 

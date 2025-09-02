@@ -24,7 +24,7 @@
 //! indices, even if the density map is only generated for a smaller subdomain.
 
 use crate::aabb::Aabb3d;
-use crate::kernel::DiscreteSquaredDistanceCubicKernel;
+use crate::kernel::{CubicSplineKernel, SymmetricKernel3d};
 use crate::mesh::{HexMesh3d, MeshWithData, OwnedMeshAttribute};
 use crate::neighborhood_search::NeighborhoodList;
 use crate::uniform_grid::UniformGrid;
@@ -163,7 +163,7 @@ pub fn sequential_compute_particle_densities_filtered<
     init_density_storage(particle_densities, particle_positions.len());
 
     // Pre-compute the kernel which can be queried using squared distances
-    let kernel = DiscreteSquaredDistanceCubicKernel::new::<f64>(1000, compact_support_radius);
+    let kernel = CubicSplineKernel::new(compact_support_radius);
 
     for (i, particle_i_position) in particle_positions
         .iter()
@@ -176,8 +176,8 @@ pub fn sequential_compute_particle_densities_filtered<
             .iter()
             .map(|&j| &particle_positions[j])
         {
-            let r_squared = (particle_j_position - particle_i_position).norm_squared();
-            particle_i_density += kernel.evaluate(r_squared);
+            let r = (particle_j_position - particle_i_position).norm();
+            particle_i_density += kernel.evaluate(r);
         }
         particle_i_density *= particle_rest_mass;
         particle_densities[i] = particle_i_density;
@@ -198,7 +198,7 @@ pub fn parallel_compute_particle_densities<I: Index, R: Real>(
     init_density_storage(particle_densities, particle_positions.len());
 
     // Pre-compute the kernel which can be queried using squared distances
-    let kernel = DiscreteSquaredDistanceCubicKernel::new::<f64>(1000, compact_support_radius);
+    let kernel = CubicSplineKernel::new(compact_support_radius);
 
     particle_positions
         .par_iter()
@@ -211,8 +211,8 @@ pub fn parallel_compute_particle_densities<I: Index, R: Real>(
                 for particle_j_position in
                     particle_i_neighbors.iter().map(|&j| &particle_positions[j])
                 {
-                    let r_squared = (particle_j_position - particle_i_position).norm_squared();
-                    density += kernel.evaluate(r_squared);
+                    let r = (particle_j_position - particle_i_position).norm();
+                    density += kernel.evaluate(r);
                 }
                 density *= particle_rest_mass;
                 *particle_i_density = density;
@@ -534,7 +534,7 @@ struct SparseDensityMapGenerator<I: Index, R: Real> {
     half_supported_cells: I,
     supported_points: I,
     kernel_evaluation_radius_sq: R,
-    kernel: DiscreteSquaredDistanceCubicKernel<R>,
+    kernel: CubicSplineKernel<R>,
     allowed_domain: Aabb3d<R>,
 }
 
@@ -594,7 +594,7 @@ impl<I: Index, R: Real> SparseDensityMapGenerator<I, R> {
 
         // Pre-compute the kernel which can be queried using squared distances
         let kernel_evaluation_radius_sq = kernel_evaluation_radius * kernel_evaluation_radius;
-        let kernel = DiscreteSquaredDistanceCubicKernel::new::<f64>(1000, compact_support_radius);
+        let kernel = CubicSplineKernel::new(compact_support_radius);
 
         // Shrink the allowed domain for particles by the kernel evaluation radius. This ensures that all cells/points
         // that are affected by a particle are actually part of the domain/grid, so it does not have to be checked in the loops below.
@@ -719,7 +719,7 @@ impl<I: Index, R: Real> SparseDensityMapGenerator<I, R> {
                     let r_squared = dxdx + dydy + dzdz;
                     if r_squared < self.kernel_evaluation_radius_sq {
                         let density_contribution =
-                            particle_volume * self.kernel.evaluate(r_squared);
+                            particle_volume * self.kernel.evaluate(r_squared.sqrt());
 
                         let flat_point_index = grid.flatten_point_indices(i, j, k);
                         *sparse_densities
