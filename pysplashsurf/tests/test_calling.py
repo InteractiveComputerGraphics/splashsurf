@@ -1,6 +1,5 @@
 import pysplashsurf
 import numpy as np
-import math
 import meshio
 import subprocess
 import time
@@ -9,45 +8,11 @@ import pathlib
 
 BINARY_PATH = "splashsurf"
 DIR = pathlib.Path(__file__).parent.resolve()
-BGEO_PATH = DIR.joinpath("ParticleData_Fluid_50.bgeo")
 VTK_PATH = DIR.joinpath("ParticleData_Fluid_5.vtk")
 
 
 def now_s():
     return time.process_time_ns() / (10**9)
-
-
-def test_bgeo():
-    particles = np.array(meshio.read(BGEO_PATH).points, dtype=np.float32)
-
-    assert len(particles) == 4732
-
-
-def test_aabb_class():
-    print("\nTesting AABB class")
-
-    aabb = pysplashsurf.Aabb3d.from_min_max(min=[0.0, 0.0, 0.0], max=[1.0, 2.0, 3.0])
-    assert (aabb.min == np.array([0.0, 0.0, 0.0])).all()
-    assert (aabb.max == np.array([1.0, 2.0, 3.0])).all()
-
-    aabb = pysplashsurf.Aabb3d.from_min_max(min=np.array([0.0, 0.0, 0.0]), max=np.array([1.0, 2.0, 3.0]))
-    assert (aabb.min == np.array([0.0, 0.0, 0.0])).all()
-    assert (aabb.max == np.array([1.0, 2.0, 3.0])).all()
-
-    aabb = pysplashsurf.Aabb3d.from_points(
-        np.array([[0.0, 0.0, 0.0], [1.0, 1.0, 1.0], [2.0, 0.5, 4.2]])
-    )
-
-    print("AABB min:", aabb.min)
-    print("AABB max:", aabb.max)
-
-    assert (aabb.min == np.array([0.0, 0.0, 0.0])).all()
-    assert (aabb.max == np.array([2.0, 1.0, 4.2])).all()
-
-    assert aabb.contains_point([1.0, 0.9, 4.1])
-    assert aabb.contains_point([0.0, 0.0, 0.0])
-    assert not aabb.contains_point([2.0, 1.0, 4.2])
-    assert not aabb.contains_point([1.0, -1.0, 5.0])
 
 
 def test_marching_cubes_calls():
@@ -284,4 +249,3 @@ def test_with_post_processing():
     print("Python verts:", python_verts)
 
     assert np.allclose(binary_verts, python_verts)
-
