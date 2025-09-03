@@ -52,6 +52,16 @@ impl PyNeighborhoodLists {
 }
 
 /// Performs a neighborhood search using spatial hashing (multithreaded implementation)
+///
+/// Parameters
+/// ----------
+/// particles : numpy.ndarray
+///     A two-dimensional numpy array of shape (N, 3) containing the positions of the particles.
+/// domain
+///     An axis-aligned bounding box (AABB) of the particles used for spatial hashing.
+///     The neighborhood search fails if particles are outside the domain.
+/// search_radius
+///     The radius per particle where other particles are considered neighbors.
 #[gen_stub_pyfunction]
 #[pyfunction]
 #[pyo3(name = "neighborhood_search_spatial_hashing_parallel")]

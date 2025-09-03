@@ -101,14 +101,41 @@ impl PySurfaceReconstruction {
 /// Performs a surface reconstruction from the given particles without additional post-processing
 ///
 /// Note that all parameters use absolute distance units and are not relative to the particle radius.
+///
+/// Parameters
+/// ----------
+/// particles : numpy.ndarray
+///     A two-dimensional numpy array of shape (N, 3) containing the positions of the particles.
+/// particle_radius
+///     Particle radius.
+/// rest_density
+///     Rest density of the fluid.
+/// smoothing_length
+///     Smoothing length of the SPH kernel in absolute distance units (compact support radius of SPH kernel will be twice the smoothing length).
+/// cube_size
+///     Size of the cubes (voxels) used for the marching cubes grid in absolute distance units.
+/// iso_surface_threshold
+///     Threshold of the SPH interpolation of the "color field" where the iso surface should be extracted.
+/// aabb_min
+///     Lower corner of the AABB of particles to consider in the reconstruction.
+/// aabb_max
+///     Upper corner of the AABB of particles to consider in the reconstruction.
+/// multi_threading
+///     Flag to enable multi-threading for the reconstruction and post-processing steps.
+/// subdomain_grid
+///     Flag to enable spatial decomposition by dividing the domain into subdomains with dense marching cube grids for efficient multi-threading.
+/// subdomain_grid_auto_disable
+///     Flag to automatically disable the subdomain grid if the global domain is too small.
+/// subdomain_num_cubes_per_dim
+///     Number of marching cubes voxels along each coordinate axis in each subdomain if the subdomain grid is enabled.
 #[gen_stub_pyfunction]
 #[pyfunction]
 #[pyo3(name = "reconstruct_surface")]
 #[pyo3(signature = (particles, *,
     particle_radius, rest_density = 1000.0, smoothing_length, cube_size, iso_surface_threshold = 0.6,
+    aabb_min = None, aabb_max = None,
     multi_threading = true, global_neighborhood_list = false,
-    subdomain_grid = true, subdomain_grid_auto_disable = true, subdomain_num_cubes_per_dim = 64,
-    aabb_min = None, aabb_max = None
+    subdomain_grid = true, subdomain_grid_auto_disable = true, subdomain_num_cubes_per_dim = 64
 ))]
 pub fn reconstruct_surface<'py>(
     particles: &Bound<'py, PyUntypedArray>,
@@ -117,13 +144,13 @@ pub fn reconstruct_surface<'py>(
     smoothing_length: f64,
     cube_size: f64,
     iso_surface_threshold: f64,
+    aabb_min: Option<[f64; 3]>,
+    aabb_max: Option<[f64; 3]>,
     multi_threading: bool,
     global_neighborhood_list: bool,
     subdomain_grid: bool,
     subdomain_grid_auto_disable: bool,
     subdomain_num_cubes_per_dim: u32,
-    aabb_min: Option<[f64; 3]>,
-    aabb_max: Option<[f64; 3]>,
 ) -> PyResult<PySurfaceReconstruction> {
     let py = particles.py();
 

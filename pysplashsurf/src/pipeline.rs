@@ -27,85 +27,81 @@ use crate::utils::{IndexT, pyerr_unsupported_scalar};
 /// Parameters
 /// ----------
 /// particles : numpy.ndarray
-///    A two-dimensional numpy array of shape (N, 3) containing the positions of the particles.
+///     A two-dimensional numpy array of shape (N, 3) containing the positions of the particles.
 /// attributes_to_interpolate
-///    Dictionary containing all attributes to interpolate. The keys are the attribute names and the values are the corresponding 1D/2D arrays.\n
-///    The arrays must have the same length as the number of particles. \n
-///    Supported array types are 2D float32/float64 arrays for vector attributes and 1D uint64/float32/float64 arrays for scalar attributes.
+///     Dictionary containing all attributes to interpolate. The keys are the attribute names and the values are the corresponding 1D/2D arrays.
+///     The arrays must have the same length as the number of particles.
+///     Supported array types are 2D float32/float64 arrays for vector attributes and 1D uint64/float32/float64 arrays for scalar attributes.
 /// particle_radius
-///     Particle radius
+///     Particle radius.
 /// rest_density
-///     Rest density of the fluid
+///     Rest density of the fluid.
 /// smoothing_length
-///     Smoothing length of the fluid in multiples of the particle radius (compact support radius of SPH kernel will be twice the smoothing length)
+///     Smoothing length of the SPH kernel in multiples of the particle radius (compact support radius of SPH kernel will be twice the smoothing length).
 /// cube_size
-///     Size of the cubes used for the marching cubes grid in multiples of the particle radius
+///     Size of the cubes (voxels) used for the marching cubes grid in multiples of the particle radius.
 /// iso_surface_threshold
-///     Threshold for the iso surface
+///     Threshold of the SPH interpolation of the "color field" where the iso surface should be extracted.
 /// aabb_min
-///     Lower corner of the AABB of particles to consider in the reconstruction
+///     Lower corner [x,y,z] of the AABB of particles that are active in the reconstruction.
 /// aabb_max
-///     Upper corner of the AABB of particles to consider in the reconstruction
+///     Upper corner [x,y,z] of the AABB of particles to consider in the reconstruction.
 /// multi_threading
-///     Multi-threading
+///     Flag to enable multi-threading for the reconstruction and post-processing steps.
 /// subdomain_grid
-///     Enable spatial decomposition using by dividing the domain into subdomains with dense marching cube grids for efficient multi-threading
+///     Flag to enable spatial decomposition by dividing the domain into subdomains with dense marching cube grids for efficient multi-threading.
 /// subdomain_grid_auto_disable
-///     Whether to automatically disable the subdomain grid if the global domain is too small
+///     Flag to automatically disable the subdomain grid if the global domain is too small.
 /// subdomain_num_cubes_per_dim
-///     Each subdomain will be a cube consisting of this number of MC cube cells along each coordinate axis
+///     Number of marching cubes voxels along each coordinate axis in each subdomain if the subdomain grid is enabled.
 /// check_mesh_closed
-///     Enable checking the final mesh for holes
+///     Flag to enable checking the final mesh for holes.
 /// check_mesh_manifold
-///     Enable checking the final mesh for non-manifold edges and vertices
+///     Flag to enable checking the final mesh for non-manifold edges and vertices.
 /// check_mesh_orientation
-///     Enable checking the final mesh for inverted triangles (compares angle between vertex normals and adjacent face normals)
+///     Flag to enable checking the final mesh for inverted triangles (compares angle between vertex normals and adjacent face normals).
 /// check_mesh_debug
-///     Enable additional debug output for the check-mesh operations (has no effect if no other check-mesh option is enabled)
+///     Flag to enable additional debug output for the check-mesh operations (has no effect if no other check-mesh option is enabled).
 /// mesh_cleanup
-///     Flag to perform mesh cleanup\n
-///     This implements the method from “Compact isocontours from sampled data” (Moore, Warren; 1992)
+///     Flag to enable marching cubes mesh cleanup. This implements the method from "Compact isocontours from sampled data" (Moore, Warren; 1992).
 /// mesh_cleanup_snap_dist
-///     If MC mesh cleanup is enabled, vertex snapping can be limited to this distance relative to the MC edge length (should be in range of [0.0,0.5])
+///     If marching cubes mesh cleanup is enabled, this limits vertex snapping to the specified distance relative to the MC edge length (should be in range of [0.0,0.5]).
 /// decimate_barnacles
-///     Flag to perform barnacle decimation\n
-///     For details see “Weighted Laplacian Smoothing for Surface Reconstruction of Particle-based Fluids” (Löschner, Böttcher, Jeske, Bender; 2023).
+///     Flag to perform barnacle decimation. For details see "Weighted Laplacian Smoothing for Surface Reconstruction of Particle-based Fluids" (Löschner, Böttcher, Jeske, Bender; 2023).
 /// keep_vertices
-///     Flag to keep any vertices without connectivity resulting from mesh cleanup or decimation step
+///     Flag to retain any vertices without connectivity resulting from mesh cleanup or decimation step instead of filtering them out.
 /// compute_normals
-///     Flag to compute normals\n
-///     If set to True, the normals will be computed and stored in the mesh.
+///     Flag to enable computation of vertex normals on the final mesh.
 /// sph_normals
-///     Flag to compute normals using SPH interpolation instead of geometry-based normals.
+///     Flag to enable computation of normals using SPH interpolation (gradient of the color field) instead of geometry-based normals.
 /// normals_smoothing_iters
-///     Number of Laplacian smoothing iterations for the normal field
+///     Number of Laplacian smoothing iterations to perform on the normal field.
 /// mesh_smoothing_iters
-///     Number of Laplacian smoothing iterations for the mesh
+///     Number of Laplacian smoothing iterations to perform on the mesh vertices.
 /// mesh_smoothing_weights
-///     Flag to compute mesh smoothing weights\n
-///     This implements the method from “Weighted Laplacian Smoothing for Surface Reconstruction of Particle-based Fluids” (Löschner, Böttcher, Jeske, Bender; 2023).
+///     Flag to enable computation and usage of mesh smoothing weights according to "Weighted Laplacian Smoothing for Surface Reconstruction of Particle-based Fluids" (Löschner, Böttcher, Jeske, Bender; 2023).
 /// mesh_smoothing_weights_normalization
-///     Normalization value for the mesh smoothing weights
+///     Normalization value for the mesh smoothing weights.
 /// generate_quads
-///     Enable trying to convert triangles to quads if they meet quality criteria
+///     Flag to enable conversion of triangles to quads depending on geometric criteria.
 /// quad_max_edge_diag_ratio
-///     Maximum allowed ratio of quad edge lengths to its diagonals to merge two triangles to a quad (inverse is used for minimum)
+///     Maximum allowed ratio of quad edge lengths to its diagonals to merge two triangles to a quad (inverse is used for minimum).
 /// quad_max_normal_angle
-///     Maximum allowed angle (in degrees) between triangle normals to merge them to a quad
+///     Maximum allowed angle (in degrees) between triangle normals to merge them to a quad.
 /// quad_max_interior_angle
-///     Maximum allowed vertex interior angle (in degrees) inside a quad to merge two triangles to a quad
+///     Maximum allowed vertex interior angle (in degrees) inside a quad to merge two triangles to a quad.
 /// output_mesh_smoothing_weights
-///     Flag to store the mesh smoothing weights if smoothing weights are computed.
+///     Flag to attach and return the smoothing weights as a mesh attribute if smoothing weights are computed.
 /// output_raw_normals
-///     Flag to output the raw normals in addition to smoothed normals if smoothing of normals is enabled
+///     Flag to output the raw normals in addition to smoothed normals if smoothing of normals is enabled.
 /// output_raw_mesh
-///     When true, also return the SurfaceReconstruction object with no post-processing applied
+///     Flag to return a copy of the raw mesh before any post-processing steps (inside the returned reconstruction object).
 /// mesh_aabb_min
-///     Smallest corner of the axis-aligned bounding box for the mesh
+///     Lower corner [x,y,z] of the axis-aligned bounding box for the mesh, triangles fully outside this box will be removed.
 /// mesh_aabb_max
-///     Largest corner of the axis-aligned bounding box for the mesh
+///     Upper corner [x,y,z] of the axis-aligned bounding box for the mesh, triangles fully outside this box will be removed.
 /// mesh_aabb_clamp_vertices
-///     Flag to clamp the vertices of the mesh to the AABB
+///     Flag to clamp the vertices of the mesh to the AABB in addition to removing triangles outside the AABB.
 ///
 #[gen_stub_pyfunction]
 #[pyfunction]

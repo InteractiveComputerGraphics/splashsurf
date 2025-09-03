@@ -11,7 +11,25 @@ use crate::uniform_grid::PyUniformGrid;
 use crate::utils;
 use crate::utils::IndexT;
 
-/// Checks the consistency of a reconstructed surface mesh (watertightness, manifoldness), optionally returns a string with details if problems are found
+/// Checks the consistency of a reconstructed surface mesh (watertightness, manifoldness), optionally returns a string with details, if problems are found
+///
+/// Parameters
+/// ----------
+/// mesh
+///     The triangle mesh to check for consistency.
+/// grid
+///     The uniform grid that was used for the marching cubes triangulation of the input mesh.
+/// check_closed
+///     Flag to enable checking if the mesh is closed (watertight).
+/// check_manifold
+///     Flag to enable checking if the mesh is manifold (i.e. has no non-manifold vertices & edges).
+/// debug
+///     Flag to enable additional debug output during the consistency checks.
+///
+/// Returns
+/// -------
+///     An optional string with details about the problems found during the consistency checks.
+///     If no problems are found, None is returned.
 #[gen_stub_pyfunction]
 #[pyfunction]
 #[pyo3(name = "check_mesh_consistency")]
@@ -73,6 +91,18 @@ pub fn check_mesh_consistency<'py>(
 ///
 /// The function is currently single-threaded. The SPH surface reconstruction functions :py:func:`reconstruction_pipeline`
 /// and :py:func:`reconstruct_surface` improve performance by processing multiple patches in parallel.
+///
+/// Parameters
+/// ----------
+/// values : numpy.ndarray
+///    A three-dimensional numpy array of shape (nx, ny, nz) containing the scalar values at the vertices
+///    of the marching cubes grid.
+/// iso_surface_threshold
+///    The iso-surface threshold value used to determine the surface.
+/// cube_size
+///    The size of each cube/voxel of the marching cubes grid. Determines the scaling of the resulting mesh.
+/// translation
+///    An optional translation vector [tx, ty, tz] applied to the entire mesh after scaling.
 #[gen_stub_pyfunction]
 #[pyfunction]
 #[pyo3(name = "marching_cubes")]

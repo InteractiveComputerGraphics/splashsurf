@@ -160,6 +160,17 @@ impl PySphInterpolator {
 #[pymethods]
 impl PySphInterpolator {
     /// Constructs an SPH interpolator (with cubic kernels) for the given particles
+    ///
+    /// Parameters
+    /// ----------
+    /// particle_positions : numpy.ndarray
+    ///     A two-dimensional numpy array of shape (N, 3) containing the positions of the particles that are used for interpolation.
+    /// particle_densities : numpy.ndarray
+    ///     A one-dimensional numpy array of shape (N,) containing the densities of the particles.
+    /// particle_rest_mass
+    ///     The rest mass of each particle (assumed to be the same for all particles).
+    /// compact_support_radius
+    ///     The compact support radius of the cubic spline kernel used for interpolation.
     #[new]
     fn py_new<'py>(
         particle_positions: &Bound<'py, PyUntypedArray>,

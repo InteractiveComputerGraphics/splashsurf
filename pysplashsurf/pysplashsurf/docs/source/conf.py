@@ -75,6 +75,10 @@ autodoc_typehints = "both"
 
 always_document_param_types = True
 always_use_bars_union = True
+
+napoleon_use_rtype = False
+napoleon_include_special_with_doc = True
+
 # typehints_document_rtype = False
 # typehints_use_rtype = False
 # typehints_use_signature = True

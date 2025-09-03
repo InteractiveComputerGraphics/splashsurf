@@ -190,6 +190,17 @@ class SphInterpolator:
     def __new__(cls, particle_positions:numpy.typing.NDArray[typing.Any], particle_densities:numpy.typing.NDArray[typing.Any], particle_rest_mass:builtins.float, compact_support_radius:builtins.float) -> SphInterpolator:
         r"""
         Constructs an SPH interpolator (with cubic kernels) for the given particles
+        
+        Parameters
+        ----------
+        particle_positions : numpy.ndarray
+            A two-dimensional numpy array of shape (N, 3) containing the positions of the particles that are used for interpolation.
+        particle_densities : numpy.ndarray
+            A one-dimensional numpy array of shape (N,) containing the densities of the particles.
+        particle_rest_mass
+            The rest mass of each particle (assumed to be the same for all particles).
+        compact_support_radius
+            The compact support radius of the cubic spline kernel used for interpolation.
         """
     def interpolate_quantity(self, particle_quantity:numpy.typing.NDArray[typing.Any], interpolation_points:numpy.typing.NDArray[typing.Any], *, first_order_correction:builtins.bool=False) -> numpy.typing.NDArray[typing.Any]:
         r"""
@@ -324,11 +335,36 @@ def barnacle_decimation(mesh:typing.Union[TriMesh3d, MeshWithData], *, keep_vert
     The decimation is performed inplace and modifies the given mesh.
     Returns the vertex-vertex connectivity of the decimated mesh which can be used for other
     post-processing steps.
+    
+    Parameters
+    ----------
+    mesh
+        The triangle mesh to decimate.
+    keep_vertices
+        Flag to retain any vertices without connectivity resulting from decimation instead of filtering them out.
     """
 
 def check_mesh_consistency(mesh:typing.Union[TriMesh3d, MeshWithData], grid:UniformGrid, *, check_closed:builtins.bool=True, check_manifold:builtins.bool=True, debug:builtins.bool=False) -> typing.Optional[builtins.str]:
     r"""
-    Checks the consistency of a reconstructed surface mesh (watertightness, manifoldness), optionally returns a string with details if problems are found
+    Checks the consistency of a reconstructed surface mesh (watertightness, manifoldness), optionally returns a string with details, if problems are found
+    
+    Parameters
+    ----------
+    mesh
+        The triangle mesh to check for consistency.
+    grid
+        The uniform grid that was used for the marching cubes triangulation of the input mesh.
+    check_closed
+        Flag to enable checking if the mesh is closed (watertight).
+    check_manifold
+        Flag to enable checking if the mesh is manifold (i.e. has no non-manifold vertices & edges).
+    debug
+        Flag to enable additional debug output during the consistency checks.
+    
+    Returns
+    -------
+        An optional string with details about the problems found during the consistency checks.
+        If no problems are found, None is returned.
     """
 
 def convert_tris_to_quads(mesh:typing.Union[TriMesh3d, MeshWithData], *, non_squareness_limit:builtins.float=1.75, normal_angle_limit:builtins.float=10.0, max_interior_angle:builtins.float=135.0) -> typing.Union[MixedTriQuadMesh3d, MeshWithData]:
@@ -337,6 +373,17 @@ def convert_tris_to_quads(mesh:typing.Union[TriMesh3d, MeshWithData], *, non_squ
     
     This operation creates a new mesh and does not modify the input mesh.
     Angles are specified in degrees.
+    
+    Parameters
+    ----------
+    mesh
+        The triangle mesh to convert to a mixed triangle-quad mesh.
+    non_squareness_limit
+        Maximum allowed ratio of quad edge lengths to its diagonals to merge two triangles to a quad (inverse is used for minimum).
+    normal_angle_limit
+        Maximum allowed angle (in degrees) between triangle normals to merge them to a quad.
+    max_interior_angle
+        Maximum allowed vertex interior angle (in degrees) inside a quad to merge two triangles to a quad.
     """
 
 def laplacian_smoothing_normals_parallel(normals:numpy.typing.NDArray[typing.Any], vertex_connectivity:VertexVertexConnectivity, *, iterations:builtins.int) -> None:
@@ -344,6 +391,15 @@ def laplacian_smoothing_normals_parallel(normals:numpy.typing.NDArray[typing.Any
     Laplacian smoothing of a normal field
     
     The smoothing is performed inplace and modifies the given normal array.
+    
+    Parameters
+    ----------
+    normals
+        A two-dimensional array of shape (N, 3) containing the normals to smooth.
+    vertex_connectivity
+        The vertex-vertex connectivity of the mesh, required for efficient smoothing.
+    iterations
+        The number of smoothing iterations to perform.
     """
 
 def laplacian_smoothing_parallel(mesh:typing.Union[TriMesh3d, MeshWithData], vertex_connectivity:VertexVertexConnectivity, *, iterations:builtins.int, beta:builtins.float=1.0, weights:numpy.typing.NDArray[typing.Any]) -> None:
@@ -351,6 +407,20 @@ def laplacian_smoothing_parallel(mesh:typing.Union[TriMesh3d, MeshWithData], ver
     Laplacian smoothing of mesh vertices with feature weights
     
     The smoothing is performed inplace and modifies the vertices of the given mesh.
+    
+    Parameters
+    ----------
+    mesh
+        The triangle mesh to smooth.
+    vertex_connectivity
+        The vertex-vertex connectivity of the mesh, required for efficient smoothing.
+    iterations
+        The number of smoothing iterations to perform.
+    beta
+        Factor used for blending the original vertex position with the smoothed position.
+    weights
+        A one-dimensional array of weights per vertex that influence the smoothing.
+        The weight is multiplied with beta.
     """
 
 def marching_cubes(values:numpy.typing.NDArray[typing.Any], *, iso_surface_threshold:builtins.float, cube_size:builtins.float, translation:typing.Optional[typing.Sequence[builtins.float]]=None, return_grid:builtins.bool=False) -> typing.Union[TriMesh3d, tuple[TriMesh3d, UniformGrid]]:
@@ -375,6 +445,18 @@ def marching_cubes(values:numpy.typing.NDArray[typing.Any], *, iso_surface_thres
     
     The function is currently single-threaded. The SPH surface reconstruction functions :py:func:`reconstruction_pipeline`
     and :py:func:`reconstruct_surface` improve performance by processing multiple patches in parallel.
+    
+    Parameters
+    ----------
+    values : numpy.ndarray
+       A three-dimensional numpy array of shape (nx, ny, nz) containing the scalar values at the vertices
+       of the marching cubes grid.
+    iso_surface_threshold
+       The iso-surface threshold value used to determine the surface.
+    cube_size
+       The size of each cube/voxel of the marching cubes grid. Determines the scaling of the resulting mesh.
+    translation
+       An optional translation vector [tx, ty, tz] applied to the entire mesh after scaling.
     """
 
 def marching_cubes_cleanup(mesh:typing.Union[TriMesh3d, MeshWithData], grid:UniformGrid, *, max_rel_snap_dist:typing.Optional[builtins.float]=None, max_iter:builtins.int=5, keep_vertices:builtins.bool=False) -> typing.Union[TriMesh3d, MeshWithData]:
@@ -385,18 +467,68 @@ def marching_cubes_cleanup(mesh:typing.Union[TriMesh3d, MeshWithData], grid:Unif
     The method is designed specifically for meshes generated by Marching Cubes.
     See Moore and Warren: `Mesh Displacement: An Improved Contouring Method for Trivariate Data <https://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.49.5214&rep=rep1&type=pdf>`_ (1991)
     or Moore and Warren: "Compact Isocontours from Sampled Data" in "Graphics Gems III" (1992).
+    
+    Parameters
+    ----------
+    mesh
+        The triangle mesh to simplify.
+    grid
+        The uniform grid that was used for the marching cubes triangulation of the input mesh.
+    max_rel_snap_dist
+        Optional maximum relative snapping distance (relative to the grid cell size) to merge close vertices.
+    max_iter
+        The maximum number of iterations of cleanup to perform.
+    keep_vertices
+        Flag to retain any vertices without connectivity resulting from simplification instead of filtering them out.
     """
 
 def neighborhood_search_spatial_hashing_parallel(particle_positions:numpy.typing.NDArray[typing.Any], domain:Aabb3d, search_radius:builtins.float) -> NeighborhoodLists:
     r"""
     Performs a neighborhood search using spatial hashing (multithreaded implementation)
+    
+    Parameters
+    ----------
+    particles : numpy.ndarray
+        A two-dimensional numpy array of shape (N, 3) containing the positions of the particles.
+    domain
+        An axis-aligned bounding box (AABB) of the particles used for spatial hashing.
+        The neighborhood search fails if particles are outside the domain.
+    search_radius
+        The radius per particle where other particles are considered neighbors.
     """
 
-def reconstruct_surface(particles:numpy.typing.NDArray[typing.Any], *, particle_radius:builtins.float, rest_density:builtins.float=1000.0, smoothing_length:builtins.float, cube_size:builtins.float, iso_surface_threshold:builtins.float=0.6, multi_threading:builtins.bool=True, global_neighborhood_list:builtins.bool=False, subdomain_grid:builtins.bool=True, subdomain_grid_auto_disable:builtins.bool=True, subdomain_num_cubes_per_dim:builtins.int=64, aabb_min:typing.Optional[typing.Sequence[builtins.float]]=None, aabb_max:typing.Optional[typing.Sequence[builtins.float]]=None) -> SurfaceReconstruction:
+def reconstruct_surface(particles:numpy.typing.NDArray[typing.Any], *, particle_radius:builtins.float, rest_density:builtins.float=1000.0, smoothing_length:builtins.float, cube_size:builtins.float, iso_surface_threshold:builtins.float=0.6, aabb_min:typing.Optional[typing.Sequence[builtins.float]]=None, aabb_max:typing.Optional[typing.Sequence[builtins.float]]=None, multi_threading:builtins.bool=True, global_neighborhood_list:builtins.bool=False, subdomain_grid:builtins.bool=True, subdomain_grid_auto_disable:builtins.bool=True, subdomain_num_cubes_per_dim:builtins.int=64) -> SurfaceReconstruction:
     r"""
     Performs a surface reconstruction from the given particles without additional post-processing
     
     Note that all parameters use absolute distance units and are not relative to the particle radius.
+    
+    Parameters
+    ----------
+    particles : numpy.ndarray
+        A two-dimensional numpy array of shape (N, 3) containing the positions of the particles.
+    particle_radius
+        Particle radius.
+    rest_density
+        Rest density of the fluid.
+    smoothing_length
+        Smoothing length of the SPH kernel in absolute distance units (compact support radius of SPH kernel will be twice the smoothing length).
+    cube_size
+        Size of the cubes (voxels) used for the marching cubes grid in absolute distance units.
+    iso_surface_threshold
+        Threshold of the SPH interpolation of the "color field" where the iso surface should be extracted.
+    aabb_min
+        Lower corner of the AABB of particles to consider in the reconstruction.
+    aabb_max
+        Upper corner of the AABB of particles to consider in the reconstruction.
+    multi_threading
+        Flag to enable multi-threading for the reconstruction and post-processing steps.
+    subdomain_grid
+        Flag to enable spatial decomposition by dividing the domain into subdomains with dense marching cube grids for efficient multi-threading.
+    subdomain_grid_auto_disable
+        Flag to automatically disable the subdomain grid if the global domain is too small.
+    subdomain_num_cubes_per_dim
+        Number of marching cubes voxels along each coordinate axis in each subdomain if the subdomain grid is enabled.
     """
 
 def reconstruction_pipeline(particles:numpy.typing.NDArray[typing.Any], *, attributes_to_interpolate:typing.Optional[dict]=None, particle_radius:builtins.float, rest_density:builtins.float=1000.0, smoothing_length:builtins.float, cube_size:builtins.float, iso_surface_threshold:builtins.float=0.6, aabb_min:typing.Optional[typing.Sequence[builtins.float]]=None, aabb_max:typing.Optional[typing.Sequence[builtins.float]]=None, multi_threading:builtins.bool=True, subdomain_grid:builtins.bool=True, subdomain_grid_auto_disable:builtins.bool=True, subdomain_num_cubes_per_dim:builtins.int=64, check_mesh_closed:builtins.bool=False, check_mesh_manifold:builtins.bool=False, check_mesh_orientation:builtins.bool=False, check_mesh_debug:builtins.bool=False, mesh_cleanup:builtins.bool=False, mesh_cleanup_snap_dist:typing.Optional[builtins.float]=None, decimate_barnacles:builtins.bool=False, keep_vertices:builtins.bool=False, compute_normals:builtins.bool=False, sph_normals:builtins.bool=False, normals_smoothing_iters:typing.Optional[builtins.int]=None, mesh_smoothing_iters:typing.Optional[builtins.int]=None, mesh_smoothing_weights:builtins.bool=True, mesh_smoothing_weights_normalization:builtins.float=13.0, generate_quads:builtins.bool=False, quad_max_edge_diag_ratio:builtins.float=1.75, quad_max_normal_angle:builtins.float=10.0, quad_max_interior_angle:builtins.float=135.0, output_mesh_smoothing_weights:builtins.bool=False, output_raw_normals:builtins.bool=False, output_raw_mesh:builtins.bool=False, mesh_aabb_min:typing.Optional[typing.Sequence[builtins.float]]=None, mesh_aabb_max:typing.Optional[typing.Sequence[builtins.float]]=None, mesh_aabb_clamp_vertices:builtins.bool=True) -> tuple[MeshWithData, SurfaceReconstruction]:
@@ -408,83 +540,79 @@ def reconstruction_pipeline(particles:numpy.typing.NDArray[typing.Any], *, attri
     Parameters
     ----------
     particles : numpy.ndarray
-       A two-dimensional numpy array of shape (N, 3) containing the positions of the particles.
+        A two-dimensional numpy array of shape (N, 3) containing the positions of the particles.
     attributes_to_interpolate
-       Dictionary containing all attributes to interpolate. The keys are the attribute names and the values are the corresponding 1D/2D arrays.\n
-       The arrays must have the same length as the number of particles. \n
-       Supported array types are 2D float32/float64 arrays for vector attributes and 1D uint64/float32/float64 arrays for scalar attributes.
+        Dictionary containing all attributes to interpolate. The keys are the attribute names and the values are the corresponding 1D/2D arrays.
+        The arrays must have the same length as the number of particles.
+        Supported array types are 2D float32/float64 arrays for vector attributes and 1D uint64/float32/float64 arrays for scalar attributes.
     particle_radius
-        Particle radius
+        Particle radius.
     rest_density
-        Rest density of the fluid
+        Rest density of the fluid.
     smoothing_length
-        Smoothing length of the fluid in multiples of the particle radius (compact support radius of SPH kernel will be twice the smoothing length)
+        Smoothing length of the SPH kernel in multiples of the particle radius (compact support radius of SPH kernel will be twice the smoothing length).
     cube_size
-        Size of the cubes used for the marching cubes grid in multiples of the particle radius
+        Size of the cubes (voxels) used for the marching cubes grid in multiples of the particle radius.
     iso_surface_threshold
-        Threshold for the iso surface
+        Threshold of the SPH interpolation of the "color field" where the iso surface should be extracted.
     aabb_min
-        Lower corner of the AABB of particles to consider in the reconstruction
+        Lower corner [x,y,z] of the AABB of particles that are active in the reconstruction.
     aabb_max
-        Upper corner of the AABB of particles to consider in the reconstruction
+        Upper corner [x,y,z] of the AABB of particles to consider in the reconstruction.
     multi_threading
-        Multi-threading
+        Flag to enable multi-threading for the reconstruction and post-processing steps.
     subdomain_grid
-        Enable spatial decomposition using by dividing the domain into subdomains with dense marching cube grids for efficient multi-threading
+        Flag to enable spatial decomposition by dividing the domain into subdomains with dense marching cube grids for efficient multi-threading.
     subdomain_grid_auto_disable
-        Whether to automatically disable the subdomain grid if the global domain is too small
+        Flag to automatically disable the subdomain grid if the global domain is too small.
     subdomain_num_cubes_per_dim
-        Each subdomain will be a cube consisting of this number of MC cube cells along each coordinate axis
+        Number of marching cubes voxels along each coordinate axis in each subdomain if the subdomain grid is enabled.
     check_mesh_closed
-        Enable checking the final mesh for holes
+        Flag to enable checking the final mesh for holes.
     check_mesh_manifold
-        Enable checking the final mesh for non-manifold edges and vertices
+        Flag to enable checking the final mesh for non-manifold edges and vertices.
     check_mesh_orientation
-        Enable checking the final mesh for inverted triangles (compares angle between vertex normals and adjacent face normals)
+        Flag to enable checking the final mesh for inverted triangles (compares angle between vertex normals and adjacent face normals).
     check_mesh_debug
-        Enable additional debug output for the check-mesh operations (has no effect if no other check-mesh option is enabled)
+        Flag to enable additional debug output for the check-mesh operations (has no effect if no other check-mesh option is enabled).
     mesh_cleanup
-        Flag to perform mesh cleanup\n
-        This implements the method from “Compact isocontours from sampled data” (Moore, Warren; 1992)
+        Flag to enable marching cubes mesh cleanup. This implements the method from "Compact isocontours from sampled data" (Moore, Warren; 1992).
     mesh_cleanup_snap_dist
-        If MC mesh cleanup is enabled, vertex snapping can be limited to this distance relative to the MC edge length (should be in range of [0.0,0.5])
+        If marching cubes mesh cleanup is enabled, this limits vertex snapping to the specified distance relative to the MC edge length (should be in range of [0.0,0.5]).
     decimate_barnacles
-        Flag to perform barnacle decimation\n
-        For details see “Weighted Laplacian Smoothing for Surface Reconstruction of Particle-based Fluids” (Löschner, Böttcher, Jeske, Bender; 2023).
+        Flag to perform barnacle decimation. For details see "Weighted Laplacian Smoothing for Surface Reconstruction of Particle-based Fluids" (Löschner, Böttcher, Jeske, Bender; 2023).
     keep_vertices
-        Flag to keep any vertices without connectivity resulting from mesh cleanup or decimation step
+        Flag to retain any vertices without connectivity resulting from mesh cleanup or decimation step instead of filtering them out.
     compute_normals
-        Flag to compute normals\n
-        If set to True, the normals will be computed and stored in the mesh.
+        Flag to enable computation of vertex normals on the final mesh.
     sph_normals
-        Flag to compute normals using SPH interpolation instead of geometry-based normals.
+        Flag to enable computation of normals using SPH interpolation (gradient of the color field) instead of geometry-based normals.
     normals_smoothing_iters
-        Number of Laplacian smoothing iterations for the normal field
+        Number of Laplacian smoothing iterations to perform on the normal field.
     mesh_smoothing_iters
-        Number of Laplacian smoothing iterations for the mesh
+        Number of Laplacian smoothing iterations to perform on the mesh vertices.
     mesh_smoothing_weights
-        Flag to compute mesh smoothing weights\n
-        This implements the method from “Weighted Laplacian Smoothing for Surface Reconstruction of Particle-based Fluids” (Löschner, Böttcher, Jeske, Bender; 2023).
+        Flag to enable computation and usage of mesh smoothing weights according to "Weighted Laplacian Smoothing for Surface Reconstruction of Particle-based Fluids" (Löschner, Böttcher, Jeske, Bender; 2023).
     mesh_smoothing_weights_normalization
-        Normalization value for the mesh smoothing weights
+        Normalization value for the mesh smoothing weights.
     generate_quads
-        Enable trying to convert triangles to quads if they meet quality criteria
+        Flag to enable conversion of triangles to quads depending on geometric criteria.
     quad_max_edge_diag_ratio
-        Maximum allowed ratio of quad edge lengths to its diagonals to merge two triangles to a quad (inverse is used for minimum)
+        Maximum allowed ratio of quad edge lengths to its diagonals to merge two triangles to a quad (inverse is used for minimum).
     quad_max_normal_angle
-        Maximum allowed angle (in degrees) between triangle normals to merge them to a quad
+        Maximum allowed angle (in degrees) between triangle normals to merge them to a quad.
     quad_max_interior_angle
-        Maximum allowed vertex interior angle (in degrees) inside a quad to merge two triangles to a quad
+        Maximum allowed vertex interior angle (in degrees) inside a quad to merge two triangles to a quad.
     output_mesh_smoothing_weights
-        Flag to store the mesh smoothing weights if smoothing weights are computed.
+        Flag to attach and return the smoothing weights as a mesh attribute if smoothing weights are computed.
     output_raw_normals
-        Flag to output the raw normals in addition to smoothed normals if smoothing of normals is enabled
+        Flag to output the raw normals in addition to smoothed normals if smoothing of normals is enabled.
     output_raw_mesh
-        When true, also return the SurfaceReconstruction object with no post-processing applied
+        Flag to return a copy of the raw mesh before any post-processing steps (inside the returned reconstruction object).
     mesh_aabb_min
-        Smallest corner of the axis-aligned bounding box for the mesh
+        Lower corner [x,y,z] of the axis-aligned bounding box for the mesh, triangles fully outside this box will be removed.
     mesh_aabb_max
-        Largest corner of the axis-aligned bounding box for the mesh
+        Upper corner [x,y,z] of the axis-aligned bounding box for the mesh, triangles fully outside this box will be removed.
     mesh_aabb_clamp_vertices
-        Flag to clamp the vertices of the mesh to the AABB
+        Flag to clamp the vertices of the mesh to the AABB in addition to removing triangles outside the AABB.
     """
