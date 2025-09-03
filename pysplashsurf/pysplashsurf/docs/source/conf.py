@@ -6,27 +6,29 @@
 
 # -- Path setup --------------------------------------------------------------
 
-# If extensions (or modules to document with autodoc) are in another directory,
-# add these directories to sys.path here. If the directory is relative to the
-# documentation root, use os.path.abspath to make it absolute, like shown here.
-#
-
-
 import os
 import sys
 
 from sphinx.ext.autodoc.importer import import_module
-print(f"### Appended path: {os.path.abspath('../../')}")
-sys.path.insert(0, os.path.abspath('../../'))
-pysplashsurf = import_module('pysplashsurf')
+
+# Verify that the generated stub file exists
+stub_path = os.path.abspath("../../pysplashsurf.pyi")
+if not os.path.exists(stub_path):
+   print(f"### Error: Stub file not found at {stub_path}. Please ensure stub_gen produced pysplashsurf.pyi.")
+   sys.exit(1)
+
+# Import the stub file
+print(f"### Prepend to path: {os.path.abspath('../../')}")
+sys.path.insert(0, os.path.abspath("../../"))
+pysplashsurf = import_module("pysplashsurf")
 
 #import pysplashsurf
 
 # -- Project information -----------------------------------------------------
 
-project = 'pySplashsurf'
-copyright = '2025, Interactive Computer Graphics'
-author = 'Interactive Computer Graphics'
+project = "pySplashsurf"
+copyright = "2025, Interactive Computer Graphics"
+author = "Interactive Computer Graphics"
 
 
 # -- General configuration ---------------------------------------------------
@@ -35,21 +37,21 @@ author = 'Interactive Computer Graphics'
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
-   'sphinx.ext.autodoc',
-   'sphinx.ext.autosummary',
-   'sphinx.ext.napoleon',
-   'numpydoc',
-   'myst_parser',
-   'sphinx_rtd_theme',
-   #'sphinx_autodoc_typehints'
+    "sphinx.ext.autodoc",
+    "sphinx.ext.autosummary",
+    "sphinx.ext.napoleon",
+    "numpydoc",
+    "myst_parser",
+    "sphinx_rtd_theme",
+    #'sphinx_autodoc_typehints'
 ]
 
-source_suffix = ['.rst', '.md']
+source_suffix = [".rst", ".md"]
 
 numpydoc_class_members_toctree = False
 
 # Add any paths that contain templates here, relative to this directory.
-templates_path = ['_templates']
+templates_path = ["_templates"]
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
@@ -62,7 +64,7 @@ exclude_patterns = []
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = 'sphinx_rtd_theme'
+html_theme = "sphinx_rtd_theme"
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
@@ -73,7 +75,7 @@ autodoc_typehints = "both"
 
 always_document_param_types = True
 always_use_bars_union = True
-#typehints_document_rtype = False
-#typehints_use_rtype = False
-#typehints_use_signature = True
-#typehints_use_signature_return = True
+# typehints_document_rtype = False
+# typehints_use_rtype = False
+# typehints_use_signature = True
+# typehints_use_signature_return = True
