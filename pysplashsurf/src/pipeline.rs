@@ -23,6 +23,90 @@ use crate::utils::{IndexT, pyerr_unsupported_scalar};
 /// Runs the surface reconstruction pipeline for the given particle positions with optional post-processing
 ///
 /// Note that smoothing length and cube size are given in multiples of the particle radius.
+///
+/// Parameters
+/// ----------
+/// particles : numpy.ndarray
+///    A two-dimensional numpy array of shape (N, 3) containing the positions of the particles.
+/// attributes_to_interpolate
+///    Dictionary containing all attributes to interpolate. The keys are the attribute names and the values are the corresponding 1D/2D arrays.\n
+///    The arrays must have the same length as the number of particles. \n
+///    Supported array types are 2D float32/float64 arrays for vector attributes and 1D uint64/float32/float64 arrays for scalar attributes.
+/// particle_radius
+///     Particle radius
+/// rest_density
+///     Rest density of the fluid
+/// smoothing_length
+///     Smoothing length of the fluid in multiples of the particle radius (compact support radius of SPH kernel will be twice the smoothing length)
+/// cube_size
+///     Size of the cubes used for the marching cubes grid in multiples of the particle radius
+/// iso_surface_threshold
+///     Threshold for the iso surface
+/// aabb_min
+///     Lower corner of the AABB of particles to consider in the reconstruction
+/// aabb_max
+///     Upper corner of the AABB of particles to consider in the reconstruction
+/// multi_threading
+///     Multi-threading
+/// subdomain_grid
+///     Enable spatial decomposition using by dividing the domain into subdomains with dense marching cube grids for efficient multi-threading
+/// subdomain_grid_auto_disable
+///     Whether to automatically disable the subdomain grid if the global domain is too small
+/// subdomain_num_cubes_per_dim
+///     Each subdomain will be a cube consisting of this number of MC cube cells along each coordinate axis
+/// check_mesh_closed
+///     Enable checking the final mesh for holes
+/// check_mesh_manifold
+///     Enable checking the final mesh for non-manifold edges and vertices
+/// check_mesh_orientation
+///     Enable checking the final mesh for inverted triangles (compares angle between vertex normals and adjacent face normals)
+/// check_mesh_debug
+///     Enable additional debug output for the check-mesh operations (has no effect if no other check-mesh option is enabled)
+/// mesh_cleanup
+///     Flag to perform mesh cleanup\n
+///     This implements the method from “Compact isocontours from sampled data” (Moore, Warren; 1992)
+/// mesh_cleanup_snap_dist
+///     If MC mesh cleanup is enabled, vertex snapping can be limited to this distance relative to the MC edge length (should be in range of [0.0,0.5])
+/// decimate_barnacles
+///     Flag to perform barnacle decimation\n
+///     For details see “Weighted Laplacian Smoothing for Surface Reconstruction of Particle-based Fluids” (Löschner, Böttcher, Jeske, Bender; 2023).
+/// keep_vertices
+///     Flag to keep any vertices without connectivity resulting from mesh cleanup or decimation step
+/// compute_normals
+///     Flag to compute normals\n
+///     If set to True, the normals will be computed and stored in the mesh.
+/// sph_normals
+///     Flag to compute normals using SPH interpolation instead of geometry-based normals.
+/// normals_smoothing_iters
+///     Number of Laplacian smoothing iterations for the normal field
+/// mesh_smoothing_iters
+///     Number of Laplacian smoothing iterations for the mesh
+/// mesh_smoothing_weights
+///     Flag to compute mesh smoothing weights\n
+///     This implements the method from “Weighted Laplacian Smoothing for Surface Reconstruction of Particle-based Fluids” (Löschner, Böttcher, Jeske, Bender; 2023).
+/// mesh_smoothing_weights_normalization
+///     Normalization value for the mesh smoothing weights
+/// generate_quads
+///     Enable trying to convert triangles to quads if they meet quality criteria
+/// quad_max_edge_diag_ratio
+///     Maximum allowed ratio of quad edge lengths to its diagonals to merge two triangles to a quad (inverse is used for minimum)
+/// quad_max_normal_angle
+///     Maximum allowed angle (in degrees) between triangle normals to merge them to a quad
+/// quad_max_interior_angle
+///     Maximum allowed vertex interior angle (in degrees) inside a quad to merge two triangles to a quad
+/// output_mesh_smoothing_weights
+///     Flag to store the mesh smoothing weights if smoothing weights are computed.
+/// output_raw_normals
+///     Flag to output the raw normals in addition to smoothed normals if smoothing of normals is enabled
+/// output_raw_mesh
+///     When true, also return the SurfaceReconstruction object with no post-processing applied
+/// mesh_aabb_min
+///     Smallest corner of the axis-aligned bounding box for the mesh
+/// mesh_aabb_max
+///     Largest corner of the axis-aligned bounding box for the mesh
+/// mesh_aabb_clamp_vertices
+///     Flag to clamp the vertices of the mesh to the AABB
+///
 #[gen_stub_pyfunction]
 #[pyfunction]
 #[pyo3(name = "reconstruction_pipeline")]
@@ -35,7 +119,7 @@ use crate::utils::{IndexT, pyerr_unsupported_scalar};
     normals_smoothing_iters = None, mesh_smoothing_iters = None, mesh_smoothing_weights = true, mesh_smoothing_weights_normalization = 13.0,
     generate_quads = false, quad_max_edge_diag_ratio = 1.75, quad_max_normal_angle = 10.0, quad_max_interior_angle = 135.0,
     output_mesh_smoothing_weights = false, output_raw_normals = false, output_raw_mesh = false,
-    mesh_aabb_min = None, mesh_aabb_max = None, mesh_aabb_clamp_vertices = true, dtype = None
+    mesh_aabb_min = None, mesh_aabb_max = None, mesh_aabb_clamp_vertices = true
 ))]
 pub fn reconstruction_pipeline<'py>(
     particles: &Bound<'py, PyUntypedArray>,
@@ -75,11 +159,12 @@ pub fn reconstruction_pipeline<'py>(
     mesh_aabb_min: Option<[f64; 3]>,
     mesh_aabb_max: Option<[f64; 3]>,
     mesh_aabb_clamp_vertices: bool,
-    dtype: Option<Bound<'py, PyArrayDescr>>,
+    //dtype: Option<Bound<'py, PyArrayDescr>>,
 ) -> PyResult<(PyMeshWithData, PySurfaceReconstruction)> {
     let py = particles.py();
     let element_type = particles.dtype();
 
+    let dtype: Option<Bound<'py, PyArrayDescr>> = None;
     if let Some(target_dtype) = dtype
         && !target_dtype.is_equiv_to(&element_type)
     {

@@ -10,16 +10,14 @@
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
-#import pysplashsurf
+
 
 import os
 import sys
-# #sys.path.append(os.path.abspath('..'))
 
 from sphinx.ext.autodoc.importer import import_module
-rootpath = '/Users/floeschner/programming/splashsurf/pysplashsurf/pysplashsurf'
-sys_path = list(sys.path)
-sys.path.insert(0, str(rootpath))
+print(f"### Appended path: {os.path.abspath('../../')}")
+sys.path.insert(0, os.path.abspath('../../'))
 pysplashsurf = import_module('pysplashsurf')
 
 #import pysplashsurf
@@ -39,10 +37,11 @@ author = 'Interactive Computer Graphics'
 extensions = [
    'sphinx.ext.autodoc',
    'sphinx.ext.autosummary',
+   'sphinx.ext.napoleon',
    'numpydoc',
    'myst_parser',
    'sphinx_rtd_theme',
-   'sphinx_autodoc_typehints'
+   #'sphinx_autodoc_typehints'
 ]
 
 source_suffix = ['.rst', '.md']
@@ -74,7 +73,7 @@ autodoc_typehints = "both"
 
 always_document_param_types = True
 always_use_bars_union = True
-typehints_document_rtype = False
-typehints_use_rtype = False
-typehints_use_signature = True
-typehints_use_signature_return = True
+#typehints_document_rtype = False
+#typehints_use_rtype = False
+#typehints_use_signature = True
+#typehints_use_signature_return = True
