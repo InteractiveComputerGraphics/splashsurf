@@ -22,8 +22,8 @@ use crate::neighborhood_search::{
 use crate::topology::Direction;
 use crate::uniform_grid::{EdgeIndex, GridConstructionError, UniformCartesianCubeGrid3d};
 use crate::{
-    Aabb3d, MapType, Parameters, RealConvert, SpatialDecomposition, SurfaceReconstruction, new_map,
-    new_parallel_map, profile,
+    Aabb3d, MapType, Parameters, RealConvert, SpatialDecomposition, SurfaceReconstruction, kernel,
+    new_map, new_parallel_map, profile,
 };
 use crate::{Index, Real};
 
@@ -110,7 +110,7 @@ pub(crate) fn initialize_parameters<I: Index, R: Real>(
     let cube_size = parameters.cube_size;
     let surface_threshold = parameters.iso_surface_threshold;
 
-    let particle_rest_volume = R::from_float(4.0) * R::frac_pi_3() * particle_radius.powi(3);
+    let particle_rest_volume = kernel::Volume::cube_particle(particle_radius);
     let particle_rest_mass = particle_rest_volume * particle_rest_density;
 
     let ghost_particle_margin =

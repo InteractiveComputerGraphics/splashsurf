@@ -244,7 +244,7 @@ fn reconstruct() -> Result<(), anyhow::Error> {
     let grid = UniformGrid::<I, R>::from_aabb(&particle_aabb, cube_size)?;
     let kernel = kernel::CubicSplineKernel::new(compact_support_radius);
 
-    let particle_rest_volume = (2.0 * args.particle_radius).powi(3);
+    let particle_rest_volume = kernel::Volume::cube_particle(args.particle_radius);
     let particle_rest_mass = particle_rest_volume * args.rest_density;
 
     info!(

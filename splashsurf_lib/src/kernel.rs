@@ -6,6 +6,21 @@ use numeric_literals::replace_float_literals;
 
 // TODO: Add reference for the kernel function, document formula
 
+/// Utility functions for computing the volume of fluid particles
+pub struct Volume;
+
+impl Volume {
+    /// Returns the volume of a particle representing a cube of fluid
+    pub fn cube_particle<R: Real>(particle_radius: R) -> R {
+        (particle_radius + particle_radius).powi(3)
+    }
+
+    /// Returns the volume of a particle representing a sphere of fluid
+    pub fn sphere_particle<R: Real>(particle_radius: R) -> R {
+        R::from_float(4.0) * R::frac_pi_3() * particle_radius.powi(3)
+    }
+}
+
 /// Trait for symmetric kernel functions in three dimensions
 pub trait SymmetricKernel3d<R: Real> {
     /// Evaluates the kernel at the radial distance `r` relative to the origin

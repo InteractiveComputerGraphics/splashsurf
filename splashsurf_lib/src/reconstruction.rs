@@ -6,7 +6,7 @@ use crate::mesh::TriMesh3d;
 use crate::uniform_grid::UniformGrid;
 use crate::workspace::LocalReconstructionWorkspace;
 use crate::{
-    Index, Parameters, Real, ReconstructionError, SurfaceReconstruction, density_map,
+    Index, Parameters, Real, ReconstructionError, SurfaceReconstruction, density_map, kernel,
     marching_cubes, neighborhood_search, profile,
 };
 use anyhow::Context;
@@ -120,8 +120,7 @@ pub(crate) fn compute_particle_densities_and_neighbors<I: Index, R: Real>(
     profile!("compute_particle_densities_and_neighbors");
 
     let particle_rest_density = parameters.rest_density;
-    let particle_rest_volume =
-        R::from_float(4.0) * R::frac_pi_3() * parameters.particle_radius.powi(3);
+    let particle_rest_volume = kernel::Volume::cube_particle(parameters.particle_radius);
     let particle_rest_mass = particle_rest_volume * particle_rest_density;
 
     trace!("Starting neighborhood search...");
@@ -153,8 +152,7 @@ pub(crate) fn reconstruct_single_surface_append<I: Index, R: Real>(
     output_mesh: &mut TriMesh3d<R>,
 ) -> Result<(), ReconstructionError<I, R>> {
     let particle_rest_density = parameters.rest_density;
-    let particle_rest_volume =
-        R::from_float(4.0) * R::frac_pi_3() * parameters.particle_radius.powi(3);
+    let particle_rest_volume = kernel::Volume::cube_particle(parameters.particle_radius);
     let particle_rest_mass = particle_rest_volume * particle_rest_density;
 
     let particle_densities = {
