@@ -108,8 +108,8 @@ def test_pipeline_f64():
     impl_basic_test(np.float64)
 
 
-def test_reconstruct():
-    particles = np.array(meshio.read(VTK_PATH).points, dtype=np.float32)
+def reconstruct_test(dtype):
+    particles = np.array(meshio.read(VTK_PATH).points, dtype=dtype)
 
     reconstruction = pysplashsurf.reconstruct_surface(
         particles,
@@ -130,17 +130,25 @@ def test_reconstruct():
 
     mesh = reconstruction.mesh
 
-    assert mesh.dtype == np.float32
+    assert mesh.dtype == dtype
 
-    assert reconstruction.particle_densities.dtype == np.float32
+    assert reconstruction.particle_densities.dtype == dtype
     assert len(reconstruction.particle_densities) == len(particles)
 
     assert len(mesh.vertices) in range(25000, 30000)
     assert len(mesh.triangles) in range(49000, 53000)
 
 
-def test_neighborhood_search():
-    particles = np.array(meshio.read(VTK_PATH).points, dtype=np.float32)
+def test_reconstruct_f32():
+    reconstruct_test(np.float32)
+
+
+def test_reconstruct_f64():
+    reconstruct_test(np.float64)
+
+
+def neighborhood_search_test(dtype):
+    particles = np.array(meshio.read(VTK_PATH).points, dtype=dtype)
 
     reconstruction = pysplashsurf.reconstruct_surface(
         particles,
@@ -174,8 +182,16 @@ def test_neighborhood_search():
     # TODO: Compare with naive neighbor search
 
 
-def test_check_consistency():
-    particles = np.array(meshio.read(VTK_PATH).points, dtype=np.float32)
+def test_neighborhood_search_f32():
+    neighborhood_search_test(np.float32)
+
+
+def test_neighborhood_search_f64():
+    neighborhood_search_test(np.float64)
+
+
+def check_consistency_test(dtype):
+    particles = np.array(meshio.read(VTK_PATH).points, dtype=dtype)
 
     reconstruction = pysplashsurf.reconstruct_surface(
         particles,
@@ -208,8 +224,16 @@ def test_check_consistency():
     # TODO: Delete some triangles and check for failure
 
 
-def test_tris_to_quads():
-    particles = np.array(meshio.read(VTK_PATH).points, dtype=np.float32)
+def test_check_consistency_f32():
+    check_consistency_test(np.float32)
+
+
+def test_check_consistency_f64():
+    check_consistency_test(np.float64)
+
+
+def tris_to_quads_test(dtype):
+    particles = np.array(meshio.read(VTK_PATH).points, dtype=dtype)
 
     mesh_with_data, reconstruction = pysplashsurf.reconstruction_pipeline(
         particles,
@@ -251,8 +275,16 @@ def test_tris_to_quads():
     assert "wnn" in mesh_with_data.point_attributes
 
 
-def test_interpolator():
-    particles = np.array(meshio.read(VTK_PATH).points, dtype=np.float32)
+def test_tris_to_quads_f32():
+    tris_to_quads_test(np.float32)
+
+
+def test_tris_to_quads_f64():
+    tris_to_quads_test(np.float64)
+
+
+def interpolator_test(dtype):
+    particles = np.array(meshio.read(VTK_PATH).points, dtype=dtype)
 
     mesh_with_data, reconstruction = pysplashsurf.reconstruction_pipeline(
         particles,
@@ -280,20 +312,20 @@ def test_interpolator():
     )
 
     assert type(mesh_densities) is np.ndarray
-    assert mesh_densities.dtype == np.float32
+    assert mesh_densities.dtype == dtype
     assert mesh_densities.shape == (len(mesh.vertices),)
     assert mesh_densities.min() >= 0.0
 
     mesh_particles = interpolator.interpolate_quantity(particles, mesh.vertices)
 
     assert type(mesh_particles) is np.ndarray
-    assert mesh_particles.dtype == np.float32
+    assert mesh_particles.dtype == dtype
     assert mesh_particles.shape == (len(mesh.vertices), 3)
 
     mesh_sph_normals = interpolator.interpolate_normals(mesh.vertices)
 
     assert type(mesh_sph_normals) is np.ndarray
-    assert mesh_sph_normals.dtype == np.float32
+    assert mesh_sph_normals.dtype == dtype
     assert mesh_sph_normals.shape == (len(mesh.vertices), 3)
 
     mesh_with_data.add_point_attribute("density", mesh_densities)
@@ -307,3 +339,11 @@ def test_interpolator():
     assert np.array_equal(mesh_with_data.point_attributes["density"], mesh_densities)
     assert np.array_equal(mesh_with_data.point_attributes["position"], mesh_particles)
     assert np.array_equal(mesh_with_data.point_attributes["normal"], mesh_sph_normals)
+
+
+def test_interpolator_f32():
+    interpolator_test(np.float32)
+
+
+def test_interpolator_f64():
+    interpolator_test(np.float64)

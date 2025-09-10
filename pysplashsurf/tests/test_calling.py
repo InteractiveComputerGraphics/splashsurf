@@ -15,10 +15,10 @@ def now_s():
     return time.process_time_ns() / (10**9)
 
 
-def test_marching_cubes_calls():
+def marching_cubes_calls(dtype):
     print("\nTesting marching cubes calls")
 
-    particles = np.array(meshio.read(VTK_PATH).points, dtype=np.float32)
+    particles = np.array(meshio.read(VTK_PATH).points, dtype=dtype)
     reconstruction = pysplashsurf.reconstruct_surface(
         particles,
         particle_radius=0.025,
@@ -38,6 +38,14 @@ def test_marching_cubes_calls():
     verts_after = len(mesh.vertices)
     print("# of vertices after:", verts_after)
     assert verts_after < verts_before
+
+
+def test_marching_cubes_calls_f32():
+    marching_cubes_calls(np.float32)
+
+
+def test_marching_cubes_calls_f64():
+    marching_cubes_calls(np.float64)
 
 
 def reconstruction_pipeline(
@@ -76,9 +84,10 @@ def reconstruction_pipeline(
     quad_max_interior_angle=135.0,
     subdomain_grid=False,
     subdomain_num_cubes_per_dim=64,
+    dtype
 ):
     mesh = meshio.read(input_file)
-    particles = np.array(mesh.points, dtype=np.float64)
+    particles = np.array(mesh.points, dtype=dtype)
 
     if attributes_to_interpolate is None:
         attributes_to_interpolate = []
@@ -88,7 +97,7 @@ def reconstruction_pipeline(
     for attr in attributes_to_interpolate:
         if attr in mesh.point_data:
             if mesh.point_data[attr].dtype.kind == "f":
-                attrs[attr] = mesh.point_data[attr].astype(np.float64)
+                attrs[attr] = mesh.point_data[attr].astype(dtype)
             else:
                 attrs[attr] = mesh.point_data[attr].astype(np.int64)
 
@@ -131,11 +140,11 @@ def reconstruction_pipeline(
     mesh_with_data.write_to_file(output_file)
 
 
-def test_no_post_processing():
+def no_post_processing_test(dtype):
     start = now_s()
     subprocess.run(
         [BINARY_PATH]
-        + f"reconstruct {VTK_PATH} -o {DIR.joinpath('test_bin.vtk')} -r=0.025 -l=2.0 -c=0.5 -t=0.6 -d=on --subdomain-grid=on --mesh-cleanup=off --mesh-smoothing-weights=off --mesh-smoothing-iters=0 --normals=off --normals-smoothing-iters=0".split(),
+        + f"reconstruct {VTK_PATH} -o {DIR.joinpath('test_bin.vtk')} -r=0.025 -l=2.0 -c=0.5 -t=0.6 {"-d=on" if dtype == np.float64 else ""} --subdomain-grid=on --mesh-cleanup=off --mesh-smoothing-weights=off --mesh-smoothing-iters=0 --normals=off --normals-smoothing-iters=0".split(),
         check=True,
     )
     print("Binary done in", now_s() - start)
@@ -144,24 +153,25 @@ def test_no_post_processing():
     reconstruction_pipeline(
         VTK_PATH,
         DIR.joinpath("test.vtk"),
-        particle_radius=np.float64(0.025),
-        smoothing_length=np.float64(2.0),
-        cube_size=np.float64(0.5),
-        iso_surface_threshold=np.float64(0.6),
+        particle_radius=0.025,
+        smoothing_length=2.0,
+        cube_size=0.5,
+        iso_surface_threshold=0.6,
         mesh_smoothing_weights=False,
         mesh_smoothing_iters=0,
         normals_smoothing_iters=0,
         mesh_cleanup=False,
         compute_normals=False,
         subdomain_grid=True,
+        dtype=dtype
     )
     print("Python done in", now_s() - start)
 
     binary_mesh = meshio.read(DIR.joinpath("test_bin.vtk"))
     python_mesh = meshio.read(DIR.joinpath("test.vtk"))
 
-    binary_verts = np.array(binary_mesh.points, dtype=np.float64)
-    python_verts = np.array(python_mesh.points, dtype=np.float64)
+    binary_verts = np.array(binary_mesh.points, dtype=dtype)
+    python_verts = np.array(python_mesh.points, dtype=dtype)
 
     print("# of vertices binary:", len(binary_verts))
     print("# of vertices python:", len(python_verts))
@@ -174,11 +184,19 @@ def test_no_post_processing():
     assert np.allclose(binary_verts, python_verts)
 
 
-def test_with_post_processing():
+def test_no_post_processing_f32():
+    no_post_processing_test(np.float32)
+
+
+def test_no_post_processing_f64():
+    no_post_processing_test(np.float64)
+
+
+def with_post_processing_test(dtype):
     start = now_s()
     subprocess.run(
         [BINARY_PATH]
-        + f"reconstruct {VTK_PATH} -o {DIR.joinpath('test_bin.vtk')} -r=0.025 -l=2.0 -c=0.5 -t=0.6 -d=on --subdomain-grid=on --interpolate_attribute velocity --decimate-barnacles=on --mesh-cleanup=on --mesh-smoothing-weights=on --mesh-smoothing-iters=25 --normals=on --normals-smoothing-iters=10 --output-smoothing-weights=on --generate-quads=off".split(),
+        + f"reconstruct {VTK_PATH} -o {DIR.joinpath('test_bin.vtk')} -r=0.025 -l=2.0 -c=0.5 -t=0.6 {"-d=on" if dtype == np.float64 else ""} --subdomain-grid=on --interpolate_attribute velocity --decimate-barnacles=on --mesh-cleanup=on --mesh-smoothing-weights=on --mesh-smoothing-iters=25 --normals=on --normals-smoothing-iters=10 --output-smoothing-weights=on --generate-quads=off".split(),
         check=True,
     )
     print("Binary done in", now_s() - start)
@@ -188,12 +206,12 @@ def test_with_post_processing():
         VTK_PATH,
         DIR.joinpath("test.vtk"),
         attributes_to_interpolate=["velocity"],
-        particle_radius=np.float64(0.025),
-        smoothing_length=np.float64(2.0),
-        cube_size=np.float64(0.5),
-        iso_surface_threshold=np.float64(0.6),
+        particle_radius=0.025,
+        smoothing_length=2.0,
+        cube_size=0.5,
+        iso_surface_threshold=0.6,
         mesh_smoothing_weights=True,
-        mesh_smoothing_weights_normalization=np.float64(13.0),
+        mesh_smoothing_weights_normalization=13.0,
         mesh_smoothing_iters=25,
         normals_smoothing_iters=10,
         generate_quads=False,
@@ -203,6 +221,7 @@ def test_with_post_processing():
         decimate_barnacles=True,
         output_mesh_smoothing_weights=True,
         output_raw_normals=True,
+        dtype=dtype
     )
     print("Python done in", now_s() - start)
 
@@ -210,8 +229,8 @@ def test_with_post_processing():
     python_mesh = meshio.read(DIR.joinpath("test.vtk"))
 
     # Compare number of vertices
-    binary_verts = np.array(binary_mesh.points, dtype=np.float64)
-    python_verts = np.array(python_mesh.points, dtype=np.float64)
+    binary_verts = np.array(binary_mesh.points, dtype=dtype)
+    python_verts = np.array(python_mesh.points, dtype=dtype)
 
     print("# of vertices binary:", len(binary_verts))
     print("# of vertices python:", len(python_verts))
@@ -249,3 +268,11 @@ def test_with_post_processing():
     print("Python verts:", python_verts)
 
     assert np.allclose(binary_verts, python_verts)
+
+
+def test_with_post_processing_f32():
+    with_post_processing_test(np.float32)
+
+
+def test_with_post_processing_f64():
+    with_post_processing_test(np.float64)
