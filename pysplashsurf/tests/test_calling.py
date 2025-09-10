@@ -6,7 +6,7 @@ import time
 import trimesh
 import pathlib
 
-BINARY_PATH = "/home/fek/Documents/HiwiJob/splashsurf/target/release/splashsurf"
+BINARY_PATH = "splashsurf"
 DIR = pathlib.Path(__file__).parent.resolve()
 VTK_PATH = DIR.joinpath("ParticleData_Fluid_5.vtk")
 
