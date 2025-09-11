@@ -23,6 +23,7 @@ impl Volume {
 
 /// Trait for symmetric kernel functions in three dimensions
 pub trait SymmetricKernel3d<R: Real> {
+    fn compact_support_radius(&self) -> R;
     /// Evaluates the kernel at the radial distance `r` relative to the origin
     fn evaluate(&self, r: R) -> R;
     /// Evaluates the kernel gradient at the position `x` relative to the origin
@@ -80,6 +81,10 @@ impl<R: Real> CubicSplineKernel<R> {
 }
 
 impl<R: Real> SymmetricKernel3d<R> for CubicSplineKernel<R> {
+    fn compact_support_radius(&self) -> R {
+        self.compact_support_radius
+    }
+
     /// Evaluates the cubic spline kernel at the radial distance `r`
     fn evaluate(&self, r: R) -> R {
         let q = (r + r) / self.compact_support_radius;

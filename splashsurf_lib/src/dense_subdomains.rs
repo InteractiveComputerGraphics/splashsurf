@@ -795,6 +795,52 @@ pub fn density_grid_loop_neon<K: SymmetricKernel3d<f32>>(
     use core::arch::aarch64::*;
     const LANES: usize = 4;
 
+    struct CubicKernelNeon {
+        compact_support_inv: f32,
+        sigma: f32,
+    }
+
+    impl CubicKernelNeon {
+        fn new(compact_support_radius: f32) -> Self {
+            let r = compact_support_radius;
+            let compact_support_inv = 1.0 / r;
+            let rrr = r * r * r;
+            let sigma = 8.0 / (std::f32::consts::PI * rrr);
+            Self {
+                compact_support_inv,
+                sigma,
+            }
+        }
+
+        #[target_feature(enable = "neon")]
+        fn evaluate(&self, r: float32x4_t) -> float32x4_t {
+            let one = vdupq_n_f32(1.0);
+            let q = vmulq_n_f32(r, self.compact_support_inv);
+            let v = vsubq_f32(one, q);
+
+            // q <= 0.5
+            let res_inner = {
+                let qq = vmulq_f32(q, q);
+                let qqv = vmulq_f32(qq, v);
+                vmlsq_n_f32(vdupq_n_f32(self.sigma), qqv, 6.0 * self.sigma)
+            };
+            // 0.5 < q <= 1.0
+            let res_outer = {
+                let v2 = vmulq_f32(v, v);
+                let v3 = vmulq_f32(v2, v);
+                vmulq_n_f32(v3, 2.0 * self.sigma)
+            };
+
+            let leq_than_one = vcleq_f32(q, one);
+            let leq_than_half = vcleq_f32(q, vdupq_n_f32(0.5));
+            let res = vbslq_f32(leq_than_one, res_outer, vdupq_n_f32(0.0));
+            let res = vbslq_f32(leq_than_half, res_inner, res);
+            res
+        }
+    }
+
+    let kernel_neon = CubicKernelNeon::new(kernel.compact_support_radius());
+
     profile!("density grid loop");
     let mc_grid = subdomain_mc_grid;
     let extents = mc_grid.points_per_dim();
@@ -869,24 +915,25 @@ pub fn density_grid_loop_neon<K: SymmetricKernel3d<f32>>(
                     let dist_sq = vmlaq_f32(dist_sq, dzs, dzs);
                     let dist = vsqrtq_f32(dist_sq);
 
-                    let dist_sq =
-                        unsafe { std::mem::transmute::<float32x4_t, [f32; LANES]>(dist_sq) };
-                    let dist = unsafe { std::mem::transmute::<float32x4_t, [f32; LANES]>(dist) };
+                    // TODO: Hardcode
+                    let local_point = mc_grid
+                        .get_point([i, j, k])
+                        .expect("point has to be part of the subdomain grid");
+                    let flat_point_idx = mc_grid.flatten_point_index(&local_point);
+                    let flat_point_idx = flat_point_idx as usize;
 
-                    for ki in 0..LANES {
-                        if dist_sq[ki] < squared_support_with_margin {
-                            let v_i = particle_rest_mass / rho_i;
-                            let w_ij = kernel.evaluate(dist[ki]);
-                            let interpolated_value = v_i * w_ij;
-
-                            let local_point = mc_grid
-                                .get_point([i, j, k + ki as i64])
-                                .expect("point has to be part of the subdomain grid");
-                            let flat_point_idx = mc_grid.flatten_point_index(&local_point);
-                            let flat_point_idx = flat_point_idx as usize;
-                            levelset_grid[flat_point_idx] += interpolated_value;
-                        }
-                    }
+                    let v_i = particle_rest_mass / rho_i;
+                    let prev_val = unsafe {
+                        vld1q_f32(levelset_grid.as_ptr().offset(flat_point_idx as isize))
+                    };
+                    let w_ij = kernel_neon.evaluate(dist);
+                    let val = vmlaq_n_f32(prev_val, w_ij, v_i);
+                    unsafe {
+                        vst1q_f32(
+                            levelset_grid.as_mut_ptr().offset(flat_point_idx as isize),
+                            val,
+                        )
+                    };
                 }
 
                 for k in upper_k_aligned..upper[2] {
