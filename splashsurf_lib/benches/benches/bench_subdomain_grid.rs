@@ -7,7 +7,7 @@ use splashsurf_lib::{
 };
 use std::time::Duration;
 
-static CANYON_PATH: &str = "C:\\canyon.xyz";
+static CANYON_PATH: &str = "/Users/floeschner/Documents/canyon.xyz";
 
 fn parameters_canyon() -> Parameters<f32> {
     let particle_radius = 0.011;
