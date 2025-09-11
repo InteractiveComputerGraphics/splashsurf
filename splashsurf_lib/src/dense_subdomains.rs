@@ -702,18 +702,33 @@ pub fn density_grid_loop<I: Index, R: Real, K: SymmetricKernel3d<R>>(
         // We want to loop over the vertices of the enclosing cells plus all points in `cube_radius` distance from the cell
 
         let lower = [
-            particle_cell[0].saturating_sub(&cube_radius).max(I::zero()),
-            particle_cell[1].saturating_sub(&cube_radius).max(I::zero()),
-            particle_cell[2].saturating_sub(&cube_radius).max(I::zero()),
+            particle_cell[0]
+                .saturating_sub(&cube_radius)
+                .max(I::zero())
+                .min(extents[0]),
+            particle_cell[1]
+                .saturating_sub(&cube_radius)
+                .max(I::zero())
+                .min(extents[1]),
+            particle_cell[2]
+                .saturating_sub(&cube_radius)
+                .max(I::zero())
+                .min(extents[2]),
         ];
 
         let upper = [
             // We add 2 because
             //  - we want to loop over all grid points of the cell (+1 for upper points) + the radius
             //  - the upper range limit is exclusive (+1)
-            (particle_cell[0] + cube_radius + I::two()).min(extents[0]),
-            (particle_cell[1] + cube_radius + I::two()).min(extents[1]),
-            (particle_cell[2] + cube_radius + I::two()).min(extents[2]),
+            (particle_cell[0] + cube_radius + I::two())
+                .min(extents[0])
+                .max(I::zero()),
+            (particle_cell[1] + cube_radius + I::two())
+                .min(extents[1])
+                .max(I::zero()),
+            (particle_cell[2] + cube_radius + I::two())
+                .min(extents[2])
+                .max(I::zero()),
         ];
 
         // Loop over all grid points around the enclosing cell
@@ -861,18 +876,33 @@ pub fn density_grid_loop_neon<K: SymmetricKernel3d<f32>>(
         // We want to loop over the vertices of the enclosing cells plus all points in `cube_radius` distance from the cell
 
         let lower = [
-            particle_cell[0].saturating_sub(cube_radius).max(0) as usize,
-            particle_cell[1].saturating_sub(cube_radius).max(0) as usize,
-            particle_cell[2].saturating_sub(cube_radius).max(0) as usize,
+            particle_cell[0]
+                .saturating_sub(cube_radius)
+                .max(0)
+                .min(mc_points[0]) as usize,
+            particle_cell[1]
+                .saturating_sub(cube_radius)
+                .max(0)
+                .min(mc_points[1]) as usize,
+            particle_cell[2]
+                .saturating_sub(cube_radius)
+                .max(0)
+                .min(mc_points[2]) as usize,
         ];
 
         let upper = [
             // We add 2 because
             //  - we want to loop over all grid points of the cell (+1 for upper points) + the radius
             //  - the upper range limit is exclusive (+1)
-            (particle_cell[0] + cube_radius + 2).min(mc_points[0]) as usize,
-            (particle_cell[1] + cube_radius + 2).min(mc_points[1]) as usize,
-            (particle_cell[2] + cube_radius + 2).min(mc_points[2]) as usize,
+            (particle_cell[0] + cube_radius + 2)
+                .min(mc_points[0])
+                .max(0) as usize,
+            (particle_cell[1] + cube_radius + 2)
+                .min(mc_points[1])
+                .max(0) as usize,
+            (particle_cell[2] + cube_radius + 2)
+                .min(mc_points[2])
+                .max(0) as usize,
         ];
 
         let remainder = (upper[2] - lower[2]) % LANES;
@@ -908,14 +938,14 @@ pub fn density_grid_loop_neon<K: SymmetricKernel3d<f32>>(
                     let particle_xs = vdupq_n_f32(p_i[0]);
                     let particle_ys = vdupq_n_f32(p_i[1]);
                     let particle_zs = vdupq_n_f32(p_i[2]);
-                    
+
                     let grid_xs = vdupq_n_f32(grid_x);
                     let grid_ys = vdupq_n_f32(grid_y);
-                    
+
                     let dxs = vsubq_f32(particle_xs, grid_xs);
                     let dys = vsubq_f32(particle_ys, grid_ys);
                     let dzs = vsubq_f32(particle_zs, grid_zs);
-                    
+
                     let dist_sq = vmlaq_f32(vmulq_f32(dxs, dxs), dys, dys);
                     let dist_sq = vmlaq_f32(dist_sq, dzs, dzs);
                     let dist = vsqrtq_f32(dist_sq);
