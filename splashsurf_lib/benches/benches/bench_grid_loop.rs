@@ -14,10 +14,10 @@ pub fn grid_loop_no_simd(c: &mut Criterion) {
     )
     .unwrap();
 
-    let mut group = c.benchmark_group("mesh");
-    group.sample_size(50);
-    group.warm_up_time(Duration::from_secs(3));
-    group.measurement_time(Duration::from_secs(10));
+    let mut group = c.benchmark_group("grid_loop");
+    group.sample_size(200);
+    group.warm_up_time(Duration::from_secs(5));
+    group.measurement_time(Duration::from_secs(20));
 
     group.bench_function("grid_loop_no_simd", |b| {
         b.iter(|| {
@@ -96,10 +96,10 @@ pub fn grid_loop_neon(c: &mut Criterion) {
         );
     }
 
-    let mut group = c.benchmark_group("mesh");
-    group.sample_size(50);
-    group.warm_up_time(Duration::from_secs(3));
-    group.measurement_time(Duration::from_secs(10));
+    let mut group = c.benchmark_group("grid_loop");
+    group.sample_size(200);
+    group.warm_up_time(Duration::from_secs(5));
+    group.measurement_time(Duration::from_secs(20));
 
     #[cfg(target_feature = "neon")]
     unsafe {
