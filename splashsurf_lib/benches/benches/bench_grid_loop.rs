@@ -16,7 +16,7 @@ pub fn grid_loop_no_simd(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("grid_loop");
     group.sample_size(200);
-    group.warm_up_time(Duration::from_secs(5));
+    group.warm_up_time(Duration::from_secs(3));
     group.measurement_time(Duration::from_secs(20));
 
     group.bench_function("grid_loop_no_simd", |b| {
@@ -87,7 +87,7 @@ pub fn grid_loop_neon(c: &mut Criterion) {
             );
             params.levelset_grid
         };
-
+        
         assert!(
             neon_result
                 .iter()
@@ -98,7 +98,7 @@ pub fn grid_loop_neon(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("grid_loop");
     group.sample_size(200);
-    group.warm_up_time(Duration::from_secs(5));
+    group.warm_up_time(Duration::from_secs(3));
     group.measurement_time(Duration::from_secs(20));
 
     #[cfg(target_feature = "neon")]

@@ -788,7 +788,7 @@ pub fn density_grid_loop_neon<K: SymmetricKernel3d<f32>>(
     subdomain_ijk: &[i64; 3],
     global_mc_grid: &UniformCartesianCubeGrid3d<GlobalIndex, f32>,
     cube_radius: i64,
-    squared_support_with_margin: f32,
+    _squared_support_with_margin: f32,
     particle_rest_mass: f32,
     kernel: &K,
 ) {
@@ -843,7 +843,7 @@ pub fn density_grid_loop_neon<K: SymmetricKernel3d<f32>>(
 
     profile!("density grid loop");
     let mc_grid = subdomain_mc_grid;
-    let extents = mc_grid.points_per_dim();
+    let mc_points = mc_grid.points_per_dim();
 
     for (p_i, rho_i) in subdomain_particles
         .iter()
@@ -870,53 +870,53 @@ pub fn density_grid_loop_neon<K: SymmetricKernel3d<f32>>(
             // We add 2 because
             //  - we want to loop over all grid points of the cell (+1 for upper points) + the radius
             //  - the upper range limit is exclusive (+1)
-            (particle_cell[0] + cube_radius + 2).min(extents[0]) as usize,
-            (particle_cell[1] + cube_radius + 2).min(extents[1]) as usize,
-            (particle_cell[2] + cube_radius + 2).min(extents[2]) as usize,
+            (particle_cell[0] + cube_radius + 2).min(mc_points[0]) as usize,
+            (particle_cell[1] + cube_radius + 2).min(mc_points[1]) as usize,
+            (particle_cell[2] + cube_radius + 2).min(mc_points[2]) as usize,
         ];
 
         let remainder = (upper[2] - lower[2]) % LANES;
         let upper_k_aligned = upper[2] - remainder;
 
         // TODO: Check that i,j,k fit into u32
+        let subdomain_ijk = subdomain_ijk.map(|i| i as u32);
+        let mc_cells = mc_grid.cells_per_dim().map(|i| i as u32);
+
+        let global_min = global_mc_grid.aabb().min();
+        let cube_size = global_mc_grid.cell_size();
 
         // Loop over all grid points around the enclosing cell
         for i in lower[0]..upper[0] {
             for j in lower[1]..upper[1] {
-                let flat_index_base = (i * (extents[1] as usize) + j) * (extents[2] as usize);
+                let flat_index_base = (i * (mc_points[1] as usize) + j) * (mc_points[2] as usize);
+
+                let global_i = subdomain_ijk[0] * mc_cells[0] + i as u32;
+                let global_j = subdomain_ijk[1] * mc_cells[1] + j as u32;
+
+                let grid_x = global_i as f32 * cube_size + global_min[0];
+                let grid_y = global_j as f32 * cube_size + global_min[1];
+
                 for k in (lower[2]..upper_k_aligned).step_by(LANES) {
                     let flat_point_idx = flat_index_base + k;
 
-                    let mc_cells_per_subdomain = mc_grid.cells_per_dim();
-                    let global_min = global_mc_grid.aabb().min();
-                    let cube_size = global_mc_grid.cell_size();
+                    let global_k_base = vdupq_n_u32(subdomain_ijk[2] * mc_cells[2] + k as u32);
+                    let k_offsets = unsafe { vld1q_u32([0, 1, 2, 3].as_ptr()) };
+                    let global_k = vaddq_u32(global_k_base, k_offsets);
+                    let global_k_f32 = vcvtq_f32_u32(global_k);
+                    let grid_zs = vmlaq_n_f32(vdupq_n_f32(global_min[2]), global_k_f32, cube_size);
 
-                    let global_i = subdomain_ijk[0] * mc_cells_per_subdomain[0] + i as i64;
-                    let global_j = subdomain_ijk[1] * mc_cells_per_subdomain[1] + j as i64;
-                    let global_k = subdomain_ijk[2] * mc_cells_per_subdomain[2] + k as i64;
-
-                    let grid_x = global_i as f32 * cube_size + global_min[0];
-                    let grid_y = global_j as f32 * cube_size + global_min[1];
-                    let grid_zs = [
-                        (global_k + 0) as f32 * cube_size + global_min[2],
-                        (global_k + 1) as f32 * cube_size + global_min[2],
-                        (global_k + 2) as f32 * cube_size + global_min[2],
-                        (global_k + 3) as f32 * cube_size + global_min[2],
-                    ];
-
-                    let grid_xs = vdupq_n_f32(grid_x);
                     let particle_xs = vdupq_n_f32(p_i[0]);
-                    let dxs = vsubq_f32(particle_xs, grid_xs);
-                    let dist_sq = vmulq_f32(dxs, dxs);
-
-                    let grid_ys = vdupq_n_f32(grid_y);
                     let particle_ys = vdupq_n_f32(p_i[1]);
-                    let dys = vsubq_f32(particle_ys, grid_ys);
-                    let dist_sq = vmlaq_f32(dist_sq, dys, dys);
-
-                    let grid_zs = unsafe { vld1q_f32(grid_zs.as_ptr()) };
                     let particle_zs = vdupq_n_f32(p_i[2]);
+                    
+                    let grid_xs = vdupq_n_f32(grid_x);
+                    let grid_ys = vdupq_n_f32(grid_y);
+                    
+                    let dxs = vsubq_f32(particle_xs, grid_xs);
+                    let dys = vsubq_f32(particle_ys, grid_ys);
                     let dzs = vsubq_f32(particle_zs, grid_zs);
+                    
+                    let dist_sq = vmlaq_f32(vmulq_f32(dxs, dxs), dys, dys);
                     let dist_sq = vmlaq_f32(dist_sq, dzs, dzs);
                     let dist = vsqrtq_f32(dist_sq);
 
@@ -938,36 +938,25 @@ pub fn density_grid_loop_neon<K: SymmetricKernel3d<f32>>(
                 if remainder > 0 {
                     let flat_point_idx = flat_index_base + upper_k_aligned;
 
-                    let mc_cells_per_subdomain = mc_grid.cells_per_dim();
-                    let global_min = global_mc_grid.aabb().min();
-                    let cube_size = global_mc_grid.cell_size();
+                    let global_k_base =
+                        vdupq_n_u32(subdomain_ijk[2] * mc_cells[2] + upper_k_aligned as u32);
+                    let k_offsets = unsafe { vld1q_u32([0, 1, 2, 3].as_ptr()) };
+                    let global_k = vaddq_u32(global_k_base, k_offsets);
+                    let global_k_f32 = vcvtq_f32_u32(global_k);
+                    let grid_zs = vmlaq_n_f32(vdupq_n_f32(global_min[2]), global_k_f32, cube_size);
 
-                    let global_i = subdomain_ijk[0] * mc_cells_per_subdomain[0] + i as i64;
-                    let global_j = subdomain_ijk[1] * mc_cells_per_subdomain[1] + j as i64;
-                    let global_k = subdomain_ijk[2] * mc_cells_per_subdomain[2] + upper_k_aligned as i64;
-
-                    let grid_x = global_i as f32 * cube_size + global_min[0];
-                    let grid_y = global_j as f32 * cube_size + global_min[1];
-                    let grid_zs = [
-                        (global_k + 0) as f32 * cube_size + global_min[2],
-                        (global_k + 1) as f32 * cube_size + global_min[2],
-                        (global_k + 2) as f32 * cube_size + global_min[2],
-                        (global_k + 3) as f32 * cube_size + global_min[2],
-                    ];
+                    let particle_xs = vdupq_n_f32(p_i[0]);
+                    let particle_ys = vdupq_n_f32(p_i[1]);
+                    let particle_zs = vdupq_n_f32(p_i[2]);
 
                     let grid_xs = vdupq_n_f32(grid_x);
-                    let particle_xs = vdupq_n_f32(p_i[0]);
-                    let dxs = vsubq_f32(particle_xs, grid_xs);
-                    let dist_sq = vmulq_f32(dxs, dxs);
-
                     let grid_ys = vdupq_n_f32(grid_y);
-                    let particle_ys = vdupq_n_f32(p_i[1]);
-                    let dys = vsubq_f32(particle_ys, grid_ys);
-                    let dist_sq = vmlaq_f32(dist_sq, dys, dys);
 
-                    let grid_zs = unsafe { vld1q_f32(grid_zs.as_ptr()) };
-                    let particle_zs = vdupq_n_f32(p_i[2]);
+                    let dxs = vsubq_f32(particle_xs, grid_xs);
+                    let dys = vsubq_f32(particle_ys, grid_ys);
                     let dzs = vsubq_f32(particle_zs, grid_zs);
+
+                    let dist_sq = vmlaq_f32(vmulq_f32(dxs, dxs), dys, dys);
                     let dist_sq = vmlaq_f32(dist_sq, dzs, dzs);
                     let dist = vsqrtq_f32(dist_sq);
 
