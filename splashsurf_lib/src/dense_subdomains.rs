@@ -658,7 +658,7 @@ pub(crate) struct SurfacePatch<I: Index, R: Real> {
     pub exterior_vertex_edge_indices: Vec<(I, EdgeIndex<I>)>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct DensityGridLoopParameters<I: Scalar, R: Scalar> {
     pub levelset_grid: Vec<R>,
     pub subdomain_particles: Vec<Vector3<R>>,
@@ -669,6 +669,7 @@ pub struct DensityGridLoopParameters<I: Scalar, R: Scalar> {
     pub cube_radius: I,
     pub squared_support_with_margin: R,
     pub particle_rest_mass: R,
+    pub compact_support_radius: R,
 }
 
 pub fn density_grid_loop<I: Index, R: Real, K: SymmetricKernel3d<R>>(
@@ -966,6 +967,7 @@ pub(crate) fn reconstruction<I: Index, R: Real>(
                 cube_radius,
                 squared_support_with_margin,
                 particle_rest_mass: parameters.particle_rest_mass,
+                compact_support_radius: parameters.compact_support_radius,
             };
             serde_json::to_writer(
                 std::fs::File::create(format!(

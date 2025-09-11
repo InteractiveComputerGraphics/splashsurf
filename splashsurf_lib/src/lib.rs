@@ -53,7 +53,7 @@ pub mod profiling;
 pub mod profiling_macro;
 
 mod aabb;
-pub(crate) mod dense_subdomains;
+pub mod dense_subdomains;
 pub mod density_map;
 pub mod generic_tree;
 pub mod halfedge_mesh;
