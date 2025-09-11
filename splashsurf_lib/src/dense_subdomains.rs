@@ -2,11 +2,12 @@ use anyhow::{Context, anyhow};
 use arrayvec::ArrayVec;
 use itertools::Itertools;
 use log::{info, trace};
-use nalgebra::Vector3;
+use nalgebra::{Scalar, Vector3};
 use num_integer::Integer;
 use num_traits::{FromPrimitive, NumCast};
 use parking_lot::Mutex;
 use rayon::prelude::*;
+use serde_derive::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use thread_local::ThreadLocal;
@@ -657,6 +658,126 @@ pub(crate) struct SurfacePatch<I: Index, R: Real> {
     pub exterior_vertex_edge_indices: Vec<(I, EdgeIndex<I>)>,
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct DensityGridLoopParameters<I: Scalar, R: Scalar> {
+    pub levelset_grid: Vec<R>,
+    pub subdomain_particles: Vec<Vector3<R>>,
+    pub subdomain_particle_densities: Vec<R>,
+    pub subdomain_mc_grid: UniformCartesianCubeGrid3d<I, R>,
+    pub subdomain_ijk: [I; 3],
+    pub global_mc_grid: UniformCartesianCubeGrid3d<GlobalIndex, R>,
+    pub cube_radius: I,
+    pub squared_support_with_margin: R,
+    pub particle_rest_mass: R,
+}
+
+pub fn density_grid_loop<I: Index, R: Real, K: SymmetricKernel3d<R>>(
+    levelset_grid: &mut [R],
+    subdomain_particles: &[Vector3<R>],
+    subdomain_particle_densities: &[R],
+    subdomain_mc_grid: &UniformCartesianCubeGrid3d<I, R>,
+    subdomain_ijk: &[I; 3],
+    global_mc_grid: &UniformCartesianCubeGrid3d<GlobalIndex, R>,
+    cube_radius: I,
+    squared_support_with_margin: R,
+    particle_rest_mass: R,
+    kernel: &K,
+) {
+    profile!("density grid loop");
+    let mc_grid = subdomain_mc_grid;
+    let extents = mc_grid.points_per_dim();
+
+    for (p_i, rho_i) in subdomain_particles
+        .iter()
+        .copied()
+        .zip(subdomain_particle_densities.iter().copied())
+    {
+        // Note: this loop assumes that enclosing_cell can return negative indices for ghost particles
+
+        // Get grid cell containing particle
+        let particle_cell = mc_grid.enclosing_cell(&p_i);
+
+        // Compute lower and upper bounds of the grid points possibly affected by the particle
+        // We want to loop over the vertices of the enclosing cells plus all points in `cube_radius` distance from the cell
+
+        let lower = [
+            particle_cell[0].saturating_sub(&cube_radius).max(I::zero()),
+            particle_cell[1].saturating_sub(&cube_radius).max(I::zero()),
+            particle_cell[2].saturating_sub(&cube_radius).max(I::zero()),
+        ];
+
+        let upper = [
+            // We add 2 because
+            //  - we want to loop over all grid points of the cell (+1 for upper points) + the radius
+            //  - the upper range limit is exclusive (+1)
+            (particle_cell[0] + cube_radius + I::two()).min(extents[0]),
+            (particle_cell[1] + cube_radius + I::two()).min(extents[1]),
+            (particle_cell[2] + cube_radius + I::two()).min(extents[2]),
+        ];
+
+        // Loop over all grid points around the enclosing cell
+        for i in I::range(lower[0], upper[0]).iter() {
+            for j in I::range(lower[1], upper[1]).iter() {
+                for k in I::range(lower[2], upper[2]).iter() {
+                    let point_ijk = [i, j, k];
+                    let local_point = mc_grid
+                        .get_point(point_ijk)
+                        .expect("point has to be part of the subdomain grid");
+
+                    let mc_cells_per_subdomain = mc_grid.cells_per_dim();
+
+                    fn local_to_global_point_ijk<I: Index>(
+                        local_point_ijk: [I; 3],
+                        subdomain_ijk: [I; 3],
+                        cells_per_subdomain: [I; 3],
+                    ) -> [GlobalIndex; 3] {
+                        let local_point_ijk =
+                            local_point_ijk.map(|i| <GlobalIndex as NumCast>::from(i).unwrap());
+                        let subdomain_ijk =
+                            subdomain_ijk.map(|i| <GlobalIndex as NumCast>::from(i).unwrap());
+                        let cells_per_subdomain =
+                            cells_per_subdomain.map(|i| <GlobalIndex as NumCast>::from(i).unwrap());
+                        let [i, j, k] = local_point_ijk;
+
+                        [
+                            subdomain_ijk[0] * cells_per_subdomain[0] + i,
+                            subdomain_ijk[1] * cells_per_subdomain[1] + j,
+                            subdomain_ijk[2] * cells_per_subdomain[2] + k,
+                        ]
+                    }
+
+                    // Use global coordinate calculation for consistency with neighboring domains
+                    let global_point_ijk = local_to_global_point_ijk(
+                        point_ijk,
+                        *subdomain_ijk,
+                        *mc_cells_per_subdomain,
+                    );
+                    let global_point = global_mc_grid
+                        .get_point(global_point_ijk)
+                        .expect("point has to be part of the global mc grid");
+                    let point_coordinates = global_mc_grid.point_coordinates(&global_point);
+
+                    let dx = p_i - point_coordinates;
+                    let dx_norm_sq = dx.norm_squared();
+
+                    if dx_norm_sq < squared_support_with_margin {
+                        let v_i = particle_rest_mass / rho_i;
+                        let r = dx_norm_sq.sqrt();
+                        let w_ij = kernel.evaluate(r);
+                        //let w_ij = kernel.evaluate(dx_norm_sq);
+
+                        let interpolated_value = v_i * w_ij;
+
+                        let flat_point_idx = mc_grid.flatten_point_index(&local_point);
+                        let flat_point_idx = flat_point_idx.to_usize().unwrap();
+                        levelset_grid[flat_point_idx] += interpolated_value;
+                    }
+                }
+            }
+        }
+    }
+}
+
 // TODO: Reduce code duplication between dense and sparse
 pub(crate) fn reconstruction<I: Index, R: Real>(
     parameters: &ParametersSubdomainGrid<I, R>,
@@ -833,107 +954,42 @@ pub(crate) fn reconstruction<I: Index, R: Real>(
         levelset_grid.fill(R::zero());
         levelset_grid.resize(mc_total_points.to_usize().unwrap(), R::zero());
 
-        {
-            profile!("density grid loop");
-
-            let extents = mc_grid.points_per_dim();
-
-            for (p_i, rho_i) in subdomain_particles
-                .iter()
-                .copied()
-                .zip(subdomain_particle_densities.iter().copied())
-            {
-                // Note: this loop assumes that enclosing_cell can return negative indices for ghost particles
-
-                // Get grid cell containing particle
-                let particle_cell = mc_grid.enclosing_cell(&p_i);
-
-                // Compute lower and upper bounds of the grid points possibly affected by the particle
-                // We want to loop over the vertices of the enclosing cells plus all points in `cube_radius` distance from the cell
-
-                let lower = [0, 1, 2].map(|i| {
-                    particle_cell[i]
-                        .saturating_sub(&cube_radius)
-                        .max(I::zero())
-                        .min(extents[i])
-                });
-
-                let upper = [0, 1, 2].map(|i| {
-                    // We add 2 because
-                    //  - we want to loop over all grid points of the cell (+1 for upper points) + the radius
-                    //  - the upper range limit is exclusive (+1)
-                    (particle_cell[i] + cube_radius + I::two())
-                        .min(extents[i])
-                        .max(I::zero())
-                });
-
-                // Loop over all grid points around the enclosing cell
-                for i in I::range(lower[0], upper[0]).iter() {
-                    for j in I::range(lower[1], upper[1]).iter() {
-                        for k in I::range(lower[2], upper[2]).iter() {
-                            let point_ijk = [i, j, k];
-                            let local_point = mc_grid
-                                .get_point(point_ijk)
-                                .expect("point has to be part of the subdomain grid");
-                            //let point_coordinates = mc_grid.point_coordinates(&point);
-
-                            let subdomain_ijk = subdomain_idx.index();
-                            let mc_cells_per_subdomain = mc_grid.cells_per_dim();
-
-                            fn local_to_global_point_ijk<I: Index>(
-                                local_point_ijk: [I; 3],
-                                subdomain_ijk: [I; 3],
-                                cells_per_subdomain: [I; 3],
-                            ) -> [GlobalIndex; 3] {
-                                let local_point_ijk = local_point_ijk
-                                    .map(|i| <GlobalIndex as NumCast>::from(i).unwrap());
-                                let subdomain_ijk = subdomain_ijk
-                                    .map(|i| <GlobalIndex as NumCast>::from(i).unwrap());
-                                let cells_per_subdomain = cells_per_subdomain
-                                    .map(|i| <GlobalIndex as NumCast>::from(i).unwrap());
-                                let [i, j, k] = local_point_ijk;
-
-                                [
-                                    subdomain_ijk[0] * cells_per_subdomain[0] + i,
-                                    subdomain_ijk[1] * cells_per_subdomain[1] + j,
-                                    subdomain_ijk[2] * cells_per_subdomain[2] + k,
-                                ]
-                            }
-
-                            // Use global coordinate calculation for consistency with neighboring domains
-                            let global_point_ijk = local_to_global_point_ijk(
-                                point_ijk,
-                                *subdomain_ijk,
-                                *mc_cells_per_subdomain,
-                            );
-                            let global_point = parameters
-                                .global_marching_cubes_grid
-                                .get_point(global_point_ijk)
-                                .expect("point has to be part of the global mc grid");
-                            let point_coordinates = parameters
-                                .global_marching_cubes_grid
-                                .point_coordinates(&global_point);
-
-                            let dx = p_i - point_coordinates;
-                            let dx_norm_sq = dx.norm_squared();
-
-                            if dx_norm_sq < squared_support_with_margin {
-                                let v_i = parameters.particle_rest_mass / rho_i;
-                                let r = dx_norm_sq.sqrt();
-                                let w_ij = kernel.evaluate(r);
-                                //let w_ij = kernel.evaluate(dx_norm_sq);
-
-                                let interpolated_value = v_i * w_ij;
-
-                                let flat_point_idx = mc_grid.flatten_point_index(&local_point);
-                                let flat_point_idx = flat_point_idx.to_usize().unwrap();
-                                levelset_grid[flat_point_idx] += interpolated_value;
-                            }
-                        }
-                    }
-                }
-            }
+        if subdomain_particles.len() > 6800 {
+            println!("{}", subdomain_particles.len());
+            let arguments = DensityGridLoopParameters {
+                levelset_grid: levelset_grid.clone(),
+                subdomain_particles: subdomain_particles.clone(),
+                subdomain_particle_densities: subdomain_particle_densities.clone(),
+                subdomain_mc_grid: mc_grid.clone(),
+                subdomain_ijk: *subdomain_idx.index(),
+                global_mc_grid: parameters.global_marching_cubes_grid.clone(),
+                cube_radius,
+                squared_support_with_margin,
+                particle_rest_mass: parameters.particle_rest_mass,
+            };
+            serde_json::to_writer(
+                std::fs::File::create(format!(
+                    "density_grid_loop_subdomain_{}.json",
+                    flat_subdomain_idx
+                ))
+                .unwrap(),
+                &arguments,
+            )
+            .unwrap();
         }
+
+        density_grid_loop(
+            levelset_grid.as_mut_slice(),
+            subdomain_particles.as_slice(),
+            subdomain_particle_densities.as_slice(),
+            &mc_grid,
+            &subdomain_idx.index(),
+            &parameters.global_marching_cubes_grid,
+            cube_radius,
+            squared_support_with_margin,
+            parameters.particle_rest_mass,
+            &kernel,
+        );
 
         let mut vertices = Vec::new();
         let mut triangles = Vec::new();
