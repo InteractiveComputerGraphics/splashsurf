@@ -865,6 +865,17 @@ pub fn density_grid_loop_neon<K: SymmetricKernel3d<f32>>(
     profile!("density grid loop");
     let mc_grid = subdomain_mc_grid;
     let mc_points = mc_grid.points_per_dim();
+    let dim_y = mc_points[1] as usize;
+    let dim_z = mc_points[2] as usize;
+
+    // Preload constants used inside the hot loops
+    const K_OFFSETS_ARR: [u32; 4] = [0, 1, 2, 3];
+    let k_offsets = unsafe { vld1q_u32(K_OFFSETS_ARR.as_ptr()) };
+    let global_min = global_mc_grid.aabb().min();
+    let min_z_v = vdupq_n_f32(global_min[2]);
+    let cube_size = global_mc_grid.cell_size();
+    let support = kernel.compact_support_radius();
+    let support_sq_v = vdupq_n_f32(support * support);
 
     for (p_i, rho_i) in subdomain_particles
         .iter()
@@ -904,49 +915,53 @@ pub fn density_grid_loop_neon<K: SymmetricKernel3d<f32>>(
         let subdomain_ijk = subdomain_ijk.map(|i| i as u32);
         let mc_cells = mc_grid.cells_per_dim().map(|i| i as u32);
 
-        let global_min = global_mc_grid.aabb().min();
-        let cube_size = global_mc_grid.cell_size();
+        // Broadcast particle coordinates once per particle
+        let particle_xs = vdupq_n_f32(p_i[0]);
+        let particle_ys = vdupq_n_f32(p_i[1]);
+        let particle_zs = vdupq_n_f32(p_i[2]);
 
-        let evaluate_contribution = |k: usize, grid_x: f32, grid_y: f32| -> float32x4_t {
-            let global_k_base = vdupq_n_u32(subdomain_ijk[2] * mc_cells[2] + k as u32);
-            let k_offsets = unsafe { vld1q_u32([0, 1, 2, 3].as_ptr()) };
-            let global_k = vaddq_u32(global_k_base, k_offsets);
-            let global_k_f32 = vcvtq_f32_u32(global_k);
-            let grid_zs = vmlaq_n_f32(vdupq_n_f32(global_min[2]), global_k_f32, cube_size);
+        let evaluate_contribution =
+            |k: usize, grid_xs: float32x4_t, grid_ys: float32x4_t| -> float32x4_t {
+                // Compute global k for 4 consecutive points
+                let global_k_base = vdupq_n_u32(subdomain_ijk[2] * mc_cells[2] + k as u32);
+                let global_k = vaddq_u32(global_k_base, k_offsets);
+                let global_k_f32 = vcvtq_f32_u32(global_k);
+                let grid_zs = vmlaq_n_f32(min_z_v, global_k_f32, cube_size);
+                // Deltas
+                let dxs = vsubq_f32(particle_xs, grid_xs);
+                let dys = vsubq_f32(particle_ys, grid_ys);
+                let dzs = vsubq_f32(particle_zs, grid_zs);
+                // Distance squared
+                let dist_sq = vmlaq_f32(vmulq_f32(dxs, dxs), dys, dys);
+                let dist_sq = vmlaq_f32(dist_sq, dzs, dzs);
+                // Cheap mask to skip work if all lanes are outside support
+                let inside_mask = vcltq_f32(dist_sq, support_sq_v);
+                let any_inside = vmaxvq_u32(inside_mask);
+                if any_inside == 0 {
+                    return vdupq_n_f32(0.0);
+                }
+                // Compute weights, then mask out lanes outside support
+                let dist = vsqrtq_f32(dist_sq);
+                let w = kernel_neon.evaluate(dist);
+                vbslq_f32(inside_mask, w, vdupq_n_f32(0.0))
+            };
 
-            let particle_xs = vdupq_n_f32(p_i[0]);
-            let particle_ys = vdupq_n_f32(p_i[1]);
-            let particle_zs = vdupq_n_f32(p_i[2]);
-
-            let grid_xs = vdupq_n_f32(grid_x);
-            let grid_ys = vdupq_n_f32(grid_y);
-
-            let dxs = vsubq_f32(particle_xs, grid_xs);
-            let dys = vsubq_f32(particle_ys, grid_ys);
-            let dzs = vsubq_f32(particle_zs, grid_zs);
-
-            let dist_sq = vmlaq_f32(vmulq_f32(dxs, dxs), dys, dys);
-            let dist_sq = vmlaq_f32(dist_sq, dzs, dzs);
-            let dist = vsqrtq_f32(dist_sq);
-
-            let w_ij = kernel_neon.evaluate(dist);
-            w_ij
-        };
-
-        // Loop over all grid points around the enclosing cell
+        // Loop over grid points in support region of the particle
         for i in lower[0]..upper[0] {
             for j in lower[1]..upper[1] {
-                let flat_index_base = (i * (mc_points[1] as usize) + j) * (mc_points[2] as usize);
+                let flat_index_base = (i * dim_y + j) * dim_z;
 
                 let global_i = subdomain_ijk[0] * mc_cells[0] + i as u32;
                 let global_j = subdomain_ijk[1] * mc_cells[1] + j as u32;
 
                 let grid_x = global_i as f32 * cube_size + global_min[0];
                 let grid_y = global_j as f32 * cube_size + global_min[1];
+                let grid_xs = vdupq_n_f32(grid_x);
+                let grid_ys = vdupq_n_f32(grid_y);
 
                 for k in (lower[2]..upper_k_aligned).step_by(LANES) {
                     let flat_point_idx = flat_index_base + k;
-                    let w_ij = evaluate_contribution(k, grid_x, grid_y);
+                    let w_ij = evaluate_contribution(k, grid_xs, grid_ys);
 
                     let prev_val = unsafe {
                         vld1q_f32(levelset_grid.as_ptr().offset(flat_point_idx as isize))
@@ -963,13 +978,12 @@ pub fn density_grid_loop_neon<K: SymmetricKernel3d<f32>>(
                 // Handle remainder
                 if remainder > 0 {
                     let flat_point_idx = flat_index_base + upper_k_aligned;
-                    let w_ij = evaluate_contribution(upper_k_aligned, grid_x, grid_y);
-
+                    let w_ij = evaluate_contribution(upper_k_aligned, grid_xs, grid_ys);
                     let val = vmulq_n_f32(w_ij, v_i);
-                    let val = unsafe { std::mem::transmute::<float32x4_t, [f32; 4]>(val) };
-
-                    for i in 0..remainder {
-                        levelset_grid[flat_point_idx + i] += val[i];
+                    let mut tmp: [f32; 4] = [0.0; 4];
+                    unsafe { vst1q_f32(tmp.as_mut_ptr(), val) };
+                    for rr in 0..remainder {
+                        levelset_grid[flat_point_idx + rr] += tmp[rr];
                     }
                 }
             }
