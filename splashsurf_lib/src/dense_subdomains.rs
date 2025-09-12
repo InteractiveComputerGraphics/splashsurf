@@ -75,8 +75,8 @@ impl<I: Index, R: Real> ParametersSubdomainGrid<I, R> {
     }
 }
 
-#[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
-#[target_feature(enable = "avx2")]
+#[cfg(all(target_arch = "x86_64", target_feature = "avx2", target_feature = "fma"))]
+#[target_feature(enable = "avx2,fma")]
 pub fn density_grid_loop_avx<K: SymmetricKernel3d<f32>>(
     levelset_grid: &mut [f32],
     subdomain_particles: &[Vector3<f32>],
@@ -109,7 +109,7 @@ pub fn density_grid_loop_avx<K: SymmetricKernel3d<f32>>(
             }
         }
 
-        #[target_feature(enable = "avx2")]
+        #[target_feature(enable = "avx2,fma")]
         fn evaluate(&self, r: __m256) -> __m256 {
             let one = _mm256_set1_ps(1.0);
             let half = _mm256_set1_ps(0.5);
@@ -130,18 +130,12 @@ pub fn density_grid_loop_avx<K: SymmetricKernel3d<f32>>(
 
             // Inner: sigma * (1 - 6v + 12v^2 - 6v^3)
             let mut res_inner = _mm256_set1_ps(self.sigma);
-            res_inner = _mm256_sub_ps(
-                res_inner,
-                _mm256_mul_ps(v, _mm256_set1_ps(6.0 * self.sigma)),
-            );
-            res_inner = _mm256_add_ps(
-                res_inner,
-                _mm256_mul_ps(v2, _mm256_set1_ps(12.0 * self.sigma)),
-            );
-            res_inner = _mm256_sub_ps(
-                res_inner,
-                _mm256_mul_ps(v3, _mm256_set1_ps(6.0 * self.sigma)),
-            );
+            // res_inner = res_inner - 6*sigma*v
+            res_inner = _mm256_fnmadd_ps(v, _mm256_set1_ps(6.0 * self.sigma), res_inner);
+            // res_inner = res_inner + 12*sigma*v^2
+            res_inner = _mm256_fmadd_ps(v2, _mm256_set1_ps(12.0 * self.sigma), res_inner);
+            // res_inner = res_inner - 6*sigma*v^3
+            res_inner = _mm256_fnmadd_ps(v3, _mm256_set1_ps(6.0 * self.sigma), res_inner);
 
             // Select inner for q <= 0.5, else outer
             let leq_than_half = _mm256_cmp_ps(q, half, _CMP_LE_OQ);
@@ -207,7 +201,7 @@ pub fn density_grid_loop_avx<K: SymmetricKernel3d<f32>>(
             let base_k = subdomain_ijk_i32[2] * mc_cells[2] + k as i32;
             let global_k_i32 = _mm256_add_epi32(_mm256_set1_epi32(base_k), k_offsets_i32);
             let global_k_f32 = _mm256_cvtepi32_ps(global_k_i32);
-            let grid_zs = _mm256_add_ps(min_z_v, _mm256_mul_ps(global_k_f32, cube_size_ps));
+            let grid_zs = _mm256_fmadd_ps(global_k_f32, cube_size_ps, min_z_v);
 
             // Deltas
             let dxs = _mm256_sub_ps(particle_xs, grid_xs);
@@ -216,8 +210,8 @@ pub fn density_grid_loop_avx<K: SymmetricKernel3d<f32>>(
 
             // Distance squared
             let dist_sq = {
-                let t = _mm256_add_ps(_mm256_mul_ps(dxs, dxs), _mm256_mul_ps(dys, dys));
-                _mm256_add_ps(t, _mm256_mul_ps(dzs, dzs))
+                let t = _mm256_fmadd_ps(dxs, dxs, _mm256_mul_ps(dys, dys));
+                _mm256_fmadd_ps(dzs, dzs, t)
             };
 
             // Cheap mask to skip work if all lanes are outside support
@@ -251,7 +245,7 @@ pub fn density_grid_loop_avx<K: SymmetricKernel3d<f32>>(
 
                     unsafe {
                         let prev_val = _mm256_loadu_ps(levelset_grid.as_ptr().add(flat_point_idx));
-                        let val = _mm256_add_ps(prev_val, _mm256_mul_ps(w_ij, v_i_ps));
+                        let val = _mm256_fmadd_ps(w_ij, v_i_ps, prev_val);
                         _mm256_storeu_ps(levelset_grid.as_mut_ptr().add(flat_point_idx), val);
                     }
                 }

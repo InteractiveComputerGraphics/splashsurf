@@ -128,9 +128,9 @@ pub fn grid_loop_neon(c: &mut Criterion) {
 }
 
 pub fn grid_loop_avx2(c: &mut Criterion) {
-    #[cfg(not(target_feature = "avx2"))]
+    #[cfg(not(all(target_feature = "avx2", target_feature = "fma")))]
     {
-        println!("Skipping AVX2 benchmark because the target does not support AVX2.");
+        println!("Skipping AVX2 benchmark because the target does not support AVX2 and FMA.");
         return;
     }
 
@@ -157,7 +157,7 @@ pub fn grid_loop_avx2(c: &mut Criterion) {
         params.levelset_grid
     };
 
-    #[cfg(target_feature = "avx2")]
+    #[cfg(all(target_feature = "avx2", target_feature = "fma"))]
     {
         let neon_result = unsafe {
             let kernel = CubicSplineKernel::new(params.compact_support_radius);
@@ -184,7 +184,7 @@ pub fn grid_loop_avx2(c: &mut Criterion) {
             neon_result
                 .iter()
                 .zip(reference.iter())
-                .all(|(a, b)| (a - b).abs() < f32::EPSILON * 10.0)
+                .all(|(a, b)| (a - b).abs() < f32::EPSILON * 100.0)
         );
     }
 
@@ -193,7 +193,7 @@ pub fn grid_loop_avx2(c: &mut Criterion) {
     group.warm_up_time(Duration::from_secs(3));
     group.measurement_time(Duration::from_secs(20));
 
-    #[cfg(target_feature = "avx2")]
+    #[cfg(all(target_feature = "avx2", target_feature = "fma"))]
     unsafe {
         group.bench_function("grid_loop_avx2", |b| {
             b.iter(|| {
