@@ -273,6 +273,7 @@ pub fn density_grid_loop_avx<K: SymmetricKernel3d<f32>>(
 }
 
 /// Auto-dispatching density grid loop for f32/i64: chooses AVX2+FMA on x86_64, NEON on aarch64, otherwise scalar fallback
+#[allow(unreachable_code)]
 pub fn density_grid_loop_auto<K: SymmetricKernel3d<f32>>(
     levelset_grid: &mut [f32],
     subdomain_particles: &[Vector3<f32>],
@@ -1265,6 +1266,7 @@ pub(crate) fn reconstruction<I: Index, R: Real>(
     global_particles: &[Vector3<R>],
     global_particle_densities: &[R],
     subdomains: &Subdomains<I>,
+    enable_vectorization: bool,
 ) -> Vec<SurfacePatch<I, R>> {
     profile!(parent, "reconstruction");
 
@@ -1464,7 +1466,10 @@ pub(crate) fn reconstruction<I: Index, R: Real>(
 
         use std::any::TypeId;
         use std::mem::transmute;
-        if TypeId::of::<I>() == TypeId::of::<i64>() && TypeId::of::<R>() == TypeId::of::<f32>() {
+        if enable_vectorization
+            && TypeId::of::<I>() == TypeId::of::<i64>()
+            && TypeId::of::<R>() == TypeId::of::<f32>()
+        {
             density_grid_loop_auto(
                 unsafe { transmute::<&mut [R], &mut [f32]>(levelset_grid.as_mut_slice()) },
                 unsafe {

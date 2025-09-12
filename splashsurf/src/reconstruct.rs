@@ -124,6 +124,16 @@ pub(crate) struct ReconstructSubcommandArgs {
     /// Set the number of threads for the worker thread pool
     #[arg(help_heading = ARGS_ADV, long, short = 'n')]
     pub num_threads: Option<usize>,
+    /// Enable vectorization of some computations using SIMD instructions (requires CPU with AVX2 or NEON support)
+    #[arg(
+        help_heading = ARGS_ADV,
+        long,
+        default_value = "on",
+        value_name = "off|on",
+        ignore_case = true,
+        require_equals = true
+    )]
+    pub vectorization: Switch,
 
     /// Enable automatic spatial decomposition using a regular grid-based approach (for efficient multithreading) if the domain is large enough
     #[arg(
@@ -637,6 +647,7 @@ pub(crate) mod arguments {
                 iso_surface_threshold: args.surface_threshold,
                 particle_aabb,
                 enable_multi_threading: args.parallelize_over_particles.into_bool(),
+                enable_vectorization: args.vectorization.into_bool(),
                 spatial_decomposition,
                 global_neighborhood_list: args.mesh_smoothing_weights.into_bool(),
             };

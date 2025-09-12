@@ -86,14 +86,36 @@ pub fn grid_loop_neon(c: &mut Criterion) {
             params.levelset_grid
         };
 
-        println!("{:?}", &reference[0..10]);
-        println!("{:?}", &neon_result[0..10]);
+        let eps = f32::EPSILON * 10.0;
+        println!("{:?}", params.subdomain_mc_grid);
+        for (i, (a, b)) in neon_result.iter().zip(reference.iter()).enumerate() {
+            let diff = (a - b).abs();
+            if diff >= eps {
+                let ijk = params.subdomain_mc_grid.try_unflatten_point_index(i as i64);
+                println!(
+                    "Mismatch at index {}: neon = {}, reference = {}, diff = {}, ijk = {:?}",
+                    i, a, b, diff, ijk
+                );
+            }
+        }
+
+        println!("reference head: {:?}", &reference[0..10]);
+        println!("neon head     : {:?}", &reference[0..10]);
+
+        println!(
+            "reference tail: {:?}",
+            &neon_result[neon_result.len() - 10..]
+        );
+        println!(
+            "neon tail     : {:?}",
+            &neon_result[neon_result.len() - 10..]
+        );
 
         assert!(
             neon_result
                 .iter()
                 .zip(reference.iter())
-                .all(|(a, b)| (a - b).abs() < f32::EPSILON * 10.0)
+                .all(|(a, b)| (a - b).abs() < eps)
         );
     }
 
