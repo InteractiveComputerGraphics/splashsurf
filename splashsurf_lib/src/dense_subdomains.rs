@@ -829,28 +829,34 @@ pub fn density_grid_loop_neon<K: SymmetricKernel3d<f32>>(
 
         #[target_feature(enable = "neon")]
         fn evaluate(&self, r: float32x4_t) -> float32x4_t {
+            use core::arch::aarch64::*;
             let one = vdupq_n_f32(1.0);
+            let half = vdupq_n_f32(0.5);
+            let zero = vdupq_n_f32(0.0);
+
+            // q = r / h, v = 1 - q
             let q = vmulq_n_f32(r, self.compact_support_inv);
             let v = vsubq_f32(one, q);
+            // Clamp v to [0, 1] to implicitly zero-out contributions with q > 1
+            let v = vmaxq_f32(v, zero);
 
-            // q <= 0.5
-            let res_inner = {
-                let qq = vmulq_f32(q, q);
-                let qqv = vmulq_f32(qq, v);
-                vmlsq_n_f32(vdupq_n_f32(self.sigma), qqv, 6.0 * self.sigma)
-            };
-            // 0.5 < q <= 1.0
-            let res_outer = {
-                let v2 = vmulq_f32(v, v);
-                let v3 = vmulq_f32(v2, v);
-                vmulq_n_f32(v3, 2.0 * self.sigma)
-            };
+            // Reuse v^2 and v^3 for both branches
+            let v2 = vmulq_f32(v, v);
+            let v3 = vmulq_f32(v2, v);
 
-            let leq_than_one = vcleq_f32(q, one);
-            let leq_than_half = vcleq_f32(q, vdupq_n_f32(0.5));
-            let res = vbslq_f32(leq_than_one, res_outer, vdupq_n_f32(0.0));
-            let res = vbslq_f32(leq_than_half, res_inner, res);
-            res
+            // Outer branch: 2*sigma*(1 - q)^3 = 2*sigma*v^3
+            let res_outer = vmulq_n_f32(v3, 2.0 * self.sigma);
+
+            // Inner branch rewritten in terms of v to avoid computing q^2:
+            // sigma * (1 - 6q^2 + 6q^3) == sigma * (1 - 6v + 12v^2 - 6v^3)
+            let mut res_inner = vdupq_n_f32(self.sigma);
+            res_inner = vmlsq_n_f32(res_inner, v, 6.0 * self.sigma); // -6*sigma*v
+            res_inner = vmlaq_n_f32(res_inner, v2, 12.0 * self.sigma); // +12*sigma*v^2
+            res_inner = vmlsq_n_f32(res_inner, v3, 6.0 * self.sigma); // -6*sigma*v^3
+
+            // Select inner for q <= 0.5, else outer; v was clamped so q > 1 yields 0 automatically
+            let leq_than_half = vcleq_f32(q, half);
+            vbslq_f32(leq_than_half, res_inner, res_outer)
         }
     }
 
@@ -957,8 +963,8 @@ pub fn density_grid_loop_neon<K: SymmetricKernel3d<f32>>(
                 // Handle remainder
                 if remainder > 0 {
                     let flat_point_idx = flat_index_base + upper_k_aligned;
-
                     let w_ij = evaluate_contribution(upper_k_aligned, grid_x, grid_y);
+
                     let val = vmulq_n_f32(w_ij, v_i);
                     let val = unsafe { std::mem::transmute::<float32x4_t, [f32; 4]>(val) };
 
