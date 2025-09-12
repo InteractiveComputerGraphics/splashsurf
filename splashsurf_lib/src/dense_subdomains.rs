@@ -851,20 +851,21 @@ pub(crate) fn reconstruction<I: Index, R: Real>(
                 // Compute lower and upper bounds of the grid points possibly affected by the particle
                 // We want to loop over the vertices of the enclosing cells plus all points in `cube_radius` distance from the cell
 
-                let lower = [
-                    particle_cell[0].saturating_sub(&cube_radius).max(I::zero()),
-                    particle_cell[1].saturating_sub(&cube_radius).max(I::zero()),
-                    particle_cell[2].saturating_sub(&cube_radius).max(I::zero()),
-                ];
+                let lower = [0, 1, 2].map(|i| {
+                    particle_cell[i]
+                        .saturating_sub(&cube_radius)
+                        .max(I::zero())
+                        .min(extents[i])
+                });
 
-                let upper = [
+                let upper = [0, 1, 2].map(|i| {
                     // We add 2 because
                     //  - we want to loop over all grid points of the cell (+1 for upper points) + the radius
                     //  - the upper range limit is exclusive (+1)
-                    (particle_cell[0] + cube_radius + I::two()).min(extents[0]),
-                    (particle_cell[1] + cube_radius + I::two()).min(extents[1]),
-                    (particle_cell[2] + cube_radius + I::two()).min(extents[2]),
-                ];
+                    (particle_cell[i] + cube_radius + I::two())
+                        .min(extents[i])
+                        .max(I::zero())
+                });
 
                 // Loop over all grid points around the enclosing cell
                 for i in I::range(lower[0], upper[0]).iter() {
@@ -873,8 +874,6 @@ pub(crate) fn reconstruction<I: Index, R: Real>(
                             let point_ijk = [i, j, k];
                             let local_point = mc_grid
                                 .get_point(point_ijk)
-                                // TODO: Can this fail if the ghost margin is too large such that upper
-                                //  falls outside of the subdomain grid?
                                 .expect("point has to be part of the subdomain grid");
                             //let point_coordinates = mc_grid.point_coordinates(&point);
 
@@ -1108,20 +1107,21 @@ pub(crate) fn reconstruction<I: Index, R: Real>(
                 // Compute lower and upper bounds of the grid points possibly affected by the particle
                 // We want to loop over the vertices of the enclosing cells plus all points in `cube_radius` distance from the cell
 
-                let lower = [
-                    particle_cell[0].saturating_sub(&cube_radius).max(I::zero()),
-                    particle_cell[1].saturating_sub(&cube_radius).max(I::zero()),
-                    particle_cell[2].saturating_sub(&cube_radius).max(I::zero()),
-                ];
+                let lower = [0, 1, 2].map(|i| {
+                    particle_cell[i]
+                        .saturating_sub(&cube_radius)
+                        .max(I::zero())
+                        .min(extents[i])
+                });
 
-                let upper = [
+                let upper = [0, 1, 2].map(|i| {
                     // We add 2 because
                     //  - we want to loop over all grid points of the cell (+1 for upper points) + the radius
                     //  - the upper range limit is exclusive (+1)
-                    (particle_cell[0] + cube_radius + I::two()).min(extents[0]),
-                    (particle_cell[1] + cube_radius + I::two()).min(extents[1]),
-                    (particle_cell[2] + cube_radius + I::two()).min(extents[2]),
-                ];
+                    (particle_cell[i] + cube_radius + I::two())
+                        .min(extents[i])
+                        .max(I::zero())
+                });
 
                 // Loop over all grid points around the enclosing cell
                 for i in I::range(lower[0], upper[0]).iter() {
@@ -1318,6 +1318,8 @@ pub(crate) fn reconstruction<I: Index, R: Real>(
         .copied()
         .zip(subdomains.per_subdomain_particles.par_iter())
         .map(|(flat_subdomain_idx, subdomain_particle_indices)| {
+            // TODO: Decision should consider size of compact support radius in relation to subdomain
+            //  If support radius is huge, the dense method might be better even for few particles
             if subdomain_particle_indices.len() <= sparse_limit {
                 profile!("subdomain reconstruction (sparse)", parent = parent);
                 reconstruct_sparse(flat_subdomain_idx, subdomain_particle_indices)
