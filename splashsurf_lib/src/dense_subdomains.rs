@@ -149,7 +149,7 @@ pub fn density_grid_loop_avx<K: SymmetricKernel3d<f32>>(
 
     let kernel_avx = CubicKernelAvx::new(kernel.compact_support_radius());
 
-    profile!("density grid loop");
+    profile!("density grid loop (avx)");
     let mc_grid = subdomain_mc_grid;
     let mc_points = mc_grid.points_per_dim();
     let dim_y = mc_points[1] as usize;
@@ -952,7 +952,7 @@ pub fn density_grid_loop<I: Index, R: Real, K: SymmetricKernel3d<R>>(
     particle_rest_mass: R,
     kernel: &K,
 ) {
-    profile!("density grid loop");
+    profile!("density grid loop (scalar)");
     let mc_grid = subdomain_mc_grid;
     let extents = mc_grid.points_per_dim();
 
@@ -1131,7 +1131,7 @@ pub fn density_grid_loop_neon<K: SymmetricKernel3d<f32>>(
 
     let kernel_neon = CubicKernelNeon::new(kernel.compact_support_radius());
 
-    profile!("density grid loop");
+    profile!("density grid loop (neon)");
     let mc_grid = subdomain_mc_grid;
     let mc_points = mc_grid.points_per_dim();
     let dim_y = mc_points[1] as usize;
