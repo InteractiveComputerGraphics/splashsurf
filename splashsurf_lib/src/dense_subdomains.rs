@@ -875,35 +875,21 @@ pub fn density_grid_loop_neon<K: SymmetricKernel3d<f32>>(
         // Compute lower and upper bounds of the grid points possibly affected by the particle
         // We want to loop over the vertices of the enclosing cells plus all points in `cube_radius` distance from the cell
 
-        let lower = [
-            particle_cell[0]
+        let lower = [0, 1, 2].map(|i| {
+            particle_cell[i]
                 .saturating_sub(cube_radius)
                 .max(0)
-                .min(mc_points[0]) as usize,
-            particle_cell[1]
-                .saturating_sub(cube_radius)
-                .max(0)
-                .min(mc_points[1]) as usize,
-            particle_cell[2]
-                .saturating_sub(cube_radius)
-                .max(0)
-                .min(mc_points[2]) as usize,
-        ];
+                .min(mc_points[i]) as usize
+        });
 
-        let upper = [
+        let upper = [0, 1, 2].map(|i| {
             // We add 2 because
             //  - we want to loop over all grid points of the cell (+1 for upper points) + the radius
             //  - the upper range limit is exclusive (+1)
-            (particle_cell[0] + cube_radius + 2)
-                .min(mc_points[0])
-                .max(0) as usize,
-            (particle_cell[1] + cube_radius + 2)
-                .min(mc_points[1])
-                .max(0) as usize,
-            (particle_cell[2] + cube_radius + 2)
-                .min(mc_points[2])
-                .max(0) as usize,
-        ];
+            (particle_cell[i] + cube_radius + 2)
+                .min(mc_points[i])
+                .max(0) as usize
+        });
 
         let remainder = (upper[2] - lower[2]) % LANES;
         let upper_k_aligned = upper[2] - remainder;
