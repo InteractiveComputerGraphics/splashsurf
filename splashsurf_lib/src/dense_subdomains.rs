@@ -794,6 +794,7 @@ pub fn density_grid_loop<I: Index, R: Real, K: SymmetricKernel3d<R>>(
     }
 }
 
+#[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
 #[target_feature(enable = "neon")]
 pub fn density_grid_loop_neon<K: SymmetricKernel3d<f32>>(
     levelset_grid: &mut [f32],
