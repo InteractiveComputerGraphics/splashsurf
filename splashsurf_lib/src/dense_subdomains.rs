@@ -1462,18 +1462,47 @@ pub(crate) fn reconstruction<I: Index, R: Real>(
         }
          */
 
-        density_grid_loop(
-            levelset_grid.as_mut_slice(),
-            subdomain_particles.as_slice(),
-            subdomain_particle_densities.as_slice(),
-            &mc_grid,
-            &subdomain_idx.index(),
-            &parameters.global_marching_cubes_grid,
-            cube_radius,
-            squared_support_with_margin,
-            parameters.particle_rest_mass,
-            &kernel,
-        );
+        use std::any::TypeId;
+        use std::mem::transmute;
+        if TypeId::of::<I>() == TypeId::of::<i64>() && TypeId::of::<R>() == TypeId::of::<f32>() {
+            density_grid_loop_auto(
+                unsafe { transmute::<&mut [R], &mut [f32]>(levelset_grid.as_mut_slice()) },
+                unsafe {
+                    transmute::<&[Vector3<R>], &[Vector3<f32>]>(subdomain_particles.as_slice())
+                },
+                unsafe { transmute::<&[R], &[f32]>(subdomain_particle_densities.as_slice()) },
+                unsafe {
+                    transmute::<
+                        &UniformCartesianCubeGrid3d<I, R>,
+                        &UniformCartesianCubeGrid3d<i64, f32>,
+                    >(&mc_grid)
+                },
+                &subdomain_idx.index().map(|i| i.to_i64().unwrap()),
+                unsafe {
+                    transmute::<
+                        &UniformCartesianCubeGrid3d<GlobalIndex, R>,
+                        &UniformCartesianCubeGrid3d<GlobalIndex, f32>,
+                    >(&parameters.global_marching_cubes_grid)
+                },
+                cube_radius.to_i64().unwrap(),
+                squared_support_with_margin.to_f32().unwrap(),
+                parameters.particle_rest_mass.to_f32().unwrap(),
+                &CubicSplineKernel::new(parameters.compact_support_radius.to_f32().unwrap()),
+            );
+        } else {
+            density_grid_loop(
+                levelset_grid.as_mut_slice(),
+                subdomain_particles.as_slice(),
+                subdomain_particle_densities.as_slice(),
+                &mc_grid,
+                &subdomain_idx.index(),
+                &parameters.global_marching_cubes_grid,
+                cube_radius,
+                squared_support_with_margin,
+                parameters.particle_rest_mass,
+                &kernel,
+            );
+        }
 
         let mut vertices = Vec::new();
         let mut triangles = Vec::new();
