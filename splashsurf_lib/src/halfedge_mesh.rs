@@ -4,7 +4,7 @@
 
 use crate::mesh::{Mesh3d, TriMesh3d, TriMesh3dExt};
 use crate::{Real, SetType, profile};
-use nalgebra::Vector3;
+use nalgebra::{Scalar, Vector3};
 use rayon::prelude::*;
 use thiserror::Error as ThisError;
 
@@ -54,7 +54,7 @@ impl HalfEdge {
 /// [`is_valid_vertex`](HalfEdgeTriMesh::is_valid_vertex)/[`is_valid_triangle`](HalfEdgeTriMesh::is_valid_triangle)/[`is_valid_half_edge`](HalfEdgeTriMesh::is_valid_half_edge)
 /// methods.
 #[derive(Clone, Debug, Default)]
-pub struct HalfEdgeTriMesh<R: Real> {
+pub struct HalfEdgeTriMesh<R: Scalar> {
     /// All vertices in the mesh
     pub vertices: Vec<Vector3<R>>,
     /// All triangles in the mesh

@@ -1,6 +1,6 @@
 //! Workspace for reusing allocated memory between multiple surface reconstructions
 
-use crate::Real;
+use crate::{Real, Scalar};
 use nalgebra::Vector3;
 use std::cell::RefCell;
 use std::fmt;
@@ -9,7 +9,7 @@ use thread_local::ThreadLocal;
 
 /// Collection of all thread local workspaces used to reduce allocations on subsequent surface reconstructions
 #[derive(Default)]
-pub struct ReconstructionWorkspace<R: Real> {
+pub struct ReconstructionWorkspace<R: Scalar + Send> {
     /// Temporary storage for storing a filtered set of the user provided particles
     filtered_particles: Vec<Vector3<R>>,
     local_workspaces: ThreadLocal<RefCell<LocalReconstructionWorkspace<R>>>,
@@ -31,14 +31,14 @@ impl<R: Real> ReconstructionWorkspace<R> {
     }
 }
 
-impl<R: Real> Clone for ReconstructionWorkspace<R> {
+impl<R: Scalar + Send + Default> Clone for ReconstructionWorkspace<R> {
     /// Returns a new default workspace without any allocated memory
     fn clone(&self) -> Self {
         ReconstructionWorkspace::default()
     }
 }
 
-impl<R: Real> Debug for ReconstructionWorkspace<R> {
+impl<R: Scalar + Send> Debug for ReconstructionWorkspace<R> {
     /// Only print the name of type to the formatter
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ReconstructionWorkspace").finish()
@@ -46,7 +46,7 @@ impl<R: Real> Debug for ReconstructionWorkspace<R> {
 }
 
 /// Workspace used by [`reconstruct_surface_inplace`] internally to re-use allocated memory
-pub(crate) struct LocalReconstructionWorkspace<R: Real> {
+pub(crate) struct LocalReconstructionWorkspace<R: Scalar> {
     /// Storage for per particle neighbor lists
     pub particle_neighbor_lists: Vec<Vec<usize>>,
     /// Storage for per particle densities

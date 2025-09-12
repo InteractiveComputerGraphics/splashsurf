@@ -1,16 +1,13 @@
 //! Axis-aligned bounding boxes
 
-use std::fmt;
-use std::fmt::Debug;
-
 use nalgebra::SVector;
 use rayon::prelude::*;
 
-use crate::{Real, RealConvert, ThreadSafe};
+use crate::{Real, RealConvert, Scalar, ThreadSafe};
 
 /// Type representing an axis aligned bounding box in arbitrary dimensions
-#[derive(Clone, Eq, PartialEq)]
-pub struct AxisAlignedBoundingBox<R: Real, const D: usize> {
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AxisAlignedBoundingBox<R: Scalar, const D: usize> {
     min: SVector<R, D>,
     max: SVector<R, D>,
 }
@@ -271,19 +268,6 @@ where
         );
         cube.translate(&center);
         cube
-    }
-}
-
-impl<R, const D: usize> Debug for AxisAlignedBoundingBox<R, D>
-where
-    R: Real,
-{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "AxisAlignedBoundingBox {{ min: [{:.7}, {:.7}, {:.7}], max: [{:.7}, {:.7}, {:.7}] }}",
-            self.min[0], self.min[1], self.min[2], self.max[0], self.max[1], self.max[2]
-        )
     }
 }
 

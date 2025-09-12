@@ -26,6 +26,7 @@
 use log::info;
 /// Re-export the version of `nalgebra` used by this crate
 pub use nalgebra;
+use nalgebra::Scalar;
 use nalgebra::Vector3;
 use std::borrow::Cow;
 use std::hash::Hash;
@@ -154,7 +155,7 @@ impl Default for GridDecompositionParameters {
 
 /// Parameters for the surface reconstruction
 #[derive(Clone, Debug)]
-pub struct Parameters<R: Real> {
+pub struct Parameters<R: Scalar> {
     /// Radius per particle (used to calculate the particle volume)
     pub particle_radius: R,
     /// Rest density of the fluid
@@ -237,7 +238,7 @@ impl<R: Real> Parameters<R> {
 
 /// Result data returned when the surface reconstruction was successful
 #[derive(Clone, Debug)]
-pub struct SurfaceReconstruction<I: Index, R: Real> {
+pub struct SurfaceReconstruction<I: Scalar, R: Scalar + Send + Default> {
     /// Background grid that was used as a basis for generating the density map for marching cubes
     pub grid: UniformGrid<I, R>,
     /// Per particle densities (contains only data of particles inside the domain)

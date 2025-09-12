@@ -15,7 +15,7 @@
 //!  - [`IntoVtkUnstructuredGridPiece`] to convert basic meshes and meshes with attached attributes to the
 //!  - [`IntoVtkDataSet`] for all meshes implementing [`IntoVtkUnstructuredGridPiece`] to directly save a mesh as a VTK file
 
-use crate::{Aabb3d, MapType, Real, RealConvert, new_map, profile};
+use crate::{Aabb3d, MapType, Real, RealConvert, Scalar, new_map, profile};
 use bytemuck_derive::{Pod, Zeroable};
 use nalgebra::{Unit, Vector3};
 use rayon::prelude::*;
@@ -159,7 +159,7 @@ impl<R: Real> TriMesh3dExt<R> for TriMesh3d<R> {
 ///
 /// The attribute data can be owned or borrowed.
 #[derive(Clone, Debug)]
-pub struct MeshAttribute<'a, R: Real> {
+pub struct MeshAttribute<'a, R: Scalar> {
     /// Name of the attribute
     pub name: String,
     /// Data of the attribute
@@ -174,7 +174,7 @@ pub type OwnedMeshAttribute<R> = MeshAttribute<'static, R>;
 /// Each value in the data-set is associated to a point or cell of the mesh.
 /// Data can be owned or borrowed.
 #[derive(Clone, Debug)]
-pub enum AttributeData<'a, R: Real> {
+pub enum AttributeData<'a, R: Scalar> {
     ScalarU64(Cow<'a, [u64]>),
     ScalarReal(Cow<'a, [R]>),
     Vector3Real(Cow<'a, [Vector3<R>]>),
@@ -185,7 +185,7 @@ pub type OwnedAttributeData<R> = AttributeData<'static, R>;
 
 /// A triangle (surface) mesh in 3D
 #[derive(Clone, Debug, Default)]
-pub struct TriMesh3d<R: Real> {
+pub struct TriMesh3d<R: Scalar> {
     /// Coordinates of all vertices of the mesh
     pub vertices: Vec<Vector3<R>>,
     /// The triangles of the mesh identified by their vertex indices
@@ -229,7 +229,7 @@ impl TriangleOrQuadCell {
 
 /// A surface mesh in 3D containing cells representing either triangles or quadrilaterals
 #[derive(Clone, Debug, Default)]
-pub struct MixedTriQuadMesh3d<R: Real> {
+pub struct MixedTriQuadMesh3d<R: Scalar> {
     /// Coordinates of all vertices of the mesh
     pub vertices: Vec<Vector3<R>>,
     /// All triangle and quad cells of the mesh
@@ -238,7 +238,7 @@ pub struct MixedTriQuadMesh3d<R: Real> {
 
 /// A hexahedral (volumetric) mesh in 3D
 #[derive(Clone, Debug, Default)]
-pub struct HexMesh3d<R: Real> {
+pub struct HexMesh3d<R: Scalar> {
     /// Coordinates of all vertices of the mesh
     pub vertices: Vec<Vector3<R>>,
     /// The hexahedral cells of the mesh identified by their vertex indices
@@ -247,7 +247,7 @@ pub struct HexMesh3d<R: Real> {
 
 /// A point cloud in 3D
 #[derive(Clone, Debug, Default)]
-pub struct PointCloud3d<R: Real> {
+pub struct PointCloud3d<R: Scalar> {
     /// Coordinates of all points in the point cloud
     points: Vec<Vector3<R>>,
     /// Indices of the points (for `CellConnectivity`)
@@ -330,7 +330,7 @@ where
         }
     }
 
-    /// Removes all cells from the mesh that are completely outside of the given AABB and clamps the remaining cells to the boundary
+    /// Removes all cells from the mesh that are completely outside the given AABB and clamps the remaining cells to the boundary
     fn par_clamp_with_aabb(
         &self,
         aabb: &Aabb3d<R>,

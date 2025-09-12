@@ -5,7 +5,7 @@ use crate::{Aabb3d, Index, Real};
 use bitflags::bitflags;
 use itertools::iproduct;
 use log::trace;
-use nalgebra::Vector3;
+use nalgebra::{Scalar, Vector3};
 use num_traits::Bounded;
 use std::iter::Iterator;
 use thiserror::Error as ThisError;
@@ -107,7 +107,7 @@ pub type UniformGrid<I, R> = UniformCartesianCubeGrid3d<I, R>;
 
 /// Helper type for connectivity information on a 3D cartesian grid based on uniform cubes
 ///
-/// This type represents a virtual or implicit three dimensional cartesian grid in based on uniform cubes.
+/// This type represents a virtual or implicit three-dimensional cartesian grid in based on uniform cubes.
 /// It provides helper functions to access connectivity of points (vertices), edges and cells on
 /// the virtual grid.
 ///
@@ -127,7 +127,7 @@ pub type UniformGrid<I, R> = UniformCartesianCubeGrid3d<I, R>;
 /// functions respectively. These functions check if the specified indices are in the valid index range
 /// of the grid (as computed during construction based on the extents of the grid).
 #[derive(Clone, PartialEq, Debug)]
-pub struct UniformCartesianCubeGrid3d<I: Index, R: Real> {
+pub struct UniformCartesianCubeGrid3d<I: Scalar, R: Scalar> {
     /// AABB of the grid. Note that the grid may extend beyond the max coordinate of the AABB by less than the `cell_size`.
     aabb: Aabb3d<R>,
     /// The edge length of the cubes in the grid

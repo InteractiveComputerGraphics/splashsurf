@@ -32,10 +32,11 @@ use crate::utils::{ChunkSize, ParallelPolicy};
 use crate::{HashState, Index, MapType, ParallelMapType, Real, new_map, profile};
 use dashmap::ReadOnlyView as ReadDashMap;
 use log::{info, trace, warn};
-use nalgebra::Vector3;
+use nalgebra::{Scalar, Vector3};
 use rayon::prelude::*;
 use std::borrow::Cow;
 use std::cell::RefCell;
+use std::hash::Hash;
 use thiserror::Error as ThisError;
 use thread_local::ThreadLocal;
 
@@ -44,7 +45,7 @@ use thread_local::ThreadLocal;
 
 /// Errors that can occur during generation of the density map
 #[derive(Debug, ThisError)]
-pub enum DensityMapError<R: Real> {
+pub enum DensityMapError<R: Scalar> {
     /// Indicates that domain for the density map is inconsistent or degenerate
     ///
     /// For the density map computation the user specified domain is shrunk ensuring that all
@@ -225,7 +226,7 @@ pub fn parallel_compute_particle_densities<I: Index, R: Real>(
 /// The density map contains values for all points of the background grid where the density is not
 /// trivially zero (which is the case when a point is outside the compact support of any particles).
 #[derive(Clone, Debug)]
-pub enum DensityMap<'a, I: Index, R: Real> {
+pub enum DensityMap<'a, I: Scalar + Eq + Hash, R: Scalar> {
     Standard(MapType<I, R>),
     DashMap(ReadDashMap<I, R, HashState>),
     Dense(Cow<'a, [R]>),
