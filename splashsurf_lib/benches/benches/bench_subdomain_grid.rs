@@ -31,7 +31,17 @@ fn parameters_canyon() -> Parameters<f32> {
 }
 
 pub fn grid_canyon(c: &mut Criterion) {
-    let particle_positions: &Vec<Vector3<f32>> = &particles_from_file(CANYON_PATH).unwrap();
+    let particle_positions: Vec<Vector3<f32>> =
+        if let Some(particle_positions) = particles_from_file(CANYON_PATH).ok() {
+            particle_positions
+        } else {
+            eprintln!(
+                "Canyon file not found at path: {}, skipping canyon benchmarks",
+                CANYON_PATH
+            );
+            return;
+        };
+
     let parameters = parameters_canyon();
 
     let mut group = c.benchmark_group("grid_canyon");
@@ -86,7 +96,17 @@ pub fn grid_canyon(c: &mut Criterion) {
 }
 
 pub fn grid_optimal_num_cubes_canyon(c: &mut Criterion) {
-    let particle_positions: &Vec<Vector3<f32>> = &particles_from_file(CANYON_PATH).unwrap();
+    let particle_positions: Vec<Vector3<f32>> =
+        if let Some(particle_positions) = particles_from_file(CANYON_PATH).ok() {
+            particle_positions
+        } else {
+            eprintln!(
+                "Canyon file not found at path: {}, skipping canyon benchmarks",
+                CANYON_PATH
+            );
+            return;
+        };
+
     let mut parameters = parameters_canyon();
 
     let mut with_cube_factor = |cube_factor: f32, num_cubes: &[u32]| {
