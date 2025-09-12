@@ -75,7 +75,11 @@ impl<I: Index, R: Real> ParametersSubdomainGrid<I, R> {
     }
 }
 
-#[cfg(all(target_arch = "x86_64", target_feature = "avx2", target_feature = "fma"))]
+#[cfg(all(
+    target_arch = "x86_64",
+    target_feature = "avx2",
+    target_feature = "fma"
+))]
 #[target_feature(enable = "avx2,fma")]
 pub fn density_grid_loop_avx<K: SymmetricKernel3d<f32>>(
     levelset_grid: &mut [f32],
@@ -280,12 +284,13 @@ pub fn density_grid_loop_auto<K: SymmetricKernel3d<f32>>(
     squared_support_with_margin: f32,
     particle_rest_mass: f32,
     kernel: &K,
-){
+) {
     // Try x86_64 AVX2+FMA first
     #[cfg(target_arch = "x86_64")]
     {
         // Only call the AVX2+FMA implementation when the CPU supports it at runtime
-        if std::arch::is_x86_feature_detected!("avx2") && std::arch::is_x86_feature_detected!("fma") {
+        if std::arch::is_x86_feature_detected!("avx2") && std::arch::is_x86_feature_detected!("fma")
+        {
             // Call only if compiled with the intrinsic function available; otherwise fall back below
             #[cfg(all(target_feature = "avx2", target_feature = "fma"))]
             unsafe {
