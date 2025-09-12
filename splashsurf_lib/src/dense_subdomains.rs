@@ -268,6 +268,75 @@ pub fn density_grid_loop_avx<K: SymmetricKernel3d<f32>>(
     }
 }
 
+/// Auto-dispatching density grid loop for f32/i64: chooses AVX2+FMA on x86_64, NEON on aarch64, otherwise scalar fallback
+pub fn density_grid_loop_auto<K: SymmetricKernel3d<f32>>(
+    levelset_grid: &mut [f32],
+    subdomain_particles: &[Vector3<f32>],
+    subdomain_particle_densities: &[f32],
+    subdomain_mc_grid: &UniformCartesianCubeGrid3d<i64, f32>,
+    subdomain_ijk: &[i64; 3],
+    global_mc_grid: &UniformCartesianCubeGrid3d<GlobalIndex, f32>,
+    cube_radius: i64,
+    squared_support_with_margin: f32,
+    particle_rest_mass: f32,
+    kernel: &K,
+){
+    // Try x86_64 AVX2+FMA first
+    #[cfg(target_arch = "x86_64")]
+    {
+        // Only call the AVX2+FMA implementation when the CPU supports it at runtime
+        if std::arch::is_x86_feature_detected!("avx2") && std::arch::is_x86_feature_detected!("fma") {
+            // Call only if compiled with the intrinsic function available; otherwise fall back below
+            #[cfg(all(target_feature = "avx2", target_feature = "fma"))]
+            unsafe {
+                return density_grid_loop_avx(
+                    levelset_grid,
+                    subdomain_particles,
+                    subdomain_particle_densities,
+                    subdomain_mc_grid,
+                    subdomain_ijk,
+                    global_mc_grid,
+                    cube_radius,
+                    squared_support_with_margin,
+                    particle_rest_mass,
+                    kernel,
+                );
+            }
+        }
+    }
+
+    // On aarch64, prefer NEON when compiled in
+    #[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
+    unsafe {
+        return density_grid_loop_neon(
+            levelset_grid,
+            subdomain_particles,
+            subdomain_particle_densities,
+            subdomain_mc_grid,
+            subdomain_ijk,
+            global_mc_grid,
+            cube_radius,
+            squared_support_with_margin,
+            particle_rest_mass,
+            kernel,
+        );
+    }
+
+    // Fallback: scalar generic implementation
+    density_grid_loop::<i64, f32, K>(
+        levelset_grid,
+        subdomain_particles,
+        subdomain_particle_densities,
+        subdomain_mc_grid,
+        subdomain_ijk,
+        global_mc_grid,
+        cube_radius,
+        squared_support_with_margin,
+        particle_rest_mass,
+        kernel,
+    );
+}
+
 /// Result of the subdomain decomposition procedure
 pub(crate) struct Subdomains<I: Index> {
     // Flat subdomain coordinate indices (same order as the particle list)
