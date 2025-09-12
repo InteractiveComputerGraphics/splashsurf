@@ -1180,6 +1180,7 @@ pub(crate) fn reconstruction<I: Index, R: Real>(
         levelset_grid.fill(R::zero());
         levelset_grid.resize(mc_total_points.to_usize().unwrap(), R::zero());
 
+        /*
         if subdomain_particles.len() > 6800 {
             println!("{}", subdomain_particles.len());
             let arguments = DensityGridLoopParameters {
@@ -1204,6 +1205,7 @@ pub(crate) fn reconstruction<I: Index, R: Real>(
             )
             .unwrap();
         }
+         */
 
         density_grid_loop(
             levelset_grid.as_mut_slice(),

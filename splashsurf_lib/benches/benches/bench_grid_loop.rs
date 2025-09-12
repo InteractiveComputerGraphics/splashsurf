@@ -7,15 +7,12 @@ use std::time::Duration;
 
 pub fn grid_loop_no_simd(c: &mut Criterion) {
     let params: DensityGridLoopParameters<i64, f32> = serde_json::from_reader(
-        std::fs::File::open(
-            "/Users/floeschner/programming/splashsurf_private/density_grid_loop_subdomain_33.json",
-        )
-        .unwrap(),
+        std::fs::File::open("../data/density_grid_loop_subdomain_33.json").unwrap(),
     )
     .unwrap();
 
     let mut group = c.benchmark_group("grid_loop");
-    group.sample_size(200);
+    group.sample_size(400);
     group.warm_up_time(Duration::from_secs(3));
     group.measurement_time(Duration::from_secs(20));
 
@@ -43,10 +40,7 @@ pub fn grid_loop_no_simd(c: &mut Criterion) {
 
 pub fn grid_loop_neon(c: &mut Criterion) {
     let params: DensityGridLoopParameters<i64, f32> = serde_json::from_reader(
-        std::fs::File::open(
-            "/Users/floeschner/programming/splashsurf_private/density_grid_loop_subdomain_33.json",
-        )
-        .unwrap(),
+        std::fs::File::open("../data/density_grid_loop_subdomain_33.json").unwrap(),
     )
     .unwrap();
 
@@ -87,7 +81,10 @@ pub fn grid_loop_neon(c: &mut Criterion) {
             );
             params.levelset_grid
         };
-        
+
+        println!("{:?}", &reference[0..10]);
+        println!("{:?}", &neon_result[0..10]);
+
         assert!(
             neon_result
                 .iter()
@@ -97,7 +94,7 @@ pub fn grid_loop_neon(c: &mut Criterion) {
     }
 
     let mut group = c.benchmark_group("grid_loop");
-    group.sample_size(200);
+    group.sample_size(600);
     group.warm_up_time(Duration::from_secs(3));
     group.measurement_time(Duration::from_secs(20));
 
