@@ -7,9 +7,10 @@ use itertools::iproduct;
 use log::trace;
 use nalgebra::{Scalar, Vector3};
 use num_traits::Bounded;
+#[cfg(feature = "serde-serialize")]
+use serde_derive::{Deserialize, Serialize};
 use std::iter::Iterator;
 use thiserror::Error as ThisError;
-
 // TODO: Reduce mess with all array and scalar indexing functions
 
 /*
@@ -126,7 +127,8 @@ pub type UniformGrid<I, R> = UniformCartesianCubeGrid3d<I, R>;
 /// obtained using the [`get_point`](UniformCartesianCubeGrid3d::get_point) and [`get_cell`](UniformCartesianCubeGrid3d::get_cell)
 /// functions respectively. These functions check if the specified indices are in the valid index range
 /// of the grid (as computed during construction based on the extents of the grid).
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
 pub struct UniformCartesianCubeGrid3d<I: Scalar, R: Scalar> {
     /// AABB of the grid. Note that the grid may extend beyond the max coordinate of the AABB by less than the `cell_size`.
     aabb: Aabb3d<R>,

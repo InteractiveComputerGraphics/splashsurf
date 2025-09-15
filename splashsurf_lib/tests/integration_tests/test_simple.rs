@@ -29,6 +29,7 @@ fn params_with_aabb<R: Real>(
         iso_surface_threshold,
         particle_aabb: domain_aabb,
         enable_multi_threading: false,
+        enable_simd: false,
         spatial_decomposition: SpatialDecomposition::None,
         global_neighborhood_list: false,
     };

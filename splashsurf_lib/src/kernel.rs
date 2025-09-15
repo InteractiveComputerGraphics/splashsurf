@@ -1,8 +1,22 @@
 //! SPH kernel function implementations
+//!
+//! Currently, the following SIMD implementations are provided:
+//!  - `CubicSplineKernelAvxF32`: Only available on `x86` and `x86_64` targets, requires AVX2 and FMA support
+//!  - `CubicSplineKernelNeonF32`: Only available on `aarch64` targets, requires NEON support
+//!
+//! Note that documentation of the SIMD kernels is only available on the respective target architectures.
 
 use crate::{Real, RealConvert};
 use nalgebra::Vector3;
 use numeric_literals::replace_float_literals;
+
+#[cfg(all(target_arch = "aarch64"))]
+use core::arch::aarch64::float32x4_t;
+
+#[cfg(target_arch = "x86")]
+use core::arch::x86::__m256;
+#[cfg(target_arch = "x86_64")]
+use core::arch::x86_64::__m256;
 
 // TODO: Add reference for the kernel function, document formula
 
@@ -23,6 +37,8 @@ impl Volume {
 
 /// Trait for symmetric kernel functions in three dimensions
 pub trait SymmetricKernel3d<R: Real> {
+    /// Returns the compact support radius of the kernel
+    fn compact_support_radius(&self) -> R;
     /// Evaluates the kernel at the radial distance `r` relative to the origin
     fn evaluate(&self, r: R) -> R;
     /// Evaluates the kernel gradient at the position `x` relative to the origin
@@ -80,6 +96,10 @@ impl<R: Real> CubicSplineKernel<R> {
 }
 
 impl<R: Real> SymmetricKernel3d<R> for CubicSplineKernel<R> {
+    fn compact_support_radius(&self) -> R {
+        self.compact_support_radius
+    }
+
     /// Evaluates the cubic spline kernel at the radial distance `r`
     fn evaluate(&self, r: R) -> R {
         let q = (r + r) / self.compact_support_radius;
@@ -156,6 +176,307 @@ fn test_cubic_kernel_r_integral() {
         }
 
         assert!((integral - 1.0).abs() <= 1e-5);
+    }
+}
+
+/// Vectorized implementation of the cubic spline kernel using NEON instructions. Only available on `aarch64` targets.
+#[cfg(target_arch = "aarch64")]
+pub struct CubicSplineKernelNeonF32 {
+    compact_support_inv: f32,
+    sigma: f32,
+}
+
+#[cfg(target_arch = "aarch64")]
+impl CubicSplineKernelNeonF32 {
+    /// Initializes a cubic spline kernel with the given compact support radius
+    pub fn new(compact_support_radius: f32) -> Self {
+        let r = compact_support_radius;
+        let compact_support_inv = 1.0 / r;
+        let rrr = r * r * r;
+        let sigma = 8.0 / (std::f32::consts::PI * rrr);
+        Self {
+            compact_support_inv,
+            sigma,
+        }
+    }
+
+    /// Evaluates the cubic spline kernel at the specified radial distances
+    #[target_feature(enable = "neon")]
+    pub fn evaluate(&self, r: float32x4_t) -> float32x4_t {
+        use core::arch::aarch64::*;
+
+        let one = vdupq_n_f32(1.0);
+        let half = vdupq_n_f32(0.5);
+        let zero = vdupq_n_f32(0.0);
+
+        // q = r / h, v = 1 - q
+        let q = vmulq_n_f32(r, self.compact_support_inv);
+        let v = vsubq_f32(one, q);
+        // Clamp v to [0, 1] to implicitly zero-out contributions with q > 1
+        let v = vmaxq_f32(v, zero);
+
+        // Reuse v^2 and v^3 for both branches
+        let v2 = vmulq_f32(v, v);
+        let v3 = vmulq_f32(v2, v);
+
+        // Outer branch (0.5 < q <= 1.0): 2*sigma*(1 - q)^3 = 2*sigma*v^3
+        let res_outer = vmulq_n_f32(v3, 2.0 * self.sigma);
+
+        // Inner branch (q <= 0.5) rewritten in terms of v to avoid computing q^2:
+        // sigma * (1 - 6q^2 + 6q^3) == sigma * (1 - 6v + 12v^2 - 6v^3)
+        let mut res_inner = vdupq_n_f32(self.sigma);
+        res_inner = vmlsq_n_f32(res_inner, v, 6.0 * self.sigma); // -6*sigma*v
+        res_inner = vmlaq_n_f32(res_inner, v2, 12.0 * self.sigma); // +12*sigma*v^2
+        res_inner = vmlsq_n_f32(res_inner, v3, 6.0 * self.sigma); // -6*sigma*v^3
+
+        // Select inner for q <= 0.5, else outer; v was clamped so q > 1 yields 0 automatically
+        let leq_than_half = vcleq_f32(q, half);
+        vbslq_f32(leq_than_half, res_inner, res_outer)
+    }
+}
+
+#[test]
+#[cfg_attr(
+    not(all(target_arch = "aarch64", target_feature = "neon")),
+    ignore = "Skipped on non-aarch64 targets"
+)]
+fn test_cubic_spline_kernel_neon() {
+    #[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
+    {
+        use core::arch::aarch64::*;
+
+        // Test a few representative compact support radii
+        let hs: [f32; 3] = [0.025, 0.1, 2.0];
+        for &h in hs.iter() {
+            let scalar = CubicSplineKernel::new(h);
+            let neon = CubicSplineKernelNeonF32::new(h);
+
+            // Sample radii from 0 to 2h (beyond support should be 0)
+            let n: usize = 1024;
+            let mut r0: f32 = 0.0;
+            let dr: f32 = (2.0 * h) / (n as f32);
+
+            for _chunk in 0..(n / 4) {
+                // Prepare 4 lanes of radii
+                let rs = [r0, r0 + dr, r0 + 2.0 * dr, r0 + 3.0 * dr];
+                let r_vec = unsafe { vld1q_f32(rs.as_ptr()) };
+
+                // Evaluate NEON and store back to array
+                let w_vec = unsafe { neon.evaluate(r_vec) };
+                let mut w_neon = [0.0f32; 4];
+                unsafe { vst1q_f32(w_neon.as_mut_ptr(), w_vec) };
+
+                // Compare against scalar lane-wise
+                for lane in 0..4 {
+                    let r_lane = rs[lane];
+                    let w_scalar = scalar.evaluate(r_lane);
+                    let diff = (w_neon[lane] - w_scalar).abs();
+
+                    // Absolute tolerance with mild relative component to be robust across scales
+                    let tol = 5e-6_f32.max(2e-5_f32 * w_scalar.abs());
+                    assert!(
+                        diff <= tol,
+                        "NEON kernel mismatch (h={}, r={}, lane={}): neon={}, scalar={}, diff={}, tol={}",
+                        h,
+                        r_lane,
+                        lane,
+                        w_neon[lane],
+                        w_scalar,
+                        diff,
+                        tol
+                    );
+                }
+
+                r0 += 4.0 * dr;
+            }
+
+            // Also check a couple of out-of-support points explicitly
+            for &r in &[h * 1.01, h * 1.5, h * 2.0, h * 2.5] {
+                let w_scalar = scalar.evaluate(r);
+                let w_neon = {
+                    let v = unsafe { vld1q_f32([r, r, r, r].as_ptr()) };
+                    let w = unsafe { neon.evaluate(v) };
+                    let mut tmp = [0.0f32; 4];
+                    unsafe { vst1q_f32(tmp.as_mut_ptr(), w) };
+                    tmp[0]
+                };
+                let diff = (w_neon - w_scalar).abs();
+                let tol = 5e-6_f32.max(1e-5_f32 * w_scalar.abs());
+                assert!(
+                    diff <= tol,
+                    "NEON kernel mismatch outside support (h={}, r={}): neon={}, scalar={}, diff={}, tol={}",
+                    h,
+                    r,
+                    w_neon,
+                    w_scalar,
+                    diff,
+                    tol
+                );
+            }
+        }
+    }
+}
+
+/// Vectorized implementation of the cubic spline kernel using AVX2 and FMA instructions. Only available on `x86` and `x86_64` targets.
+#[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
+pub struct CubicSplineKernelAvxF32 {
+    compact_support_inv: f32,
+    sigma: f32,
+}
+
+#[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
+impl CubicSplineKernelAvxF32 {
+    /// Initializes a cubic spline kernel with the given compact support radius
+    pub fn new(compact_support_radius: f32) -> Self {
+        let r = compact_support_radius;
+        let compact_support_inv = 1.0 / r;
+        let rrr = r * r * r;
+        let sigma = 8.0 / (std::f32::consts::PI * rrr);
+        Self {
+            compact_support_inv,
+            sigma,
+        }
+    }
+
+    /// Evaluates the cubic spline kernel at the specified radial distances
+    #[target_feature(enable = "avx2,fma")]
+    pub fn evaluate(&self, r: __m256) -> __m256 {
+        #[cfg(target_arch = "x86")]
+        use core::arch::x86::*;
+        #[cfg(target_arch = "x86_64")]
+        use core::arch::x86_64::*;
+
+        let one = _mm256_set1_ps(1.0);
+        let half = _mm256_set1_ps(0.5);
+        let zero = _mm256_set1_ps(0.0);
+
+        // q = r / h, v = 1 - q
+        let q = _mm256_mul_ps(r, _mm256_set1_ps(self.compact_support_inv));
+        let mut v = _mm256_sub_ps(one, q);
+        // Clamp v to [0, 1] to implicitly zero-out contributions with q > 1
+        v = _mm256_max_ps(v, zero);
+
+        // v^2 and v^3
+        let v2 = _mm256_mul_ps(v, v);
+        let v3 = _mm256_mul_ps(v2, v);
+
+        // Outer: 2*sigma*v^3
+        let res_outer = _mm256_mul_ps(v3, _mm256_set1_ps(2.0 * self.sigma));
+
+        // Inner: sigma * (1 - 6v + 12v^2 - 6v^3)
+        let mut res_inner = _mm256_set1_ps(self.sigma);
+        // res_inner = res_inner - 6*sigma*v
+        res_inner = _mm256_fnmadd_ps(v, _mm256_set1_ps(6.0 * self.sigma), res_inner);
+        // res_inner = res_inner + 12*sigma*v^2
+        res_inner = _mm256_fmadd_ps(v2, _mm256_set1_ps(12.0 * self.sigma), res_inner);
+        // res_inner = res_inner - 6*sigma*v^3
+        res_inner = _mm256_fnmadd_ps(v3, _mm256_set1_ps(6.0 * self.sigma), res_inner);
+
+        // Select inner for q <= 0.5, else outer
+        let leq_than_half = _mm256_cmp_ps::<_CMP_LE_OQ>(q, half);
+        _mm256_blendv_ps(res_outer, res_inner, leq_than_half)
+    }
+}
+
+#[test]
+#[cfg_attr(
+    not(all(
+        any(target_arch = "x86_64", target_arch = "x86"),
+        target_feature = "avx2",
+        target_feature = "fma"
+    )),
+    ignore = "Skipped on non-x86 targets"
+)]
+fn test_cubic_spline_kernel_avx() {
+    #[cfg(all(
+        any(target_arch = "x86_64", target_arch = "x86"),
+        target_feature = "avx2",
+        target_feature = "fma"
+    ))]
+    {
+        #[cfg(target_arch = "x86")]
+        use core::arch::x86::*;
+        #[cfg(target_arch = "x86_64")]
+        use core::arch::x86_64::*;
+
+        // Test a few representative compact support radii
+        let hs: [f32; 3] = [0.025, 0.1, 2.0];
+        for &h in hs.iter() {
+            let scalar = CubicSplineKernel::new(h);
+            let avx = CubicSplineKernelAvxF32::new(h);
+
+            // Sample radii from 0 to 2h (beyond support should be 0)
+            let n: usize = 1024;
+            let mut r0: f32 = 0.0;
+            let dr: f32 = (2.0 * h) / (n as f32);
+
+            for _chunk in 0..(n / 8) {
+                // Prepare 8 lanes of radii
+                let rs = [
+                    r0,
+                    r0 + dr,
+                    r0 + 2.0 * dr,
+                    r0 + 3.0 * dr,
+                    r0 + 4.0 * dr,
+                    r0 + 5.0 * dr,
+                    r0 + 6.0 * dr,
+                    r0 + 7.0 * dr,
+                ];
+
+                // Evaluate AVX and store back to array
+                let r_vec = unsafe { _mm256_loadu_ps(rs.as_ptr()) };
+                let w_vec = unsafe { avx.evaluate(r_vec) };
+                let mut w_avx = [0.0f32; 8];
+                unsafe { _mm256_storeu_ps(w_avx.as_mut_ptr(), w_vec) };
+
+                // Compare against scalar lane-wise
+                for lane in 0..8 {
+                    let r_lane = rs[lane];
+                    let w_scalar = scalar.evaluate(r_lane);
+                    let diff = (w_avx[lane] - w_scalar).abs();
+
+                    // Absolute tolerance with mild relative component to be robust across scales
+                    let tol = 1e-6_f32.max(1e-5_f32 * w_scalar.abs());
+                    assert!(
+                        diff <= tol,
+                        "AVX kernel mismatch (h={}, r={}, lane={}): avx={}, scalar={}, diff={}, tol={}",
+                        h,
+                        r_lane,
+                        lane,
+                        w_avx[lane],
+                        w_scalar,
+                        diff,
+                        tol
+                    );
+                }
+
+                r0 += 8.0 * dr;
+            }
+
+            // Also check a couple of out-of-support points explicitly
+            for &r in &[h * 1.01, h * 1.5, h * 2.0, h * 2.5] {
+                let w_scalar = scalar.evaluate(r);
+                let w_avx = {
+                    let v = unsafe { _mm256_set1_ps(r) };
+                    let w = unsafe { avx.evaluate(v) };
+                    let mut tmp = [0.0f32; 8];
+                    unsafe { _mm256_storeu_ps(tmp.as_mut_ptr(), w) };
+                    tmp[0]
+                };
+                let diff = (w_avx - w_scalar).abs();
+                let tol = 1e-6_f32.max(1e-5_f32 * w_scalar.abs());
+                assert!(
+                    diff <= tol,
+                    "AVX kernel mismatch outside support (h={}, r={}): avx={}, scalar={}, diff={}, tol={}",
+                    h,
+                    r,
+                    w_avx,
+                    w_scalar,
+                    diff,
+                    tol
+                );
+            }
+        }
     }
 }
 

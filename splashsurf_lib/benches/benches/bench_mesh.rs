@@ -23,6 +23,7 @@ fn reconstruct_particles<P: AsRef<Path>>(particle_file: P) -> SurfaceReconstruct
         iso_surface_threshold: 0.6,
         particle_aabb: None,
         enable_multi_threading: true,
+        enable_simd: true,
         spatial_decomposition: SpatialDecomposition::UniformGrid(GridDecompositionParameters {
             subdomain_num_cubes_per_dim: 64,
             auto_disable: false,

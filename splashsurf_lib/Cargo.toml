@@ -6,6 +6,7 @@ keywords = ["sph", "particle", "surface", "reconstruction", "marching-cubes"]
 categories = ["graphics", "science", "simulation", "visualization", "rendering"]
 readme = "README.md"
 edition = "2024"
+rust-version = "1.88"
 
 documentation = "https://docs.rs/splashsurf_lib"
 authors.workspace = true
@@ -17,9 +18,15 @@ repository.workspace = true
 # RUSTDOCFLAGS="--cfg docsrs" cargo +nightly doc --all-features --no-deps --open
 # Build with all features to properly document everything
 all-features = true
-# Build only for a single target as this crate does not have any platform specific behavior
-default-target = "x86_64-unknown-linux-gnu"
-targets = []
+targets = [
+  "x86_64-unknown-linux-gnu",
+  "i686-unknown-linux-gnu",
+  "aarch64-unknown-linux-gnu",
+  "aarch64-apple-darwin",
+  "x86_64-apple-darwin",
+  "x86_64-pc-windows-msvc",
+  "i686-pc-windows-msvc"
+]
 
 # Ignore the tests (especially the test mesh files) for publishing
 exclude = ["tests/*", "benches/*"]
@@ -29,6 +36,7 @@ default = []
 vtk_extras = ["vtkio"]
 profiling = []
 io = ["vtk_extras", "vtkio", "ply-rs", "nom", "serde_json", "flate2"]
+serde-serialize = ["serde", "serde_derive", "serde_json", "nalgebra/serde-serialize"]
 
 [dependencies]
 log = "0.4"
@@ -59,6 +67,10 @@ flate2 = { version = "1.0", optional = true }
 nom = { version = "8.0", optional = true }
 serde_json = { version = "1.0", optional = true }
 
+# Serialization
+serde = { version = "1.0", optional = true }
+serde_derive = { version = "1.0", optional = true }
+
 [dev-dependencies]
 criterion = "0.7"
 ultraviolet = "0.10"
@@ -83,4 +95,4 @@ required-features = ["profiling", "io"]
 name = "splashsurf_lib_benches"
 path = "benches/splashsurf_lib_benches.rs"
 harness = false
-required-features = ["io"]
+required-features = ["io", "serde-serialize"]

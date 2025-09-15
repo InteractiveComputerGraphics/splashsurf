@@ -21,9 +21,10 @@
 //!   by binary crates calling into this library to add their own profiling scopes to the measurements.
 //!   If this features is not enabled, the macro will just expend to a no-op and remove the (small)
 //!   performance overhead of the profiling.
+//! - **`serde-serialize`**: Enables `Serialize` and `Deserialize` impls for some types using `serde`.
 //!
 
-use log::info;
+use log::{info, warn};
 /// Re-export the version of `nalgebra` used by this crate
 pub use nalgebra;
 use nalgebra::Scalar;
@@ -53,7 +54,7 @@ pub mod profiling;
 pub mod profiling_macro;
 
 mod aabb;
-pub(crate) mod dense_subdomains;
+pub mod dense_subdomains;
 pub mod density_map;
 pub mod generic_tree;
 pub mod halfedge_mesh;
@@ -74,7 +75,6 @@ pub mod uniform_grid;
 mod utils;
 pub(crate) mod workspace;
 
-// TODO: Add documentation of feature flags
 // TODO: Feature flag for multi threading
 // TODO: Feature flag to disable (debug level) logging?
 
@@ -175,6 +175,10 @@ pub struct Parameters<R: Scalar> {
     pub particle_aabb: Option<Aabb3d<R>>,
     /// Whether to allow multi threading within the surface reconstruction procedure
     pub enable_multi_threading: bool,
+    /// Whether to enable SIMD vectorization for some computations if supported by the target architecture
+    ///
+    /// Currently only supported on x86/x86_64 (AVX2 + FMA) and aarch64 (NEON) for single precision (f32) reconstructions.
+    pub enable_simd: bool,
     /// Parameters for the spatial decomposition of the surface reconstruction
     /// If not provided, no spatial decomposition is performed and a global approach is used instead.
     pub spatial_decomposition: SpatialDecomposition,
@@ -199,6 +203,7 @@ impl<R: Real> Parameters<R> {
             iso_surface_threshold: R::from_float(0.6),
             particle_aabb: None,
             enable_multi_threading: true,
+            enable_simd: true,
             spatial_decomposition: Default::default(),
             global_neighborhood_list: false,
         }
@@ -230,6 +235,7 @@ impl<R: Real> Parameters<R> {
             iso_surface_threshold: self.iso_surface_threshold.try_convert()?,
             particle_aabb: map_option!(&self.particle_aabb, aabb => aabb.try_convert()?),
             enable_multi_threading: self.enable_multi_threading,
+            enable_simd: self.enable_simd,
             spatial_decomposition: self.spatial_decomposition.clone(),
             global_neighborhood_list: self.global_neighborhood_list,
         })
@@ -335,6 +341,26 @@ pub fn reconstruct_surface_inplace<I: Index, R: Real>(
 ) -> Result<(), ReconstructionError<I, R>> {
     // Clear the existing mesh
     output_surface.mesh.clear();
+
+    if parameters.enable_simd {
+        if let Some(simd) = utils::detect_simd_support() {
+            let simd_str = match simd {
+                utils::SimdFeatures::Avx2Fma => "AVX2 and FMA",
+                utils::SimdFeatures::Neon => "NEON",
+            };
+            info!("Vectorization enabled with support detected for {simd_str} instructions.");
+        } else {
+            warn!(
+                "Vectorization was enabled, but no SIMD support was detected on this CPU. Falling back to non-vectorized code."
+            );
+        }
+
+        if std::any::TypeId::of::<R>() != std::any::TypeId::of::<f32>() {
+            warn!(
+                "Vectorization is currently only supported for single-precision (f32) reconstructions. Falling back to non-vectorized code."
+            );
+        }
+    }
 
     // Filter out particles
     let filtered_particle_positions = if let Some(particle_aabb) = &parameters.particle_aabb {

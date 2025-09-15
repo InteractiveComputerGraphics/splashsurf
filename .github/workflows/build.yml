@@ -28,6 +28,19 @@ jobs:
     - uses: actions/checkout@v4
       with:
         lfs: true
+    - name: Update rust toolchain
+      run: |
+        rustup update stable
+        rustup default stable
+        rustup --version
+    - name: Cache rust dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-dev-cargo-${{ hashFiles('**/Cargo.lock') }}
     - name: Check (default members)
       run: cargo check
     - name: Check with examples
@@ -40,13 +53,30 @@ jobs:
       run: cargo test
 
   build_release:
-    name: Build & test release mode
-    runs-on: ubuntu-latest
+    name: Build & test release mode (${{ matrix.runner }})
+    runs-on: ${{ matrix.runner }}
     needs: build_workspace
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-latest, ubuntu-24.04-arm, macos-14, macos-13, windows-latest]
     steps:
       - uses: actions/checkout@v4
         with:
           lfs: true
+      - name: Update rust toolchain
+        run: |
+          rustup update stable
+          rustup default stable
+          rustup --version
+      - name: Cache rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ matrix.runner }}-release-cargo-${{ hashFiles('**/Cargo.lock') }}
       - name: Build (release)
         run: cargo build --release
       - name: Test (release)
@@ -59,6 +89,19 @@ jobs:
       - uses: actions/checkout@v4
         with:
           lfs: true
+      - name: Update rust toolchain
+        run: |
+          rustup update stable
+          rustup default stable
+          rustup --version
+      - name: Cache rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-lib-all-cargo-${{ hashFiles('**/Cargo.lock') }}
       - name: Build
         run: |
           cargo build --manifest-path="splashsurf_lib/Cargo.toml" --all-targets --all-features
@@ -76,6 +119,19 @@ jobs:
       - uses: actions/checkout@v4
         with:
           lfs: true
+      - name: Update rust toolchain
+        run: |
+          rustup update stable
+          rustup default stable
+          rustup --version
+      - name: Cache rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-lib-no-default-cargo-${{ hashFiles('**/Cargo.lock') }}
       - name: Build
         run: |
           cargo build --manifest-path="splashsurf_lib/Cargo.toml" --all-targets --no-default-features
@@ -87,9 +143,14 @@ jobs:
     name: Publish to crates.io
     runs-on: ubuntu-latest
     if: ${{ startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') }}
-    needs: [check_format, build_workspace, build_lib_all_features, build_lib_no_default_features]
+    needs: [check_format, build_workspace, build_lib_all_features, build_lib_no_default_features, build_release]
     steps:
       - uses: actions/checkout@v4
+      - name: Update rust toolchain
+        run: |
+          rustup update stable
+          rustup default stable
+          rustup --version
       - name: Publish splashsurf_lib
         run: |
           cargo publish --package splashsurf_lib

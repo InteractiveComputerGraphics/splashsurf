@@ -7,7 +7,7 @@ use splashsurf_lib::{
 };
 use std::time::Duration;
 
-static CANYON_PATH: &str = "C:\\canyon.xyz";
+static CANYON_PATH: &str = "/Users/floeschner/Documents/canyon.xyz";
 
 fn parameters_canyon() -> Parameters<f32> {
     let particle_radius = 0.011;
@@ -22,6 +22,7 @@ fn parameters_canyon() -> Parameters<f32> {
         iso_surface_threshold: 0.6,
         particle_aabb: None,
         enable_multi_threading: true,
+        enable_simd: true,
         spatial_decomposition: SpatialDecomposition::UniformGrid(GridDecompositionParameters {
             subdomain_num_cubes_per_dim: 32,
             auto_disable: false,
@@ -31,7 +32,17 @@ fn parameters_canyon() -> Parameters<f32> {
 }
 
 pub fn grid_canyon(c: &mut Criterion) {
-    let particle_positions: &Vec<Vector3<f32>> = &particles_from_file(CANYON_PATH).unwrap();
+    let particle_positions: Vec<Vector3<f32>> =
+        if let Some(particle_positions) = particles_from_file(CANYON_PATH).ok() {
+            particle_positions
+        } else {
+            eprintln!(
+                "Canyon file not found at path: {}, skipping canyon benchmarks",
+                CANYON_PATH
+            );
+            return;
+        };
+
     let parameters = parameters_canyon();
 
     let mut group = c.benchmark_group("grid_canyon");
@@ -86,7 +97,17 @@ pub fn grid_canyon(c: &mut Criterion) {
 }
 
 pub fn grid_optimal_num_cubes_canyon(c: &mut Criterion) {
-    let particle_positions: &Vec<Vector3<f32>> = &particles_from_file(CANYON_PATH).unwrap();
+    let particle_positions: Vec<Vector3<f32>> =
+        if let Some(particle_positions) = particles_from_file(CANYON_PATH).ok() {
+            particle_positions
+        } else {
+            eprintln!(
+                "Canyon file not found at path: {}, skipping canyon benchmarks",
+                CANYON_PATH
+            );
+            return;
+        };
+
     let mut parameters = parameters_canyon();
 
     let mut with_cube_factor = |cube_factor: f32, num_cubes: &[u32]| {

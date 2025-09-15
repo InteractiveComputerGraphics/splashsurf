@@ -1,7 +1,7 @@
 //! Workspace for reusing allocated memory between multiple surface reconstructions
 
-use crate::{Real, Scalar};
-use nalgebra::Vector3;
+use crate::Real;
+use nalgebra::{Scalar, Vector3};
 use std::cell::RefCell;
 use std::fmt;
 use std::fmt::Debug;

@@ -5,6 +5,7 @@ use num_traits::{
     Bounded, CheckedAdd, CheckedMul, CheckedSub, FromPrimitive, NumCast, SaturatingSub, Signed,
     ToPrimitive,
 };
+//use serde::{Serialize, de::DeserializeOwned};
 use simba::scalar::SupersetOf;
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
@@ -62,6 +63,8 @@ pub trait Index:
     + Display
     + Pod
     + ThreadSafe
+//    + Serialize
+//    + DeserializeOwned
     + 'static
 {
     #[inline]
@@ -124,6 +127,8 @@ pub trait Real:
     + Default
     + Pod
     + ThreadSafe
+//    + Serialize
+//    + DeserializeOwned
 {
     /// Converts the given float value to this Real type
     #[inline(always)]
@@ -172,6 +177,8 @@ impl<I> Index for I where
         + Display
         + Pod
         + ThreadSafe
+        //        + Serialize
+        //        + DeserializeOwned
         + 'static
 {
 }
@@ -187,6 +194,8 @@ impl<R> Real for R where
         + Default
         + Pod
         + ThreadSafe
+        //        + Serialize
+        //        + DeserializeOwned
         + 'static
 {
 }

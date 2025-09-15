@@ -15,9 +15,9 @@
 //!  - [`IntoVtkUnstructuredGridPiece`] to convert basic meshes and meshes with attached attributes to the
 //!  - [`IntoVtkDataSet`] for all meshes implementing [`IntoVtkUnstructuredGridPiece`] to directly save a mesh as a VTK file
 
-use crate::{Aabb3d, MapType, Real, RealConvert, Scalar, new_map, profile};
+use crate::{Aabb3d, MapType, Real, RealConvert, new_map, profile};
 use bytemuck_derive::{Pod, Zeroable};
-use nalgebra::{Unit, Vector3};
+use nalgebra::{Scalar, Unit, Vector3};
 use rayon::prelude::*;
 use std::borrow::Cow;
 use std::cell::RefCell;
