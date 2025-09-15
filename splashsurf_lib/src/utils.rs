@@ -190,7 +190,7 @@ pub(crate) fn detect_simd_support() -> Option<SimdFeatures> {
     #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
     {
         if is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma") {
-            return Some(VectorizationFeatures::Avx2Fma);
+            return Some(SimdFeatures::Avx2Fma);
         }
     }
 

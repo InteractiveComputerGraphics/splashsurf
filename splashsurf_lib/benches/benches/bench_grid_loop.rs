@@ -207,7 +207,7 @@ pub fn grid_loop_avx2(c: &mut Criterion) {
         println!("{:?}", &avx_result[0..10]);
 
         assert!(
-            neon_result
+            avx_result
                 .iter()
                 .zip(reference.iter())
                 .all(|(a, b)| (a - b).abs() < f32::EPSILON * 100.0)

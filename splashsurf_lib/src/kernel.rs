@@ -134,7 +134,6 @@ impl<R: Real> SymmetricKernel3d<R> for CubicSplineKernel<R> {
     }
 }
 
-
 #[test]
 fn test_cubic_kernel_r_compact_support() {
     let hs = [0.025, 0.1, 2.0];
@@ -362,7 +361,7 @@ impl CubicSplineKernelAvxF32 {
         res_inner = _mm256_fnmadd_ps(v3, _mm256_set1_ps(6.0 * self.sigma), res_inner);
 
         // Select inner for q <= 0.5, else outer
-        let leq_than_half = _mm256_cmp_ps(q, half, _CMP_LE_OQ);
+        let leq_than_half = _mm256_cmp_ps::<_CMP_LE_OQ>(q, half);
         _mm256_blendv_ps(res_outer, res_inner, leq_than_half)
     }
 }

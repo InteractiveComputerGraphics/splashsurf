@@ -1129,7 +1129,7 @@ pub fn density_grid_loop_avx<K: SymmetricKernel3d<f32>>(
             };
 
             // Cheap mask to skip work if all lanes are outside support
-            let inside_mask = _mm256_cmp_ps(dist_sq, support_sq_v, _CMP_LT_OQ);
+            let inside_mask = _mm256_cmp_ps::<_CMP_LT_OQ>(dist_sq, support_sq_v);
             if _mm256_movemask_ps(inside_mask) == 0 {
                 return _mm256_set1_ps(0.0);
             }
