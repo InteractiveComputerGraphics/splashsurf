@@ -33,7 +33,7 @@ pysplashsurf --help
 ```
 For example, to reconstruct a surface from particle data in a VTK file with some smoothing:
 ```bash
-splashsurf reconstruct particles.vtk -r=0.025 -l=2.0 -c=0.5 -t=0.6 --mesh-smoothing-weights=on --mesh-smoothing-iters=15 --normals=on --normals-smoothing-iters=10
+pysplashsurf reconstruct particles.vtk -r=0.025 -l=2.0 -c=0.5 -t=0.6 --mesh-smoothing-weights=on --mesh-smoothing-iters=15 --normals=on --normals-smoothing-iters=10
 ```
 
 For more information on the CLI and its arguments, refer to the [splashsurf documentation](https://github.com/InteractiveComputerGraphics/splashsurf).
