@@ -348,10 +348,16 @@ pub fn reconstruct_surface_inplace<I: Index, R: Real>(
                 utils::SimdFeatures::Avx2Fma => "AVX2 and FMA",
                 utils::SimdFeatures::Neon => "NEON",
             };
-            info!("Vectorization enabled with support detected for {simd_str}.");
+            info!("Vectorization enabled with support detected for {simd_str} instructions.");
         } else {
             warn!(
                 "Vectorization was enabled, but no SIMD support was detected on this CPU. Falling back to non-vectorized code."
+            );
+        }
+
+        if std::any::TypeId::of::<R>() != std::any::TypeId::of::<f32>() {
+            warn!(
+                "Vectorization is currently only supported for single-precision (f32) reconstructions. Falling back to non-vectorized code."
             );
         }
     }
