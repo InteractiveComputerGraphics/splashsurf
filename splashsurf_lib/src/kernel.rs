@@ -175,13 +175,13 @@ fn test_cubic_kernel_r_integral() {
 }
 
 /// Vectorized implementation of the cubic spline kernel using NEON instructions. Only available on aarch64 targets.
-#[cfg(all(target_arch = "aarch64"))]
+#[cfg(target_arch = "aarch64")]
 pub struct CubicSplineKernelNeonF32 {
     compact_support_inv: f32,
     sigma: f32,
 }
 
-#[cfg(all(target_arch = "aarch64"))]
+#[cfg(target_arch = "aarch64")]
 impl CubicSplineKernelNeonF32 {
     /// Initializes a cubic spline kernel with the given compact support radius
     pub fn new(compact_support_radius: f32) -> Self {
@@ -227,6 +227,82 @@ impl CubicSplineKernelNeonF32 {
         // Select inner for q <= 0.5, else outer; v was clamped so q > 1 yields 0 automatically
         let leq_than_half = vcleq_f32(q, half);
         vbslq_f32(leq_than_half, res_inner, res_outer)
+    }
+}
+
+#[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
+#[test]
+fn test_cubic_spline_kernel_neon() {
+    use core::arch::aarch64::*;
+
+    // Test a few representative compact support radii
+    let hs: [f32; 3] = [0.025, 0.1, 2.0];
+    for &h in hs.iter() {
+        let scalar = CubicSplineKernel::new(h);
+        let neon = CubicSplineKernelNeonF32::new(h);
+
+        // Sample radii from 0 to 2h (beyond support should be 0)
+        let n: usize = 1024;
+        let mut r0: f32 = 0.0;
+        let dr: f32 = (2.0 * h) / (n as f32);
+
+        for _chunk in 0..(n / 4) {
+            // Prepare 4 lanes of radii
+            let rs = [r0, r0 + dr, r0 + 2.0 * dr, r0 + 3.0 * dr];
+            let r_vec = unsafe { vld1q_f32(rs.as_ptr()) };
+
+            // Evaluate NEON and store back to array
+            let w_vec = unsafe { neon.evaluate(r_vec) };
+            let mut w_neon = [0.0f32; 4];
+            unsafe { vst1q_f32(w_neon.as_mut_ptr(), w_vec) };
+
+            // Compare against scalar lane-wise
+            for lane in 0..4 {
+                let r_lane = rs[lane];
+                let w_scalar = scalar.evaluate(r_lane);
+                let diff = (w_neon[lane] - w_scalar).abs();
+
+                // Absolute tolerance with mild relative component to be robust across scales
+                let tol = 5e-6_f32.max(2e-5_f32 * w_scalar.abs());
+                assert!(
+                    diff <= tol,
+                    "NEON kernel mismatch (h={}, r={}, lane={}): neon={}, scalar={}, diff={}, tol={}",
+                    h,
+                    r_lane,
+                    lane,
+                    w_neon[lane],
+                    w_scalar,
+                    diff,
+                    tol
+                );
+            }
+
+            r0 += 4.0 * dr;
+        }
+
+        // Also check a couple of out-of-support points explicitly
+        for &r in &[h * 1.01, h * 1.5, h * 2.0, h * 2.5] {
+            let w_scalar = scalar.evaluate(r);
+            let w_neon = {
+                let v = unsafe { vld1q_f32([r, r, r, r].as_ptr()) };
+                let w = unsafe { neon.evaluate(v) };
+                let mut tmp = [0.0f32; 4];
+                unsafe { vst1q_f32(tmp.as_mut_ptr(), w) };
+                tmp[0]
+            };
+            let diff = (w_neon - w_scalar).abs();
+            let tol = 5e-6_f32.max(1e-5_f32 * w_scalar.abs());
+            assert!(
+                diff <= tol,
+                "NEON kernel mismatch outside support (h={}, r={}): neon={}, scalar={}, diff={}, tol={}",
+                h,
+                r,
+                w_neon,
+                w_scalar,
+                diff,
+                tol
+            );
+        }
     }
 }
 
