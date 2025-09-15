@@ -75,274 +75,6 @@ impl<I: Index, R: Real> ParametersSubdomainGrid<I, R> {
     }
 }
 
-#[cfg(all(
-    target_arch = "x86_64",
-    target_feature = "avx2",
-    target_feature = "fma"
-))]
-#[target_feature(enable = "avx2,fma")]
-pub fn density_grid_loop_avx<K: SymmetricKernel3d<f32>>(
-    levelset_grid: &mut [f32],
-    subdomain_particles: &[Vector3<f32>],
-    subdomain_particle_densities: &[f32],
-    subdomain_mc_grid: &UniformCartesianCubeGrid3d<i64, f32>,
-    subdomain_ijk: &[i64; 3],
-    global_mc_grid: &UniformCartesianCubeGrid3d<GlobalIndex, f32>,
-    cube_radius: i64,
-    _squared_support_with_margin: f32,
-    particle_rest_mass: f32,
-    kernel: &K,
-) {
-    use core::arch::x86_64::*;
-    const LANES: usize = 8;
-
-    struct CubicKernelAvx {
-        compact_support_inv: f32,
-        sigma: f32,
-    }
-
-    impl CubicKernelAvx {
-        fn new(compact_support_radius: f32) -> Self {
-            let r = compact_support_radius;
-            let compact_support_inv = 1.0 / r;
-            let rrr = r * r * r;
-            let sigma = 8.0 / (std::f32::consts::PI * rrr);
-            Self {
-                compact_support_inv,
-                sigma,
-            }
-        }
-
-        #[target_feature(enable = "avx2,fma")]
-        fn evaluate(&self, r: __m256) -> __m256 {
-            let one = _mm256_set1_ps(1.0);
-            let half = _mm256_set1_ps(0.5);
-            let zero = _mm256_set1_ps(0.0);
-
-            // q = r / h, v = 1 - q
-            let q = _mm256_mul_ps(r, _mm256_set1_ps(self.compact_support_inv));
-            let mut v = _mm256_sub_ps(one, q);
-            // Clamp v to [0, 1] to implicitly zero-out contributions with q > 1
-            v = _mm256_max_ps(v, zero);
-
-            // v^2 and v^3
-            let v2 = _mm256_mul_ps(v, v);
-            let v3 = _mm256_mul_ps(v2, v);
-
-            // Outer: 2*sigma*v^3
-            let res_outer = _mm256_mul_ps(v3, _mm256_set1_ps(2.0 * self.sigma));
-
-            // Inner: sigma * (1 - 6v + 12v^2 - 6v^3)
-            let mut res_inner = _mm256_set1_ps(self.sigma);
-            // res_inner = res_inner - 6*sigma*v
-            res_inner = _mm256_fnmadd_ps(v, _mm256_set1_ps(6.0 * self.sigma), res_inner);
-            // res_inner = res_inner + 12*sigma*v^2
-            res_inner = _mm256_fmadd_ps(v2, _mm256_set1_ps(12.0 * self.sigma), res_inner);
-            // res_inner = res_inner - 6*sigma*v^3
-            res_inner = _mm256_fnmadd_ps(v3, _mm256_set1_ps(6.0 * self.sigma), res_inner);
-
-            // Select inner for q <= 0.5, else outer
-            let leq_than_half = _mm256_cmp_ps(q, half, _CMP_LE_OQ);
-            _mm256_blendv_ps(res_outer, res_inner, leq_than_half)
-        }
-    }
-
-    let kernel_avx = CubicKernelAvx::new(kernel.compact_support_radius());
-
-    profile!("density grid loop (avx)");
-    let mc_grid = subdomain_mc_grid;
-    let mc_points = mc_grid.points_per_dim();
-    let dim_y = mc_points[1] as usize;
-    let dim_z = mc_points[2] as usize;
-
-    // Preload constants used inside the hot loops
-    let k_offsets_i32 = _mm256_setr_epi32(0, 1, 2, 3, 4, 5, 6, 7);
-    let global_min = global_mc_grid.aabb().min();
-    let min_z_v = _mm256_set1_ps(global_min[2]);
-    let cube_size = global_mc_grid.cell_size();
-    let cube_size_ps = _mm256_set1_ps(cube_size);
-    let support = kernel.compact_support_radius();
-    let support_sq_v = _mm256_set1_ps(support * support);
-
-    for (p_i, rho_i) in subdomain_particles
-        .iter()
-        .copied()
-        .zip(subdomain_particle_densities.iter().copied())
-    {
-        let v_i = particle_rest_mass / rho_i;
-
-        // Get grid cell containing particle
-        let particle_cell = mc_grid.enclosing_cell(&p_i);
-
-        // Bounds of possibly affected grid points
-        let lower = [0, 1, 2].map(|ii| {
-            particle_cell[ii]
-                .saturating_sub(cube_radius)
-                .max(0)
-                .min(mc_points[ii]) as usize
-        });
-        let upper = [0, 1, 2].map(|ii| {
-            (particle_cell[ii] + cube_radius + 2)
-                .min(mc_points[ii])
-                .max(0) as usize
-        });
-
-        let remainder = (upper[2] - lower[2]) % LANES;
-        let upper_k_aligned = upper[2] - remainder;
-
-        // TODO: Check that i,j,k fit into i32
-        let subdomain_ijk_i32 = subdomain_ijk.map(|i| i as i32);
-        let mc_cells = mc_grid.cells_per_dim().map(|i| i as i32);
-
-        // Broadcast particle coordinates once per particle
-        let particle_xs = _mm256_set1_ps(p_i[0]);
-        let particle_ys = _mm256_set1_ps(p_i[1]);
-        let particle_zs = _mm256_set1_ps(p_i[2]);
-        let v_i_ps = _mm256_set1_ps(v_i);
-
-        let evaluate_contribution = |k: usize, grid_xs: __m256, grid_ys: __m256| -> __m256 {
-            // Compute global k for 8 consecutive points using i32 lanes and convert to f32
-            let base_k = subdomain_ijk_i32[2] * mc_cells[2] + k as i32;
-            let global_k_i32 = _mm256_add_epi32(_mm256_set1_epi32(base_k), k_offsets_i32);
-            let global_k_f32 = _mm256_cvtepi32_ps(global_k_i32);
-            let grid_zs = _mm256_fmadd_ps(global_k_f32, cube_size_ps, min_z_v);
-
-            // Deltas
-            let dxs = _mm256_sub_ps(particle_xs, grid_xs);
-            let dys = _mm256_sub_ps(particle_ys, grid_ys);
-            let dzs = _mm256_sub_ps(particle_zs, grid_zs);
-
-            // Distance squared
-            let dist_sq = {
-                let t = _mm256_fmadd_ps(dxs, dxs, _mm256_mul_ps(dys, dys));
-                _mm256_fmadd_ps(dzs, dzs, t)
-            };
-
-            // Cheap mask to skip work if all lanes are outside support
-            let inside_mask = _mm256_cmp_ps(dist_sq, support_sq_v, _CMP_LT_OQ);
-            if _mm256_movemask_ps(inside_mask) == 0 {
-                return _mm256_set1_ps(0.0);
-            }
-
-            // Compute weights, then mask out lanes outside support
-            let dist = _mm256_sqrt_ps(dist_sq);
-            let w = kernel_avx.evaluate(dist);
-            _mm256_and_ps(w, inside_mask)
-        };
-
-        // Loop over grid points in support region of the particle
-        for i in lower[0]..upper[0] {
-            for j in lower[1]..upper[1] {
-                let flat_index_base = (i * dim_y + j) * dim_z;
-
-                let global_i = subdomain_ijk_i32[0] * mc_cells[0] + i as i32;
-                let global_j = subdomain_ijk_i32[1] * mc_cells[1] + j as i32;
-
-                let grid_x = global_i as f32 * cube_size + global_min[0];
-                let grid_y = global_j as f32 * cube_size + global_min[1];
-                let grid_xs = _mm256_set1_ps(grid_x);
-                let grid_ys = _mm256_set1_ps(grid_y);
-
-                for k in (lower[2]..upper_k_aligned).step_by(LANES) {
-                    let flat_point_idx = flat_index_base + k;
-                    let w_ij = evaluate_contribution(k, grid_xs, grid_ys);
-
-                    unsafe {
-                        let prev_val = _mm256_loadu_ps(levelset_grid.as_ptr().add(flat_point_idx));
-                        let val = _mm256_fmadd_ps(w_ij, v_i_ps, prev_val);
-                        _mm256_storeu_ps(levelset_grid.as_mut_ptr().add(flat_point_idx), val);
-                    }
-                }
-
-                // Handle remainder
-                if remainder > 0 {
-                    let flat_point_idx = flat_index_base + upper_k_aligned;
-                    let w_ij = evaluate_contribution(upper_k_aligned, grid_xs, grid_ys);
-                    unsafe {
-                        let val = _mm256_mul_ps(w_ij, v_i_ps);
-                        let mut tmp: [f32; LANES] = [0.0; LANES];
-                        _mm256_storeu_ps(tmp.as_mut_ptr(), val);
-                        for rr in 0..remainder {
-                            levelset_grid[flat_point_idx + rr] += tmp[rr];
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-/// Auto-dispatching density grid loop for f32/i64: chooses AVX2+FMA on x86_64, NEON on aarch64, otherwise scalar fallback
-#[allow(unreachable_code)]
-pub fn density_grid_loop_auto<K: SymmetricKernel3d<f32>>(
-    levelset_grid: &mut [f32],
-    subdomain_particles: &[Vector3<f32>],
-    subdomain_particle_densities: &[f32],
-    subdomain_mc_grid: &UniformCartesianCubeGrid3d<i64, f32>,
-    subdomain_ijk: &[i64; 3],
-    global_mc_grid: &UniformCartesianCubeGrid3d<GlobalIndex, f32>,
-    cube_radius: i64,
-    squared_support_with_margin: f32,
-    particle_rest_mass: f32,
-    kernel: &K,
-) {
-    // Try x86_64 AVX2+FMA first
-    #[cfg(target_arch = "x86_64")]
-    {
-        // Only call the AVX2+FMA implementation when the CPU supports it at runtime
-        if std::arch::is_x86_feature_detected!("avx2") && std::arch::is_x86_feature_detected!("fma")
-        {
-            // Call only if compiled with the intrinsic function available; otherwise fall back below
-            #[cfg(all(target_feature = "avx2", target_feature = "fma"))]
-            unsafe {
-                return density_grid_loop_avx(
-                    levelset_grid,
-                    subdomain_particles,
-                    subdomain_particle_densities,
-                    subdomain_mc_grid,
-                    subdomain_ijk,
-                    global_mc_grid,
-                    cube_radius,
-                    squared_support_with_margin,
-                    particle_rest_mass,
-                    kernel,
-                );
-            }
-        }
-    }
-
-    // On aarch64, prefer NEON when compiled in
-    #[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
-    unsafe {
-        return density_grid_loop_neon(
-            levelset_grid,
-            subdomain_particles,
-            subdomain_particle_densities,
-            subdomain_mc_grid,
-            subdomain_ijk,
-            global_mc_grid,
-            cube_radius,
-            squared_support_with_margin,
-            particle_rest_mass,
-            kernel,
-        );
-    }
-
-    // Fallback: scalar generic implementation
-    density_grid_loop::<i64, f32, K>(
-        levelset_grid,
-        subdomain_particles,
-        subdomain_particle_densities,
-        subdomain_mc_grid,
-        subdomain_ijk,
-        global_mc_grid,
-        cube_radius,
-        squared_support_with_margin,
-        particle_rest_mass,
-        kernel,
-    );
-}
-
 /// Result of the subdomain decomposition procedure
 pub(crate) struct Subdomains<I: Index> {
     // Flat subdomain coordinate indices (same order as the particle list)
@@ -940,7 +672,7 @@ pub struct DensityGridLoopParameters<I: Scalar, R: Scalar> {
     pub compact_support_radius: R,
 }
 
-pub fn density_grid_loop<I: Index, R: Real, K: SymmetricKernel3d<R>>(
+pub fn density_grid_loop_scalar<I: Index, R: Real, K: SymmetricKernel3d<R>>(
     levelset_grid: &mut [R],
     subdomain_particles: &[Vector3<R>],
     subdomain_particle_densities: &[R],
@@ -1062,7 +794,7 @@ pub fn density_grid_loop<I: Index, R: Real, K: SymmetricKernel3d<R>>(
     }
 }
 
-#[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
+#[cfg(all(target_arch = "aarch64"))]
 #[target_feature(enable = "neon")]
 pub fn density_grid_loop_neon<K: SymmetricKernel3d<f32>>(
     levelset_grid: &mut [f32],
@@ -1258,6 +990,272 @@ pub fn density_grid_loop_neon<K: SymmetricKernel3d<f32>>(
             }
         }
     }
+}
+
+#[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
+#[target_feature(enable = "avx2,fma")]
+pub fn density_grid_loop_avx<K: SymmetricKernel3d<f32>>(
+    levelset_grid: &mut [f32],
+    subdomain_particles: &[Vector3<f32>],
+    subdomain_particle_densities: &[f32],
+    subdomain_mc_grid: &UniformCartesianCubeGrid3d<i64, f32>,
+    subdomain_ijk: &[i64; 3],
+    global_mc_grid: &UniformCartesianCubeGrid3d<GlobalIndex, f32>,
+    cube_radius: i64,
+    _squared_support_with_margin: f32,
+    particle_rest_mass: f32,
+    kernel: &K,
+) {
+    #[cfg(target_arch = "x86")]
+    use core::arch::x86::*;
+    #[cfg(target_arch = "x86_64")]
+    use core::arch::x86_64::*;
+
+    const LANES: usize = 8;
+
+    struct CubicKernelAvx {
+        compact_support_inv: f32,
+        sigma: f32,
+    }
+
+    impl CubicKernelAvx {
+        fn new(compact_support_radius: f32) -> Self {
+            let r = compact_support_radius;
+            let compact_support_inv = 1.0 / r;
+            let rrr = r * r * r;
+            let sigma = 8.0 / (std::f32::consts::PI * rrr);
+            Self {
+                compact_support_inv,
+                sigma,
+            }
+        }
+
+        #[target_feature(enable = "avx2,fma")]
+        fn evaluate(&self, r: __m256) -> __m256 {
+            let one = _mm256_set1_ps(1.0);
+            let half = _mm256_set1_ps(0.5);
+            let zero = _mm256_set1_ps(0.0);
+
+            // q = r / h, v = 1 - q
+            let q = _mm256_mul_ps(r, _mm256_set1_ps(self.compact_support_inv));
+            let mut v = _mm256_sub_ps(one, q);
+            // Clamp v to [0, 1] to implicitly zero-out contributions with q > 1
+            v = _mm256_max_ps(v, zero);
+
+            // v^2 and v^3
+            let v2 = _mm256_mul_ps(v, v);
+            let v3 = _mm256_mul_ps(v2, v);
+
+            // Outer: 2*sigma*v^3
+            let res_outer = _mm256_mul_ps(v3, _mm256_set1_ps(2.0 * self.sigma));
+
+            // Inner: sigma * (1 - 6v + 12v^2 - 6v^3)
+            let mut res_inner = _mm256_set1_ps(self.sigma);
+            // res_inner = res_inner - 6*sigma*v
+            res_inner = _mm256_fnmadd_ps(v, _mm256_set1_ps(6.0 * self.sigma), res_inner);
+            // res_inner = res_inner + 12*sigma*v^2
+            res_inner = _mm256_fmadd_ps(v2, _mm256_set1_ps(12.0 * self.sigma), res_inner);
+            // res_inner = res_inner - 6*sigma*v^3
+            res_inner = _mm256_fnmadd_ps(v3, _mm256_set1_ps(6.0 * self.sigma), res_inner);
+
+            // Select inner for q <= 0.5, else outer
+            let leq_than_half = _mm256_cmp_ps(q, half, _CMP_LE_OQ);
+            _mm256_blendv_ps(res_outer, res_inner, leq_than_half)
+        }
+    }
+
+    let kernel_avx = CubicKernelAvx::new(kernel.compact_support_radius());
+
+    profile!("density grid loop (avx)");
+    let mc_grid = subdomain_mc_grid;
+    let mc_points = mc_grid.points_per_dim();
+    let dim_y = mc_points[1] as usize;
+    let dim_z = mc_points[2] as usize;
+
+    // Preload constants used inside the hot loops
+    let k_offsets_i32 = _mm256_setr_epi32(0, 1, 2, 3, 4, 5, 6, 7);
+    let global_min = global_mc_grid.aabb().min();
+    let min_z_v = _mm256_set1_ps(global_min[2]);
+    let cube_size = global_mc_grid.cell_size();
+    let cube_size_ps = _mm256_set1_ps(cube_size);
+    let support = kernel.compact_support_radius();
+    let support_sq_v = _mm256_set1_ps(support * support);
+
+    for (p_i, rho_i) in subdomain_particles
+        .iter()
+        .copied()
+        .zip(subdomain_particle_densities.iter().copied())
+    {
+        let v_i = particle_rest_mass / rho_i;
+
+        // Get grid cell containing particle
+        let particle_cell = mc_grid.enclosing_cell(&p_i);
+
+        // Bounds of possibly affected grid points
+        let lower = [0, 1, 2].map(|ii| {
+            particle_cell[ii]
+                .saturating_sub(cube_radius)
+                .max(0)
+                .min(mc_points[ii]) as usize
+        });
+        let upper = [0, 1, 2].map(|ii| {
+            (particle_cell[ii] + cube_radius + 2)
+                .min(mc_points[ii])
+                .max(0) as usize
+        });
+
+        let remainder = (upper[2] - lower[2]) % LANES;
+        let upper_k_aligned = upper[2] - remainder;
+
+        // TODO: Check that i,j,k fit into i32
+        let subdomain_ijk_i32 = subdomain_ijk.map(|i| i as i32);
+        let mc_cells = mc_grid.cells_per_dim().map(|i| i as i32);
+
+        // Broadcast particle coordinates once per particle
+        let particle_xs = _mm256_set1_ps(p_i[0]);
+        let particle_ys = _mm256_set1_ps(p_i[1]);
+        let particle_zs = _mm256_set1_ps(p_i[2]);
+        let v_i_ps = _mm256_set1_ps(v_i);
+
+        let evaluate_contribution = |k: usize, grid_xs: __m256, grid_ys: __m256| -> __m256 {
+            // Compute global k for 8 consecutive points using i32 lanes and convert to f32
+            let base_k = subdomain_ijk_i32[2] * mc_cells[2] + k as i32;
+            let global_k_i32 = _mm256_add_epi32(_mm256_set1_epi32(base_k), k_offsets_i32);
+            let global_k_f32 = _mm256_cvtepi32_ps(global_k_i32);
+            let grid_zs = _mm256_fmadd_ps(global_k_f32, cube_size_ps, min_z_v);
+
+            // Deltas
+            let dxs = _mm256_sub_ps(particle_xs, grid_xs);
+            let dys = _mm256_sub_ps(particle_ys, grid_ys);
+            let dzs = _mm256_sub_ps(particle_zs, grid_zs);
+
+            // Distance squared
+            let dist_sq = {
+                let t = _mm256_fmadd_ps(dxs, dxs, _mm256_mul_ps(dys, dys));
+                _mm256_fmadd_ps(dzs, dzs, t)
+            };
+
+            // Cheap mask to skip work if all lanes are outside support
+            let inside_mask = _mm256_cmp_ps(dist_sq, support_sq_v, _CMP_LT_OQ);
+            if _mm256_movemask_ps(inside_mask) == 0 {
+                return _mm256_set1_ps(0.0);
+            }
+
+            // Compute weights, then mask out lanes outside support
+            let dist = _mm256_sqrt_ps(dist_sq);
+            let w = kernel_avx.evaluate(dist);
+            _mm256_and_ps(w, inside_mask)
+        };
+
+        // Loop over grid points in support region of the particle
+        for i in lower[0]..upper[0] {
+            for j in lower[1]..upper[1] {
+                let flat_index_base = (i * dim_y + j) * dim_z;
+
+                let global_i = subdomain_ijk_i32[0] * mc_cells[0] + i as i32;
+                let global_j = subdomain_ijk_i32[1] * mc_cells[1] + j as i32;
+
+                let grid_x = global_i as f32 * cube_size + global_min[0];
+                let grid_y = global_j as f32 * cube_size + global_min[1];
+                let grid_xs = _mm256_set1_ps(grid_x);
+                let grid_ys = _mm256_set1_ps(grid_y);
+
+                for k in (lower[2]..upper_k_aligned).step_by(LANES) {
+                    let flat_point_idx = flat_index_base + k;
+                    let w_ij = evaluate_contribution(k, grid_xs, grid_ys);
+
+                    unsafe {
+                        let prev_val = _mm256_loadu_ps(levelset_grid.as_ptr().add(flat_point_idx));
+                        let val = _mm256_fmadd_ps(w_ij, v_i_ps, prev_val);
+                        _mm256_storeu_ps(levelset_grid.as_mut_ptr().add(flat_point_idx), val);
+                    }
+                }
+
+                // Handle remainder
+                if remainder > 0 {
+                    let flat_point_idx = flat_index_base + upper_k_aligned;
+                    let w_ij = evaluate_contribution(upper_k_aligned, grid_xs, grid_ys);
+                    unsafe {
+                        let val = _mm256_mul_ps(w_ij, v_i_ps);
+                        let mut tmp: [f32; LANES] = [0.0; LANES];
+                        _mm256_storeu_ps(tmp.as_mut_ptr(), val);
+                        for rr in 0..remainder {
+                            levelset_grid[flat_point_idx + rr] += tmp[rr];
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Auto-dispatching density grid loop for f32/i64: chooses AVX2+FMA on x86_64, NEON on aarch64, otherwise scalar fallback
+pub fn density_grid_loop_auto<K: SymmetricKernel3d<f32>>(
+    levelset_grid: &mut [f32],
+    subdomain_particles: &[Vector3<f32>],
+    subdomain_particle_densities: &[f32],
+    subdomain_mc_grid: &UniformCartesianCubeGrid3d<i64, f32>,
+    subdomain_ijk: &[i64; 3],
+    global_mc_grid: &UniformCartesianCubeGrid3d<GlobalIndex, f32>,
+    cube_radius: i64,
+    squared_support_with_margin: f32,
+    particle_rest_mass: f32,
+    kernel: &K,
+) {
+    #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
+    {
+        if std::arch::is_x86_feature_detected!("avx2") && std::arch::is_x86_feature_detected!("fma")
+        {
+            unsafe {
+                return density_grid_loop_avx(
+                    levelset_grid,
+                    subdomain_particles,
+                    subdomain_particle_densities,
+                    subdomain_mc_grid,
+                    subdomain_ijk,
+                    global_mc_grid,
+                    cube_radius,
+                    squared_support_with_margin,
+                    particle_rest_mass,
+                    kernel,
+                );
+            }
+        }
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    {
+        if std::arch::is_aarch64_feature_detected!("neon") {
+            unsafe {
+                return density_grid_loop_neon(
+                    levelset_grid,
+                    subdomain_particles,
+                    subdomain_particle_densities,
+                    subdomain_mc_grid,
+                    subdomain_ijk,
+                    global_mc_grid,
+                    cube_radius,
+                    squared_support_with_margin,
+                    particle_rest_mass,
+                    kernel,
+                );
+            }
+        }
+    }
+
+    // Fallback: scalar generic implementation
+    density_grid_loop_scalar::<i64, f32, K>(
+        levelset_grid,
+        subdomain_particles,
+        subdomain_particle_densities,
+        subdomain_mc_grid,
+        subdomain_ijk,
+        global_mc_grid,
+        cube_radius,
+        squared_support_with_margin,
+        particle_rest_mass,
+        kernel,
+    );
 }
 
 // TODO: Reduce code duplication between dense and sparse
@@ -1495,7 +1493,7 @@ pub(crate) fn reconstruction<I: Index, R: Real>(
                 &CubicSplineKernel::new(parameters.compact_support_radius.to_f32().unwrap()),
             );
         } else {
-            density_grid_loop(
+            density_grid_loop_scalar(
                 levelset_grid.as_mut_slice(),
                 subdomain_particles.as_slice(),
                 subdomain_particle_densities.as_slice(),

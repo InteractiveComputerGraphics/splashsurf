@@ -18,7 +18,7 @@ pub fn grid_loop_no_simd(c: &mut Criterion) {
         b.iter(|| {
             let kernel = CubicSplineKernel::new(params.compact_support_radius);
             let mut params = params.clone();
-            dense_subdomains::density_grid_loop(
+            dense_subdomains::density_grid_loop_scalar(
                 params.levelset_grid.as_mut_slice(),
                 params.subdomain_particles.as_slice(),
                 params.subdomain_particle_densities.as_slice(),
@@ -51,7 +51,7 @@ pub fn grid_loop_neon(c: &mut Criterion) {
     let reference = {
         let kernel = CubicSplineKernel::new(params.compact_support_radius);
         let mut params = params.clone();
-        dense_subdomains::density_grid_loop(
+        dense_subdomains::density_grid_loop_scalar(
             params.levelset_grid.as_mut_slice(),
             params.subdomain_particles.as_slice(),
             params.subdomain_particle_densities.as_slice(),
@@ -164,7 +164,7 @@ pub fn grid_loop_avx2(c: &mut Criterion) {
     let reference = {
         let kernel = CubicSplineKernel::new(params.compact_support_radius);
         let mut params = params.clone();
-        dense_subdomains::density_grid_loop(
+        dense_subdomains::density_grid_loop_scalar(
             params.levelset_grid.as_mut_slice(),
             params.subdomain_particles.as_slice(),
             params.subdomain_particle_densities.as_slice(),
