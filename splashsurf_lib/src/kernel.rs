@@ -4,6 +4,14 @@ use crate::{Real, RealConvert};
 use nalgebra::Vector3;
 use numeric_literals::replace_float_literals;
 
+#[cfg(all(target_arch = "aarch64"))]
+use core::arch::aarch64::float32x4_t;
+
+#[cfg(target_arch = "x86")]
+use core::arch::x86::__m256;
+#[cfg(target_arch = "x86_64")]
+use core::arch::x86_64::__m256;
+
 // TODO: Add reference for the kernel function, document formula
 
 /// Utility functions for computing the volume of fluid particles
@@ -23,6 +31,7 @@ impl Volume {
 
 /// Trait for symmetric kernel functions in three dimensions
 pub trait SymmetricKernel3d<R: Real> {
+    /// Returns the compact support radius of the kernel
     fn compact_support_radius(&self) -> R;
     /// Evaluates the kernel at the radial distance `r` relative to the origin
     fn evaluate(&self, r: R) -> R;
@@ -125,6 +134,7 @@ impl<R: Real> SymmetricKernel3d<R> for CubicSplineKernel<R> {
     }
 }
 
+
 #[test]
 fn test_cubic_kernel_r_compact_support() {
     let hs = [0.025, 0.1, 2.0];
@@ -161,6 +171,123 @@ fn test_cubic_kernel_r_integral() {
         }
 
         assert!((integral - 1.0).abs() <= 1e-5);
+    }
+}
+
+/// Vectorized implementation of the cubic spline kernel using NEON instructions. Only available on aarch64 targets.
+#[cfg(all(target_arch = "aarch64"))]
+pub struct CubicSplineKernelNeonF32 {
+    compact_support_inv: f32,
+    sigma: f32,
+}
+
+#[cfg(all(target_arch = "aarch64"))]
+impl CubicSplineKernelNeonF32 {
+    /// Initializes a cubic spline kernel with the given compact support radius
+    pub fn new(compact_support_radius: f32) -> Self {
+        let r = compact_support_radius;
+        let compact_support_inv = 1.0 / r;
+        let rrr = r * r * r;
+        let sigma = 8.0 / (std::f32::consts::PI * rrr);
+        Self {
+            compact_support_inv,
+            sigma,
+        }
+    }
+
+    /// Evaluates the cubic spline kernel at the specified radial distances
+    #[target_feature(enable = "neon")]
+    pub fn evaluate(&self, r: float32x4_t) -> float32x4_t {
+        use core::arch::aarch64::*;
+
+        let one = vdupq_n_f32(1.0);
+        let half = vdupq_n_f32(0.5);
+        let zero = vdupq_n_f32(0.0);
+
+        // q = r / h, v = 1 - q
+        let q = vmulq_n_f32(r, self.compact_support_inv);
+        let v = vsubq_f32(one, q);
+        // Clamp v to [0, 1] to implicitly zero-out contributions with q > 1
+        let v = vmaxq_f32(v, zero);
+
+        // Reuse v^2 and v^3 for both branches
+        let v2 = vmulq_f32(v, v);
+        let v3 = vmulq_f32(v2, v);
+
+        // Outer branch (0.5 < q <= 1.0): 2*sigma*(1 - q)^3 = 2*sigma*v^3
+        let res_outer = vmulq_n_f32(v3, 2.0 * self.sigma);
+
+        // Inner branch (q <= 0.5) rewritten in terms of v to avoid computing q^2:
+        // sigma * (1 - 6q^2 + 6q^3) == sigma * (1 - 6v + 12v^2 - 6v^3)
+        let mut res_inner = vdupq_n_f32(self.sigma);
+        res_inner = vmlsq_n_f32(res_inner, v, 6.0 * self.sigma); // -6*sigma*v
+        res_inner = vmlaq_n_f32(res_inner, v2, 12.0 * self.sigma); // +12*sigma*v^2
+        res_inner = vmlsq_n_f32(res_inner, v3, 6.0 * self.sigma); // -6*sigma*v^3
+
+        // Select inner for q <= 0.5, else outer; v was clamped so q > 1 yields 0 automatically
+        let leq_than_half = vcleq_f32(q, half);
+        vbslq_f32(leq_than_half, res_inner, res_outer)
+    }
+}
+
+/// Vectorized implementation of the cubic spline kernel using AVX2 and FMA instructions. Only available on x86 and x86_64 targets.
+#[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
+pub struct CubicSplineKernelAvxF32 {
+    compact_support_inv: f32,
+    sigma: f32,
+}
+
+#[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
+impl CubicSplineKernelAvxF32 {
+    /// Initializes a cubic spline kernel with the given compact support radius
+    pub fn new(compact_support_radius: f32) -> Self {
+        let r = compact_support_radius;
+        let compact_support_inv = 1.0 / r;
+        let rrr = r * r * r;
+        let sigma = 8.0 / (std::f32::consts::PI * rrr);
+        Self {
+            compact_support_inv,
+            sigma,
+        }
+    }
+
+    /// Evaluates the cubic spline kernel at the specified radial distances
+    #[target_feature(enable = "avx2,fma")]
+    pub fn evaluate(&self, r: __m256) -> __m256 {
+        #[cfg(target_arch = "x86")]
+        use core::arch::x86::*;
+        #[cfg(target_arch = "x86_64")]
+        use core::arch::x86_64::*;
+
+        let one = _mm256_set1_ps(1.0);
+        let half = _mm256_set1_ps(0.5);
+        let zero = _mm256_set1_ps(0.0);
+
+        // q = r / h, v = 1 - q
+        let q = _mm256_mul_ps(r, _mm256_set1_ps(self.compact_support_inv));
+        let mut v = _mm256_sub_ps(one, q);
+        // Clamp v to [0, 1] to implicitly zero-out contributions with q > 1
+        v = _mm256_max_ps(v, zero);
+
+        // v^2 and v^3
+        let v2 = _mm256_mul_ps(v, v);
+        let v3 = _mm256_mul_ps(v2, v);
+
+        // Outer: 2*sigma*v^3
+        let res_outer = _mm256_mul_ps(v3, _mm256_set1_ps(2.0 * self.sigma));
+
+        // Inner: sigma * (1 - 6v + 12v^2 - 6v^3)
+        let mut res_inner = _mm256_set1_ps(self.sigma);
+        // res_inner = res_inner - 6*sigma*v
+        res_inner = _mm256_fnmadd_ps(v, _mm256_set1_ps(6.0 * self.sigma), res_inner);
+        // res_inner = res_inner + 12*sigma*v^2
+        res_inner = _mm256_fmadd_ps(v2, _mm256_set1_ps(12.0 * self.sigma), res_inner);
+        // res_inner = res_inner - 6*sigma*v^3
+        res_inner = _mm256_fnmadd_ps(v3, _mm256_set1_ps(6.0 * self.sigma), res_inner);
+
+        // Select inner for q <= 0.5, else outer
+        let leq_than_half = _mm256_cmp_ps(q, half, _CMP_LE_OQ);
+        _mm256_blendv_ps(res_outer, res_inner, leq_than_half)
     }
 }
 

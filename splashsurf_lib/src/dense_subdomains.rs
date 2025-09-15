@@ -893,57 +893,7 @@ pub fn density_grid_loop_neon<K: SymmetricKernel3d<f32>>(
         u32::MAX
     );
 
-    struct CubicKernelNeon {
-        compact_support_inv: f32,
-        sigma: f32,
-    }
-
-    impl CubicKernelNeon {
-        fn new(compact_support_radius: f32) -> Self {
-            let r = compact_support_radius;
-            let compact_support_inv = 1.0 / r;
-            let rrr = r * r * r;
-            let sigma = 8.0 / (std::f32::consts::PI * rrr);
-            Self {
-                compact_support_inv,
-                sigma,
-            }
-        }
-
-        #[target_feature(enable = "neon")]
-        fn evaluate(&self, r: float32x4_t) -> float32x4_t {
-            use core::arch::aarch64::*;
-            let one = vdupq_n_f32(1.0);
-            let half = vdupq_n_f32(0.5);
-            let zero = vdupq_n_f32(0.0);
-
-            // q = r / h, v = 1 - q
-            let q = vmulq_n_f32(r, self.compact_support_inv);
-            let v = vsubq_f32(one, q);
-            // Clamp v to [0, 1] to implicitly zero-out contributions with q > 1
-            let v = vmaxq_f32(v, zero);
-
-            // Reuse v^2 and v^3 for both branches
-            let v2 = vmulq_f32(v, v);
-            let v3 = vmulq_f32(v2, v);
-
-            // Outer branch: 2*sigma*(1 - q)^3 = 2*sigma*v^3
-            let res_outer = vmulq_n_f32(v3, 2.0 * self.sigma);
-
-            // Inner branch rewritten in terms of v to avoid computing q^2:
-            // sigma * (1 - 6q^2 + 6q^3) == sigma * (1 - 6v + 12v^2 - 6v^3)
-            let mut res_inner = vdupq_n_f32(self.sigma);
-            res_inner = vmlsq_n_f32(res_inner, v, 6.0 * self.sigma); // -6*sigma*v
-            res_inner = vmlaq_n_f32(res_inner, v2, 12.0 * self.sigma); // +12*sigma*v^2
-            res_inner = vmlsq_n_f32(res_inner, v3, 6.0 * self.sigma); // -6*sigma*v^3
-
-            // Select inner for q <= 0.5, else outer; v was clamped so q > 1 yields 0 automatically
-            let leq_than_half = vcleq_f32(q, half);
-            vbslq_f32(leq_than_half, res_inner, res_outer)
-        }
-    }
-
-    let kernel_neon = CubicKernelNeon::new(kernel.compact_support_radius());
+    let kernel_neon = kernel::CubicSplineKernelNeonF32::new(kernel.compact_support_radius());
 
     profile!("density grid loop (neon)");
     let mc_grid = subdomain_mc_grid;
@@ -1002,6 +952,7 @@ pub fn density_grid_loop_neon<K: SymmetricKernel3d<f32>>(
         let particle_ys = vdupq_n_f32(p_i[1]);
         let particle_zs = vdupq_n_f32(p_i[2]);
 
+        // Function to evaluate kernel contribution of current particle to 8 grid points at once
         let evaluate_contribution =
             |k: usize, grid_xs: float32x4_t, grid_ys: float32x4_t| -> float32x4_t {
                 // Compute global k for 4 consecutive points
@@ -1106,58 +1057,7 @@ pub fn density_grid_loop_avx<K: SymmetricKernel3d<f32>>(
         i32::MAX
     );
 
-    struct CubicKernelAvx {
-        compact_support_inv: f32,
-        sigma: f32,
-    }
-
-    impl CubicKernelAvx {
-        fn new(compact_support_radius: f32) -> Self {
-            let r = compact_support_radius;
-            let compact_support_inv = 1.0 / r;
-            let rrr = r * r * r;
-            let sigma = 8.0 / (std::f32::consts::PI * rrr);
-            Self {
-                compact_support_inv,
-                sigma,
-            }
-        }
-
-        #[target_feature(enable = "avx2,fma")]
-        fn evaluate(&self, r: __m256) -> __m256 {
-            let one = _mm256_set1_ps(1.0);
-            let half = _mm256_set1_ps(0.5);
-            let zero = _mm256_set1_ps(0.0);
-
-            // q = r / h, v = 1 - q
-            let q = _mm256_mul_ps(r, _mm256_set1_ps(self.compact_support_inv));
-            let mut v = _mm256_sub_ps(one, q);
-            // Clamp v to [0, 1] to implicitly zero-out contributions with q > 1
-            v = _mm256_max_ps(v, zero);
-
-            // v^2 and v^3
-            let v2 = _mm256_mul_ps(v, v);
-            let v3 = _mm256_mul_ps(v2, v);
-
-            // Outer: 2*sigma*v^3
-            let res_outer = _mm256_mul_ps(v3, _mm256_set1_ps(2.0 * self.sigma));
-
-            // Inner: sigma * (1 - 6v + 12v^2 - 6v^3)
-            let mut res_inner = _mm256_set1_ps(self.sigma);
-            // res_inner = res_inner - 6*sigma*v
-            res_inner = _mm256_fnmadd_ps(v, _mm256_set1_ps(6.0 * self.sigma), res_inner);
-            // res_inner = res_inner + 12*sigma*v^2
-            res_inner = _mm256_fmadd_ps(v2, _mm256_set1_ps(12.0 * self.sigma), res_inner);
-            // res_inner = res_inner - 6*sigma*v^3
-            res_inner = _mm256_fnmadd_ps(v3, _mm256_set1_ps(6.0 * self.sigma), res_inner);
-
-            // Select inner for q <= 0.5, else outer
-            let leq_than_half = _mm256_cmp_ps(q, half, _CMP_LE_OQ);
-            _mm256_blendv_ps(res_outer, res_inner, leq_than_half)
-        }
-    }
-
-    let kernel_avx = CubicKernelAvx::new(kernel.compact_support_radius());
+    let kernel_avx = kernel::CubicSplineKernelAvxF32::new(kernel.compact_support_radius());
 
     profile!("density grid loop (avx)");
     let mc_grid = subdomain_mc_grid;
@@ -1209,6 +1109,7 @@ pub fn density_grid_loop_avx<K: SymmetricKernel3d<f32>>(
         let particle_zs = _mm256_set1_ps(p_i[2]);
         let v_i_ps = _mm256_set1_ps(v_i);
 
+        // Function to evaluate kernel contribution of current particle to 8 grid points at once
         let evaluate_contribution = |k: usize, grid_xs: __m256, grid_ys: __m256| -> __m256 {
             // Compute global k for 8 consecutive points using i32 lanes and convert to f32
             let base_k = subdomain_ijk_i32[2] * mc_cells[2] + k as i32;
