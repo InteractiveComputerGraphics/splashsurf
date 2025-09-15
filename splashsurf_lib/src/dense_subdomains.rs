@@ -756,35 +756,21 @@ pub fn density_grid_loop_scalar<I: Index, R: Real, K: SymmetricKernel3d<R>>(
         // Compute lower and upper bounds of the grid points possibly affected by the particle
         // We want to loop over the vertices of the enclosing cells plus all points in `cube_radius` distance from the cell
 
-        let lower = [
-            particle_cell[0]
+        let lower = [0, 1, 2].map(|i| {
+            particle_cell[i]
                 .saturating_sub(&cube_radius)
                 .max(I::zero())
-                .min(extents[0]),
-            particle_cell[1]
-                .saturating_sub(&cube_radius)
-                .max(I::zero())
-                .min(extents[1]),
-            particle_cell[2]
-                .saturating_sub(&cube_radius)
-                .max(I::zero())
-                .min(extents[2]),
-        ];
+                .min(extents[i])
+        });
 
-        let upper = [
+        let upper = [0, 1, 2].map(|i| {
             // We add 2 because
             //  - we want to loop over all grid points of the cell (+1 for upper points) + the radius
             //  - the upper range limit is exclusive (+1)
-            (particle_cell[0] + cube_radius + I::two())
-                .min(extents[0])
-                .max(I::zero()),
-            (particle_cell[1] + cube_radius + I::two())
-                .min(extents[1])
-                .max(I::zero()),
-            (particle_cell[2] + cube_radius + I::two())
-                .min(extents[2])
-                .max(I::zero()),
-        ];
+            (particle_cell[i] + cube_radius + I::two())
+                .min(extents[i])
+                .max(I::zero())
+        });
 
         // Loop over all grid points around the enclosing cell
         for i in I::range(lower[0], upper[0]).iter() {
