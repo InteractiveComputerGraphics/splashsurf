@@ -172,63 +172,64 @@ For example:
 ```
 splashsurf reconstruct canyon_13353401_particles.xyz -r=0.011 -c=1.5 -l=2.0 -t=0.6
 ```
-With these parameters, a scene with 13353401 particles is reconstructed in less than 3 seconds on an Apple M4 Pro (14 cores). The output is a mesh with 6069576 triangles.
+With these parameters, a scene with 13353401 particles is reconstructed in less than 3 seconds on an Apple M4 Pro (14 cores). The output is a mesh with 6069264 triangles.
 ```
-[17:15:33.046][INFO] splashsurf v0.12.0 (splashsurf)
-[17:15:33.046][INFO] Called with command line: splashsurf reconstruct canyon_13353401_particles.xyz -r=0.011 -c=1.5 -l=2.0 -t=0.6 --output-dir=out
-[17:15:33.046][INFO] Using single precision (f32) for surface reconstruction.
-[17:15:33.046][INFO] Reading particle dataset from "canyon_13353401_particles.xyz"...
-[17:15:33.171][INFO] Successfully read dataset with 13353401 particle positions.
-[17:15:33.175][INFO] Bounding box of particles with margin for levelset evaluation: [-25.006098, -5.014629, -40.06346] to [24.499493, 18.30621, 39.775795]
-[17:15:33.175][INFO] The ghost margin volume per subdomain is 42.38% of the subdomain volume
-[17:15:33.175][INFO] The ghost margin per subdomain is 3.03 MC cells or 0.05 subdomains wide
-[17:15:33.175][INFO] Number of subdomains: 82156 (47x23x76)
-[17:15:33.175][INFO] Number of MC cells per subdomain: 262144 (64x64x64)
-[17:15:33.175][INFO] Number of MC cells globally: 21536702464 (3008x1472x4864)
-[17:15:33.175][INFO] Starting classification of particles into subdomains.
-[17:15:33.250][INFO] Starting computation of global density vector.
-[17:15:34.415][INFO] Largest subdomain has 167861 particles.
-[17:15:34.415][INFO] Subdomains with 8393 or less particles will be considered sparse.
-[17:15:34.415][INFO] Starting reconstruction (level-set evaluation and local triangulation).
-[17:15:35.551][INFO] Starting stitching of subdomain meshes to global mesh.
-[17:15:35.598][INFO] Global mesh has 3038116 vertices and 6069576 triangles.
-[17:15:35.658][INFO] Writing mesh with 3038116 vertices and 6069576 cells to "out/canyon_13353401_particles_surface.vtk"...
-[17:15:35.770][INFO] Successfully wrote mesh to file.
-[17:15:35.777][INFO] Successfully finished processing all inputs.
-[17:15:35.777][INFO] Timings:
-[17:15:35.777][INFO] reconstruct subcommand: 100.00%, 2731.05ms avg, 1 call (total: 2.731s)
-[17:15:35.777][INFO]   surface reconstruction: 99.99%, 2730.84ms avg, 1 call (total: 2.731s)
-[17:15:35.777][INFO]     loading particle positions: 4.57%, 124.71ms avg, 1 call (total: 0.125s)
-[17:15:35.777][INFO]     compute minimum enclosing aabb: 0.14%, 3.87ms avg, 1 call (total: 0.004s)
-[17:15:35.777][INFO]     surface reconstruction subdomain-grid: 89.94%, 2456.05ms avg, 1 call (total: 2.456s)
-[17:15:35.777][INFO]       decomposition: 3.07%, 75.45ms avg, 1 call (total: 0.075s)
-[17:15:35.777][INFO]         classifying particles: 30.15%, 22.75ms avg, 1 call (total: 0.023s)
-[17:15:35.777][INFO]         merging TL per cell particle counters: 0.25%, 0.19ms avg, 1 call (total: 0.000s)
-[17:15:35.777][INFO]         initializing flat subdomain data and index mapping: 0.06%, 0.05ms avg, 1 call (total: 0.000s)
-[17:15:35.777][INFO]         copying particles to subdomains: 55.31%, 41.73ms avg, 1 call (total: 0.042s)
-[17:15:35.777][INFO]         sort subdomain particles: 14.20%, 10.71ms avg, 1 call (total: 0.011s)
-[17:15:35.777][INFO]       compute_global_density_vector: 47.41%, 1164.38ms avg, 1 call (total: 1.164s)
-[17:15:35.777][INFO]         subdomain density computation: ≈100.00%, 11.76ms avg, 1275 calls (total: 14.997s)
-[17:15:35.777][INFO]           collect subdomain data: 0.35%, 0.04ms avg, 1275 calls (total: 0.052s)
-[17:15:35.777][INFO]           initialize particle filter: 0.14%, 0.02ms avg, 1275 calls (total: 0.020s)
-[17:15:35.777][INFO]           neighborhood_search_spatial_hashing_flat_filtered: 93.14%, 10.95ms avg, 1275 calls (total: 13.968s)
-[17:15:35.777][INFO]             sequential_generate_cell_to_particle_map_with_positions: 5.40%, 0.59ms avg, 1275 calls (total: 0.754s)
-[17:15:35.777][INFO]             collect particle neighbors: 92.97%, 10.18ms avg, 1275 calls (total: 12.986s)
-[17:15:35.777][INFO]           sequential_compute_particle_densities_filtered: 6.14%, 0.72ms avg, 1275 calls (total: 0.920s)
-[17:15:35.777][INFO]           update global density values: 0.24%, 0.03ms avg, 1275 calls (total: 0.035s)
-[17:15:35.777][INFO]       reconstruction: 46.29%, 1136.91ms avg, 1 call (total: 1.137s)
-[17:15:35.777][INFO]         subdomain reconstruction (dense): ≈92.15%, 43.66ms avg, 313 calls (total: 13.664s)
-[17:15:35.777][INFO]           density grid loop: 92.76%, 40.50ms avg, 313 calls (total: 12.675s)
-[17:15:35.777][INFO]           mc triangulation loop: 7.02%, 3.06ms avg, 313 calls (total: 0.959s)
-[17:15:35.777][INFO]         subdomain reconstruction (sparse): ≈7.85%, 1.21ms avg, 962 calls (total: 1.164s)
-[17:15:35.777][INFO]           density grid loop: 61.65%, 0.75ms avg, 962 calls (total: 0.718s)
-[17:15:35.777][INFO]           mc triangulation loop: 37.38%, 0.45ms avg, 962 calls (total: 0.435s)
-[17:15:35.777][INFO]       stitching: 1.62%, 39.87ms avg, 1 call (total: 0.040s)
-[17:15:35.777][INFO]         surface patch offset scan: 0.05%, 0.02ms avg, 1 call (total: 0.000s)
-[17:15:35.777][INFO]         copy interior verts/tris and deduplicate exterior verts: 89.15%, 35.54ms avg, 1 call (total: 0.036s)
-[17:15:35.777][INFO]     postprocessing: 0.00%, 0.02ms avg, 1 call (total: 0.000s)
-[17:15:35.777][INFO]     write surface mesh to file: 4.11%, 112.32ms avg, 1 call (total: 0.112s)
-[17:15:35.777][INFO]       write_vtk: 99.93%, 112.25ms avg, 1 call (total: 0.112s)
+[17:34:31.034][INFO] target/release/splashsurf v0.14.0 (splashsurf)
+[17:34:31.034][INFO] Called with command line: target/release/splashsurf reconstruct /Users/floeschner/Downloads/canyon_13353401_particles.xyz -r=0.011 -c=1.5 -l=2.0 -t=0.6 --output-dir=out
+[17:34:31.034][INFO] Using single precision (f32) for surface reconstruction.
+[17:34:31.034][INFO] Reading particle dataset from "/Users/floeschner/Downloads/canyon_13353401_particles.xyz"...
+[17:34:31.093][INFO] Successfully read dataset with 13353401 particle positions.
+[17:34:31.093][INFO] Vectorization enabled with support detected for NEON instructions.
+[17:34:31.098][INFO] Bounding box of particles with margin for levelset evaluation: [-25.006098, -5.014629, -40.06346] to [24.499493, 18.30621, 39.775795]
+[17:34:31.098][INFO] The ghost margin volume per subdomain is 42.38% of the subdomain volume
+[17:34:31.098][INFO] The ghost margin per subdomain is 3.03 MC cells or 0.05 subdomains wide
+[17:34:31.098][INFO] Number of subdomains: 82156 (47x23x76)
+[17:34:31.098][INFO] Number of MC cells per subdomain: 262144 (64x64x64)
+[17:34:31.098][INFO] Number of MC cells globally: 21536702464 (3008x1472x4864)
+[17:34:31.098][INFO] Starting classification of particles into subdomains.
+[17:34:31.180][INFO] Starting computation of global density vector.
+[17:34:32.645][INFO] Largest subdomain has 167861 particles.
+[17:34:32.645][INFO] Subdomains with 8393 or less particles will be considered sparse.
+[17:34:32.645][INFO] Starting reconstruction (level-set evaluation and local triangulation).
+[17:34:33.259][INFO] Starting stitching of subdomain meshes to global mesh.
+[17:34:33.316][INFO] Global mesh has 3037970 vertices and 6069264 triangles.
+[17:34:33.400][INFO] Writing mesh with 3037970 vertices and 6069264 cells to "out/canyon_13353401_particles_surface.vtk"...
+[17:34:33.494][INFO] Successfully wrote mesh to file.
+[17:34:33.501][INFO] Successfully finished processing all inputs.
+[17:34:33.501][INFO] Timings:
+[17:34:33.501][INFO] reconstruct subcommand: 100.00%, 2467.24ms avg, 1 call (total: 2.467s)
+[17:34:33.501][INFO]   surface reconstruction: 99.99%, 2467.07ms avg, 1 call (total: 2.467s)
+[17:34:33.501][INFO]     loading particle positions: 2.37%, 58.58ms avg, 1 call (total: 0.059s)
+[17:34:33.501][INFO]     compute minimum enclosing aabb: 0.23%, 5.62ms avg, 1 call (total: 0.006s)
+[17:34:33.501][INFO]     surface reconstruction subdomain-grid: 93.31%, 2301.96ms avg, 1 call (total: 2.302s)
+[17:34:33.501][INFO]       decomposition: 3.53%, 81.29ms avg, 1 call (total: 0.081s)
+[17:34:33.501][INFO]         classifying particles: 32.92%, 26.76ms avg, 1 call (total: 0.027s)
+[17:34:33.501][INFO]         merging TL per cell particle counters: 0.17%, 0.14ms avg, 1 call (total: 0.000s)
+[17:34:33.501][INFO]         initializing flat subdomain data and index mapping: 0.07%, 0.06ms avg, 1 call (total: 0.000s)
+[17:34:33.501][INFO]         copying particles to subdomains: 52.60%, 42.76ms avg, 1 call (total: 0.043s)
+[17:34:33.501][INFO]         sort subdomain particles: 14.17%, 11.52ms avg, 1 call (total: 0.012s)
+[17:34:33.501][INFO]       compute_global_density_vector: 63.66%, 1465.39ms avg, 1 call (total: 1.465s)
+[17:34:33.501][INFO]         subdomain density computation: ≈100.00%, 15.09ms avg, 1275 calls (total: 19.238s)
+[17:34:33.501][INFO]           collect subdomain data: 0.57%, 0.09ms avg, 1275 calls (total: 0.110s)
+[17:34:33.501][INFO]           initialize particle filter: 0.10%, 0.02ms avg, 1275 calls (total: 0.019s)
+[17:34:33.501][INFO]           neighborhood_search_spatial_hashing_flat_filtered: 85.88%, 12.96ms avg, 1275 calls (total: 16.522s)
+[17:34:33.501][INFO]             sequential_generate_cell_to_particle_map_with_positions: 5.29%, 0.69ms avg, 1275 calls (total: 0.875s)
+[17:34:33.501][INFO]             collect particle neighbors: 92.97%, 12.05ms avg, 1275 calls (total: 15.360s)
+[17:34:33.501][INFO]           sequential_compute_particle_densities_filtered: 12.91%, 1.95ms avg, 1275 calls (total: 2.484s)
+[17:34:33.501][INFO]           update global density values: 0.53%, 0.08ms avg, 1275 calls (total: 0.102s)
+[17:34:33.501][INFO]       reconstruction: 26.66%, 613.62ms avg, 1 call (total: 0.614s)
+[17:34:33.501][INFO]         subdomain reconstruction (dense): ≈86.17%, 22.84ms avg, 313 calls (total: 7.148s)
+[17:34:33.501][INFO]           density grid loop (neon): 79.79%, 18.22ms avg, 313 calls (total: 5.704s)
+[17:34:33.501][INFO]           mc triangulation loop: 19.68%, 4.49ms avg, 313 calls (total: 1.407s)
+[17:34:33.501][INFO]         subdomain reconstruction (sparse): ≈13.83%, 1.19ms avg, 962 calls (total: 1.147s)
+[17:34:33.501][INFO]           density grid loop (sparse): 52.93%, 0.63ms avg, 962 calls (total: 0.607s)
+[17:34:33.501][INFO]           mc triangulation loop: 46.21%, 0.55ms avg, 962 calls (total: 0.530s)
+[17:34:33.501][INFO]       stitching: 2.00%, 46.06ms avg, 1 call (total: 0.046s)
+[17:34:33.501][INFO]         surface patch offset scan: 0.04%, 0.02ms avg, 1 call (total: 0.000s)
+[17:34:33.501][INFO]         copy interior verts/tris and deduplicate exterior verts: 82.90%, 38.18ms avg, 1 call (total: 0.038s)
+[17:34:33.501][INFO]     postprocessing: 0.00%, 0.02ms avg, 1 call (total: 0.000s)
+[17:34:33.501][INFO]     write surface mesh to file: 3.82%, 94.24ms avg, 1 call (total: 0.094s)
+[17:34:33.501][INFO]       write_vtk: 99.90%, 94.15ms avg, 1 call (total: 0.094s)
 ```
 
 ### Sequences of files
@@ -315,7 +316,7 @@ The file format is inferred from the extension of output filename.
 
 ### The `reconstruct` command
 ```
-splashsurf-reconstruct (v0.13.0) - Reconstruct a surface from particle data
+splashsurf-reconstruct (v0.14.0) - Reconstruct a surface from particle data
 
 Usage: splashsurf reconstruct [OPTIONS] --particle-radius <PARTICLE_RADIUS> --smoothing-length <SMOOTHING_LENGTH> --cube-size <CUBE_SIZE> <INPUT_FILE_OR_SEQUENCE>
 
@@ -353,6 +354,7 @@ Advanced parameters:
       --mt-files=<off|on>          Enable multithreading to process multiple input files in parallel (NOTE: Currently, the subdomain-grid domain decomposition approach and some post-processing functions including interpolation do not have sequential versions and therefore do not work well with this option enabled) [default: off] [possible values: off, on]
       --mt-particles=<off|on>      Enable multithreading for a single input file by processing chunks of particles in parallel [default: on] [possible values: off, on]
   -n, --num-threads <NUM_THREADS>  Set the number of threads for the worker thread pool
+      --simd=<off|on>              Enable vectorization of some computations using SIMD instructions (requires CPU with AVX2 or NEON support). Note that vectorization is currently only available in single precision (f32) mode [default: on] [possible values: off, on]
 
 Domain decomposition parameters:
       --subdomain-grid=<off|on>

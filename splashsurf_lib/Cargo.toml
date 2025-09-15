@@ -1,6 +1,6 @@
 [package]
 name = "splashsurf_lib"
-version = "0.13.0"
+version = "0.14.0"
 description = "Library for surface reconstruction of SPH particle data"
 keywords = ["sph", "particle", "surface", "reconstruction", "marching-cubes"]
 categories = ["graphics", "science", "simulation", "visualization", "rendering"]

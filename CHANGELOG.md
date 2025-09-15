@@ -4,6 +4,13 @@ The following changes are present in the `main` branch of the repository and are
 
  - N/A
 
+## Version 0.14.0
+
+ - Lib: Implement AVX and NEON variants of f32 cubic spline kernel
+ - Lib: Implement AVX and NEON variants of particle to grid levelset evaluation in subdomain-based reconstruction
+ - CLI: Add `--simd=on/off` CLI flag to enable/disable use of SIMD in kernels and levelset evaluation if supported by the CPU
+ - Py: Add `simd` argument to `reconstruction_pipeline` and `reconstruct_surface` to enable/disable use of SIMD in kernels and levelset evaluation if supported by the CPU
+
 ## Version 0.13.0
 
  - Py: Major refactor of the Python bindings, interface is much simpler and more "pythonic"
