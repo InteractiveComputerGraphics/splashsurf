@@ -149,6 +149,7 @@ pub fn grid_loop_neon(c: &mut Criterion) {
     group.finish();
 }
 
+#[allow(dead_code)]
 pub fn grid_loop_avx2(c: &mut Criterion) {
     #[cfg(not(all(target_feature = "avx2", target_feature = "fma")))]
     {
@@ -181,7 +182,7 @@ pub fn grid_loop_avx2(c: &mut Criterion) {
 
     #[cfg(all(target_feature = "avx2", target_feature = "fma"))]
     {
-        let neon_result = unsafe {
+        let avx_result = unsafe {
             let kernel = CubicSplineKernel::new(params.compact_support_radius);
             let mut params = params.clone();
             dense_subdomains::density_grid_loop_avx(
@@ -200,7 +201,7 @@ pub fn grid_loop_avx2(c: &mut Criterion) {
         };
 
         println!("{:?}", &reference[0..10]);
-        println!("{:?}", &neon_result[0..10]);
+        println!("{:?}", &avx_result[0..10]);
 
         assert!(
             neon_result

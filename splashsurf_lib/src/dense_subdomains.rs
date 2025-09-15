@@ -672,6 +672,76 @@ pub struct DensityGridLoopParameters<I: Scalar, R: Scalar> {
     pub compact_support_radius: R,
 }
 
+/// Auto-dispatching density grid loop for f32/i64: chooses AVX2+FMA on x86, NEON on aarch64, otherwise scalar fallback
+pub fn density_grid_loop_auto<K: SymmetricKernel3d<f32>>(
+    levelset_grid: &mut [f32],
+    subdomain_particles: &[Vector3<f32>],
+    subdomain_particle_densities: &[f32],
+    subdomain_mc_grid: &UniformCartesianCubeGrid3d<i64, f32>,
+    subdomain_ijk: &[i64; 3],
+    global_mc_grid: &UniformCartesianCubeGrid3d<GlobalIndex, f32>,
+    cube_radius: i64,
+    squared_support_with_margin: f32,
+    particle_rest_mass: f32,
+    kernel: &K,
+) {
+    #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
+    {
+        if std::arch::is_x86_feature_detected!("avx2") && std::arch::is_x86_feature_detected!("fma")
+        {
+            unsafe {
+                return density_grid_loop_avx(
+                    levelset_grid,
+                    subdomain_particles,
+                    subdomain_particle_densities,
+                    subdomain_mc_grid,
+                    subdomain_ijk,
+                    global_mc_grid,
+                    cube_radius,
+                    squared_support_with_margin,
+                    particle_rest_mass,
+                    kernel,
+                );
+            }
+        }
+    }
+
+    // TODO: Not supported on arm (32 bit) until https://github.com/rust-lang/rust/issues/111800 is resolved
+    #[cfg(target_arch = "aarch64")]
+    {
+        if std::arch::is_aarch64_feature_detected!("neon") {
+            unsafe {
+                return density_grid_loop_neon(
+                    levelset_grid,
+                    subdomain_particles,
+                    subdomain_particle_densities,
+                    subdomain_mc_grid,
+                    subdomain_ijk,
+                    global_mc_grid,
+                    cube_radius,
+                    squared_support_with_margin,
+                    particle_rest_mass,
+                    kernel,
+                );
+            }
+        }
+    }
+
+    // Fallback: scalar generic implementation
+    density_grid_loop_scalar::<i64, f32, K>(
+        levelset_grid,
+        subdomain_particles,
+        subdomain_particle_densities,
+        subdomain_mc_grid,
+        subdomain_ijk,
+        global_mc_grid,
+        cube_radius,
+        squared_support_with_margin,
+        particle_rest_mass,
+        kernel,
+    );
+}
+
 pub fn density_grid_loop_scalar<I: Index, R: Real, K: SymmetricKernel3d<R>>(
     levelset_grid: &mut [R],
     subdomain_particles: &[Vector3<R>],
@@ -811,6 +881,18 @@ pub fn density_grid_loop_neon<K: SymmetricKernel3d<f32>>(
     use core::arch::aarch64::*;
     const LANES: usize = 4;
 
+    // Ensure that we can safely compute global MC vertex positions via u32 indices per dimension
+    assert!(
+        global_mc_grid
+            .points_per_dim()
+            .iter()
+            .copied()
+            .all(|p| p < u32::MAX as i64),
+        "global marching cubes grid has too many vertices per dimension ({:?}) to fit into u32 (max: {}) for density_grid_loop_neon",
+        global_mc_grid.points_per_dim(),
+        u32::MAX
+    );
+
     struct CubicKernelNeon {
         compact_support_inv: f32,
         sigma: f32,
@@ -912,7 +994,6 @@ pub fn density_grid_loop_neon<K: SymmetricKernel3d<f32>>(
         let remainder = (upper[2] - lower[2]) % LANES;
         let upper_k_aligned = upper[2] - remainder;
 
-        // TODO: Check that i,j,k fit into u32
         let subdomain_ijk = subdomain_ijk.map(|i| i as u32);
         let mc_cells = mc_grid.cells_per_dim().map(|i| i as u32);
 
@@ -980,11 +1061,11 @@ pub fn density_grid_loop_neon<K: SymmetricKernel3d<f32>>(
                 if remainder > 0 {
                     let flat_point_idx = flat_index_base + upper_k_aligned;
                     let w_ij = evaluate_contribution(upper_k_aligned, grid_xs, grid_ys);
-                    let val = vmulq_n_f32(w_ij, v_i);
-                    let mut tmp: [f32; 4] = [0.0; 4];
-                    unsafe { vst1q_f32(tmp.as_mut_ptr(), val) };
+                    let w_ij_v = vmulq_n_f32(w_ij, v_i);
+                    let w_ij_v =
+                        unsafe { std::mem::transmute::<float32x4_t, [f32; LANES]>(w_ij_v) };
                     for rr in 0..remainder {
-                        levelset_grid[flat_point_idx + rr] += tmp[rr];
+                        levelset_grid[flat_point_idx + rr] += w_ij_v[rr];
                     }
                 }
             }
@@ -1012,6 +1093,18 @@ pub fn density_grid_loop_avx<K: SymmetricKernel3d<f32>>(
     use core::arch::x86_64::*;
 
     const LANES: usize = 8;
+
+    // Ensure that we can safely compute global MC vertex positions via i32 indices per dimension
+    assert!(
+        global_mc_grid
+            .points_per_dim()
+            .iter()
+            .copied()
+            .all(|p| p < i32::MAX as i64),
+        "global marching cubes grid has too many vertices per dimension ({:?}) to fit into i32 (max: {}) for density_grid_loop_avx",
+        global_mc_grid.points_per_dim(),
+        i32::MAX
+    );
 
     struct CubicKernelAvx {
         compact_support_inv: f32,
@@ -1107,7 +1200,6 @@ pub fn density_grid_loop_avx<K: SymmetricKernel3d<f32>>(
         let remainder = (upper[2] - lower[2]) % LANES;
         let upper_k_aligned = upper[2] - remainder;
 
-        // TODO: Check that i,j,k fit into i32
         let subdomain_ijk_i32 = subdomain_ijk.map(|i| i as i32);
         let mc_cells = mc_grid.cells_per_dim().map(|i| i as i32);
 
@@ -1187,75 +1279,6 @@ pub fn density_grid_loop_avx<K: SymmetricKernel3d<f32>>(
             }
         }
     }
-}
-
-/// Auto-dispatching density grid loop for f32/i64: chooses AVX2+FMA on x86_64, NEON on aarch64, otherwise scalar fallback
-pub fn density_grid_loop_auto<K: SymmetricKernel3d<f32>>(
-    levelset_grid: &mut [f32],
-    subdomain_particles: &[Vector3<f32>],
-    subdomain_particle_densities: &[f32],
-    subdomain_mc_grid: &UniformCartesianCubeGrid3d<i64, f32>,
-    subdomain_ijk: &[i64; 3],
-    global_mc_grid: &UniformCartesianCubeGrid3d<GlobalIndex, f32>,
-    cube_radius: i64,
-    squared_support_with_margin: f32,
-    particle_rest_mass: f32,
-    kernel: &K,
-) {
-    #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
-    {
-        if std::arch::is_x86_feature_detected!("avx2") && std::arch::is_x86_feature_detected!("fma")
-        {
-            unsafe {
-                return density_grid_loop_avx(
-                    levelset_grid,
-                    subdomain_particles,
-                    subdomain_particle_densities,
-                    subdomain_mc_grid,
-                    subdomain_ijk,
-                    global_mc_grid,
-                    cube_radius,
-                    squared_support_with_margin,
-                    particle_rest_mass,
-                    kernel,
-                );
-            }
-        }
-    }
-
-    #[cfg(target_arch = "aarch64")]
-    {
-        if std::arch::is_aarch64_feature_detected!("neon") {
-            unsafe {
-                return density_grid_loop_neon(
-                    levelset_grid,
-                    subdomain_particles,
-                    subdomain_particle_densities,
-                    subdomain_mc_grid,
-                    subdomain_ijk,
-                    global_mc_grid,
-                    cube_radius,
-                    squared_support_with_margin,
-                    particle_rest_mass,
-                    kernel,
-                );
-            }
-        }
-    }
-
-    // Fallback: scalar generic implementation
-    density_grid_loop_scalar::<i64, f32, K>(
-        levelset_grid,
-        subdomain_particles,
-        subdomain_particle_densities,
-        subdomain_mc_grid,
-        subdomain_ijk,
-        global_mc_grid,
-        cube_radius,
-        squared_support_with_margin,
-        particle_rest_mass,
-        kernel,
-    );
 }
 
 // TODO: Reduce code duplication between dense and sparse
