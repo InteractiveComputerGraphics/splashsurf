@@ -23,7 +23,7 @@
 //!   performance overhead of the profiling.
 //!
 
-use log::info;
+use log::{info, warn};
 /// Re-export the version of `nalgebra` used by this crate
 pub use nalgebra;
 use nalgebra::Scalar;
@@ -339,6 +339,20 @@ pub fn reconstruct_surface_inplace<I: Index, R: Real>(
 ) -> Result<(), ReconstructionError<I, R>> {
     // Clear the existing mesh
     output_surface.mesh.clear();
+
+    if parameters.enable_vectorization {
+        if let Some(simd) = utils::detect_simd_support() {
+            let simd_str = match simd {
+                utils::SimdFeatures::Avx2Fma => "AVX2 and FMA",
+                utils::SimdFeatures::Neon => "NEON",
+            };
+            info!("Vectorization enabled with support detected for {simd_str}.");
+        } else {
+            warn!(
+                "Vectorization was enabled, but no SIMD support was detected on this CPU. Falling back to non-vectorized code."
+            );
+        }
+    }
 
     // Filter out particles
     let filtered_particle_positions = if let Some(particle_aabb) = &parameters.particle_aabb {

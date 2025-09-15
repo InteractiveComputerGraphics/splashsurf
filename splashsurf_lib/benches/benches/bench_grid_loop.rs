@@ -36,6 +36,8 @@ pub fn grid_loop_no_simd(c: &mut Criterion) {
     group.finish();
 }
 
+#[allow(unreachable_code)]
+#[allow(unused_variables)]
 pub fn grid_loop_neon(c: &mut Criterion) {
     #[cfg(not(target_feature = "neon"))]
     {
@@ -149,7 +151,8 @@ pub fn grid_loop_neon(c: &mut Criterion) {
     group.finish();
 }
 
-#[allow(dead_code)]
+#[allow(unreachable_code)]
+#[allow(unused_variables)]
 pub fn grid_loop_avx2(c: &mut Criterion) {
     #[cfg(not(all(target_feature = "avx2", target_feature = "fma")))]
     {

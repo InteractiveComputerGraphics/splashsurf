@@ -177,3 +177,29 @@ impl ChunkSize {
         self
     }
 }
+
+#[allow(dead_code)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub(crate) enum SimdFeatures {
+    Avx2Fma,
+    Neon,
+}
+
+/// Returns the SIMD
+pub(crate) fn detect_simd_support() -> Option<SimdFeatures> {
+    #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
+    {
+        if is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma") {
+            return Some(VectorizationFeatures::Avx2Fma);
+        }
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    {
+        if std::arch::is_aarch64_feature_detected!("neon") {
+            return Some(SimdFeatures::Neon);
+        }
+    }
+
+    None
+}
