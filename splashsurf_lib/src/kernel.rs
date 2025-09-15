@@ -1,4 +1,10 @@
 //! SPH kernel function implementations
+//!
+//! Currently, the following SIMD implementations are provided:
+//!  - `CubicSplineKernelAvxF32`: Only available on `x86` and `x86_64` targets, requires AVX2 and FMA support
+//!  - `CubicSplineKernelNeonF32`: Only available on `aarch64` targets, requires NEON support
+//!
+//! Note that documentation of the SIMD kernels is only available on the respective target architectures.
 
 use crate::{Real, RealConvert};
 use nalgebra::Vector3;
@@ -173,7 +179,7 @@ fn test_cubic_kernel_r_integral() {
     }
 }
 
-/// Vectorized implementation of the cubic spline kernel using NEON instructions. Only available on aarch64 targets.
+/// Vectorized implementation of the cubic spline kernel using NEON instructions. Only available on `aarch64` targets.
 #[cfg(target_arch = "aarch64")]
 pub struct CubicSplineKernelNeonF32 {
     compact_support_inv: f32,
@@ -305,7 +311,7 @@ fn test_cubic_spline_kernel_neon() {
     }
 }
 
-/// Vectorized implementation of the cubic spline kernel using AVX2 and FMA instructions. Only available on x86 and x86_64 targets.
+/// Vectorized implementation of the cubic spline kernel using AVX2 and FMA instructions. Only available on `x86` and `x86_64` targets.
 #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
 pub struct CubicSplineKernelAvxF32 {
     compact_support_inv: f32,

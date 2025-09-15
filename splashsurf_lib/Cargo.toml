@@ -17,9 +17,15 @@ repository.workspace = true
 # RUSTDOCFLAGS="--cfg docsrs" cargo +nightly doc --all-features --no-deps --open
 # Build with all features to properly document everything
 all-features = true
-# Build only for a single target as this crate does not have any platform specific behavior
-default-target = "x86_64-unknown-linux-gnu"
-targets = []
+targets = [
+  "x86_64-unknown-linux-gnu",
+  "i686-unknown-linux-gnu",
+  "aarch64-unknown-linux-gnu",
+  "aarch64-apple-darwin",
+  "x86_64-apple-darwin",
+  "x86_64-pc-windows-msvc",
+  "i686-pc-windows-msvc"
+]
 
 # Ignore the tests (especially the test mesh files) for publishing
 exclude = ["tests/*", "benches/*"]
