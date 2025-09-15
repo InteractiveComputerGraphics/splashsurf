@@ -3,10 +3,12 @@
 use crate::{Real, RealConvert, ThreadSafe};
 use nalgebra::{SVector, Scalar};
 use rayon::prelude::*;
+#[cfg(feature = "serde-serialize")]
 use serde_derive::{Deserialize, Serialize};
 
 /// Type representing an axis aligned bounding box in arbitrary dimensions
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
 pub struct AxisAlignedBoundingBox<R: Scalar, const D: usize> {
     min: SVector<R, D>,
     max: SVector<R, D>,

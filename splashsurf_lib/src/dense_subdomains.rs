@@ -2,12 +2,11 @@ use anyhow::{Context, anyhow};
 use arrayvec::ArrayVec;
 use itertools::Itertools;
 use log::{info, trace};
-use nalgebra::{Scalar, Vector3};
+use nalgebra::Vector3;
 use num_integer::Integer;
 use num_traits::{FromPrimitive, NumCast};
 use parking_lot::Mutex;
 use rayon::prelude::*;
-use serde_derive::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use thread_local::ThreadLocal;
@@ -656,20 +655,6 @@ pub(crate) struct SurfacePatch<I: Index, R: Real> {
     pub vertex_inside_flags: Vec<bool>,
     pub triangle_inside_flags: Vec<bool>,
     pub exterior_vertex_edge_indices: Vec<(I, EdgeIndex<I>)>,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-pub struct DensityGridLoopParameters<I: Scalar, R: Scalar> {
-    pub levelset_grid: Vec<R>,
-    pub subdomain_particles: Vec<Vector3<R>>,
-    pub subdomain_particle_densities: Vec<R>,
-    pub subdomain_mc_grid: UniformCartesianCubeGrid3d<I, R>,
-    pub subdomain_ijk: [I; 3],
-    pub global_mc_grid: UniformCartesianCubeGrid3d<GlobalIndex, R>,
-    pub cube_radius: I,
-    pub squared_support_with_margin: R,
-    pub particle_rest_mass: R,
-    pub compact_support_radius: R,
 }
 
 /// Auto-dispatching density grid loop for f32/i64: chooses AVX2+FMA on x86, NEON on aarch64, otherwise scalar fallback
@@ -1358,33 +1343,6 @@ pub(crate) fn reconstruction<I: Index, R: Real>(
 
         levelset_grid.fill(R::zero());
         levelset_grid.resize(mc_total_points.to_usize().unwrap(), R::zero());
-
-        /*
-        if subdomain_particles.len() > 6800 {
-            println!("{}", subdomain_particles.len());
-            let arguments = DensityGridLoopParameters {
-                levelset_grid: levelset_grid.clone(),
-                subdomain_particles: subdomain_particles.clone(),
-                subdomain_particle_densities: subdomain_particle_densities.clone(),
-                subdomain_mc_grid: mc_grid.clone(),
-                subdomain_ijk: *subdomain_idx.index(),
-                global_mc_grid: parameters.global_marching_cubes_grid.clone(),
-                cube_radius,
-                squared_support_with_margin,
-                particle_rest_mass: parameters.particle_rest_mass,
-                compact_support_radius: parameters.compact_support_radius,
-            };
-            serde_json::to_writer(
-                std::fs::File::create(format!(
-                    "density_grid_loop_subdomain_{}.json",
-                    flat_subdomain_idx
-                ))
-                .unwrap(),
-                &arguments,
-            )
-            .unwrap();
-        }
-         */
 
         use std::any::TypeId;
         use std::mem::transmute;

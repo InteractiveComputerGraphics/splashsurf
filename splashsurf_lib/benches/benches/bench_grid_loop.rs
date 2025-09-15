@@ -1,10 +1,55 @@
 use criterion::{Criterion, criterion_group};
+use nalgebra::{Scalar, Vector3};
+use serde_derive::{Deserialize, Serialize};
 use splashsurf_lib::dense_subdomains;
 use splashsurf_lib::kernel::CubicSplineKernel;
+use splashsurf_lib::uniform_grid::UniformCartesianCubeGrid3d;
 use std::time::Duration;
 
+// Code to generate the input data for the benchmark from dense_subdomains.rs
+/*
+if subdomain_particles.len() > 6800 {
+    println!("{}", subdomain_particles.len());
+    let arguments = DensityGridLoopParameters {
+        levelset_grid: levelset_grid.clone(),
+        subdomain_particles: subdomain_particles.clone(),
+        subdomain_particle_densities: subdomain_particle_densities.clone(),
+        subdomain_mc_grid: mc_grid.clone(),
+        subdomain_ijk: *subdomain_idx.index(),
+        global_mc_grid: parameters.global_marching_cubes_grid.clone(),
+        cube_radius,
+        squared_support_with_margin,
+        particle_rest_mass: parameters.particle_rest_mass,
+        compact_support_radius: parameters.compact_support_radius,
+    };
+    serde_json::to_writer(
+        std::fs::File::create(format!(
+            "density_grid_loop_subdomain_{}.json",
+            flat_subdomain_idx
+        ))
+        .unwrap(),
+        &arguments,
+    )
+    .unwrap();
+}
+ */
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct DensityGridLoopParameters<I: Scalar, R: Scalar> {
+    pub levelset_grid: Vec<R>,
+    pub subdomain_particles: Vec<Vector3<R>>,
+    pub subdomain_particle_densities: Vec<R>,
+    pub subdomain_mc_grid: UniformCartesianCubeGrid3d<I, R>,
+    pub subdomain_ijk: [I; 3],
+    pub global_mc_grid: UniformCartesianCubeGrid3d<i64, R>,
+    pub cube_radius: I,
+    pub squared_support_with_margin: R,
+    pub particle_rest_mass: R,
+    pub compact_support_radius: R,
+}
+
 pub fn grid_loop_no_simd(c: &mut Criterion) {
-    let params: dense_subdomains::DensityGridLoopParameters<i64, f32> = serde_json::from_reader(
+    let params: DensityGridLoopParameters<i64, f32> = serde_json::from_reader(
         std::fs::File::open("../data/density_grid_loop_subdomain_33.json").unwrap(),
     )
     .unwrap();
@@ -45,7 +90,7 @@ pub fn grid_loop_neon(c: &mut Criterion) {
         return;
     }
 
-    let params: dense_subdomains::DensityGridLoopParameters<i64, f32> = serde_json::from_reader(
+    let params: DensityGridLoopParameters<i64, f32> = serde_json::from_reader(
         std::fs::File::open("../data/density_grid_loop_subdomain_33.json").unwrap(),
     )
     .unwrap();
@@ -160,7 +205,7 @@ pub fn grid_loop_avx2(c: &mut Criterion) {
         return;
     }
 
-    let params: dense_subdomains::DensityGridLoopParameters<i64, f32> = serde_json::from_reader(
+    let params: DensityGridLoopParameters<i64, f32> = serde_json::from_reader(
         std::fs::File::open("../data/density_grid_loop_subdomain_33.json").unwrap(),
     )
     .unwrap();

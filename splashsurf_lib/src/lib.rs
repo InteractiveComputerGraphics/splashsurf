@@ -21,6 +21,7 @@
 //!   by binary crates calling into this library to add their own profiling scopes to the measurements.
 //!   If this features is not enabled, the macro will just expend to a no-op and remove the (small)
 //!   performance overhead of the profiling.
+//! - **`serde-serialize`**: Enables `Serialize` and `Deserialize` impls for some types using `serde`.
 //!
 
 use log::{info, warn};
@@ -74,7 +75,6 @@ pub mod uniform_grid;
 mod utils;
 pub(crate) mod workspace;
 
-// TODO: Add documentation of feature flags
 // TODO: Feature flag for multi threading
 // TODO: Feature flag to disable (debug level) logging?
 
@@ -176,7 +176,7 @@ pub struct Parameters<R: Scalar> {
     /// Whether to allow multi threading within the surface reconstruction procedure
     pub enable_multi_threading: bool,
     /// Whether to enable SIMD vectorization for some computations if supported by the target architecture
-    /// 
+    ///
     /// Currently only supported on x86/x86_64 (AVX2 + FMA) and aarch64 (NEON) for single precision (f32) reconstructions.
     pub enable_simd: bool,
     /// Parameters for the spatial decomposition of the surface reconstruction
