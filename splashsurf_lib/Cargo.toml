@@ -6,6 +6,7 @@ keywords = ["sph", "particle", "surface", "reconstruction", "marching-cubes"]
 categories = ["graphics", "science", "simulation", "visualization", "rendering"]
 readme = "README.md"
 edition = "2024"
+rust-version = "1.88"
 
 documentation = "https://docs.rs/splashsurf_lib"
 authors.workspace = true

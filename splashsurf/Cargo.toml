@@ -6,6 +6,7 @@ keywords = ["sph", "particle", "surface", "reconstruction", "marching-cubes"]
 categories = ["command-line-utilities", "graphics", "science", "simulation", "visualization"]
 readme = "README.md"
 edition = "2024"
+rust-version = "1.88"
 
 authors.workspace = true
 license.workspace = true
