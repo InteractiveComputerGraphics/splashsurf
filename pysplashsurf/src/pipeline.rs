@@ -48,6 +48,8 @@ use crate::utils::{IndexT, pyerr_unsupported_scalar};
 ///     Upper corner [x,y,z] of the AABB of particles to consider in the reconstruction.
 /// multi_threading
 ///     Flag to enable multi-threading for the reconstruction and post-processing steps.
+/// simd
+///    Flag to enable SIMD vectorization for the reconstruction if supported by the CPU architecture.
 /// subdomain_grid
 ///     Flag to enable spatial decomposition by dividing the domain into subdomains with dense marching cube grids for efficient multi-threading.
 /// subdomain_grid_auto_disable
@@ -108,7 +110,7 @@ use crate::utils::{IndexT, pyerr_unsupported_scalar};
 #[pyo3(name = "reconstruction_pipeline")]
 #[pyo3(signature = (particles, *, attributes_to_interpolate = None,
     particle_radius, rest_density = 1000.0, smoothing_length, cube_size, iso_surface_threshold = 0.6,
-    aabb_min = None, aabb_max = None, multi_threading = true,
+    aabb_min = None, aabb_max = None, multi_threading = true, simd = true,
     subdomain_grid = true, subdomain_grid_auto_disable = true, subdomain_num_cubes_per_dim = 64,
     check_mesh_closed = false, check_mesh_manifold = false, check_mesh_orientation = false, check_mesh_debug = false,
     mesh_cleanup = false, mesh_cleanup_snap_dist = None, decimate_barnacles = false, keep_vertices = false, compute_normals = false, sph_normals = false,
@@ -128,6 +130,7 @@ pub fn reconstruction_pipeline<'py>(
     aabb_min: Option<[f64; 3]>,
     aabb_max: Option<[f64; 3]>,
     multi_threading: bool,
+    simd: bool,
     subdomain_grid: bool,
     subdomain_grid_auto_disable: bool,
     subdomain_num_cubes_per_dim: u32,
@@ -192,6 +195,7 @@ pub fn reconstruction_pipeline<'py>(
         iso_surface_threshold,
         particle_aabb,
         enable_multi_threading: multi_threading,
+        enable_simd: simd,
         spatial_decomposition,
         global_neighborhood_list: false,
     };

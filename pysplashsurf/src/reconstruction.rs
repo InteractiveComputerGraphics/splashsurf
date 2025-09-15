@@ -122,6 +122,8 @@ impl PySurfaceReconstruction {
 ///     Upper corner of the AABB of particles to consider in the reconstruction.
 /// multi_threading
 ///     Flag to enable multi-threading for the reconstruction and post-processing steps.
+/// simd
+///    Flag to enable SIMD vectorization for the reconstruction if supported by the CPU architecture.
 /// subdomain_grid
 ///     Flag to enable spatial decomposition by dividing the domain into subdomains with dense marching cube grids for efficient multi-threading.
 /// subdomain_grid_auto_disable
@@ -134,7 +136,7 @@ impl PySurfaceReconstruction {
 #[pyo3(signature = (particles, *,
     particle_radius, rest_density = 1000.0, smoothing_length, cube_size, iso_surface_threshold = 0.6,
     aabb_min = None, aabb_max = None,
-    multi_threading = true, global_neighborhood_list = false,
+    multi_threading = true, simd = true, global_neighborhood_list = false,
     subdomain_grid = true, subdomain_grid_auto_disable = true, subdomain_num_cubes_per_dim = 64
 ))]
 pub fn reconstruct_surface<'py>(
@@ -147,6 +149,7 @@ pub fn reconstruct_surface<'py>(
     aabb_min: Option<[f64; 3]>,
     aabb_max: Option<[f64; 3]>,
     multi_threading: bool,
+    simd: bool,
     global_neighborhood_list: bool,
     subdomain_grid: bool,
     subdomain_grid_auto_disable: bool,
@@ -175,6 +178,7 @@ pub fn reconstruct_surface<'py>(
         iso_surface_threshold,
         particle_aabb,
         enable_multi_threading: multi_threading,
+        enable_simd: simd,
         spatial_decomposition,
         global_neighborhood_list,
     };
