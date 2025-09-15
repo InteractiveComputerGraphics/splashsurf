@@ -22,7 +22,7 @@ fn parameters_canyon() -> Parameters<f32> {
         iso_surface_threshold: 0.6,
         particle_aabb: None,
         enable_multi_threading: true,
-        enable_vectorization: true,
+        enable_simd: true,
         spatial_decomposition: SpatialDecomposition::UniformGrid(GridDecompositionParameters {
             subdomain_num_cubes_per_dim: 32,
             auto_disable: false,

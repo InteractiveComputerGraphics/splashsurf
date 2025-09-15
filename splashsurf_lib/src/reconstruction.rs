@@ -41,7 +41,7 @@ pub(crate) fn reconstruct_surface_subdomain_grid<I: Index, R: Real>(
         particle_positions,
         &particle_densities,
         &subdomains,
-        parameters.enable_vectorization,
+        parameters.enable_simd,
     );
 
     let global_mesh = stitching(surface_patches);

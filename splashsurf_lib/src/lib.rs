@@ -175,8 +175,10 @@ pub struct Parameters<R: Scalar> {
     pub particle_aabb: Option<Aabb3d<R>>,
     /// Whether to allow multi threading within the surface reconstruction procedure
     pub enable_multi_threading: bool,
-    /// Whether to enable SIMD vectorization for some inner loops if supported by the target architecture
-    pub enable_vectorization: bool,
+    /// Whether to enable SIMD vectorization for some computations if supported by the target architecture
+    /// 
+    /// Currently only supported on x86/x86_64 (AVX2 + FMA) and aarch64 (NEON) for single precision (f32) reconstructions.
+    pub enable_simd: bool,
     /// Parameters for the spatial decomposition of the surface reconstruction
     /// If not provided, no spatial decomposition is performed and a global approach is used instead.
     pub spatial_decomposition: SpatialDecomposition,
@@ -201,7 +203,7 @@ impl<R: Real> Parameters<R> {
             iso_surface_threshold: R::from_float(0.6),
             particle_aabb: None,
             enable_multi_threading: true,
-            enable_vectorization: true,
+            enable_simd: true,
             spatial_decomposition: Default::default(),
             global_neighborhood_list: false,
         }
@@ -233,7 +235,7 @@ impl<R: Real> Parameters<R> {
             iso_surface_threshold: self.iso_surface_threshold.try_convert()?,
             particle_aabb: map_option!(&self.particle_aabb, aabb => aabb.try_convert()?),
             enable_multi_threading: self.enable_multi_threading,
-            enable_vectorization: self.enable_vectorization,
+            enable_simd: self.enable_simd,
             spatial_decomposition: self.spatial_decomposition.clone(),
             global_neighborhood_list: self.global_neighborhood_list,
         })
@@ -340,7 +342,7 @@ pub fn reconstruct_surface_inplace<I: Index, R: Real>(
     // Clear the existing mesh
     output_surface.mesh.clear();
 
-    if parameters.enable_vectorization {
+    if parameters.enable_simd {
         if let Some(simd) = utils::detect_simd_support() {
             let simd_str = match simd {
                 utils::SimdFeatures::Avx2Fma => "AVX2 and FMA",

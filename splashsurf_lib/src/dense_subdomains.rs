@@ -1188,7 +1188,7 @@ pub(crate) fn reconstruction<I: Index, R: Real>(
     global_particles: &[Vector3<R>],
     global_particle_densities: &[R],
     subdomains: &Subdomains<I>,
-    enable_vectorization: bool,
+    enable_simd: bool,
 ) -> Vec<SurfacePatch<I, R>> {
     profile!(parent, "reconstruction");
 
@@ -1388,7 +1388,7 @@ pub(crate) fn reconstruction<I: Index, R: Real>(
 
         use std::any::TypeId;
         use std::mem::transmute;
-        if enable_vectorization
+        if enable_simd
             && TypeId::of::<I>() == TypeId::of::<i64>()
             && TypeId::of::<R>() == TypeId::of::<f32>()
         {
