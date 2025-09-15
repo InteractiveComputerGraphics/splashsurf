@@ -1134,7 +1134,86 @@ pub fn density_grid_loop_avx<K: SymmetricKernel3d<f32>>(
     }
 }
 
-// TODO: Reduce code duplication between dense and sparse
+pub fn density_grid_loop_sparse<I: Index, R: Real, K: SymmetricKernel3d<R>>(
+    levelset_grid: &mut [R],
+    index_cache: &mut Vec<I>,
+    subdomain_particles: &[Vector3<R>],
+    subdomain_particle_densities: &[R],
+    subdomain_mc_grid: &UniformCartesianCubeGrid3d<I, R>,
+    subdomain_ijk: &[I; 3],
+    global_mc_grid: &UniformCartesianCubeGrid3d<GlobalIndex, R>,
+    cube_radius: I,
+    squared_support_with_margin: R,
+    particle_rest_mass: R,
+    surface_threshold: R,
+    kernel: &K,
+) {
+    profile!("density grid loop (sparse)");
+    let mc_grid = subdomain_mc_grid;
+
+    for (p_i, rho_i) in subdomain_particles
+        .iter()
+        .copied()
+        .zip(subdomain_particle_densities.iter().copied())
+    {
+        let (lower, upper) = particle_influence_aabb(&p_i, &mc_grid, cube_radius);
+
+        // Loop over all grid points around the enclosing cell
+        for i in I::range(lower[0], upper[0]).iter() {
+            for j in I::range(lower[1], upper[1]).iter() {
+                for k in I::range(lower[2], upper[2]).iter() {
+                    let point_ijk = [i, j, k];
+                    let local_point = mc_grid
+                        .get_point(point_ijk)
+                        .expect("point has to be part of the subdomain grid");
+
+                    let mc_cells_per_subdomain = mc_grid.cells_per_dim();
+
+                    // Use global coordinate calculation for consistency with neighboring domains
+                    let global_point_ijk = local_to_global_point_ijk(
+                        point_ijk,
+                        *subdomain_ijk,
+                        *mc_cells_per_subdomain,
+                    );
+                    let global_point = global_mc_grid
+                        .get_point(global_point_ijk)
+                        .expect("point has to be part of the global mc grid");
+                    let point_coordinates = global_mc_grid.point_coordinates(&global_point);
+
+                    let dx = p_i - point_coordinates;
+                    let dx_norm_sq = dx.norm_squared();
+
+                    if dx_norm_sq < squared_support_with_margin {
+                        let v_i = particle_rest_mass / rho_i;
+                        let r = dx_norm_sq.sqrt();
+                        let w_ij = kernel.evaluate(r);
+                        //let w_ij = kernel.evaluate(dx_norm_sq);
+
+                        let interpolated_value = v_i * w_ij;
+
+                        let flat_point_idx = mc_grid.flatten_point_index(&local_point);
+                        let flat_point_idx = flat_point_idx.to_usize().unwrap();
+                        levelset_grid[flat_point_idx] += interpolated_value;
+
+                        if levelset_grid[flat_point_idx] > surface_threshold {
+                            for c in mc_grid
+                                .cells_adjacent_to_point(
+                                    &mc_grid.get_point_neighborhood(&local_point),
+                                )
+                                .iter()
+                                .flatten()
+                            {
+                                let flat_cell_index = mc_grid.flatten_cell_index(c);
+                                index_cache.push(flat_cell_index);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 pub(crate) fn reconstruction<I: Index, R: Real>(
     parameters: &ParametersSubdomainGrid<I, R>,
     global_particles: &[Vector3<R>],
@@ -1265,204 +1344,9 @@ pub(crate) fn reconstruction<I: Index, R: Real>(
 
     let workspace_tls = ThreadLocal::<RefCell<SubdomainWorkspace<I, R>>>::new();
 
-    let reconstruct_dense = |flat_subdomain_idx: I, subdomain_particle_indices: &Vec<usize>| {
-        // Obtain thread local workspace and clear it
-        let mut workspace = workspace_tls.get_or_default().borrow_mut();
-
-        let SubdomainWorkspace {
-            subdomain_particles,
-            subdomain_particle_densities,
-            levelset_grid,
-            index_cache: _index_cache,
-        } = &mut *workspace;
-
-        let flat_subdomain_idx: I = flat_subdomain_idx;
-        let subdomain_particle_indices: &[usize] = subdomain_particle_indices.as_slice();
-
-        // Collect all particle positions and densities of this subdomain
-        {
-            //profile!("collect subdomain data");
-            gather_subdomain_data(
-                global_particles,
-                subdomain_particle_indices,
-                subdomain_particles,
-            );
-            gather_subdomain_data(
-                global_particle_densities,
-                subdomain_particle_indices,
-                subdomain_particle_densities,
-            );
-        }
-
-        // Get the cell index and AABB of the subdomain
-        let subdomain_idx = parameters
-            .subdomain_grid
-            .try_unflatten_cell_index(flat_subdomain_idx)
-            .expect("Subdomain cell does not exist");
-        let subdomain_aabb = parameters.subdomain_grid.cell_aabb(&subdomain_idx);
-
-        let mc_grid = UniformCartesianCubeGrid3d::new(
-            subdomain_aabb.min(),
-            &[parameters.subdomain_cubes; 3],
-            parameters.cube_size,
-        )
-        .unwrap();
-
-        levelset_grid.fill(R::zero());
-        levelset_grid.resize(mc_total_points.to_usize().unwrap(), R::zero());
-
-        use std::any::TypeId;
-        use std::mem::transmute;
-        if enable_simd
-            && TypeId::of::<I>() == TypeId::of::<i64>()
-            && TypeId::of::<R>() == TypeId::of::<f32>()
-        {
-            density_grid_loop_auto(
-                unsafe { transmute::<&mut [R], &mut [f32]>(levelset_grid.as_mut_slice()) },
-                unsafe {
-                    transmute::<&[Vector3<R>], &[Vector3<f32>]>(subdomain_particles.as_slice())
-                },
-                unsafe { transmute::<&[R], &[f32]>(subdomain_particle_densities.as_slice()) },
-                unsafe {
-                    transmute::<
-                        &UniformCartesianCubeGrid3d<I, R>,
-                        &UniformCartesianCubeGrid3d<i64, f32>,
-                    >(&mc_grid)
-                },
-                &subdomain_idx.index().map(|i| i.to_i64().unwrap()),
-                unsafe {
-                    transmute::<
-                        &UniformCartesianCubeGrid3d<GlobalIndex, R>,
-                        &UniformCartesianCubeGrid3d<GlobalIndex, f32>,
-                    >(&parameters.global_marching_cubes_grid)
-                },
-                cube_radius.to_i64().unwrap(),
-                squared_support_with_margin.to_f32().unwrap(),
-                parameters.particle_rest_mass.to_f32().unwrap(),
-                &CubicSplineKernel::new(parameters.compact_support_radius.to_f32().unwrap()),
-            );
-        } else {
-            density_grid_loop_scalar(
-                levelset_grid.as_mut_slice(),
-                subdomain_particles.as_slice(),
-                subdomain_particle_densities.as_slice(),
-                &mc_grid,
-                &subdomain_idx.index(),
-                &parameters.global_marching_cubes_grid,
-                cube_radius,
-                squared_support_with_margin,
-                parameters.particle_rest_mass,
-                &kernel,
-            );
-        }
-
-        let mut vertices = Vec::new();
-        let mut triangles = Vec::new();
-
-        let mut vertex_inside_count = 0;
-        let mut triangle_inside_count = 0;
-
-        let mut vertex_inside_flags = Vec::new();
-        let mut triangle_inside_flags = Vec::new();
-
-        let mut exterior_vertex_edge_indices = Vec::new();
-
-        let mut edge_to_vertex = new_map();
-
-        {
-            profile!("mc triangulation loop");
-
-            for flat_cell_idx in I::range(I::zero(), mc_total_cells).iter() {
-                let cell = mc_grid.try_unflatten_cell_index(flat_cell_idx).unwrap();
-
-                let mut vertices_inside = [true; 8];
-                for local_point_index in 0..8 {
-                    let point = cell.global_point_index_of(local_point_index).unwrap();
-                    let flat_point_idx = mc_grid.flatten_point_index(&point);
-                    let flat_point_idx = flat_point_idx.to_usize().unwrap();
-                    // Get value of density map
-                    let density_value = levelset_grid[flat_point_idx];
-                    // Update inside/outside surface flag
-                    vertices_inside[local_point_index] =
-                        density_value > parameters.surface_threshold;
-                }
-
-                for triangle in marching_cubes_triangulation_iter(&vertices_inside) {
-                    let mut global_triangle = [0; 3];
-                    for (v_idx, local_edge_index) in triangle.iter().copied().enumerate() {
-                        let edge = cell
-                            .global_edge_index_of(local_edge_index as usize)
-                            .unwrap();
-                        let vertex_index = *edge_to_vertex.entry(edge).or_insert_with(|| {
-                            // TODO: Nonlinear interpolation
-
-                            let origin_coords = mc_grid.point_coordinates(edge.origin());
-                            let target_coords = mc_grid.point_coordinates(&edge.target());
-
-                            let flat_origin_idx = mc_grid
-                                .flatten_point_index(edge.origin())
-                                .to_usize()
-                                .unwrap();
-                            let flat_target_idx = mc_grid
-                                .flatten_point_index(&edge.target())
-                                .to_usize()
-                                .unwrap();
-
-                            let origin_value = levelset_grid[flat_origin_idx];
-                            let target_value = levelset_grid[flat_target_idx];
-
-                            let alpha = (parameters.surface_threshold - origin_value)
-                                / (target_value - origin_value);
-                            let interpolated_coords =
-                                origin_coords * (R::one() - alpha) + target_coords * alpha;
-                            let vertex_coords = interpolated_coords;
-
-                            vertices.push(vertex_coords);
-                            let vertex_index = vertices.len() - 1;
-
-                            let is_interior_vertex = !mc_grid.is_boundary_edge(&edge);
-                            vertex_inside_count += is_interior_vertex as usize;
-                            vertex_inside_flags.push(is_interior_vertex);
-
-                            if !is_interior_vertex {
-                                exterior_vertex_edge_indices.push(globalize_local_edge(
-                                    &mc_grid,
-                                    &parameters.subdomain_grid,
-                                    flat_subdomain_idx,
-                                    &edge,
-                                ));
-                            }
-
-                            vertex_index
-                        });
-
-                        global_triangle[v_idx] = vertex_index;
-                    }
-
-                    let all_tri_vertices_inside = global_triangle
-                        .iter()
-                        .copied()
-                        .all(|v_idx| vertex_inside_flags[v_idx]);
-
-                    triangles.push(global_triangle);
-                    triangle_inside_count += all_tri_vertices_inside as usize;
-                    triangle_inside_flags.push(all_tri_vertices_inside);
-                }
-            }
-        }
-
-        SurfacePatch {
-            vertices,
-            triangles,
-            vertex_inside_count,
-            triangle_inside_count,
-            vertex_inside_flags,
-            triangle_inside_flags,
-            exterior_vertex_edge_indices,
-        }
-    };
-
-    let reconstruct_sparse = |flat_subdomain_idx: I, subdomain_particle_indices: &Vec<usize>| {
+    let reconstruct_patch = |flat_subdomain_idx: I,
+                             subdomain_particle_indices: &Vec<usize>,
+                             sparse: bool| {
         // Obtain thread local workspace and clear it
         let mut workspace = workspace_tls.get_or_default().borrow_mut();
 
@@ -1510,72 +1394,65 @@ pub(crate) fn reconstruction<I: Index, R: Real>(
 
         index_cache.clear();
 
-        {
-            profile!("density grid loop");
-            for (p_i, rho_i) in subdomain_particles
-                .iter()
-                .copied()
-                .zip(subdomain_particle_densities.iter().copied())
+        if sparse {
+            density_grid_loop_sparse(
+                levelset_grid.as_mut_slice(),
+                index_cache,
+                subdomain_particles.as_slice(),
+                subdomain_particle_densities.as_slice(),
+                &mc_grid,
+                &subdomain_idx.index(),
+                &parameters.global_marching_cubes_grid,
+                cube_radius,
+                squared_support_with_margin,
+                parameters.particle_rest_mass,
+                parameters.surface_threshold,
+                &kernel,
+            );
+        } else {
+            use std::any::TypeId;
+            use std::mem::transmute;
+            if enable_simd
+                && TypeId::of::<I>() == TypeId::of::<i64>()
+                && TypeId::of::<R>() == TypeId::of::<f32>()
             {
-                let (lower, upper) = particle_influence_aabb(&p_i, &mc_grid, cube_radius);
-
-                // Loop over all grid points around the enclosing cell
-                for i in I::range(lower[0], upper[0]).iter() {
-                    for j in I::range(lower[1], upper[1]).iter() {
-                        for k in I::range(lower[2], upper[2]).iter() {
-                            let point_ijk = [i, j, k];
-                            let local_point = mc_grid
-                                .get_point(point_ijk)
-                                .expect("point has to be part of the subdomain grid");
-
-                            let subdomain_ijk = subdomain_idx.index();
-                            let mc_cells_per_subdomain = mc_grid.cells_per_dim();
-
-                            // Use global coordinate calculation for consistency with neighboring domains
-                            let global_point_ijk = local_to_global_point_ijk(
-                                point_ijk,
-                                *subdomain_ijk,
-                                *mc_cells_per_subdomain,
-                            );
-                            let global_point = parameters
-                                .global_marching_cubes_grid
-                                .get_point(global_point_ijk)
-                                .expect("point has to be part of the global mc grid");
-                            let point_coordinates = parameters
-                                .global_marching_cubes_grid
-                                .point_coordinates(&global_point);
-
-                            let dx = p_i - point_coordinates;
-                            let dx_norm_sq = dx.norm_squared();
-
-                            if dx_norm_sq < squared_support_with_margin {
-                                let v_i = parameters.particle_rest_mass / rho_i;
-                                let r = dx_norm_sq.sqrt();
-                                let w_ij = kernel.evaluate(r);
-                                //let w_ij = kernel.evaluate(dx_norm_sq);
-
-                                let interpolated_value = v_i * w_ij;
-
-                                let flat_point_idx = mc_grid.flatten_point_index(&local_point);
-                                let flat_point_idx = flat_point_idx.to_usize().unwrap();
-                                levelset_grid[flat_point_idx] += interpolated_value;
-
-                                if levelset_grid[flat_point_idx] > parameters.surface_threshold {
-                                    for c in mc_grid
-                                        .cells_adjacent_to_point(
-                                            &mc_grid.get_point_neighborhood(&local_point),
-                                        )
-                                        .iter()
-                                        .flatten()
-                                    {
-                                        let flat_cell_index = mc_grid.flatten_cell_index(c);
-                                        index_cache.push(flat_cell_index);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+                density_grid_loop_auto(
+                    unsafe { transmute::<&mut [R], &mut [f32]>(levelset_grid.as_mut_slice()) },
+                    unsafe {
+                        transmute::<&[Vector3<R>], &[Vector3<f32>]>(subdomain_particles.as_slice())
+                    },
+                    unsafe { transmute::<&[R], &[f32]>(subdomain_particle_densities.as_slice()) },
+                    unsafe {
+                        transmute::<
+                            &UniformCartesianCubeGrid3d<I, R>,
+                            &UniformCartesianCubeGrid3d<i64, f32>,
+                        >(&mc_grid)
+                    },
+                    &subdomain_idx.index().map(|i| i.to_i64().unwrap()),
+                    unsafe {
+                        transmute::<
+                            &UniformCartesianCubeGrid3d<GlobalIndex, R>,
+                            &UniformCartesianCubeGrid3d<GlobalIndex, f32>,
+                        >(&parameters.global_marching_cubes_grid)
+                    },
+                    cube_radius.to_i64().unwrap(),
+                    squared_support_with_margin.to_f32().unwrap(),
+                    parameters.particle_rest_mass.to_f32().unwrap(),
+                    &CubicSplineKernel::new(parameters.compact_support_radius.to_f32().unwrap()),
+                );
+            } else {
+                density_grid_loop_scalar(
+                    levelset_grid.as_mut_slice(),
+                    subdomain_particles.as_slice(),
+                    subdomain_particle_densities.as_slice(),
+                    &mc_grid,
+                    &subdomain_idx.index(),
+                    &parameters.global_marching_cubes_grid,
+                    cube_radius,
+                    squared_support_with_margin,
+                    parameters.particle_rest_mass,
+                    &kernel,
+                );
             }
         }
 
@@ -1592,85 +1469,94 @@ pub(crate) fn reconstruction<I: Index, R: Real>(
 
         let mut edge_to_vertex = new_map();
 
+        let mut triangulate_cell = |flat_cell_idx: I| {
+            let cell = mc_grid.try_unflatten_cell_index(flat_cell_idx).unwrap();
+
+            let mut vertices_inside = [true; 8];
+            for local_point_index in 0..8 {
+                let point = cell.global_point_index_of(local_point_index).unwrap();
+                let flat_point_idx = mc_grid.flatten_point_index(&point);
+                let flat_point_idx = flat_point_idx.to_usize().unwrap();
+                // Get value of density map
+                let density_value = levelset_grid[flat_point_idx];
+                // Update inside/outside surface flag
+                vertices_inside[local_point_index] = density_value > parameters.surface_threshold;
+            }
+
+            for triangle in marching_cubes_triangulation_iter(&vertices_inside) {
+                let mut global_triangle = [0; 3];
+                for (v_idx, local_edge_index) in triangle.iter().copied().enumerate() {
+                    let edge = cell
+                        .global_edge_index_of(local_edge_index as usize)
+                        .unwrap();
+                    let vertex_index = *edge_to_vertex.entry(edge).or_insert_with(|| {
+                        // TODO: Nonlinear interpolation
+
+                        let origin_coords = mc_grid.point_coordinates(edge.origin());
+                        let target_coords = mc_grid.point_coordinates(&edge.target());
+
+                        let flat_origin_idx = mc_grid
+                            .flatten_point_index(edge.origin())
+                            .to_usize()
+                            .unwrap();
+                        let flat_target_idx = mc_grid
+                            .flatten_point_index(&edge.target())
+                            .to_usize()
+                            .unwrap();
+
+                        let origin_value = levelset_grid[flat_origin_idx];
+                        let target_value = levelset_grid[flat_target_idx];
+
+                        let alpha = (parameters.surface_threshold - origin_value)
+                            / (target_value - origin_value);
+                        let interpolated_coords =
+                            origin_coords * (R::one() - alpha) + target_coords * alpha;
+                        let vertex_coords = interpolated_coords;
+
+                        vertices.push(vertex_coords);
+                        let vertex_index = vertices.len() - 1;
+
+                        let is_interior_vertex = !mc_grid.is_boundary_edge(&edge);
+                        vertex_inside_count += is_interior_vertex as usize;
+                        vertex_inside_flags.push(is_interior_vertex);
+
+                        if !is_interior_vertex {
+                            exterior_vertex_edge_indices.push(globalize_local_edge(
+                                &mc_grid,
+                                &parameters.subdomain_grid,
+                                flat_subdomain_idx,
+                                &edge,
+                            ));
+                        }
+
+                        vertex_index
+                    });
+
+                    global_triangle[v_idx] = vertex_index;
+                }
+
+                let all_tri_vertices_inside = global_triangle
+                    .iter()
+                    .copied()
+                    .all(|v_idx| vertex_inside_flags[v_idx]);
+
+                triangles.push(global_triangle);
+                triangle_inside_count += all_tri_vertices_inside as usize;
+                triangle_inside_flags.push(all_tri_vertices_inside);
+            }
+        };
+
         {
             profile!("mc triangulation loop");
 
-            index_cache.sort_unstable();
-            for flat_cell_idx in index_cache.iter().copied().dedup() {
-                let cell = mc_grid.try_unflatten_cell_index(flat_cell_idx).unwrap();
-
-                let mut vertices_inside = [true; 8];
-                for local_point_index in 0..8 {
-                    let point = cell.global_point_index_of(local_point_index).unwrap();
-                    let flat_point_idx = mc_grid.flatten_point_index(&point);
-                    let flat_point_idx = flat_point_idx.to_usize().unwrap();
-                    // Get value of density map
-                    let density_value = levelset_grid[flat_point_idx];
-                    // Update inside/outside surface flag
-                    vertices_inside[local_point_index] =
-                        density_value > parameters.surface_threshold;
+            if sparse {
+                index_cache.sort_unstable();
+                for flat_cell_idx in index_cache.iter().copied().dedup() {
+                    triangulate_cell(flat_cell_idx);
                 }
-
-                for triangle in marching_cubes_triangulation_iter(&vertices_inside) {
-                    let mut global_triangle = [0; 3];
-                    for (v_idx, local_edge_index) in triangle.iter().copied().enumerate() {
-                        let edge = cell
-                            .global_edge_index_of(local_edge_index as usize)
-                            .unwrap();
-                        let vertex_index = *edge_to_vertex.entry(edge).or_insert_with(|| {
-                            // TODO: Nonlinear interpolation
-
-                            let origin_coords = mc_grid.point_coordinates(edge.origin());
-                            let target_coords = mc_grid.point_coordinates(&edge.target());
-
-                            let flat_origin_idx = mc_grid
-                                .flatten_point_index(edge.origin())
-                                .to_usize()
-                                .unwrap();
-                            let flat_target_idx = mc_grid
-                                .flatten_point_index(&edge.target())
-                                .to_usize()
-                                .unwrap();
-
-                            let origin_value = levelset_grid[flat_origin_idx];
-                            let target_value = levelset_grid[flat_target_idx];
-
-                            let alpha = (parameters.surface_threshold - origin_value)
-                                / (target_value - origin_value);
-                            let interpolated_coords =
-                                origin_coords * (R::one() - alpha) + target_coords * alpha;
-                            let vertex_coords = interpolated_coords;
-
-                            vertices.push(vertex_coords);
-                            let vertex_index = vertices.len() - 1;
-
-                            let is_interior_vertex = !mc_grid.is_boundary_edge(&edge);
-                            vertex_inside_count += is_interior_vertex as usize;
-                            vertex_inside_flags.push(is_interior_vertex);
-
-                            if !is_interior_vertex {
-                                exterior_vertex_edge_indices.push(globalize_local_edge(
-                                    &mc_grid,
-                                    &parameters.subdomain_grid,
-                                    flat_subdomain_idx,
-                                    &edge,
-                                ));
-                            }
-
-                            vertex_index
-                        });
-
-                        global_triangle[v_idx] = vertex_index;
-                    }
-
-                    let all_tri_vertices_inside = global_triangle
-                        .iter()
-                        .copied()
-                        .all(|v_idx| vertex_inside_flags[v_idx]);
-
-                    triangles.push(global_triangle);
-                    triangle_inside_count += all_tri_vertices_inside as usize;
-                    triangle_inside_flags.push(all_tri_vertices_inside);
+            } else {
+                for flat_cell_idx in I::range(I::zero(), mc_total_cells).iter() {
+                    triangulate_cell(flat_cell_idx);
                 }
             }
         }
@@ -1697,10 +1583,10 @@ pub(crate) fn reconstruction<I: Index, R: Real>(
             //  If support radius is huge, the dense method might be better even for few particles
             if subdomain_particle_indices.len() <= sparse_limit {
                 profile!("subdomain reconstruction (sparse)", parent = parent);
-                reconstruct_sparse(flat_subdomain_idx, subdomain_particle_indices)
+                reconstruct_patch(flat_subdomain_idx, subdomain_particle_indices, true)
             } else {
                 profile!("subdomain reconstruction (dense)", parent = parent);
-                reconstruct_dense(flat_subdomain_idx, subdomain_particle_indices)
+                reconstruct_patch(flat_subdomain_idx, subdomain_particle_indices, false)
             }
         })
         .collect_into_vec(&mut surface_patches);
