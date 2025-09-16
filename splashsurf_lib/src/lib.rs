@@ -247,6 +247,8 @@ impl<R: Real> Parameters<R> {
 pub struct SurfaceReconstruction<I: Scalar, R: Scalar + Send + Default> {
     /// Background grid that was used as a basis for generating the density map for marching cubes
     pub grid: UniformGrid<I, R>,
+    /// If spatial decomposition was used, this contains the grid of subdomains
+    pub subdomain_grid: Option<UniformGrid<I, R>>,
     /// Per particle densities (contains only data of particles inside the domain)
     pub particle_densities: Option<Vec<R>>,
     /// If an AABB was specified to restrict the reconstruction, this stores per input particle whether they were inside
@@ -264,6 +266,7 @@ impl<I: Index, R: Real> Default for SurfaceReconstruction<I, R> {
     fn default() -> Self {
         Self {
             grid: UniformGrid::new_zero(),
+            subdomain_grid: None,
             particle_densities: None,
             particle_neighbors: None,
             particle_inside_aabb: None,

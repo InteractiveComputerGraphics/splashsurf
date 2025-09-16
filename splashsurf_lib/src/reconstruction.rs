@@ -1,6 +1,6 @@
 use crate::dense_subdomains::{
-    compute_global_densities_and_neighbors, decomposition, initialize_parameters, reconstruction,
-    stitching, subdomain_classification::GhostMarginClassifier,
+    compute_global_densities_and_neighbors, decomposition, initialize_parameters,
+    reconstruct_subdomains, stitching, subdomain_classification::GhostMarginClassifier,
 };
 use crate::mesh::TriMesh3d;
 use crate::uniform_grid::UniformGrid;
@@ -23,6 +23,7 @@ pub(crate) fn reconstruct_surface_subdomain_grid<I: Index, R: Real>(
 
     let internal_parameters =
         initialize_parameters(parameters, particle_positions, output_surface)?;
+    output_surface.subdomain_grid = Some(internal_parameters.subdomain_grid.clone());
     output_surface.grid = internal_parameters
         .global_marching_cubes_grid()
         .context("failed to convert global marching cubes grid")?;
@@ -36,7 +37,7 @@ pub(crate) fn reconstruct_surface_subdomain_grid<I: Index, R: Real>(
         &subdomains,
     );
 
-    let surface_patches = reconstruction(
+    let surface_patches = reconstruct_subdomains(
         &internal_parameters,
         particle_positions,
         &particle_densities,

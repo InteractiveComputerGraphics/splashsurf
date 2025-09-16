@@ -4,3 +4,4 @@ pub mod test_full;
 pub mod test_mesh;
 pub mod test_neighborhood_search;
 pub mod test_simple;
+pub mod test_subdomains;

@@ -1,5 +1,9 @@
+//! Internal functions related to the subdomain-based parallel surface reconstruction
+//!
+//! Note that we do not guarantee API stability of these functions, they are only exposed for
+//! testing and benchmarking purposes.
+
 use anyhow::{Context, anyhow};
-use arrayvec::ArrayVec;
 use itertools::Itertools;
 use log::{info, trace};
 use nalgebra::Vector3;
@@ -34,27 +38,27 @@ type GlobalIndex = i64;
 pub(crate) struct ParametersSubdomainGrid<I: Index, R: Real> {
     /// SPH particle radius (in simulation units)
     #[allow(unused)]
-    particle_radius: R,
+    pub particle_radius: R,
     /// Rest mass of each particle
-    particle_rest_mass: R,
+    pub particle_rest_mass: R,
     /// SPH kernel compact support radius (in simulation units)
-    compact_support_radius: R,
+    pub compact_support_radius: R,
     /// Density value for the iso-surface
-    surface_threshold: R,
+    pub surface_threshold: R,
     /// MC cube size (in simulation units)
-    cube_size: R,
+    pub cube_size: R,
     /// Size of a subdomain in multiples of MC cubes
-    subdomain_cubes: I,
+    pub subdomain_cubes: I,
     /// Margin for ghost particles around each subdomain
-    ghost_particle_margin: R,
+    pub ghost_particle_margin: R,
     /// Implicit global MC background grid (required to compute consistent float coordinates at domain boundaries)
-    global_marching_cubes_grid: UniformCartesianCubeGrid3d<GlobalIndex, R>,
+    pub global_marching_cubes_grid: UniformCartesianCubeGrid3d<GlobalIndex, R>,
     /// Implicit subdomain grid
-    subdomain_grid: UniformCartesianCubeGrid3d<I, R>,
+    pub subdomain_grid: UniformCartesianCubeGrid3d<I, R>,
     /// Chunk size for chunked parallel processing
-    chunk_size: usize,
+    pub chunk_size: usize,
     /// Whether to return the global particle neighborhood list instead of only using per-domain lists internally
-    global_neighborhood_list: bool,
+    pub global_neighborhood_list: bool,
 }
 
 impl<I: Index, R: Real> ParametersSubdomainGrid<I, R> {
@@ -142,13 +146,6 @@ pub(crate) fn initialize_parameters<I: Index, R: Real>(
             ghost_particle_margin / cube_size,
             ghost_particle_margin / (cube_size * subdomain_cubes.to_real_unchecked())
         );
-
-        if ghost_margin_cubes > subdomain_cubes {
-            panic!(
-                "The ghost margin is {ghost_margin_cubes} cubes wide (rounded up), while the subdomain only has an extent of {subdomain_cubes} cubes. The subdomain has to have at least the same number of cubes ({})!",
-                ghost_margin_cubes
-            );
-        }
     }
 
     // AABB of the particles
@@ -559,6 +556,7 @@ pub(crate) fn compute_global_densities_and_neighbors<I: Index, R: Real>(
                 .expect("Subdomain cell does not exist");
             let subdomain_aabb = parameters.subdomain_grid.cell_aabb(&subdomain_idx);
 
+            // AABB used for neighborhood search, must encompass all particles, including ghost particles
             let margin_aabb = {
                 let mut margin_aabb = subdomain_aabb.clone();
                 // TODO: Verify if we can omit this extra margin?
@@ -1214,7 +1212,7 @@ pub fn density_grid_loop_sparse<I: Index, R: Real, K: SymmetricKernel3d<R>>(
     }
 }
 
-pub(crate) fn reconstruction<I: Index, R: Real>(
+pub(crate) fn reconstruct_subdomains<I: Index, R: Real>(
     parameters: &ParametersSubdomainGrid<I, R>,
     global_particles: &[Vector3<R>],
     global_particle_densities: &[R],
@@ -1473,6 +1471,7 @@ pub(crate) fn reconstruction<I: Index, R: Real>(
             let cell = mc_grid.try_unflatten_cell_index(flat_cell_idx).unwrap();
 
             let mut vertices_inside = [true; 8];
+            let mut any_inside = false;
             for local_point_index in 0..8 {
                 let point = cell.global_point_index_of(local_point_index).unwrap();
                 let flat_point_idx = mc_grid.flatten_point_index(&point);
@@ -1480,7 +1479,14 @@ pub(crate) fn reconstruction<I: Index, R: Real>(
                 // Get value of density map
                 let density_value = levelset_grid[flat_point_idx];
                 // Update inside/outside surface flag
-                vertices_inside[local_point_index] = density_value > parameters.surface_threshold;
+                let vertex_inside = density_value > parameters.surface_threshold;
+                any_inside |= vertex_inside;
+                vertices_inside[local_point_index] = vertex_inside;
+            }
+
+            if !any_inside {
+                // No vertices inside surface, skip triangulation
+                return;
             }
 
             for triangle in marching_cubes_triangulation_iter(&vertices_inside) {
@@ -1762,15 +1768,15 @@ pub(crate) mod subdomain_classification {
         fn get(&self, i: usize) -> I;
     }
 
-    /// Classifier that assign a particle to its owning subdomain and all subdomains where it's a ghost particle
+    /// Classifier that assign a particle to its "owning" subdomain and all subdomains where it's a ghost particle
     pub struct GhostMarginClassifier<I: Index> {
-        subdomains: ArrayVec<I, 27>,
+        subdomains: Vec<I>,
     }
 
     impl<I: Index, R: Real> ParticleToSubdomainClassifier<I, R> for GhostMarginClassifier<I> {
         fn new() -> Self {
             GhostMarginClassifier {
-                subdomains: ArrayVec::new(),
+                subdomains: Vec::with_capacity(27),
             }
         }
 
@@ -1805,14 +1811,25 @@ pub(crate) mod subdomain_classification {
         particle: &Vector3<R>,
         subdomain_grid: &UniformCartesianCubeGrid3d<I, R>,
         ghost_particle_margin: R,
-        subdomains: &mut ArrayVec<I, 27>,
+        subdomains: &mut Vec<I>,
     ) {
         // Find the owning subdomain of the particle
         let subdomain_ijk = subdomain_grid.enclosing_cell(particle);
         // Make sure particle is part of computational domain
         if subdomain_grid.get_cell(subdomain_ijk).is_none() {
+            // TODO: When/why does this occur?
             return;
         }
+
+        let dx = subdomain_grid.cell_size();
+
+        // The number of subdomains that have to be checked in each direction
+        let subdomain_radius = I::from((ghost_particle_margin / dx).ceil())
+            .map(|i| i.to_i32())
+            .flatten()
+            .expect(
+                "ghost particle margin relative to subdomains has to fit in index type and i32",
+            );
 
         // Get corner points spanning the owning subdomain
         let subdomain_aabb = subdomain_grid.cell_aabb(
@@ -1824,36 +1841,42 @@ pub(crate) mod subdomain_classification {
         let max_corner = subdomain_aabb.max();
 
         // Checks whether the current particle is within the ghost particle margin of the half plane reached by the given step and along an axis
-        let is_in_ghost_margin_single_dim = |step: i8, axis: usize| -> bool {
-            match step {
-                -1 => particle[axis] - min_corner[axis] < ghost_particle_margin,
-                0 => true,
-                1 => max_corner[axis] - particle[axis] < ghost_particle_margin,
-                _ => unsafe { std::hint::unreachable_unchecked() },
+        let is_in_ghost_margin_single_dim = |step: i32, axis: usize| -> bool {
+            let step_offset_real = R::from(step.abs() - 1).unwrap();
+            if step > 0 {
+                ((max_corner[axis] + step_offset_real * dx) - particle[axis])
+                    < ghost_particle_margin
+            } else if step < 0 {
+                (particle[axis] - (min_corner[axis] - step_offset_real * dx))
+                    < ghost_particle_margin
+            } else {
+                // step == 0
+                true
             }
         };
 
         // Checks whether the current particle is within the ghost particle margin of the neighbor subdomain reached by the given steps
-        let is_in_ghost_margin = |x_step: i8, y_step: i8, z_step: i8| -> bool {
+        let is_in_ghost_margin = |x_step: i32, y_step: i32, z_step: i32| -> bool {
             is_in_ghost_margin_single_dim(x_step, 0)
                 && is_in_ghost_margin_single_dim(y_step, 1)
                 && is_in_ghost_margin_single_dim(z_step, 2)
         };
 
-        let checked_apply_step = |index: I, step: i8| -> Option<I> {
-            let direction = match step {
-                -1 => Some(Direction::Negative),
-                0 => None,
-                1 => Some(Direction::Positive),
-                _ => unsafe { std::hint::unreachable_unchecked() },
+        let checked_apply_step = |index: I, step: i32| -> Option<I> {
+            let direction = if step > 0 {
+                Some(Direction::Positive)
+            } else if step < 0 {
+                Some(Direction::Negative)
+            } else {
+                None
             };
             direction
-                .map(|d| d.checked_apply_step(index, I::one()))
+                .map(|d| d.checked_apply_step(index, I::from(step.abs()).unwrap()))
                 .unwrap_or(Some(index))
         };
 
         let checked_apply_step_ijk =
-            |ijk: [I; 3], x_step: i8, y_step: i8, z_step: i8| -> Option<[I; 3]> {
+            |ijk: [I; 3], x_step: i32, y_step: i32, z_step: i32| -> Option<[I; 3]> {
                 Some([
                     checked_apply_step(ijk[0], x_step)?,
                     checked_apply_step(ijk[1], y_step)?,
@@ -1861,10 +1884,11 @@ pub(crate) mod subdomain_classification {
                 ])
             };
 
-        for &i in &[-1, 0, 1] {
-            for &j in &[-1, 0, 1] {
-                for &k in &[-1, 0, 1] {
-                    // Check if the particle is in the ghost particle margin of the current subdomain
+        let r = subdomain_radius;
+        for i in -r..=r {
+            for j in -r..=r {
+                for k in -r..=r {
+                    // Check if the particle is in the ghost particle margin of the subdomain i,j,k
                     let in_ghost_margin = is_in_ghost_margin(i, j, k);
 
                     if in_ghost_margin {
