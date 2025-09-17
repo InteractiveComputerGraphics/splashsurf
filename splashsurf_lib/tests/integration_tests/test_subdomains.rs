@@ -1,6 +1,7 @@
 use all_asserts::assert_range;
 use nalgebra::Vector3;
 use splashsurf_lib::GridDecompositionParameters;
+#[cfg(feature = "io")]
 use splashsurf_lib::io::vtk_format::write_vtk;
 use splashsurf_lib::marching_cubes::check_mesh_consistency;
 use std::path::Path;
@@ -34,7 +35,14 @@ macro_rules! generate_single_particle_test {
 
             let reconstruction =
                 splashsurf_lib::reconstruct_surface::<i64, f32>(&particle_positions, &parameters)?;
-            write_vtk(&reconstruction.mesh, &output_file, "mesh")?;
+            #[cfg(feature = "io")]
+            {
+                write_vtk(&reconstruction.mesh, &output_file, "mesh")?;
+            }
+            #[cfg(not(feature = "io"))]
+            {
+                let _ = &output_file;
+            }
 
             assert_range!(
                 $range_tri,

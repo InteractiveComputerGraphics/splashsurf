@@ -104,13 +104,13 @@ jobs:
           key: ${{ runner.os }}-lib-all-cargo-${{ hashFiles('**/Cargo.lock') }}
       - name: Build
         run: |
-          cargo build --manifest-path="splashsurf_lib/Cargo.toml" --all-targets --all-features
+          cargo build --package splashsurf_lib --all-targets --all-features
       - name: Run tests
         run: |
-          cargo test --manifest-path="splashsurf_lib/Cargo.toml" --all-features
+          cargo test --package splashsurf_lib --all-features
       - name: Run tests release mode
         run: |
-          cargo test --manifest-path="splashsurf_lib/Cargo.toml" --release --all-features
+          cargo test --package splashsurf_lib --release --all-features
 
   build_lib_no_default_features:
     name: Build splashsurf_lib with no default features
@@ -134,10 +134,10 @@ jobs:
           key: ${{ runner.os }}-lib-no-default-cargo-${{ hashFiles('**/Cargo.lock') }}
       - name: Build
         run: |
-          cargo build --manifest-path="splashsurf_lib/Cargo.toml" --all-targets --no-default-features
+          cargo build --package splashsurf_lib --all-targets --no-default-features
       - name: Run tests
         run: |
-          cargo test --manifest-path="splashsurf_lib/Cargo.toml" --no-default-features
+          cargo test --package splashsurf_lib --no-default-features
 
   publish:
     name: Publish to crates.io
