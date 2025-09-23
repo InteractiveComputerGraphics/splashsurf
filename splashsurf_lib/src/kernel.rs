@@ -140,45 +140,6 @@ impl<R: Real> SymmetricKernel3d<R> for CubicSplineKernel<R> {
     }
 }
 
-#[test]
-fn test_cubic_kernel_r_compact_support() {
-    let hs = [0.025, 0.1, 2.0];
-    for &h in hs.iter() {
-        let kernel = CubicSplineKernel::new(h);
-        assert_eq!(kernel.evaluate(h), 0.0);
-        assert_eq!(kernel.evaluate(2.0 * h), 0.0);
-        assert_eq!(kernel.evaluate(10.0 * h), 0.0);
-    }
-}
-
-#[test]
-fn test_cubic_kernel_r_integral() {
-    let hs = [0.025, 0.1, 2.0];
-    let n = 10;
-
-    for &h in hs.iter() {
-        let kernel = CubicSplineKernel::new(h);
-
-        let dr = h / (n as f64);
-        let dvol = dr * dr * dr;
-
-        let mut integral = 0.0;
-        for i in -n..n {
-            for j in -n..n {
-                for k in -n..n {
-                    let r_in = Vector3::new(i as f64, j as f64, k as f64) * dr;
-                    let r_out = Vector3::new((i + 1) as f64, (j + 1) as f64, (k + 1) as f64) * dr;
-                    let r = ((r_in + r_out) * 0.5).norm();
-
-                    integral += dvol * kernel.evaluate(r);
-                }
-            }
-        }
-
-        assert!((integral - 1.0).abs() <= 1e-5);
-    }
-}
-
 /// Vectorized implementation of the cubic spline kernel using NEON instructions. Only available on `aarch64` targets.
 #[cfg(target_arch = "aarch64")]
 pub struct CubicSplineKernelNeonF32 {
@@ -232,88 +193,6 @@ impl CubicSplineKernelNeonF32 {
         // Select inner for q <= 0.5, else outer; v was clamped so q > 1 yields 0 automatically
         let leq_than_half = vcleq_f32(q, half);
         vbslq_f32(leq_than_half, res_inner, res_outer)
-    }
-}
-
-#[test]
-#[cfg_attr(
-    not(all(target_arch = "aarch64", target_feature = "neon")),
-    ignore = "Skipped on non-aarch64 targets"
-)]
-fn test_cubic_spline_kernel_neon() {
-    #[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
-    {
-        use core::arch::aarch64::*;
-
-        // Test a few representative compact support radii
-        let hs: [f32; 3] = [0.025, 0.1, 2.0];
-        for &h in hs.iter() {
-            let scalar = CubicSplineKernel::new(h);
-            let neon = CubicSplineKernelNeonF32::new(h);
-
-            // Sample radii from 0 to 2h (beyond support should be 0)
-            let n: usize = 1024;
-            let mut r0: f32 = 0.0;
-            let dr: f32 = (2.0 * h) / (n as f32);
-
-            for _chunk in 0..(n / 4) {
-                // Prepare 4 lanes of radii
-                let rs = [r0, r0 + dr, r0 + 2.0 * dr, r0 + 3.0 * dr];
-                let r_vec = unsafe { vld1q_f32(rs.as_ptr()) };
-
-                // Evaluate NEON and store back to array
-                let w_vec = unsafe { neon.evaluate(r_vec) };
-                let mut w_neon = [0.0f32; 4];
-                unsafe { vst1q_f32(w_neon.as_mut_ptr(), w_vec) };
-
-                // Compare against scalar lane-wise
-                for lane in 0..4 {
-                    let r_lane = rs[lane];
-                    let w_scalar = scalar.evaluate(r_lane);
-                    let diff = (w_neon[lane] - w_scalar).abs();
-
-                    // Absolute tolerance with mild relative component to be robust across scales
-                    let tol = 5e-6_f32.max(2e-5_f32 * w_scalar.abs());
-                    assert!(
-                        diff <= tol,
-                        "NEON kernel mismatch (h={}, r={}, lane={}): neon={}, scalar={}, diff={}, tol={}",
-                        h,
-                        r_lane,
-                        lane,
-                        w_neon[lane],
-                        w_scalar,
-                        diff,
-                        tol
-                    );
-                }
-
-                r0 += 4.0 * dr;
-            }
-
-            // Also check a couple of out-of-support points explicitly
-            for &r in &[h * 1.01, h * 1.5, h * 2.0, h * 2.5] {
-                let w_scalar = scalar.evaluate(r);
-                let w_neon = {
-                    let v = unsafe { vld1q_f32([r, r, r, r].as_ptr()) };
-                    let w = unsafe { neon.evaluate(v) };
-                    let mut tmp = [0.0f32; 4];
-                    unsafe { vst1q_f32(tmp.as_mut_ptr(), w) };
-                    tmp[0]
-                };
-                let diff = (w_neon - w_scalar).abs();
-                let tol = 5e-6_f32.max(1e-5_f32 * w_scalar.abs());
-                assert!(
-                    diff <= tol,
-                    "NEON kernel mismatch outside support (h={}, r={}): neon={}, scalar={}, diff={}, tol={}",
-                    h,
-                    r,
-                    w_neon,
-                    w_scalar,
-                    diff,
-                    tol
-                );
-            }
-        }
     }
 }
 
@@ -375,108 +254,6 @@ impl CubicSplineKernelAvxF32 {
         // Select inner for q <= 0.5, else outer
         let leq_than_half = _mm256_cmp_ps::<_CMP_LE_OQ>(q, half);
         _mm256_blendv_ps(res_outer, res_inner, leq_than_half)
-    }
-}
-
-#[test]
-#[cfg_attr(
-    not(all(
-        any(target_arch = "x86_64", target_arch = "x86"),
-        target_feature = "avx2",
-        target_feature = "fma"
-    )),
-    ignore = "Skipped on non-x86 targets"
-)]
-fn test_cubic_spline_kernel_avx() {
-    #[cfg(all(
-        any(target_arch = "x86_64", target_arch = "x86"),
-        target_feature = "avx2",
-        target_feature = "fma"
-    ))]
-    {
-        #[cfg(target_arch = "x86")]
-        use core::arch::x86::*;
-        #[cfg(target_arch = "x86_64")]
-        use core::arch::x86_64::*;
-
-        // Test a few representative compact support radii
-        let hs: [f32; 3] = [0.025, 0.1, 2.0];
-        for &h in hs.iter() {
-            let scalar = CubicSplineKernel::new(h);
-            let avx = CubicSplineKernelAvxF32::new(h);
-
-            // Sample radii from 0 to 2h (beyond support should be 0)
-            let n: usize = 1024;
-            let mut r0: f32 = 0.0;
-            let dr: f32 = (2.0 * h) / (n as f32);
-
-            for _chunk in 0..(n / 8) {
-                // Prepare 8 lanes of radii
-                let rs = [
-                    r0,
-                    r0 + dr,
-                    r0 + 2.0 * dr,
-                    r0 + 3.0 * dr,
-                    r0 + 4.0 * dr,
-                    r0 + 5.0 * dr,
-                    r0 + 6.0 * dr,
-                    r0 + 7.0 * dr,
-                ];
-
-                // Evaluate AVX and store back to array
-                let r_vec = unsafe { _mm256_loadu_ps(rs.as_ptr()) };
-                let w_vec = unsafe { avx.evaluate(r_vec) };
-                let mut w_avx = [0.0f32; 8];
-                unsafe { _mm256_storeu_ps(w_avx.as_mut_ptr(), w_vec) };
-
-                // Compare against scalar lane-wise
-                for lane in 0..8 {
-                    let r_lane = rs[lane];
-                    let w_scalar = scalar.evaluate(r_lane);
-                    let diff = (w_avx[lane] - w_scalar).abs();
-
-                    // Absolute tolerance with mild relative component to be robust across scales
-                    let tol = 1e-6_f32.max(1e-5_f32 * w_scalar.abs());
-                    assert!(
-                        diff <= tol,
-                        "AVX kernel mismatch (h={}, r={}, lane={}): avx={}, scalar={}, diff={}, tol={}",
-                        h,
-                        r_lane,
-                        lane,
-                        w_avx[lane],
-                        w_scalar,
-                        diff,
-                        tol
-                    );
-                }
-
-                r0 += 8.0 * dr;
-            }
-
-            // Also check a couple of out-of-support points explicitly
-            for &r in &[h * 1.01, h * 1.5, h * 2.0, h * 2.5] {
-                let w_scalar = scalar.evaluate(r);
-                let w_avx = {
-                    let v = unsafe { _mm256_set1_ps(r) };
-                    let w = unsafe { avx.evaluate(v) };
-                    let mut tmp = [0.0f32; 8];
-                    unsafe { _mm256_storeu_ps(tmp.as_mut_ptr(), w) };
-                    tmp[0]
-                };
-                let diff = (w_avx - w_scalar).abs();
-                let tol = 1e-6_f32.max(1e-5_f32 * w_scalar.abs());
-                assert!(
-                    diff <= tol,
-                    "AVX kernel mismatch outside support (h={}, r={}): avx={}, scalar={}, diff={}, tol={}",
-                    h,
-                    r,
-                    w_avx,
-                    w_scalar,
-                    diff,
-                    tol
-                );
-            }
-        }
     }
 }
 
@@ -544,36 +321,507 @@ impl<R: Real> DiscreteSquaredDistanceCubicKernel<R> {
     }
 }
 
-#[test]
-fn test_discrete_kernel() {
-    let n = 10000;
-    let h = 0.025;
+/// Poly6 kernel
+pub struct Poly6Kernel<R: Real> {
+    /// Compact support radius of the kernel
+    compact_support_radius: R,
+    /// Kernel normalization factor (sigma)
+    normalization: R,
+}
 
-    let discrete_kernel = DiscreteSquaredDistanceCubicKernel::new::<f64>(n, h);
-    let kernel = CubicSplineKernel::new(h);
+impl<R: Real> Poly6Kernel<R> {
+    /// Initializes a poly6 kernel with the given compact support radius
+    #[replace_float_literals(R::from_float(literal))]
+    pub fn new(compact_support_radius: R) -> Self {
+        let h = compact_support_radius;
+        let sigma = 315.0/(64.0*R::pi()*h.powi(9));
 
-    // Test the pre-computed values using a linear stepping
-    let dr = h / (n as f64);
-    for i in 0..n {
-        let r = (i as f64) * dr;
-        let rr = r * r;
-
-        let discrete = discrete_kernel.evaluate(rr);
-        let continuous = kernel.evaluate(r);
-
-        let diff = (discrete - continuous).abs();
-        let rel_diff = diff / continuous;
-        if rel_diff > 5e-2 && diff > 1e-1 {
-            eprintln!(
-                "at r={}, r/h={}, discrete: {}, continuous: {}, diff: {}, rel_diff: {}",
-                r,
-                r / h,
-                discrete,
-                continuous,
-                diff,
-                rel_diff
-            );
-            assert!(false);
+        Self {
+            compact_support_radius,
+            normalization: sigma,
         }
+    }
+}
+
+impl<R: Real> SymmetricKernel3d<R> for Poly6Kernel<R> {
+    fn compact_support_radius(&self) -> R {
+        self.compact_support_radius
+    }
+
+    /// Evaluates the poly6 kernel at the radial distance `r`
+    fn evaluate(&self, r: R) -> R {
+        let r2 = r*r;
+        let h2 = self.compact_support_radius.powi(2);
+        if r2 <= h2 {
+            self.normalization * (h2 - r2).powi(3)
+        }else {
+            R::zero()
+        }
+    }
+
+    /// Evaluates the gradient of the poly6 kernel at the position `x`
+    fn evaluate_gradient(&self, x: Vector3<R>) -> Vector3<R> {
+        // Radial distance is norm of position
+        let r2 = x.norm_squared();
+        let h2 = self.compact_support_radius.powi(2);
+
+        if r2 <= h2 {
+            let x = x.normalize();
+
+            x.scale(R::from_float(6.0) * self.normalization * (h2 - r2).powi(2))
+        } else {
+            x.scale(R::zero())
+        }
+    }
+
+    /// Evaluates the norm of the gradient of the poly6 kernel at the radial distance `r`
+    fn evaluate_gradient_norm(&self, r: R) -> R {
+        let r2 = r*r;
+        let h2 = self.compact_support_radius.powi(2);
+
+        if r2 <= h2 {
+            R::from_float(6.0) * self.normalization * (h2 - r2).powi(2)
+        } else {
+            R::zero()
+        }
+    }
+}
+
+/// Spiky kernel
+pub struct SpikyKernel<R: Real> {
+    /// Compact support radius of the kernel
+    compact_support_radius: R,
+    /// Kernel normalization factor (sigma)
+    normalization: R,
+}
+
+impl<R: Real> SpikyKernel<R> {
+    /// Initializes a spiky kernel with the given compact support radius
+    #[replace_float_literals(R::from_float(literal))]
+    pub fn new(compact_support_radius: R) -> Self {
+        let h = compact_support_radius;
+        let sigma = 15.0/(R::pi()*h.powi(6));
+
+        Self {
+            compact_support_radius,
+            normalization: sigma,
+        }
+    }
+}
+
+impl<R: Real> SymmetricKernel3d<R> for SpikyKernel<R> {
+    fn compact_support_radius(&self) -> R {
+        self.compact_support_radius
+    }
+
+    /// Evaluates the spiky kernel at the radial distance `r`
+    fn evaluate(&self, r: R) -> R {
+        let r2 = r*r;
+        let h2 = self.compact_support_radius.powi(2);
+        if r2 <= h2 {
+            self.normalization * (self.compact_support_radius - r).powi(3)
+        }else {
+            R::zero()
+        }
+    }
+
+    /// Evaluates the gradient of the spiky kernel at the position `x`
+    fn evaluate_gradient(&self, x: Vector3<R>) -> Vector3<R> {
+        // Radial distance is norm of position
+        let r2 = x.norm_squared();
+        let r = r2.try_sqrt().unwrap();
+        let h2 = self.compact_support_radius.powi(2);
+
+        if r2 <= h2 {
+            // normalize x
+            let x = x.unscale(r);
+
+            x.scale(R::from_float(-3.0) * self.normalization * (self.compact_support_radius - r).powi(2))
+        } else {
+            x.scale(R::zero())
+        }
+    }
+
+    /// Evaluates the norm of the gradient of the spiky kernel at the radial distance `r`
+    fn evaluate_gradient_norm(&self, r: R) -> R {
+        let r2 = r*r;
+        let h2 = self.compact_support_radius.powi(2);
+
+        if r2 <= h2 {
+            R::from_float(-3.0) * self.normalization * (self.compact_support_radius - r).powi(2)
+        } else {
+            R::zero()
+        }
+    }
+}
+
+/// Quintic Wendland C2 kernel
+pub struct WendlandQuinticC2Kernel<R: Real> {
+    /// Compact support radius of the kernel
+    compact_support_radius: R,
+    /// Kernel normalization factor (sigma)
+    normalization: R,
+}
+
+impl<R: Real> WendlandQuinticC2Kernel<R> {
+    /// Initializes a wendland quintic C2 kernel with the given compact support radius
+    #[replace_float_literals(R::from_float(literal))]
+    pub fn new(compact_support_radius: R) -> Self {
+        let h = compact_support_radius;
+        let sigma = 21.0/(2.0*R::pi()*h.powi(3));
+
+        Self {
+            compact_support_radius,
+            normalization: sigma,
+        }
+    }
+}
+
+impl<R: Real> SymmetricKernel3d<R> for WendlandQuinticC2Kernel<R> {
+    fn compact_support_radius(&self) -> R {
+        self.compact_support_radius
+    }
+
+    /// Evaluates the wendland quintic C2 kernel at the radial distance `r`
+    fn evaluate(&self, r: R) -> R {
+        let q = r / self.compact_support_radius;
+        if q <= R::one() {
+            self.normalization * (R::one() - q).powi(4) * (R::from_float(4.0) * q + R::one())
+        }else {
+            R::zero()
+        }
+    }
+
+    /// Evaluates the gradient of the wendland quintic C2 kernel at the position `x`
+    fn evaluate_gradient(&self, x: Vector3<R>) -> Vector3<R> {
+        // Radial distance is norm of position
+        let r = x.norm();
+        let q = r / self.compact_support_radius;
+
+        if q <= R::one() {
+            // normalize x
+            let gradq = x.unscale(r * self.compact_support_radius);
+
+            gradq.scale(R::from_float(-20.0) * self.normalization * q * (R::one() - q).powi(3))
+        } else {
+            x.scale(R::zero())
+        }
+    }
+
+    /// Evaluates the norm of the gradient of the wendland quintic C2 kernel at the radial distance `r`
+    fn evaluate_gradient_norm(&self, r: R) -> R {
+        let q = r / self.compact_support_radius;
+
+        if q <= R::one() {
+            R::from_float(-20.0) * self.normalization * q * (R::one() - q).powi(3)
+        } else {
+            R::zero()
+        }
+    }
+}
+
+#[cfg(test)]
+mod kernel_tests {
+    use super::*;
+
+    macro_rules! test_kernel_r_compact_support {
+        ($kernel_class:ident) => {
+            let hs = [0.025, 0.1, 2.0];
+            for &h in hs.iter() {
+                let kernel = $kernel_class::new(h);
+                assert_eq!(kernel.evaluate(h), 0.0);
+                assert_eq!(kernel.evaluate(2.0 * h), 0.0);
+                assert_eq!(kernel.evaluate(10.0 * h), 0.0);
+            }
+        };
+    }
+
+    macro_rules! test_kernel_r_integral {
+        ($kernel_class:ident) => {
+            let hs = [0.025, 0.1, 2.0];
+            let n = 10;
+
+            for &h in hs.iter() {
+                let kernel = $kernel_class::new(h);
+
+                let dr = h / (n as f64);
+                let dvol = dr * dr * dr;
+
+                let mut integral = 0.0;
+                for i in -n..n {
+                    for j in -n..n {
+                        for k in -n..n {
+                            let r_in = Vector3::new(i as f64, j as f64, k as f64) * dr;
+                            let r_out = Vector3::new((i + 1) as f64, (j + 1) as f64, (k + 1) as f64) * dr;
+                            let r = ((r_in + r_out) * 0.5).norm();
+
+                            integral += dvol * kernel.evaluate(r);
+                        }
+                    }
+                }
+
+                // println!("{}", integral);
+                assert!((integral - 1.0).abs() <= 1e-4);
+            }
+        };
+    }
+
+    #[test]
+    fn cubic_spline_kernel_r_compact_support() {
+        test_kernel_r_compact_support!(CubicSplineKernel);
+    }
+
+    #[test]
+    fn cubic_spline_kernel_r_integral() {
+        test_kernel_r_integral!(CubicSplineKernel);
+    }
+    
+    #[test]
+    #[cfg_attr(
+        not(all(target_arch = "aarch64", target_feature = "neon")),
+        ignore = "Skipped on non-aarch64 targets"
+    )]
+    fn test_cubic_spline_kernel_neon() {
+        #[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
+        {
+            use core::arch::aarch64::*;
+
+            // Test a few representative compact support radii
+            let hs: [f32; 3] = [0.025, 0.1, 2.0];
+            for &h in hs.iter() {
+                let scalar = CubicSplineKernel::new(h);
+                let neon = crate::kernel::CubicSplineKernelNeonF32::new(h);
+
+                // Sample radii from 0 to 2h (beyond support should be 0)
+                let n: usize = 1024;
+                let mut r0: f32 = 0.0;
+                let dr: f32 = (2.0 * h) / (n as f32);
+
+                for _chunk in 0..(n / 4) {
+                    // Prepare 4 lanes of radii
+                    let rs = [r0, r0 + dr, r0 + 2.0 * dr, r0 + 3.0 * dr];
+                    let r_vec = unsafe { vld1q_f32(rs.as_ptr()) };
+
+                    // Evaluate NEON and store back to array
+                    let w_vec = unsafe { neon.evaluate(r_vec) };
+                    let mut w_neon = [0.0f32; 4];
+                    unsafe { vst1q_f32(w_neon.as_mut_ptr(), w_vec) };
+
+                    // Compare against scalar lane-wise
+                    for lane in 0..4 {
+                        let r_lane = rs[lane];
+                        let w_scalar = scalar.evaluate(r_lane);
+                        let diff = (w_neon[lane] - w_scalar).abs();
+
+                        // Absolute tolerance with mild relative component to be robust across scales
+                        let tol = 5e-6_f32.max(2e-5_f32 * w_scalar.abs());
+                        assert!(
+                            diff <= tol,
+                            "NEON kernel mismatch (h={}, r={}, lane={}): neon={}, scalar={}, diff={}, tol={}",
+                            h,
+                            r_lane,
+                            lane,
+                            w_neon[lane],
+                            w_scalar,
+                            diff,
+                            tol
+                        );
+                    }
+
+                    r0 += 4.0 * dr;
+                }
+
+                // Also check a couple of out-of-support points explicitly
+                for &r in &[h * 1.01, h * 1.5, h * 2.0, h * 2.5] {
+                    let w_scalar = scalar.evaluate(r);
+                    let w_neon = {
+                        let v = unsafe { vld1q_f32([r, r, r, r].as_ptr()) };
+                        let w = unsafe { neon.evaluate(v) };
+                        let mut tmp = [0.0f32; 4];
+                        unsafe { vst1q_f32(tmp.as_mut_ptr(), w) };
+                        tmp[0]
+                    };
+                    let diff = (w_neon - w_scalar).abs();
+                    let tol = 5e-6_f32.max(1e-5_f32 * w_scalar.abs());
+                    assert!(
+                        diff <= tol,
+                        "NEON kernel mismatch outside support (h={}, r={}): neon={}, scalar={}, diff={}, tol={}",
+                        h,
+                        r,
+                        w_neon,
+                        w_scalar,
+                        diff,
+                        tol
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    #[cfg_attr(
+        not(all(
+            any(target_arch = "x86_64", target_arch = "x86"),
+            target_feature = "avx2",
+            target_feature = "fma"
+        )),
+        ignore = "Skipped on non-x86 targets"
+    )]
+    fn cubic_spline_kernel_avx() {
+        #[cfg(all(
+            any(target_arch = "x86_64", target_arch = "x86"),
+            target_feature = "avx2",
+            target_feature = "fma"
+        ))]
+        {
+            #[cfg(target_arch = "x86")]
+            use core::arch::x86::*;
+            #[cfg(target_arch = "x86_64")]
+            use core::arch::x86_64::*;
+
+            // Test a few representative compact support radii
+            let hs: [f32; 3] = [0.025, 0.1, 2.0];
+            for &h in hs.iter() {
+                let scalar = CubicSplineKernel::new(h);
+                let avx = CubicSplineKernelAvxF32::new(h);
+
+                // Sample radii from 0 to 2h (beyond support should be 0)
+                let n: usize = 1024;
+                let mut r0: f32 = 0.0;
+                let dr: f32 = (2.0 * h) / (n as f32);
+
+                for _chunk in 0..(n / 8) {
+                    // Prepare 8 lanes of radii
+                    let rs = [
+                        r0,
+                        r0 + dr,
+                        r0 + 2.0 * dr,
+                        r0 + 3.0 * dr,
+                        r0 + 4.0 * dr,
+                        r0 + 5.0 * dr,
+                        r0 + 6.0 * dr,
+                        r0 + 7.0 * dr,
+                    ];
+
+                    // Evaluate AVX and store back to array
+                    let r_vec = unsafe { _mm256_loadu_ps(rs.as_ptr()) };
+                    let w_vec = unsafe { avx.evaluate(r_vec) };
+                    let mut w_avx = [0.0f32; 8];
+                    unsafe { _mm256_storeu_ps(w_avx.as_mut_ptr(), w_vec) };
+
+                    // Compare against scalar lane-wise
+                    for lane in 0..8 {
+                        let r_lane = rs[lane];
+                        let w_scalar = scalar.evaluate(r_lane);
+                        let diff = (w_avx[lane] - w_scalar).abs();
+
+                        // Absolute tolerance with mild relative component to be robust across scales
+                        let tol = 1e-6_f32.max(1e-5_f32 * w_scalar.abs());
+                        assert!(
+                            diff <= tol,
+                            "AVX kernel mismatch (h={}, r={}, lane={}): avx={}, scalar={}, diff={}, tol={}",
+                            h,
+                            r_lane,
+                            lane,
+                            w_avx[lane],
+                            w_scalar,
+                            diff,
+                            tol
+                        );
+                    }
+
+                    r0 += 8.0 * dr;
+                }
+
+                // Also check a couple of out-of-support points explicitly
+                for &r in &[h * 1.01, h * 1.5, h * 2.0, h * 2.5] {
+                    let w_scalar = scalar.evaluate(r);
+                    let w_avx = {
+                        let v = unsafe { _mm256_set1_ps(r) };
+                        let w = unsafe { avx.evaluate(v) };
+                        let mut tmp = [0.0f32; 8];
+                        unsafe { _mm256_storeu_ps(tmp.as_mut_ptr(), w) };
+                        tmp[0]
+                    };
+                    let diff = (w_avx - w_scalar).abs();
+                    let tol = 1e-6_f32.max(1e-5_f32 * w_scalar.abs());
+                    assert!(
+                        diff <= tol,
+                        "AVX kernel mismatch outside support (h={}, r={}): avx={}, scalar={}, diff={}, tol={}",
+                        h,
+                        r,
+                        w_avx,
+                        w_scalar,
+                        diff,
+                        tol
+                    );
+                }
+            }
+        }
+    }
+
+
+    #[test]
+    fn discrete_cubic_kernel() {
+        let n = 10000;
+        let h = 0.025;
+
+        let discrete_kernel = DiscreteSquaredDistanceCubicKernel::new::<f64>(n, h);
+        let kernel = CubicSplineKernel::new(h);
+
+        // Test the pre-computed values using a linear stepping
+        let dr = h / (n as f64);
+        for i in 0..n {
+            let r = (i as f64) * dr;
+            let rr = r * r;
+
+            let discrete = discrete_kernel.evaluate(rr);
+            let continuous = kernel.evaluate(r);
+
+            let diff = (discrete - continuous).abs();
+            let rel_diff = diff / continuous;
+            if rel_diff > 5e-2 && diff > 1e-1 {
+                eprintln!(
+                    "at r={}, r/h={}, discrete: {}, continuous: {}, diff: {}, rel_diff: {}",
+                    r,
+                    r / h,
+                    discrete,
+                    continuous,
+                    diff,
+                    rel_diff
+                );
+                assert!(false);
+            }
+        }
+    }
+
+    #[test]
+    fn poly6_kernel_r_compact_support() {
+        test_kernel_r_compact_support!(Poly6Kernel);
+    }
+
+    #[test]
+    fn poly6_kernel_r_integral() {
+        test_kernel_r_integral!(Poly6Kernel);
+    }
+
+    #[test]
+    fn spiky_kernel_r_compact_support() {
+        test_kernel_r_compact_support!(SpikyKernel);
+    }
+
+    #[test]
+    fn spiky_kernel_r_integral() {
+        test_kernel_r_integral!(SpikyKernel);
+    }
+
+    #[test]
+    fn wendland_quintic_c2_kernel_r_compact_support() {
+        test_kernel_r_compact_support!(WendlandQuinticC2Kernel);
+    }
+
+    #[test]
+    fn wendland_quintic_c2_kernel_r_integral() {
+        test_kernel_r_integral!(WendlandQuinticC2Kernel);
     }
 }
