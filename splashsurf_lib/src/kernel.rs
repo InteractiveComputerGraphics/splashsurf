@@ -1,8 +1,17 @@
 //! SPH kernel function implementations
 //!
 //! Currently, the following SIMD implementations are provided:
-//!  - `CubicSplineKernelAvxF32`: Only available on `x86` and `x86_64` targets, requires AVX2 and FMA support
+//!  - `CubicSplineKernelAvxF32`
 //!  - `CubicSplineKernelNeonF32`: Only available on `aarch64` targets, requires NEON support
+//!  - `Poly6KernelAvxF32`
+//!  - `Poly6KernelNeonF32`
+//!  - `SpikyKernelAvxF32`
+//!  - `SpikyKernelNeonF32`
+//!  - `WendlandQuinticC2KernelAvxF32`
+//!  - `WendlandQuinticC2KernelNeonF32`
+//! 
+//! The Avx implementations are only available on `x86` and `x86_64` targets and require AVX2 and FMA support. 
+//! Similarly, the Neon implementations are only available on `aarch64` targets and require NEON support.
 //!
 //! Note that documentation of the SIMD kernels is only available on the respective target architectures.
 
@@ -387,6 +396,54 @@ impl<R: Real> SymmetricKernel3d<R> for Poly6Kernel<R> {
     }
 }
 
+/// Vectorized implementation of the poly6 kernel using NEON instructions. Only available on `aarch64` targets.
+#[cfg(target_arch = "aarch64")]
+pub struct Poly6KernelNeonF32 {
+    squared_compact_support: f32,
+    sigma: f32,
+}
+
+#[cfg(target_arch = "aarch64")]
+impl Poly6KernelNeonF32 {
+    /// Initializes a poly6 kernel with the given compact support radius
+    pub fn new(compact_support_radius: f32) -> Self {
+        let r = compact_support_radius;
+        let r9 = r.powi(9);
+        let sigma = 315.0/(64.0*std::f32::consts::PI*r9);
+        Self {
+            squared_compact_support: r*r,
+            sigma,
+        }
+    }
+
+    /// Evaluates the poly6 kernel at the specified radial distances
+    #[target_feature(enable = "neon")]
+    pub fn evaluate(&self, r: float32x4_t) -> float32x4_t {
+        use core::arch::aarch64::*;
+
+        let zero = vdupq_n_f32(0.0);
+
+        let r2 = vmulq_f32(r, r);
+        let h2 = vdupq_n_f32(self.squared_compact_support);
+
+        // (h2 - r2)^3
+        let relevance = vsubq_f32(h2, r2);
+        let relevance2 = vmulq_f32(relevance, relevance);
+        let relevance3 = vmulq_f32(relevance2, relevance);
+
+        // 315.0/(64.0*PI*h^9)
+        let normalization = vdupq_n_f32(self.sigma);
+
+        let res = vmulq_f32(normalization, relevance3);
+
+        // mask: r² <= h²
+        let mask = vcleq_f32(r2, h2);
+
+        // blend: if mask true → res, else → zero
+        vbslq_f32(mask, res, zero)
+    }
+}
+
 /// Vectorized implementation of the poly6 kernel using AVX2 and FMA instructions. Only available on `x86` and `x86_64` targets.
 #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
 pub struct Poly6KernelAvxF32 {
@@ -504,6 +561,55 @@ impl<R: Real> SymmetricKernel3d<R> for SpikyKernel<R> {
     }
 }
 
+/// Vectorized implementation of the spiky kernel using NEON instructions. Only available on `aarch64` targets.
+#[cfg(target_arch = "aarch64")]
+pub struct SpikyKernelNeonF32 {
+    compact_support: f32,
+    sigma: f32,
+}
+
+#[cfg(target_arch = "aarch64")]
+impl SpikyKernelNeonF32 {
+    /// Initializes a spiky kernel with the given compact support radius
+    pub fn new(compact_support_radius: f32) -> Self {
+        let r = compact_support_radius;
+        let r6 = r.powi(6);
+        let sigma = 15.0/(std::f32::consts::PI*r6);
+        Self {
+            compact_support: r,
+            sigma,
+        }
+    }
+
+    /// Evaluates the spiky kernel at the specified radial distances
+    #[target_feature(enable = "neon")]
+    pub fn evaluate(&self, r: float32x4_t) -> float32x4_t {
+        use core::arch::aarch64::*;
+
+        let zero = vdupq_n_f32(0.0);
+        let h = vdupq_n_f32(self.compact_support);
+
+        let r2 = vmulq_f32(r, r);
+        let h2 = vmulq_f32(h, h);
+
+        // (h - r)^3
+        let relevance = vsubq_f32(h, r);
+        let relevance2 = vmulq_f32(relevance, relevance);
+        let relevance3 = vmulq_f32(relevance2, relevance);
+
+        // 15.0/(PI*h^6)
+        let normalization = vdupq_n_f32(self.sigma);
+
+        let res = vmulq_f32(normalization, relevance3);
+
+        // mask: r2 <= h2
+        let mask = vcleq_f32(r2, h2);
+
+        // blend: if mask true → res, else → zero
+        vbslq_f32(mask, res, zero)
+    }
+}
+
 /// Vectorized implementation of the spiky kernel using AVX2 and FMA instructions. Only available on `x86` and `x86_64` targets.
 #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
 pub struct SpikyKernelAvxF32 {
@@ -616,6 +722,61 @@ impl<R: Real> SymmetricKernel3d<R> for WendlandQuinticC2Kernel<R> {
         } else {
             R::zero()
         }
+    }
+}
+
+/// Vectorized implementation of the Wendland quintic C2 kernel using NEON instructions. Only available on `aarch64` targets.
+#[cfg(target_arch = "aarch64")]
+pub struct WendlandQuinticC2KernelNeonF32 {
+    compact_support_inv: f32,
+    sigma: f32,
+}
+
+#[cfg(target_arch = "aarch64")]
+impl WendlandQuinticC2KernelNeonF32 {
+    /// Initializes a Wendland quintic C2 kernel with the given compact support radius
+    pub fn new(compact_support_radius: f32) -> Self {
+        let r = compact_support_radius;
+        let compact_support_inv = 1.0 / r;
+        let r3 = r.powi(3);
+        let sigma = 21.0/(2.0*std::f32::consts::PI*r3);
+
+        Self {
+            compact_support_inv,
+            sigma,
+        }
+    }
+
+    /// Evaluates the Wendland quintic C2 kernel at the specified radial distances
+    #[target_feature(enable = "neon")]
+    pub fn evaluate(&self, r: float32x4_t) -> float32x4_t {
+        use core::arch::aarch64::*;
+
+        let zero = vdupq_n_f32(0.0);
+        let one = vdupq_n_f32(1.0);
+        let four = vdupq_n_f32(4.0);
+
+        // q = r * compact_support_inv
+        let q = vmulq_n_f32(r, self.compact_support_inv);
+
+        // v = max(0, 1 - q)
+        let mut v = vsubq_f32(one, q);
+        v = vmaxq_f32(v, zero);
+
+        // (1 - q)^4
+        let v2 = vmulq_f32(v, v);
+        let v4 = vmulq_f32(v2, v2);
+
+        // normalization factor (15.0/(PI*h^6)), stored in self.sigma
+        let normalization = vdupq_n_f32(self.sigma);
+
+        // (1-q)^4 * (4q + 1)
+        let fourq = vmulq_f32(four, q);
+        let fourq_plus_one = vaddq_f32(fourq, one);
+        let res = vmulq_f32(v4, fourq_plus_one);
+
+        // normalization * res
+        vmulq_f32(normalization, res)
     }
 }
 
@@ -906,7 +1067,7 @@ mod kernel_tests {
         not(all(target_arch = "aarch64", target_feature = "neon")),
         ignore = "Skipped on non-aarch64 targets"
     )]
-    fn test_cubic_spline_kernel_neon() {
+    fn cubic_spline_kernel_neon() {
         test_kernel_neon!(CubicSplineKernel, CubicSplineKernelNeonF32);
     }
 
@@ -969,6 +1130,15 @@ mod kernel_tests {
 
     #[test]
     #[cfg_attr(
+        not(all(target_arch = "aarch64", target_feature = "neon")),
+        ignore = "Skipped on non-aarch64 targets"
+    )]
+    fn poly6_kernel_neon() {
+        test_kernel_neon!(Poly6Kernel, Poly6KernelNeonF32);
+    }
+
+    #[test]
+    #[cfg_attr(
         not(all(
             any(target_arch = "x86_64", target_arch = "x86"),
             target_feature = "avx2",
@@ -992,6 +1162,15 @@ mod kernel_tests {
 
     #[test]
     #[cfg_attr(
+        not(all(target_arch = "aarch64", target_feature = "neon")),
+        ignore = "Skipped on non-aarch64 targets"
+    )]
+    fn spiky_kernel_neon() {
+        test_kernel_neon!(SpikyKernel, SpikyKernelNeonF32);
+    }
+
+    #[test]
+    #[cfg_attr(
         not(all(
             any(target_arch = "x86_64", target_arch = "x86"),
             target_feature = "avx2",
@@ -1011,6 +1190,15 @@ mod kernel_tests {
     #[test]
     fn wendland_quintic_c2_kernel_r_integral() {
         test_kernel_r_integral!(WendlandQuinticC2Kernel);
+    }
+
+    #[test]
+    #[cfg_attr(
+        not(all(target_arch = "aarch64", target_feature = "neon")),
+        ignore = "Skipped on non-aarch64 targets"
+    )]
+    fn wendland_quintic_c2_kernel_neon() {
+        test_kernel_neon!(WendlandQuinticC2Kernel, WendlandQuinticC2KernelNeonF32);
     }
 
     #[test]
