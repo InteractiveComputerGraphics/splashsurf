@@ -231,7 +231,6 @@ pub fn grid_loop_avx2(c: &mut Criterion) {
     #[cfg(all(target_feature = "avx2", target_feature = "fma"))]
     {
         let avx_result = unsafe {
-            let kernel = CubicSplineKernel::new(params.compact_support_radius);
             let mut params = params.clone();
             dense_subdomains::density_grid_loop_avx(
                 params.levelset_grid.as_mut_slice(),
@@ -243,7 +242,8 @@ pub fn grid_loop_avx2(c: &mut Criterion) {
                 params.cube_radius,
                 params.squared_support_with_margin,
                 params.particle_rest_mass,
-                &kernel,
+                params.compact_support_radius,
+                splashsurf_lib::kernel::KernelType::CubicSpline,
             );
             params.levelset_grid
         };
@@ -268,7 +268,6 @@ pub fn grid_loop_avx2(c: &mut Criterion) {
     unsafe {
         group.bench_function("grid_loop_avx2", |b| {
             b.iter(|| {
-                let kernel = CubicSplineKernel::new(params.compact_support_radius);
                 let mut params = params.clone();
                 dense_subdomains::density_grid_loop_avx(
                     params.levelset_grid.as_mut_slice(),
@@ -280,7 +279,8 @@ pub fn grid_loop_avx2(c: &mut Criterion) {
                     params.cube_radius,
                     params.squared_support_with_margin,
                     params.particle_rest_mass,
-                    &kernel,
+                    params.compact_support_radius,
+                    splashsurf_lib::kernel::KernelType::CubicSpline,
                 );
             })
         });
