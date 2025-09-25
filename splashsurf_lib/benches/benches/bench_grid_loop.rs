@@ -2,7 +2,7 @@ use criterion::{Criterion, criterion_group};
 use nalgebra::{Scalar, Vector3};
 use serde_derive::{Deserialize, Serialize};
 use splashsurf_lib::dense_subdomains;
-use splashsurf_lib::kernel::CubicSplineKernel;
+use splashsurf_lib::kernel::{CubicSplineKernel, SymmetricKernel3d};
 use splashsurf_lib::uniform_grid::UniformCartesianCubeGrid3d;
 use std::time::Duration;
 
@@ -243,7 +243,7 @@ pub fn grid_loop_avx2(c: &mut Criterion) {
                 params.squared_support_with_margin,
                 params.particle_rest_mass,
                 params.compact_support_radius,
-                splashsurf_lib::kernel::KernelType::CubicSpline,
+                &splashsurf_lib::kernel::KernelType::CubicSpline,
             );
             params.levelset_grid
         };
@@ -280,7 +280,7 @@ pub fn grid_loop_avx2(c: &mut Criterion) {
                     params.squared_support_with_margin,
                     params.particle_rest_mass,
                     params.compact_support_radius,
-                    splashsurf_lib::kernel::KernelType::CubicSpline,
+                    &splashsurf_lib::kernel::KernelType::CubicSpline,
                 );
             })
         });
