@@ -65,6 +65,22 @@ pub trait SymmetricKernel3d<R: Real> {
     fn evaluate_gradient_norm(&self, r: R) -> R;
 }
 
+#[cfg(target_arch = "aarch64")]
+pub unsafe trait NeonKernel {
+    fn new(compact_support_radius: f32) -> Self;
+
+    /// Evaluates the kernel at the radial distance `r` relative to the origin
+    unsafe fn evaluate(&self, r: float32x4_t) -> float32x4_t;
+}
+
+#[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
+pub unsafe trait AvxKernel {
+    fn new(compact_support_radius: f32) -> Self;
+
+    /// Evaluates the kernel at the radial distance `r` relative to the origin
+    unsafe fn evaluate(&self, r: __m256) -> __m256;
+}
+
 /// The commonly used cubic spline kernel
 pub struct CubicSplineKernel<R: Real> {
     /// Compact support radius of the kernel
@@ -166,9 +182,9 @@ pub struct CubicSplineKernelNeonF32 {
 }
 
 #[cfg(target_arch = "aarch64")]
-impl CubicSplineKernelNeonF32 {
+unsafe impl NeonKernel for CubicSplineKernelNeonF32 {
     /// Initializes a cubic spline kernel with the given compact support radius
-    pub fn new(compact_support_radius: f32) -> Self {
+    fn new(compact_support_radius: f32) -> Self {
         let r = compact_support_radius;
         let compact_support_inv = 1.0 / r;
         let rrr = r * r * r;
@@ -181,7 +197,7 @@ impl CubicSplineKernelNeonF32 {
 
     /// Evaluates the cubic spline kernel at the specified radial distances
     #[target_feature(enable = "neon")]
-    pub fn evaluate(&self, r: float32x4_t) -> float32x4_t {
+    fn evaluate(&self, r: float32x4_t) -> float32x4_t {
         use core::arch::aarch64::*;
 
         let one = vdupq_n_f32(1.0);
@@ -222,9 +238,9 @@ pub struct CubicSplineKernelAvxF32 {
 }
 
 #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
-impl CubicSplineKernelAvxF32 {
+unsafe impl AvxKernel for CubicSplineKernelAvxF32 {
     /// Initializes a cubic spline kernel with the given compact support radius
-    pub fn new(compact_support_radius: f32) -> Self {
+    fn new(compact_support_radius: f32) -> Self {
         let r = compact_support_radius;
         let compact_support_inv = 1.0 / r;
         let rrr = r * r * r;
@@ -237,7 +253,7 @@ impl CubicSplineKernelAvxF32 {
 
     /// Evaluates the cubic spline kernel at the specified radial distances
     #[target_feature(enable = "avx2,fma")]
-    pub fn evaluate(&self, r: __m256) -> __m256 {
+    unsafe fn evaluate(&self, r: __m256) -> __m256 {
         #[cfg(target_arch = "x86")]
         use core::arch::x86::*;
         #[cfg(target_arch = "x86_64")]
@@ -411,9 +427,9 @@ pub struct Poly6KernelNeonF32 {
 }
 
 #[cfg(target_arch = "aarch64")]
-impl Poly6KernelNeonF32 {
+unsafe impl NeonKernel for Poly6KernelNeonF32 {
     /// Initializes a poly6 kernel with the given compact support radius
-    pub fn new(compact_support_radius: f32) -> Self {
+    fn new(compact_support_radius: f32) -> Self {
         let r = compact_support_radius;
         let r9 = r.powi(9);
         let sigma = 315.0 / (64.0 * std::f32::consts::PI * r9);
@@ -425,7 +441,7 @@ impl Poly6KernelNeonF32 {
 
     /// Evaluates the poly6 kernel at the specified radial distances
     #[target_feature(enable = "neon")]
-    pub fn evaluate(&self, r: float32x4_t) -> float32x4_t {
+    unsafe fn evaluate(&self, r: float32x4_t) -> float32x4_t {
         use core::arch::aarch64::*;
 
         let zero = vdupq_n_f32(0.0);
@@ -459,9 +475,9 @@ pub struct Poly6KernelAvxF32 {
 }
 
 #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
-impl Poly6KernelAvxF32 {
+unsafe impl AvxKernel for Poly6KernelAvxF32 {
     /// Initializes a poly6 kernel with the given compact support radius
-    pub fn new(compact_support_radius: f32) -> Self {
+    fn new(compact_support_radius: f32) -> Self {
         let r = compact_support_radius;
         let r9 = r.powi(9);
         let sigma = 315.0 / (64.0 * std::f32::consts::PI * r9);
@@ -473,7 +489,7 @@ impl Poly6KernelAvxF32 {
 
     /// Evaluates the poly6 kernel at the specified radial distances
     #[target_feature(enable = "avx2,fma")]
-    pub fn evaluate(&self, r: __m256) -> __m256 {
+    unsafe fn evaluate(&self, r: __m256) -> __m256 {
         #[cfg(target_arch = "x86")]
         use core::arch::x86::*;
         #[cfg(target_arch = "x86_64")]
@@ -578,9 +594,9 @@ pub struct SpikyKernelNeonF32 {
 }
 
 #[cfg(target_arch = "aarch64")]
-impl SpikyKernelNeonF32 {
+unsafe impl NeonKernel for SpikyKernelNeonF32 {
     /// Initializes a spiky kernel with the given compact support radius
-    pub fn new(compact_support_radius: f32) -> Self {
+    fn new(compact_support_radius: f32) -> Self {
         let r = compact_support_radius;
         let r6 = r.powi(6);
         let sigma = 15.0 / (std::f32::consts::PI * r6);
@@ -592,7 +608,7 @@ impl SpikyKernelNeonF32 {
 
     /// Evaluates the spiky kernel at the specified radial distances
     #[target_feature(enable = "neon")]
-    pub fn evaluate(&self, r: float32x4_t) -> float32x4_t {
+    unsafe fn evaluate(&self, r: float32x4_t) -> float32x4_t {
         use core::arch::aarch64::*;
 
         let zero = vdupq_n_f32(0.0);
@@ -627,9 +643,9 @@ pub struct SpikyKernelAvxF32 {
 }
 
 #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
-impl SpikyKernelAvxF32 {
+unsafe impl AvxKernel for SpikyKernelAvxF32 {
     /// Initializes a spiky kernel with the given compact support radius
-    pub fn new(compact_support_radius: f32) -> Self {
+    fn new(compact_support_radius: f32) -> Self {
         let r = compact_support_radius;
         let r6 = r.powi(6);
         let sigma = 15.0 / (std::f32::consts::PI * r6);
@@ -641,7 +657,7 @@ impl SpikyKernelAvxF32 {
 
     /// Evaluates the spiky kernel at the specified radial distances
     #[target_feature(enable = "avx2,fma")]
-    pub fn evaluate(&self, r: __m256) -> __m256 {
+    unsafe fn evaluate(&self, r: __m256) -> __m256 {
         #[cfg(target_arch = "x86")]
         use core::arch::x86::*;
         #[cfg(target_arch = "x86_64")]
@@ -740,9 +756,9 @@ pub struct WendlandQuinticC2KernelNeonF32 {
 }
 
 #[cfg(target_arch = "aarch64")]
-impl WendlandQuinticC2KernelNeonF32 {
+unsafe impl NeonKernel for WendlandQuinticC2KernelNeonF32 {
     /// Initializes a Wendland quintic C2 kernel with the given compact support radius
-    pub fn new(compact_support_radius: f32) -> Self {
+    fn new(compact_support_radius: f32) -> Self {
         let r = compact_support_radius;
         let compact_support_inv = 1.0 / r;
         let r3 = r.powi(3);
@@ -756,7 +772,7 @@ impl WendlandQuinticC2KernelNeonF32 {
 
     /// Evaluates the Wendland quintic C2 kernel at the specified radial distances
     #[target_feature(enable = "neon")]
-    pub fn evaluate(&self, r: float32x4_t) -> float32x4_t {
+    unsafe fn evaluate(&self, r: float32x4_t) -> float32x4_t {
         use core::arch::aarch64::*;
 
         let zero = vdupq_n_f32(0.0);
@@ -795,9 +811,9 @@ pub struct WendlandQuinticC2KernelAvxF32 {
 }
 
 #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
-impl WendlandQuinticC2KernelAvxF32 {
+unsafe impl AvxKernel for WendlandQuinticC2KernelAvxF32 {
     /// Initializes a Wendland quintic C2 kernel with the given compact support radius
-    pub fn new(compact_support_radius: f32) -> Self {
+    fn new(compact_support_radius: f32) -> Self {
         let r = compact_support_radius;
         let compact_support_inv = 1.0 / r;
         let r3 = r.powi(3);
@@ -811,7 +827,7 @@ impl WendlandQuinticC2KernelAvxF32 {
 
     /// Evaluates the Wendland quintic C2 kernel at the specified radial distances
     #[target_feature(enable = "avx2,fma")]
-    pub fn evaluate(&self, r: __m256) -> __m256 {
+    unsafe fn evaluate(&self, r: __m256) -> __m256 {
         #[cfg(target_arch = "x86")]
         use core::arch::x86::*;
         #[cfg(target_arch = "x86_64")]
