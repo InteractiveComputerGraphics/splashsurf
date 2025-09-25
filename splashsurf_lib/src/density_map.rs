@@ -24,7 +24,7 @@
 //! indices, even if the density map is only generated for a smaller subdomain.
 
 use crate::aabb::Aabb3d;
-use crate::kernel::{CubicSplineKernel, SymmetricKernel3d};
+use crate::kernel::SymmetricKernel3d;
 use crate::mesh::{HexMesh3d, MeshWithData, OwnedMeshAttribute};
 use crate::neighborhood_search::NeighborhoodList;
 use crate::uniform_grid::UniformGrid;
@@ -62,7 +62,7 @@ pub enum DensityMapError<R: Scalar> {
 
 /// Computes the individual densities of particles using a standard SPH sum
 #[inline(never)]
-pub fn compute_particle_densities<I: Index, R: Real>(
+pub fn compute_particle_densities<I: Index, R: Real, K: SymmetricKernel3d<R> + Sync>(
     particle_positions: &[Vector3<R>],
     particle_neighbor_lists: &[Vec<usize>],
     compact_support_radius: R,
@@ -71,7 +71,7 @@ pub fn compute_particle_densities<I: Index, R: Real>(
 ) -> Vec<R> {
     let mut densities = Vec::new();
     if enable_multi_threading {
-        parallel_compute_particle_densities::<I, R>(
+        parallel_compute_particle_densities::<I, R, K>(
             particle_positions,
             particle_neighbor_lists,
             compact_support_radius,
@@ -79,7 +79,7 @@ pub fn compute_particle_densities<I: Index, R: Real>(
             &mut densities,
         )
     } else {
-        sequential_compute_particle_densities::<I, R, _>(
+        sequential_compute_particle_densities::<I, R, _, K>(
             particle_positions,
             particle_neighbor_lists,
             compact_support_radius,
@@ -92,7 +92,7 @@ pub fn compute_particle_densities<I: Index, R: Real>(
 
 /// Computes the individual densities of particles inplace using a standard SPH sum
 #[inline(never)]
-pub fn compute_particle_densities_inplace<I: Index, R: Real>(
+pub fn compute_particle_densities_inplace<I: Index, R: Real, K: SymmetricKernel3d<R> + Sync>(
     particle_positions: &[Vector3<R>],
     particle_neighbor_lists: &[Vec<usize>],
     compact_support_radius: R,
@@ -101,7 +101,7 @@ pub fn compute_particle_densities_inplace<I: Index, R: Real>(
     densities: &mut Vec<R>,
 ) {
     if enable_multi_threading {
-        parallel_compute_particle_densities::<I, R>(
+        parallel_compute_particle_densities::<I, R, K>(
             particle_positions,
             particle_neighbor_lists,
             compact_support_radius,
@@ -109,7 +109,7 @@ pub fn compute_particle_densities_inplace<I: Index, R: Real>(
             densities,
         )
     } else {
-        sequential_compute_particle_densities::<I, R, _>(
+        sequential_compute_particle_densities::<I, R, _, K>(
             particle_positions,
             particle_neighbor_lists,
             compact_support_radius,
@@ -127,7 +127,7 @@ fn init_density_storage<R: Real>(densities: &mut Vec<R>, new_len: usize) {
 
 /// Computes the individual densities of particles using a standard SPH sum, sequential implementation
 #[inline(never)]
-pub fn sequential_compute_particle_densities<I: Index, R: Real, Nl: NeighborhoodList + ?Sized>(
+pub fn sequential_compute_particle_densities<I: Index, R: Real, Nl: NeighborhoodList + ?Sized, K: SymmetricKernel3d<R>>(
     particle_positions: &[Vector3<R>],
     particle_neighbor_lists: &Nl,
     compact_support_radius: R,
@@ -136,7 +136,7 @@ pub fn sequential_compute_particle_densities<I: Index, R: Real, Nl: Neighborhood
 ) {
     profile!("sequential_compute_particle_densities");
 
-    sequential_compute_particle_densities_filtered::<I, R, Nl>(
+    sequential_compute_particle_densities_filtered::<I, R, Nl, K>(
         particle_positions,
         particle_neighbor_lists,
         compact_support_radius,
@@ -151,6 +151,7 @@ pub fn sequential_compute_particle_densities_filtered<
     I: Index,
     R: Real,
     Nl: NeighborhoodList + ?Sized,
+    K: SymmetricKernel3d<R>,
 >(
     particle_positions: &[Vector3<R>],
     particle_neighbor_lists: &Nl,
@@ -164,7 +165,7 @@ pub fn sequential_compute_particle_densities_filtered<
     init_density_storage(particle_densities, particle_positions.len());
 
     // Pre-compute the kernel which can be queried using squared distances
-    let kernel = CubicSplineKernel::new(compact_support_radius);
+    let kernel = K::new(compact_support_radius);
 
     for (i, particle_i_position) in particle_positions
         .iter()
@@ -187,7 +188,7 @@ pub fn sequential_compute_particle_densities_filtered<
 
 /// Computes the individual densities of particles using a standard SPH sum, multi-threaded implementation
 #[inline(never)]
-pub fn parallel_compute_particle_densities<I: Index, R: Real>(
+pub fn parallel_compute_particle_densities<I: Index, R: Real, K: SymmetricKernel3d<R> + Sync>(
     particle_positions: &[Vector3<R>],
     particle_neighbor_lists: &[Vec<usize>],
     compact_support_radius: R,
@@ -199,7 +200,7 @@ pub fn parallel_compute_particle_densities<I: Index, R: Real>(
     init_density_storage(particle_densities, particle_positions.len());
 
     // Pre-compute the kernel which can be queried using squared distances
-    let kernel = CubicSplineKernel::new(compact_support_radius);
+    let kernel = K::new(compact_support_radius);
 
     particle_positions
         .par_iter()
@@ -313,7 +314,7 @@ impl<'a, I: Index, R: Real> DensityMap<'a, I, R> {
 
 /// Computes a sparse density map for the fluid based on the specified background grid
 #[inline(never)]
-pub fn generate_sparse_density_map<I: Index, R: Real>(
+pub fn generate_sparse_density_map<I: Index, R: Real, K: SymmetricKernel3d<R> + Sync>(
     grid: &UniformGrid<I, R>,
     particle_positions: &[Vector3<R>],
     particle_densities: &[R],
@@ -334,7 +335,7 @@ pub fn generate_sparse_density_map<I: Index, R: Real>(
     );
 
     if allow_threading {
-        *density_map = parallel_generate_sparse_density_map(
+        *density_map = parallel_generate_sparse_density_map::<_, _, K>(
             grid,
             particle_positions,
             particle_densities,
@@ -344,7 +345,7 @@ pub fn generate_sparse_density_map<I: Index, R: Real>(
             cube_size,
         )?
     } else {
-        *density_map = sequential_generate_sparse_density_map(
+        *density_map = sequential_generate_sparse_density_map::<_, _, K>(
             grid,
             particle_positions,
             particle_densities,
@@ -365,7 +366,7 @@ pub fn generate_sparse_density_map<I: Index, R: Real>(
 
 /// Computes a sparse density map for the fluid based on the specified background grid, sequential implementation
 #[inline(never)]
-pub fn sequential_generate_sparse_density_map<I: Index, R: Real>(
+pub fn sequential_generate_sparse_density_map<I: Index, R: Real, K: SymmetricKernel3d<R>>(
     grid: &UniformGrid<I, R>,
     particle_positions: &[Vector3<R>],
     particle_densities: &[R],
@@ -378,7 +379,7 @@ pub fn sequential_generate_sparse_density_map<I: Index, R: Real>(
 
     let mut sparse_densities = new_map();
 
-    let density_map_generator = SparseDensityMapGenerator::try_new(
+    let density_map_generator: SparseDensityMapGenerator<I, R, K> = SparseDensityMapGenerator::try_new(
         grid,
         compact_support_radius,
         cube_size,
@@ -412,7 +413,7 @@ pub fn sequential_generate_sparse_density_map<I: Index, R: Real>(
 
 /// Computes a sparse density map for the fluid based on the specified background grid, multi-threaded implementation
 #[inline(never)]
-pub fn parallel_generate_sparse_density_map<I: Index, R: Real>(
+pub fn parallel_generate_sparse_density_map<I: Index, R: Real, K: SymmetricKernel3d<R> + Sync>(
     grid: &UniformGrid<I, R>,
     particle_positions: &[Vector3<R>],
     particle_densities: &[R],
@@ -428,7 +429,7 @@ pub fn parallel_generate_sparse_density_map<I: Index, R: Real>(
 
     // Generate thread local density maps
     {
-        let density_map_generator = SparseDensityMapGenerator::try_new(
+        let density_map_generator: SparseDensityMapGenerator<I, R, K> = SparseDensityMapGenerator::try_new(
             grid,
             compact_support_radius,
             cube_size,
@@ -530,12 +531,12 @@ pub fn parallel_generate_sparse_density_map<I: Index, R: Real>(
 }
 
 /// Internal helper type used to evaluate the density contribution for a particle
-struct SparseDensityMapGenerator<I: Index, R: Real> {
+struct SparseDensityMapGenerator<I: Index, R: Real, K: SymmetricKernel3d<R>> {
     particle_rest_mass: R,
     half_supported_cells: I,
     supported_points: I,
     kernel_evaluation_radius_sq: R,
-    kernel: CubicSplineKernel<R>,
+    kernel: K,
     allowed_domain: Aabb3d<R>,
 }
 
@@ -580,7 +581,7 @@ pub(crate) fn compute_kernel_evaluation_radius<I: Index, R: Real>(
 }
 
 // TODO: Maybe remove allowed domain check? And require this is done before, using the active_particles array?
-impl<I: Index, R: Real> SparseDensityMapGenerator<I, R> {
+impl<I: Index, R: Real, K: SymmetricKernel3d<R>> SparseDensityMapGenerator<I, R, K> {
     fn try_new(
         grid: &UniformGrid<I, R>,
         compact_support_radius: R,
@@ -595,7 +596,7 @@ impl<I: Index, R: Real> SparseDensityMapGenerator<I, R> {
 
         // Pre-compute the kernel which can be queried using squared distances
         let kernel_evaluation_radius_sq = kernel_evaluation_radius * kernel_evaluation_radius;
-        let kernel = CubicSplineKernel::new(compact_support_radius);
+        let kernel = K::new(compact_support_radius);
 
         // Shrink the allowed domain for particles by the kernel evaluation radius. This ensures that all cells/points
         // that are affected by a particle are actually part of the domain/grid, so it does not have to be checked in the loops below.

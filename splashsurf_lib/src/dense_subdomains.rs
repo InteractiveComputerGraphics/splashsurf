@@ -493,7 +493,7 @@ pub(crate) fn decomposition<
     })
 }
 
-pub(crate) fn compute_global_densities_and_neighbors<I: Index, R: Real>(
+pub(crate) fn compute_global_densities_and_neighbors<I: Index, R: Real, K: SymmetricKernel3d<R>>(
     parameters: &ParametersSubdomainGrid<I, R>,
     global_particles: &[Vector3<R>],
     subdomains: &Subdomains<I>,
@@ -583,7 +583,7 @@ pub(crate) fn compute_global_densities_and_neighbors<I: Index, R: Real>(
                 |i| is_inside[i],
             );
 
-            sequential_compute_particle_densities_filtered::<I, R, _>(
+            sequential_compute_particle_densities_filtered::<I, R, _, K>(
                 subdomain_particles,
                 neighborhood_lists,
                 parameters.compact_support_radius,
@@ -1212,7 +1212,7 @@ pub fn density_grid_loop_sparse<I: Index, R: Real, K: SymmetricKernel3d<R>>(
     }
 }
 
-pub(crate) fn reconstruct_subdomains<I: Index, R: Real>(
+pub(crate) fn reconstruct_subdomains<I: Index, R: Real, K: SymmetricKernel3d<R> + Sync>(
     parameters: &ParametersSubdomainGrid<I, R>,
     global_particles: &[Vector3<R>],
     global_particle_densities: &[R],
@@ -1228,7 +1228,7 @@ pub(crate) fn reconstruct_subdomains<I: Index, R: Real>(
     let cube_radius = I::from((parameters.compact_support_radius / parameters.cube_size).ceil())
         .expect("kernel radius in cubes has to fit in index type");
     // Kernel
-    let kernel = CubicSplineKernel::new(parameters.compact_support_radius);
+    let kernel = K::new(parameters.compact_support_radius);
     //let kernel = DiscreteSquaredDistanceCubicKernel::new::<f64>(1000, parameters.compact_support_radius);
 
     let mc_total_cells = parameters.subdomain_cubes.cubed();

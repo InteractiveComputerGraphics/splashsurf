@@ -5,6 +5,7 @@ use splashsurf_lib::GridDecompositionParameters;
 use splashsurf_lib::io::vtk_format::write_vtk;
 use splashsurf_lib::marching_cubes::check_mesh_consistency;
 use std::path::Path;
+use splashsurf_lib::kernel::KernelType;
 
 macro_rules! generate_single_particle_test {
     ($test_name:ident, $output_file:literal, cube_size = $cube_size_rel:literal, tris = $range_tri:expr, verts = $range_vert:expr, subdomains = $range_subdomains:expr) => {
@@ -31,6 +32,7 @@ macro_rules! generate_single_particle_test {
                 ),
                 rest_density: 1000.0,
                 global_neighborhood_list: false,
+                kernel_type: KernelType::CubicSpline,
             };
 
             let reconstruction =

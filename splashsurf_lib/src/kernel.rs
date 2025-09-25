@@ -2,7 +2,7 @@
 //!
 //! Currently, the following SIMD implementations are provided:
 //!  - `CubicSplineKernelAvxF32`
-//!  - `CubicSplineKernelNeonF32`: Only available on `aarch64` targets, requires NEON support
+//!  - `CubicSplineKernelNeonF32`
 //!  - `Poly6KernelAvxF32`
 //!  - `Poly6KernelNeonF32`
 //!  - `SpikyKernelAvxF32`
@@ -29,6 +29,14 @@ use core::arch::x86_64::__m256;
 
 // TODO: Add reference for the kernel function, document formula
 
+#[derive(Clone, Debug)]
+pub enum KernelType {
+    CubicSpline,
+    Poly6,
+    Spiky,
+    WendlandQuinticC2,
+}
+
 /// Utility functions for computing the volume of fluid particles
 pub struct Volume;
 
@@ -46,6 +54,7 @@ impl Volume {
 
 /// Trait for symmetric kernel functions in three dimensions
 pub trait SymmetricKernel3d<R: Real> {
+    fn new(compact_support_radius: R) -> Self;
     /// Returns the compact support radius of the kernel
     fn compact_support_radius(&self) -> R;
     /// Evaluates the kernel at the radial distance `r` relative to the origin
@@ -65,18 +74,6 @@ pub struct CubicSplineKernel<R: Real> {
 }
 
 impl<R: Real> CubicSplineKernel<R> {
-    /// Initializes a cubic spline kernel with the given compact support radius
-    #[replace_float_literals(R::from_float(literal))]
-    pub fn new(compact_support_radius: R) -> Self {
-        let h = compact_support_radius;
-        let sigma = 8.0 / (h * h * h);
-
-        Self {
-            compact_support_radius,
-            normalization: sigma,
-        }
-    }
-
     /// The cubic spline function used by the cubic spline kernel
     #[replace_float_literals(R::from_float(literal))]
     fn cubic_function(q: R) -> R {
@@ -105,6 +102,18 @@ impl<R: Real> CubicSplineKernel<R> {
 }
 
 impl<R: Real> SymmetricKernel3d<R> for CubicSplineKernel<R> {
+    /// Initializes a cubic spline kernel with the given compact support radius
+    #[replace_float_literals(R::from_float(literal))]
+    fn new(compact_support_radius: R) -> Self {
+        let h = compact_support_radius;
+        let sigma = 8.0 / (h * h * h);
+
+        Self {
+            compact_support_radius,
+            normalization: sigma,
+        }
+    }
+
     fn compact_support_radius(&self) -> R {
         self.compact_support_radius
     }
@@ -338,10 +347,10 @@ pub struct Poly6Kernel<R: Real> {
     normalization: R,
 }
 
-impl<R: Real> Poly6Kernel<R> {
+impl<R: Real> SymmetricKernel3d<R> for Poly6Kernel<R> {
     /// Initializes a poly6 kernel with the given compact support radius
     #[replace_float_literals(R::from_float(literal))]
-    pub fn new(compact_support_radius: R) -> Self {
+    fn new(compact_support_radius: R) -> Self {
         let h = compact_support_radius;
         let sigma = 315.0/(64.0*R::pi()*h.powi(9));
 
@@ -350,9 +359,7 @@ impl<R: Real> Poly6Kernel<R> {
             normalization: sigma,
         }
     }
-}
 
-impl<R: Real> SymmetricKernel3d<R> for Poly6Kernel<R> {
     fn compact_support_radius(&self) -> R {
         self.compact_support_radius
     }
@@ -501,10 +508,10 @@ pub struct SpikyKernel<R: Real> {
     normalization: R,
 }
 
-impl<R: Real> SpikyKernel<R> {
+impl<R: Real> SymmetricKernel3d<R> for SpikyKernel<R> {
     /// Initializes a spiky kernel with the given compact support radius
     #[replace_float_literals(R::from_float(literal))]
-    pub fn new(compact_support_radius: R) -> Self {
+    fn new(compact_support_radius: R) -> Self {
         let h = compact_support_radius;
         let sigma = 15.0/(R::pi()*h.powi(6));
 
@@ -513,9 +520,7 @@ impl<R: Real> SpikyKernel<R> {
             normalization: sigma,
         }
     }
-}
 
-impl<R: Real> SymmetricKernel3d<R> for SpikyKernel<R> {
     fn compact_support_radius(&self) -> R {
         self.compact_support_radius
     }
@@ -668,10 +673,10 @@ pub struct WendlandQuinticC2Kernel<R: Real> {
     normalization: R,
 }
 
-impl<R: Real> WendlandQuinticC2Kernel<R> {
+impl<R: Real> SymmetricKernel3d<R> for WendlandQuinticC2Kernel<R> {
     /// Initializes a wendland quintic C2 kernel with the given compact support radius
     #[replace_float_literals(R::from_float(literal))]
-    pub fn new(compact_support_radius: R) -> Self {
+    fn new(compact_support_radius: R) -> Self {
         let h = compact_support_radius;
         let sigma = 21.0/(2.0*R::pi()*h.powi(3));
 
@@ -680,9 +685,7 @@ impl<R: Real> WendlandQuinticC2Kernel<R> {
             normalization: sigma,
         }
     }
-}
 
-impl<R: Real> SymmetricKernel3d<R> for WendlandQuinticC2Kernel<R> {
     fn compact_support_radius(&self) -> R {
         self.compact_support_radius
     }

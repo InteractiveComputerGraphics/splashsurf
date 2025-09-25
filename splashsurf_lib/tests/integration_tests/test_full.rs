@@ -7,7 +7,7 @@ use splashsurf_lib::{
     reconstruct_surface,
 };
 use std::path::Path;
-
+use splashsurf_lib::kernel::KernelType;
 // TODO: Compare with a solution file
 // TODO: Test with a fixed grid?
 
@@ -38,6 +38,7 @@ fn params_with_aabb<R: Real>(
         enable_simd: false,
         spatial_decomposition: SpatialDecomposition::None,
         global_neighborhood_list: false,
+        kernel_type: KernelType::CubicSpline,
     };
 
     match strategy {

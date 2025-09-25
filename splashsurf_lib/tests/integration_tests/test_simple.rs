@@ -4,6 +4,7 @@ use splashsurf_lib::{
     Aabb3d, GridDecompositionParameters, Parameters, Real, SpatialDecomposition,
     reconstruct_surface,
 };
+use splashsurf_lib::kernel::KernelType;
 
 enum Strategy {
     Global,
@@ -32,6 +33,7 @@ fn params_with_aabb<R: Real>(
         enable_simd: false,
         spatial_decomposition: SpatialDecomposition::None,
         global_neighborhood_list: false,
+        kernel_type: KernelType::CubicSpline,
     };
 
     match strategy {
