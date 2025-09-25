@@ -11,7 +11,7 @@ use splashsurf_lib::{
     nalgebra::{Unit, Vector3},
     sph_interpolation::SphInterpolator,
 };
-
+use splashsurf_lib::kernel::KernelType;
 use crate::utils::*;
 
 enum PySphInterpolatorWrapper {
@@ -55,6 +55,7 @@ impl PySphInterpolator {
                 densities,
                 R::from_float(particle_rest_mass),
                 R::from_float(compact_support_radius),
+                KernelType::CubicSpline
             )))
         } else {
             Err(pyerr_scalar_type_mismatch())

@@ -1153,6 +1153,7 @@ pub fn reconstruction_pipeline<'a, I: Index, R: Real>(
                 particle_densities,
                 particle_rest_mass,
                 params.compact_support_radius,
+                params.kernel_type
             ))
         } else {
             None
