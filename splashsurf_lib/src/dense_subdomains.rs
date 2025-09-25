@@ -16,7 +16,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use thread_local::ThreadLocal;
 
 use crate::density_map::sequential_compute_particle_densities_filtered;
-use crate::kernel::{CubicSplineKernel, SymmetricKernel3d};
+use crate::kernel::{CubicSplineKernel, KernelType, Poly6Kernel, SpikyKernel, SymmetricKernel3d, WendlandQuinticC2Kernel};
 use crate::marching_cubes::marching_cubes_lut::marching_cubes_triangulation_iter;
 use crate::mesh::{HexMesh3d, TriMesh3d};
 use crate::neighborhood_search::{
@@ -59,6 +59,8 @@ pub(crate) struct ParametersSubdomainGrid<I: Index, R: Real> {
     pub chunk_size: usize,
     /// Whether to return the global particle neighborhood list instead of only using per-domain lists internally
     pub global_neighborhood_list: bool,
+    /// The SPH kernel that should be used
+    pub kernel_type: KernelType,
 }
 
 impl<I: Index, R: Real> ParametersSubdomainGrid<I, R> {
@@ -240,6 +242,7 @@ pub(crate) fn initialize_parameters<I: Index, R: Real>(
         subdomain_grid,
         chunk_size,
         global_neighborhood_list: parameters.global_neighborhood_list,
+        kernel_type: parameters.kernel_type.clone(),
     })
 }
 
@@ -712,7 +715,7 @@ fn local_to_global_point_ijk<I: Index>(
 }
 
 /// Auto-dispatching density grid loop for f32/i64: chooses AVX2+FMA on x86, NEON on aarch64, otherwise scalar fallback
-pub fn density_grid_loop_auto<K: SymmetricKernel3d<f32>>(
+pub fn density_grid_loop_auto(
     levelset_grid: &mut [f32],
     subdomain_particles: &[Vector3<f32>],
     subdomain_particle_densities: &[f32],
@@ -722,7 +725,8 @@ pub fn density_grid_loop_auto<K: SymmetricKernel3d<f32>>(
     cube_radius: i64,
     squared_support_with_margin: f32,
     particle_rest_mass: f32,
-    kernel: &K,
+    kernel_support: f32,
+    kernel_type: &KernelType
 ) {
     #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
     {
@@ -739,7 +743,8 @@ pub fn density_grid_loop_auto<K: SymmetricKernel3d<f32>>(
                     cube_radius,
                     squared_support_with_margin,
                     particle_rest_mass,
-                    kernel,
+                    kernel_support,
+                    kernel_type,
                 );
             }
         }
@@ -760,25 +765,73 @@ pub fn density_grid_loop_auto<K: SymmetricKernel3d<f32>>(
                     cube_radius,
                     squared_support_with_margin,
                     particle_rest_mass,
-                    kernel,
+                    kernel_support,
+                    kernel_type,
                 );
             }
         }
     }
 
     // Fallback: scalar generic implementation
-    density_grid_loop_scalar::<i64, f32, K>(
-        levelset_grid,
-        subdomain_particles,
-        subdomain_particle_densities,
-        subdomain_mc_grid,
-        subdomain_ijk,
-        global_mc_grid,
-        cube_radius,
-        squared_support_with_margin,
-        particle_rest_mass,
-        kernel,
-    );
+    match kernel_type {
+        KernelType::CubicSpline => {
+            density_grid_loop_scalar::<i64, f32, CubicSplineKernel<f32>>(
+                levelset_grid,
+                subdomain_particles,
+                subdomain_particle_densities,
+                subdomain_mc_grid,
+                subdomain_ijk,
+                global_mc_grid,
+                cube_radius,
+                squared_support_with_margin,
+                particle_rest_mass,
+                &CubicSplineKernel::new(kernel_support),
+            );
+        },
+        KernelType::Poly6 => {
+            density_grid_loop_scalar::<i64, f32, Poly6Kernel<f32>>(
+                levelset_grid,
+                subdomain_particles,
+                subdomain_particle_densities,
+                subdomain_mc_grid,
+                subdomain_ijk,
+                global_mc_grid,
+                cube_radius,
+                squared_support_with_margin,
+                particle_rest_mass,
+                &Poly6Kernel::new(kernel_support),
+            );
+        },
+        KernelType::Spiky => {
+            density_grid_loop_scalar::<i64, f32, SpikyKernel<f32>>(
+                levelset_grid,
+                subdomain_particles,
+                subdomain_particle_densities,
+                subdomain_mc_grid,
+                subdomain_ijk,
+                global_mc_grid,
+                cube_radius,
+                squared_support_with_margin,
+                particle_rest_mass,
+                &SpikyKernel::new(kernel_support),
+            );
+        },
+        KernelType::WendlandQuinticC2 => {
+            density_grid_loop_scalar::<i64, f32, WendlandQuinticC2Kernel<f32>>(
+                levelset_grid,
+                subdomain_particles,
+                subdomain_particle_densities,
+                subdomain_mc_grid,
+                subdomain_ijk,
+                global_mc_grid,
+                cube_radius,
+                squared_support_with_margin,
+                particle_rest_mass,
+                &WendlandQuinticC2Kernel::new(kernel_support),
+            );
+        },
+    }
+
 }
 
 pub fn density_grid_loop_scalar<I: Index, R: Real, K: SymmetricKernel3d<R>>(
@@ -848,7 +901,7 @@ pub fn density_grid_loop_scalar<I: Index, R: Real, K: SymmetricKernel3d<R>>(
 
 #[cfg(all(target_arch = "aarch64"))]
 #[target_feature(enable = "neon")]
-pub fn density_grid_loop_neon<K: SymmetricKernel3d<f32>>(
+pub fn density_grid_loop_neon(
     levelset_grid: &mut [f32],
     subdomain_particles: &[Vector3<f32>],
     subdomain_particle_densities: &[f32],
@@ -858,9 +911,11 @@ pub fn density_grid_loop_neon<K: SymmetricKernel3d<f32>>(
     cube_radius: i64,
     _squared_support_with_margin: f32,
     particle_rest_mass: f32,
-    kernel: &K,
+    kernel_support: f32,
+    kernel_type: &KernelType,
 ) {
     use core::arch::aarch64::*;
+    use crate::kernel::NeonKernel;
     const LANES: usize = 4;
 
     // Ensure that we can safely compute global MC vertex positions via u32 indices per dimension
@@ -875,120 +930,193 @@ pub fn density_grid_loop_neon<K: SymmetricKernel3d<f32>>(
         u32::MAX
     );
 
-    let kernel_neon = kernel::CubicSplineKernelNeonF32::new(kernel.compact_support_radius());
+    #[target_feature(enable = "neon")]
+    fn density_grid_loop<K: NeonKernel>(
+        levelset_grid: &mut [f32],
+        subdomain_particles: &[Vector3<f32>],
+        subdomain_particle_densities: &[f32],
+        subdomain_mc_grid: &UniformCartesianCubeGrid3d<i64, f32>,
+        subdomain_ijk: &[i64; 3],
+        global_mc_grid: &UniformCartesianCubeGrid3d<GlobalIndex, f32>,
+        cube_radius: i64,
+        _squared_support_with_margin: f32,
+        particle_rest_mass: f32,
+        kernel_support: f32,
+    ) {
+        let kernel_neon = K::new(kernel_support);
 
-    profile!("density grid loop (neon)");
-    let mc_grid = subdomain_mc_grid;
-    let mc_points = mc_grid.points_per_dim();
-    let dim_y = mc_points[1] as usize;
-    let dim_z = mc_points[2] as usize;
+        profile!("density grid loop (neon)");
+        let mc_grid = subdomain_mc_grid;
+        let mc_points = mc_grid.points_per_dim();
+        let dim_y = mc_points[1] as usize;
+        let dim_z = mc_points[2] as usize;
 
-    // Preload constants used inside the hot loops
-    const K_OFFSETS_ARR: [u32; 4] = [0, 1, 2, 3];
-    let k_offsets = unsafe { vld1q_u32(K_OFFSETS_ARR.as_ptr()) };
-    let global_min = global_mc_grid.aabb().min();
-    let min_z_v = vdupq_n_f32(global_min[2]);
-    let cube_size = global_mc_grid.cell_size();
-    let support = kernel.compact_support_radius();
-    let support_sq_v = vdupq_n_f32(support * support);
+        // Preload constants used inside the hot loops
+        const K_OFFSETS_ARR: [u32; 4] = [0, 1, 2, 3];
+        let k_offsets = unsafe { vld1q_u32(K_OFFSETS_ARR.as_ptr()) };
+        let global_min = global_mc_grid.aabb().min();
+        let min_z_v = vdupq_n_f32(global_min[2]);
+        let cube_size = global_mc_grid.cell_size();
+        let support = kernel_support;
+        let support_sq_v = vdupq_n_f32(support * support);
 
-    for (p_i, rho_i) in subdomain_particles
-        .iter()
-        .copied()
-        .zip(subdomain_particle_densities.iter().copied())
-    {
-        let v_i = particle_rest_mass / rho_i;
+        for (p_i, rho_i) in subdomain_particles
+            .iter()
+            .copied()
+            .zip(subdomain_particle_densities.iter().copied())
+        {
+            let v_i = particle_rest_mass / rho_i;
 
-        let (lower, upper) = particle_influence_aabb(&p_i, &mc_grid, cube_radius);
-        let lower = lower.map(|i| i as usize);
-        let upper = upper.map(|i| i as usize);
+            let (lower, upper) = particle_influence_aabb(&p_i, &mc_grid, cube_radius);
+            let lower = lower.map(|i| i as usize);
+            let upper = upper.map(|i| i as usize);
 
-        let remainder = (upper[2] - lower[2]) % LANES;
-        let upper_k_aligned = upper[2] - remainder;
+            let remainder = (upper[2] - lower[2]) % LANES;
+            let upper_k_aligned = upper[2] - remainder;
 
-        let subdomain_ijk = subdomain_ijk.map(|i| i as u32);
-        let mc_cells = mc_grid.cells_per_dim().map(|i| i as u32);
+            let subdomain_ijk = subdomain_ijk.map(|i| i as u32);
+            let mc_cells = mc_grid.cells_per_dim().map(|i| i as u32);
 
-        // Broadcast particle coordinates once per particle
-        let particle_xs = vdupq_n_f32(p_i[0]);
-        let particle_ys = vdupq_n_f32(p_i[1]);
-        let particle_zs = vdupq_n_f32(p_i[2]);
+            // Broadcast particle coordinates once per particle
+            let particle_xs = vdupq_n_f32(p_i[0]);
+            let particle_ys = vdupq_n_f32(p_i[1]);
+            let particle_zs = vdupq_n_f32(p_i[2]);
 
-        // Function to evaluate kernel contribution of current particle to 8 grid points at once
-        let evaluate_contribution =
-            |k: usize, grid_xs: float32x4_t, grid_ys: float32x4_t| -> float32x4_t {
-                // Compute global k for 4 consecutive points
-                let global_k_base = vdupq_n_u32(subdomain_ijk[2] * mc_cells[2] + k as u32);
-                let global_k = vaddq_u32(global_k_base, k_offsets);
-                let global_k_f32 = vcvtq_f32_u32(global_k);
-                let grid_zs = vmlaq_n_f32(min_z_v, global_k_f32, cube_size);
-                // Deltas
-                let dxs = vsubq_f32(particle_xs, grid_xs);
-                let dys = vsubq_f32(particle_ys, grid_ys);
-                let dzs = vsubq_f32(particle_zs, grid_zs);
-                // Distance squared
-                let dist_sq = vmlaq_f32(vmulq_f32(dxs, dxs), dys, dys);
-                let dist_sq = vmlaq_f32(dist_sq, dzs, dzs);
-                // Cheap mask to skip work if all lanes are outside support
-                let inside_mask = vcltq_f32(dist_sq, support_sq_v);
-                let any_inside = vmaxvq_u32(inside_mask);
-                if any_inside == 0 {
-                    return vdupq_n_f32(0.0);
-                }
-                // Compute weights, then mask out lanes outside support
-                let dist = vsqrtq_f32(dist_sq);
-                let w = kernel_neon.evaluate(dist);
-                vbslq_f32(inside_mask, w, vdupq_n_f32(0.0))
-            };
+            // Function to evaluate kernel contribution of current particle to 8 grid points at once
+            let evaluate_contribution =
+                |k: usize, grid_xs: float32x4_t, grid_ys: float32x4_t| -> float32x4_t {
+                    // Compute global k for 4 consecutive points
+                    let global_k_base = vdupq_n_u32(subdomain_ijk[2] * mc_cells[2] + k as u32);
+                    let global_k = vaddq_u32(global_k_base, k_offsets);
+                    let global_k_f32 = vcvtq_f32_u32(global_k);
+                    let grid_zs = vmlaq_n_f32(min_z_v, global_k_f32, cube_size);
+                    // Deltas
+                    let dxs = vsubq_f32(particle_xs, grid_xs);
+                    let dys = vsubq_f32(particle_ys, grid_ys);
+                    let dzs = vsubq_f32(particle_zs, grid_zs);
+                    // Distance squared
+                    let dist_sq = vmlaq_f32(vmulq_f32(dxs, dxs), dys, dys);
+                    let dist_sq = vmlaq_f32(dist_sq, dzs, dzs);
+                    // Cheap mask to skip work if all lanes are outside support
+                    let inside_mask = vcltq_f32(dist_sq, support_sq_v);
+                    let any_inside = vmaxvq_u32(inside_mask);
+                    if any_inside == 0 {
+                        return vdupq_n_f32(0.0);
+                    }
+                    // Compute weights, then mask out lanes outside support
+                    let dist = vsqrtq_f32(dist_sq);
+                    let w = unsafe { kernel_neon.evaluate(dist) };
+                    vbslq_f32(inside_mask, w, vdupq_n_f32(0.0))
+                };
 
-        // Loop over grid points in support region of the particle
-        for i in lower[0]..upper[0] {
-            for j in lower[1]..upper[1] {
-                let flat_index_base = (i * dim_y + j) * dim_z;
+            // Loop over grid points in support region of the particle
+            for i in lower[0]..upper[0] {
+                for j in lower[1]..upper[1] {
+                    let flat_index_base = (i * dim_y + j) * dim_z;
 
-                let global_i = subdomain_ijk[0] * mc_cells[0] + i as u32;
-                let global_j = subdomain_ijk[1] * mc_cells[1] + j as u32;
+                    let global_i = subdomain_ijk[0] * mc_cells[0] + i as u32;
+                    let global_j = subdomain_ijk[1] * mc_cells[1] + j as u32;
 
-                let grid_x = global_i as f32 * cube_size + global_min[0];
-                let grid_y = global_j as f32 * cube_size + global_min[1];
-                let grid_xs = vdupq_n_f32(grid_x);
-                let grid_ys = vdupq_n_f32(grid_y);
+                    let grid_x = global_i as f32 * cube_size + global_min[0];
+                    let grid_y = global_j as f32 * cube_size + global_min[1];
+                    let grid_xs = vdupq_n_f32(grid_x);
+                    let grid_ys = vdupq_n_f32(grid_y);
 
-                for k in (lower[2]..upper_k_aligned).step_by(LANES) {
-                    let flat_point_idx = flat_index_base + k;
-                    let w_ij = evaluate_contribution(k, grid_xs, grid_ys);
+                    for k in (lower[2]..upper_k_aligned).step_by(LANES) {
+                        let flat_point_idx = flat_index_base + k;
+                        let w_ij = evaluate_contribution(k, grid_xs, grid_ys);
 
-                    let prev_val = unsafe {
-                        vld1q_f32(levelset_grid.as_ptr().offset(flat_point_idx as isize))
-                    };
-                    let val = vmlaq_n_f32(prev_val, w_ij, v_i);
-                    unsafe {
-                        vst1q_f32(
-                            levelset_grid.as_mut_ptr().offset(flat_point_idx as isize),
-                            val,
-                        )
-                    };
-                }
+                        let prev_val = unsafe {
+                            vld1q_f32(levelset_grid.as_ptr().offset(flat_point_idx as isize))
+                        };
+                        let val = vmlaq_n_f32(prev_val, w_ij, v_i);
+                        unsafe {
+                            vst1q_f32(
+                                levelset_grid.as_mut_ptr().offset(flat_point_idx as isize),
+                                val,
+                            )
+                        };
+                    }
 
-                // Handle remainder
-                if remainder > 0 {
-                    let flat_point_idx = flat_index_base + upper_k_aligned;
-                    let w_ij = evaluate_contribution(upper_k_aligned, grid_xs, grid_ys);
-                    let w_ij_v = vmulq_n_f32(w_ij, v_i);
-                    let w_ij_v =
-                        unsafe { std::mem::transmute::<float32x4_t, [f32; LANES]>(w_ij_v) };
-                    for rr in 0..remainder {
-                        levelset_grid[flat_point_idx + rr] += w_ij_v[rr];
+                    // Handle remainder
+                    if remainder > 0 {
+                        let flat_point_idx = flat_index_base + upper_k_aligned;
+                        let w_ij = evaluate_contribution(upper_k_aligned, grid_xs, grid_ys);
+                        let w_ij_v = vmulq_n_f32(w_ij, v_i);
+                        let w_ij_v =
+                            unsafe { std::mem::transmute::<float32x4_t, [f32; LANES]>(w_ij_v) };
+                        for rr in 0..remainder {
+                            levelset_grid[flat_point_idx + rr] += w_ij_v[rr];
+                        }
                     }
                 }
             }
         }
     }
+    
+    match kernel_type { 
+        KernelType::CubicSpline => {
+            density_grid_loop::<kernel::CubicSplineKernelNeonF32>(
+                levelset_grid,
+                subdomain_particles,
+                subdomain_particle_densities,
+                subdomain_mc_grid,
+                subdomain_ijk,
+                global_mc_grid,
+                cube_radius,
+                _squared_support_with_margin,
+                particle_rest_mass,
+                kernel_support,
+            );
+        },
+        KernelType::Poly6 => {
+            density_grid_loop::<kernel::Poly6KernelNeonF32>(
+                levelset_grid,
+                subdomain_particles,
+                subdomain_particle_densities,
+                subdomain_mc_grid,
+                subdomain_ijk,
+                global_mc_grid,
+                cube_radius,
+                _squared_support_with_margin,
+                particle_rest_mass,
+                kernel_support,
+            );
+        },
+        KernelType::Spiky => {
+            density_grid_loop::<kernel::SpikyKernelNeonF32>(
+                levelset_grid,
+                subdomain_particles,
+                subdomain_particle_densities,
+                subdomain_mc_grid,
+                subdomain_ijk,
+                global_mc_grid,
+                cube_radius,
+                _squared_support_with_margin,
+                particle_rest_mass,
+                kernel_support,
+            );
+        },
+        KernelType::WendlandQuinticC2 => {
+            density_grid_loop::<kernel::WendlandQuinticC2KernelNeonF32>(
+                levelset_grid,
+                subdomain_particles,
+                subdomain_particle_densities,
+                subdomain_mc_grid,
+                subdomain_ijk,
+                global_mc_grid,
+                cube_radius,
+                _squared_support_with_margin,
+                particle_rest_mass,
+                kernel_support,
+            );
+        },
+    }
 }
 
 #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
 #[target_feature(enable = "avx2,fma")]
-pub fn density_grid_loop_avx<K: SymmetricKernel3d<f32>>(
+pub fn density_grid_loop_avx(
     levelset_grid: &mut [f32],
     subdomain_particles: &[Vector3<f32>],
     subdomain_particle_densities: &[f32],
@@ -998,12 +1126,15 @@ pub fn density_grid_loop_avx<K: SymmetricKernel3d<f32>>(
     cube_radius: i64,
     _squared_support_with_margin: f32,
     particle_rest_mass: f32,
-    kernel: &K,
+    kernel_support: f32,
+    kernel_type: &KernelType,
 ) {
     #[cfg(target_arch = "x86")]
     use core::arch::x86::*;
     #[cfg(target_arch = "x86_64")]
     use core::arch::x86_64::*;
+    
+    use crate::kernel::AvxKernel;
 
     const LANES: usize = 8;
 
@@ -1019,116 +1150,189 @@ pub fn density_grid_loop_avx<K: SymmetricKernel3d<f32>>(
         i32::MAX
     );
 
-    let kernel_avx = kernel::CubicSplineKernelAvxF32::new(kernel.compact_support_radius());
+    #[target_feature(enable = "avx2,fma")]
+    fn density_grid_loop<K: AvxKernel>(
+        levelset_grid: &mut [f32],
+        subdomain_particles: &[Vector3<f32>],
+        subdomain_particle_densities: &[f32],
+        subdomain_mc_grid: &UniformCartesianCubeGrid3d<i64, f32>,
+        subdomain_ijk: &[i64; 3],
+        global_mc_grid: &UniformCartesianCubeGrid3d<GlobalIndex, f32>,
+        cube_radius: i64,
+        _squared_support_with_margin: f32,
+        particle_rest_mass: f32,
+        kernel_support: f32,
+    ) {
+        let kernel_avx = K::new(kernel_support);
 
-    profile!("density grid loop (avx)");
-    let mc_grid = subdomain_mc_grid;
-    let mc_points = mc_grid.points_per_dim();
-    let dim_y = mc_points[1] as usize;
-    let dim_z = mc_points[2] as usize;
+        profile!("density grid loop (avx)");
+        let mc_grid = subdomain_mc_grid;
+        let mc_points = mc_grid.points_per_dim();
+        let dim_y = mc_points[1] as usize;
+        let dim_z = mc_points[2] as usize;
 
-    // Preload constants used inside the hot loops
-    let k_offsets_i32 = _mm256_setr_epi32(0, 1, 2, 3, 4, 5, 6, 7);
-    let global_min = global_mc_grid.aabb().min();
-    let min_z_v = _mm256_set1_ps(global_min[2]);
-    let cube_size = global_mc_grid.cell_size();
-    let cube_size_ps = _mm256_set1_ps(cube_size);
-    let support = kernel.compact_support_radius();
-    let support_sq_v = _mm256_set1_ps(support * support);
+        // Preload constants used inside the hot loops
+        let k_offsets_i32 = _mm256_setr_epi32(0, 1, 2, 3, 4, 5, 6, 7);
+        let global_min = global_mc_grid.aabb().min();
+        let min_z_v = _mm256_set1_ps(global_min[2]);
+        let cube_size = global_mc_grid.cell_size();
+        let cube_size_ps = _mm256_set1_ps(cube_size);
+        let support = kernel_support;
+        let support_sq_v = _mm256_set1_ps(support * support);
 
-    for (p_i, rho_i) in subdomain_particles
-        .iter()
-        .copied()
-        .zip(subdomain_particle_densities.iter().copied())
-    {
-        let v_i = particle_rest_mass / rho_i;
+        for (p_i, rho_i) in subdomain_particles
+            .iter()
+            .copied()
+            .zip(subdomain_particle_densities.iter().copied())
+        {
+            let v_i = particle_rest_mass / rho_i;
 
-        let (lower, upper) = particle_influence_aabb(&p_i, &mc_grid, cube_radius);
-        let lower = lower.map(|i| i as usize);
-        let upper = upper.map(|i| i as usize);
+            let (lower, upper) = particle_influence_aabb(&p_i, &mc_grid, cube_radius);
+            let lower = lower.map(|i| i as usize);
+            let upper = upper.map(|i| i as usize);
 
-        let remainder = (upper[2] - lower[2]) % LANES;
-        let upper_k_aligned = upper[2] - remainder;
+            let remainder = (upper[2] - lower[2]) % LANES;
+            let upper_k_aligned = upper[2] - remainder;
 
-        let subdomain_ijk_i32 = subdomain_ijk.map(|i| i as i32);
-        let mc_cells = mc_grid.cells_per_dim().map(|i| i as i32);
+            let subdomain_ijk_i32 = subdomain_ijk.map(|i| i as i32);
+            let mc_cells = mc_grid.cells_per_dim().map(|i| i as i32);
 
-        // Broadcast particle coordinates once per particle
-        let particle_xs = _mm256_set1_ps(p_i[0]);
-        let particle_ys = _mm256_set1_ps(p_i[1]);
-        let particle_zs = _mm256_set1_ps(p_i[2]);
-        let v_i_ps = _mm256_set1_ps(v_i);
+            // Broadcast particle coordinates once per particle
+            let particle_xs = _mm256_set1_ps(p_i[0]);
+            let particle_ys = _mm256_set1_ps(p_i[1]);
+            let particle_zs = _mm256_set1_ps(p_i[2]);
+            let v_i_ps = _mm256_set1_ps(v_i);
 
-        // Function to evaluate kernel contribution of current particle to 8 grid points at once
-        let evaluate_contribution = |k: usize, grid_xs: __m256, grid_ys: __m256| -> __m256 {
-            // Compute global k for 8 consecutive points using i32 lanes and convert to f32
-            let base_k = subdomain_ijk_i32[2] * mc_cells[2] + k as i32;
-            let global_k_i32 = _mm256_add_epi32(_mm256_set1_epi32(base_k), k_offsets_i32);
-            let global_k_f32 = _mm256_cvtepi32_ps(global_k_i32);
-            let grid_zs = _mm256_fmadd_ps(global_k_f32, cube_size_ps, min_z_v);
+            // Function to evaluate kernel contribution of current particle to 8 grid points at once
+            let evaluate_contribution = |k: usize, grid_xs: __m256, grid_ys: __m256| -> __m256 {
+                // Compute global k for 8 consecutive points using i32 lanes and convert to f32
+                let base_k = subdomain_ijk_i32[2] * mc_cells[2] + k as i32;
+                let global_k_i32 = _mm256_add_epi32(_mm256_set1_epi32(base_k), k_offsets_i32);
+                let global_k_f32 = _mm256_cvtepi32_ps(global_k_i32);
+                let grid_zs = _mm256_fmadd_ps(global_k_f32, cube_size_ps, min_z_v);
 
-            // Deltas
-            let dxs = _mm256_sub_ps(particle_xs, grid_xs);
-            let dys = _mm256_sub_ps(particle_ys, grid_ys);
-            let dzs = _mm256_sub_ps(particle_zs, grid_zs);
+                // Deltas
+                let dxs = _mm256_sub_ps(particle_xs, grid_xs);
+                let dys = _mm256_sub_ps(particle_ys, grid_ys);
+                let dzs = _mm256_sub_ps(particle_zs, grid_zs);
 
-            // Distance squared
-            let dist_sq = {
-                let t = _mm256_fmadd_ps(dxs, dxs, _mm256_mul_ps(dys, dys));
-                _mm256_fmadd_ps(dzs, dzs, t)
-            };
+                // Distance squared
+                let dist_sq = {
+                    let t = _mm256_fmadd_ps(dxs, dxs, _mm256_mul_ps(dys, dys));
+                    _mm256_fmadd_ps(dzs, dzs, t)
+                };
 
-            // Cheap mask to skip work if all lanes are outside support
-            let inside_mask = _mm256_cmp_ps::<_CMP_LT_OQ>(dist_sq, support_sq_v);
-            if _mm256_movemask_ps(inside_mask) == 0 {
-                return _mm256_set1_ps(0.0);
-            }
-
-            // Compute weights, then mask out lanes outside support
-            let dist = _mm256_sqrt_ps(dist_sq);
-            let w = kernel_avx.evaluate(dist);
-            _mm256_and_ps(w, inside_mask)
-        };
-
-        // Loop over grid points in support region of the particle
-        for i in lower[0]..upper[0] {
-            for j in lower[1]..upper[1] {
-                let flat_index_base = (i * dim_y + j) * dim_z;
-
-                let global_i = subdomain_ijk_i32[0] * mc_cells[0] + i as i32;
-                let global_j = subdomain_ijk_i32[1] * mc_cells[1] + j as i32;
-
-                let grid_x = global_i as f32 * cube_size + global_min[0];
-                let grid_y = global_j as f32 * cube_size + global_min[1];
-                let grid_xs = _mm256_set1_ps(grid_x);
-                let grid_ys = _mm256_set1_ps(grid_y);
-
-                for k in (lower[2]..upper_k_aligned).step_by(LANES) {
-                    let flat_point_idx = flat_index_base + k;
-                    let w_ij = evaluate_contribution(k, grid_xs, grid_ys);
-
-                    unsafe {
-                        let prev_val = _mm256_loadu_ps(levelset_grid.as_ptr().add(flat_point_idx));
-                        let val = _mm256_fmadd_ps(w_ij, v_i_ps, prev_val);
-                        _mm256_storeu_ps(levelset_grid.as_mut_ptr().add(flat_point_idx), val);
-                    }
+                // Cheap mask to skip work if all lanes are outside support
+                let inside_mask = _mm256_cmp_ps::<_CMP_LT_OQ>(dist_sq, support_sq_v);
+                if _mm256_movemask_ps(inside_mask) == 0 {
+                    return _mm256_set1_ps(0.0);
                 }
 
-                // Handle remainder
-                if remainder > 0 {
-                    let flat_point_idx = flat_index_base + upper_k_aligned;
-                    let w_ij = evaluate_contribution(upper_k_aligned, grid_xs, grid_ys);
-                    unsafe {
-                        let val = _mm256_mul_ps(w_ij, v_i_ps);
-                        let mut tmp: [f32; LANES] = [0.0; LANES];
-                        _mm256_storeu_ps(tmp.as_mut_ptr(), val);
-                        for rr in 0..remainder {
-                            levelset_grid[flat_point_idx + rr] += tmp[rr];
+                // Compute weights, then mask out lanes outside support
+                let dist = _mm256_sqrt_ps(dist_sq);
+                let w = unsafe { kernel_avx.evaluate(dist) };
+                _mm256_and_ps(w, inside_mask)
+            };
+
+            // Loop over grid points in support region of the particle
+            for i in lower[0]..upper[0] {
+                for j in lower[1]..upper[1] {
+                    let flat_index_base = (i * dim_y + j) * dim_z;
+
+                    let global_i = subdomain_ijk_i32[0] * mc_cells[0] + i as i32;
+                    let global_j = subdomain_ijk_i32[1] * mc_cells[1] + j as i32;
+
+                    let grid_x = global_i as f32 * cube_size + global_min[0];
+                    let grid_y = global_j as f32 * cube_size + global_min[1];
+                    let grid_xs = _mm256_set1_ps(grid_x);
+                    let grid_ys = _mm256_set1_ps(grid_y);
+
+                    for k in (lower[2]..upper_k_aligned).step_by(LANES) {
+                        let flat_point_idx = flat_index_base + k;
+                        let w_ij = evaluate_contribution(k, grid_xs, grid_ys);
+
+                        unsafe {
+                            let prev_val = _mm256_loadu_ps(levelset_grid.as_ptr().add(flat_point_idx));
+                            let val = _mm256_fmadd_ps(w_ij, v_i_ps, prev_val);
+                            _mm256_storeu_ps(levelset_grid.as_mut_ptr().add(flat_point_idx), val);
+                        }
+                    }
+
+                    // Handle remainder
+                    if remainder > 0 {
+                        let flat_point_idx = flat_index_base + upper_k_aligned;
+                        let w_ij = evaluate_contribution(upper_k_aligned, grid_xs, grid_ys);
+                        unsafe {
+                            let val = _mm256_mul_ps(w_ij, v_i_ps);
+                            let mut tmp: [f32; LANES] = [0.0; LANES];
+                            _mm256_storeu_ps(tmp.as_mut_ptr(), val);
+                            for rr in 0..remainder {
+                                levelset_grid[flat_point_idx + rr] += tmp[rr];
+                            }
                         }
                     }
                 }
             }
         }
+    }
+
+    match kernel_type {
+        KernelType::CubicSpline => {
+            density_grid_loop::<kernel::CubicSplineKernelAvxF32>(
+                levelset_grid,
+                subdomain_particles,
+                subdomain_particle_densities,
+                subdomain_mc_grid,
+                subdomain_ijk,
+                global_mc_grid,
+                cube_radius,
+                _squared_support_with_margin,
+                particle_rest_mass,
+                kernel_support,
+            );
+        },
+        KernelType::Poly6 => {
+            density_grid_loop::<kernel::Poly6KernelAvxF32>(
+                levelset_grid,
+                subdomain_particles,
+                subdomain_particle_densities,
+                subdomain_mc_grid,
+                subdomain_ijk,
+                global_mc_grid,
+                cube_radius,
+                _squared_support_with_margin,
+                particle_rest_mass,
+                kernel_support,
+            );
+        },
+        KernelType::Spiky => {
+            density_grid_loop::<kernel::SpikyKernelAvxF32>(
+                levelset_grid,
+                subdomain_particles,
+                subdomain_particle_densities,
+                subdomain_mc_grid,
+                subdomain_ijk,
+                global_mc_grid,
+                cube_radius,
+                _squared_support_with_margin,
+                particle_rest_mass,
+                kernel_support,
+            );
+        },
+        KernelType::WendlandQuinticC2 => {
+            density_grid_loop::<kernel::WendlandQuinticC2KernelAvxF32>(
+                levelset_grid,
+                subdomain_particles,
+                subdomain_particle_densities,
+                subdomain_mc_grid,
+                subdomain_ijk,
+                global_mc_grid,
+                cube_radius,
+                _squared_support_with_margin,
+                particle_rest_mass,
+                kernel_support,
+            );
+        },
     }
 }
 
@@ -1436,7 +1640,8 @@ pub(crate) fn reconstruct_subdomains<I: Index, R: Real, K: SymmetricKernel3d<R> 
                     cube_radius.to_i64().unwrap(),
                     squared_support_with_margin.to_f32().unwrap(),
                     parameters.particle_rest_mass.to_f32().unwrap(),
-                    &CubicSplineKernel::new(parameters.compact_support_radius.to_f32().unwrap()),
+                    parameters.compact_support_radius.to_f32().unwrap(),
+                    &parameters.kernel_type,
                 );
             } else {
                 density_grid_loop_scalar(
