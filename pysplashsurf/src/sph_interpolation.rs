@@ -1,3 +1,4 @@
+use crate::utils::*;
 use numpy as np;
 use numpy::prelude::*;
 use numpy::{Element, PyArray1, PyArray2, PyUntypedArray};
@@ -5,14 +6,13 @@ use pyo3::PyResult;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3_stub_gen::derive::*;
+use splashsurf_lib::kernel::KernelType;
 use splashsurf_lib::nalgebra::SVector;
 use splashsurf_lib::{
     Real,
     nalgebra::{Unit, Vector3},
     sph_interpolation::SphInterpolator,
 };
-use splashsurf_lib::kernel::KernelType;
-use crate::utils::*;
 
 enum PySphInterpolatorWrapper {
     F32(SphInterpolator<f32>),
@@ -55,7 +55,7 @@ impl PySphInterpolator {
                 densities,
                 R::from_float(particle_rest_mass),
                 R::from_float(compact_support_radius),
-                KernelType::CubicSpline
+                KernelType::CubicSpline,
             )))
         } else {
             Err(pyerr_scalar_type_mismatch())

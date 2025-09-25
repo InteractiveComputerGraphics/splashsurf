@@ -1,9 +1,12 @@
 //! Functions for interpolating quantities (e.g. normals, scalar fields) by evaluating SPH sums
 
 use crate::Real;
-use crate::kernel::{CubicSplineKernel, KernelType, Poly6Kernel, SpikyKernel, SymmetricKernel3d, WendlandQuinticC2Kernel};
-use crate::profile;
 use crate::ThreadSafe;
+use crate::kernel::{
+    CubicSplineKernel, KernelType, Poly6Kernel, SpikyKernel, SymmetricKernel3d,
+    WendlandQuinticC2Kernel,
+};
+use crate::profile;
 use nalgebra::{SVector, Unit, Vector3};
 use rayon::prelude::*;
 use rstar::RTree;
@@ -63,7 +66,7 @@ impl<R: Real> SphInterpolator<R> {
         particle_densities: &[R],
         particle_rest_mass: R,
         compact_support_radius: R,
-        kernel_type: KernelType
+        kernel_type: KernelType,
     ) -> Self {
         assert_eq!(particle_positions.len(), particle_densities.len());
 
@@ -137,21 +140,16 @@ impl<R: Real> SphInterpolator<R> {
                 interpolation_points,
                 normals,
             ),
-            KernelType::Poly6 => interpolate_normals_helper::<R, Poly6Kernel<R>>(
-                self,
-                interpolation_points,
-                normals,
-            ),
-            KernelType::Spiky => interpolate_normals_helper::<R, SpikyKernel<R>>(
-                self,
-                interpolation_points,
-                normals,
-            ),
-            KernelType::WendlandQuinticC2 => interpolate_normals_helper::<R, WendlandQuinticC2Kernel<R>>(
-                self,
-                interpolation_points,
-                normals,
-            ),
+            KernelType::Poly6 => {
+                interpolate_normals_helper::<R, Poly6Kernel<R>>(self, interpolation_points, normals)
+            }
+            KernelType::Spiky => {
+                interpolate_normals_helper::<R, SpikyKernel<R>>(self, interpolation_points, normals)
+            }
+            KernelType::WendlandQuinticC2 => interpolate_normals_helper::<
+                R,
+                WendlandQuinticC2Kernel<R>,
+            >(self, interpolation_points, normals),
         }
     }
 
@@ -245,7 +243,11 @@ impl<R: Real> SphInterpolator<R> {
         profile!("interpolate_quantity_inplace");
         assert_eq!(particle_quantity.len(), self.tree.size());
 
-        fn interpolate_quantity_helper<R: Real, T: InterpolationQuantity<R>, K: SymmetricKernel3d<R> + Sync>(
+        fn interpolate_quantity_helper<
+            R: Real,
+            T: InterpolationQuantity<R>,
+            K: SymmetricKernel3d<R> + Sync,
+        >(
             sph: &SphInterpolator<R>,
             particle_quantity: &[T],
             interpolation_points: &[Vector3<R>],
@@ -283,7 +285,8 @@ impl<R: Real> SphInterpolator<R> {
                         let r = dx.norm();
 
                         // Unchecked access is fine as we asserted before that the slice has the correct length
-                        let A_j = unsafe { particle_quantity.get_unchecked(p_j.data.index).clone() };
+                        let A_j =
+                            unsafe { particle_quantity.get_unchecked(p_j.data.index).clone() };
                         let W_ij = kernel.evaluate(r);
 
                         interpolated_value += A_j.scale(vol_j * W_ij);
@@ -319,13 +322,15 @@ impl<R: Real> SphInterpolator<R> {
                 interpolated_values,
                 first_order_correction,
             ),
-            KernelType::WendlandQuinticC2 => interpolate_quantity_helper::<R, T, WendlandQuinticC2Kernel<R>>(
-                self,
-                particle_quantity,
-                interpolation_points,
-                interpolated_values,
-                first_order_correction,
-            ),
+            KernelType::WendlandQuinticC2 => {
+                interpolate_quantity_helper::<R, T, WendlandQuinticC2Kernel<R>>(
+                    self,
+                    particle_quantity,
+                    interpolation_points,
+                    interpolated_values,
+                    first_order_correction,
+                )
+            }
         }
     }
 }

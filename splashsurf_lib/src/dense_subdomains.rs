@@ -16,7 +16,10 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use thread_local::ThreadLocal;
 
 use crate::density_map::sequential_compute_particle_densities_filtered;
-use crate::kernel::{CubicSplineKernel, KernelType, Poly6Kernel, SpikyKernel, SymmetricKernel3d, WendlandQuinticC2Kernel};
+use crate::kernel::{
+    CubicSplineKernel, KernelType, Poly6Kernel, SpikyKernel, SymmetricKernel3d,
+    WendlandQuinticC2Kernel,
+};
 use crate::marching_cubes::marching_cubes_lut::marching_cubes_triangulation_iter;
 use crate::mesh::{HexMesh3d, TriMesh3d};
 use crate::neighborhood_search::{
@@ -726,7 +729,7 @@ pub fn density_grid_loop_auto(
     squared_support_with_margin: f32,
     particle_rest_mass: f32,
     kernel_support: f32,
-    kernel_type: &KernelType
+    kernel_type: &KernelType,
 ) {
     #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
     {
@@ -787,7 +790,7 @@ pub fn density_grid_loop_auto(
                 particle_rest_mass,
                 &CubicSplineKernel::new(kernel_support),
             );
-        },
+        }
         KernelType::Poly6 => {
             density_grid_loop_scalar::<i64, f32, Poly6Kernel<f32>>(
                 levelset_grid,
@@ -801,7 +804,7 @@ pub fn density_grid_loop_auto(
                 particle_rest_mass,
                 &Poly6Kernel::new(kernel_support),
             );
-        },
+        }
         KernelType::Spiky => {
             density_grid_loop_scalar::<i64, f32, SpikyKernel<f32>>(
                 levelset_grid,
@@ -815,7 +818,7 @@ pub fn density_grid_loop_auto(
                 particle_rest_mass,
                 &SpikyKernel::new(kernel_support),
             );
-        },
+        }
         KernelType::WendlandQuinticC2 => {
             density_grid_loop_scalar::<i64, f32, WendlandQuinticC2Kernel<f32>>(
                 levelset_grid,
@@ -829,9 +832,8 @@ pub fn density_grid_loop_auto(
                 particle_rest_mass,
                 &WendlandQuinticC2Kernel::new(kernel_support),
             );
-        },
+        }
     }
-
 }
 
 pub fn density_grid_loop_scalar<I: Index, R: Real, K: SymmetricKernel3d<R>>(
@@ -914,8 +916,8 @@ pub fn density_grid_loop_neon(
     kernel_support: f32,
     kernel_type: &KernelType,
 ) {
-    use core::arch::aarch64::*;
     use crate::kernel::NeonKernel;
+    use core::arch::aarch64::*;
     const LANES: usize = 4;
 
     // Ensure that we can safely compute global MC vertex positions via u32 indices per dimension
@@ -1053,8 +1055,8 @@ pub fn density_grid_loop_neon(
             }
         }
     }
-    
-    match kernel_type { 
+
+    match kernel_type {
         KernelType::CubicSpline => {
             density_grid_loop::<kernel::CubicSplineKernelNeonF32>(
                 levelset_grid,
@@ -1068,7 +1070,7 @@ pub fn density_grid_loop_neon(
                 particle_rest_mass,
                 kernel_support,
             );
-        },
+        }
         KernelType::Poly6 => {
             density_grid_loop::<kernel::Poly6KernelNeonF32>(
                 levelset_grid,
@@ -1082,7 +1084,7 @@ pub fn density_grid_loop_neon(
                 particle_rest_mass,
                 kernel_support,
             );
-        },
+        }
         KernelType::Spiky => {
             density_grid_loop::<kernel::SpikyKernelNeonF32>(
                 levelset_grid,
@@ -1096,7 +1098,7 @@ pub fn density_grid_loop_neon(
                 particle_rest_mass,
                 kernel_support,
             );
-        },
+        }
         KernelType::WendlandQuinticC2 => {
             density_grid_loop::<kernel::WendlandQuinticC2KernelNeonF32>(
                 levelset_grid,
@@ -1110,7 +1112,7 @@ pub fn density_grid_loop_neon(
                 particle_rest_mass,
                 kernel_support,
             );
-        },
+        }
     }
 }
 
@@ -1133,7 +1135,7 @@ pub fn density_grid_loop_avx(
     use core::arch::x86::*;
     #[cfg(target_arch = "x86_64")]
     use core::arch::x86_64::*;
-    
+
     use crate::kernel::AvxKernel;
 
     const LANES: usize = 8;
@@ -1252,7 +1254,8 @@ pub fn density_grid_loop_avx(
                         let w_ij = evaluate_contribution(k, grid_xs, grid_ys);
 
                         unsafe {
-                            let prev_val = _mm256_loadu_ps(levelset_grid.as_ptr().add(flat_point_idx));
+                            let prev_val =
+                                _mm256_loadu_ps(levelset_grid.as_ptr().add(flat_point_idx));
                             let val = _mm256_fmadd_ps(w_ij, v_i_ps, prev_val);
                             _mm256_storeu_ps(levelset_grid.as_mut_ptr().add(flat_point_idx), val);
                         }
@@ -1290,7 +1293,7 @@ pub fn density_grid_loop_avx(
                 particle_rest_mass,
                 kernel_support,
             );
-        },
+        }
         KernelType::Poly6 => {
             density_grid_loop::<kernel::Poly6KernelAvxF32>(
                 levelset_grid,
@@ -1304,7 +1307,7 @@ pub fn density_grid_loop_avx(
                 particle_rest_mass,
                 kernel_support,
             );
-        },
+        }
         KernelType::Spiky => {
             density_grid_loop::<kernel::SpikyKernelAvxF32>(
                 levelset_grid,
@@ -1318,7 +1321,7 @@ pub fn density_grid_loop_avx(
                 particle_rest_mass,
                 kernel_support,
             );
-        },
+        }
         KernelType::WendlandQuinticC2 => {
             density_grid_loop::<kernel::WendlandQuinticC2KernelAvxF32>(
                 levelset_grid,
@@ -1332,7 +1335,7 @@ pub fn density_grid_loop_avx(
                 particle_rest_mass,
                 kernel_support,
             );
-        },
+        }
     }
 }
 
