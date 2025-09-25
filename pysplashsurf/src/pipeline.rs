@@ -198,6 +198,7 @@ pub fn reconstruction_pipeline<'py>(
         enable_simd: simd,
         spatial_decomposition,
         global_neighborhood_list: false,
+        kernel_type: splashsurf_lib::kernel::KernelType::CubicSpline,
     };
 
     let postprocessing_args = splashsurf::reconstruct::ReconstructionPostprocessingParameters {

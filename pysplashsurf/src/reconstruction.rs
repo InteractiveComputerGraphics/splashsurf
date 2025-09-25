@@ -181,6 +181,7 @@ pub fn reconstruct_surface<'py>(
         enable_simd: simd,
         spatial_decomposition,
         global_neighborhood_list,
+        kernel_type: splashsurf_lib::kernel::KernelType::CubicSpline,
     };
 
     let element_type = particles.dtype();
