@@ -1,4 +1,4 @@
-use crate::utils::*;
+use crate::utils::{KernelType, *};
 use numpy as np;
 use numpy::prelude::*;
 use numpy::{Element, PyArray1, PyArray2, PyUntypedArray};
@@ -6,7 +6,6 @@ use pyo3::PyResult;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3_stub_gen::derive::*;
-use splashsurf_lib::kernel::KernelType;
 use splashsurf_lib::nalgebra::SVector;
 use splashsurf_lib::{
     Real,
@@ -19,7 +18,7 @@ enum PySphInterpolatorWrapper {
     F64(SphInterpolator<f64>),
 }
 
-/// Interpolator of per-particle quantities to arbitrary points using SPH interpolation (with cubic kernel)
+/// Interpolator of per-particle quantities to arbitrary points using SPH interpolation
 #[gen_stub_pyclass]
 #[pyclass]
 #[pyo3(name = "SphInterpolator")]
@@ -36,6 +35,7 @@ impl PySphInterpolator {
         particle_densities: &Bound<'py, PyUntypedArray>,
         particle_rest_mass: f64,
         compact_support_radius: f64,
+        kernel_type: KernelType,
     ) -> PyResult<PySphInterpolator>
     where
         PySphInterpolator: From<SphInterpolator<R>>,
@@ -55,7 +55,7 @@ impl PySphInterpolator {
                 densities,
                 R::from_float(particle_rest_mass),
                 R::from_float(compact_support_radius),
-                KernelType::CubicSpline,
+                kernel_type.into_lib_enum(),
             )))
         } else {
             Err(pyerr_scalar_type_mismatch())
@@ -160,7 +160,7 @@ impl PySphInterpolator {
 #[gen_stub_pymethods]
 #[pymethods]
 impl PySphInterpolator {
-    /// Constructs an SPH interpolator (with cubic kernels) for the given particles
+    /// Constructs an SPH interpolator for the given particles
     ///
     /// Parameters
     /// ----------
@@ -171,13 +171,16 @@ impl PySphInterpolator {
     /// particle_rest_mass
     ///     The rest mass of each particle (assumed to be the same for all particles).
     /// compact_support_radius
-    ///     The compact support radius of the cubic spline kernel used for interpolation.
+    ///     The compact support radius of the kernel used for interpolation.
+    /// kernel_type
+    ///     The kernel function used for interpolation
     #[new]
     fn py_new<'py>(
         particle_positions: &Bound<'py, PyUntypedArray>,
         particle_densities: &Bound<'py, PyUntypedArray>,
         particle_rest_mass: f64,
         compact_support_radius: f64,
+        kernel_type: KernelType,
     ) -> PyResult<Self> {
         let py = particle_positions.py();
         let element_type = particle_positions.dtype();
@@ -188,6 +191,7 @@ impl PySphInterpolator {
                 particle_densities,
                 particle_rest_mass,
                 compact_support_radius,
+                kernel_type,
             )
         } else if element_type.is_equiv_to(&np::dtype::<f64>(py)) {
             Self::new_generic::<f64>(
@@ -195,6 +199,7 @@ impl PySphInterpolator {
                 particle_densities,
                 particle_rest_mass,
                 compact_support_radius,
+                kernel_type,
             )
         } else {
             Err(pyerr_unsupported_scalar())

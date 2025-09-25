@@ -1,7 +1,7 @@
 use crate::mesh::PyTriMesh3d;
 use crate::neighborhood_search::PyNeighborhoodLists;
 use crate::uniform_grid::PyUniformGrid;
-use crate::utils;
+use crate::utils::{self, KernelType};
 use anyhow::anyhow;
 use ndarray::ArrayView1;
 use numpy as np;
@@ -124,6 +124,8 @@ impl PySurfaceReconstruction {
 ///     Flag to enable multi-threading for the reconstruction and post-processing steps.
 /// simd
 ///    Flag to enable SIMD vectorization for the reconstruction if supported by the CPU architecture.
+/// kernel_type
+///     Kernel function to use for the reconstruction.
 /// subdomain_grid
 ///     Flag to enable spatial decomposition by dividing the domain into subdomains with dense marching cube grids for efficient multi-threading.
 /// subdomain_grid_auto_disable
@@ -135,8 +137,8 @@ impl PySurfaceReconstruction {
 #[pyo3(name = "reconstruct_surface")]
 #[pyo3(signature = (particles, *,
     particle_radius, rest_density = 1000.0, smoothing_length, cube_size, iso_surface_threshold = 0.6,
-    aabb_min = None, aabb_max = None,
-    multi_threading = true, simd = true, global_neighborhood_list = false,
+    aabb_min = None, aabb_max = None, multi_threading = true, simd = true,
+    kernel_type = KernelType::CubicSpline, global_neighborhood_list = false,
     subdomain_grid = true, subdomain_grid_auto_disable = true, subdomain_num_cubes_per_dim = 64
 ))]
 pub fn reconstruct_surface<'py>(
@@ -150,6 +152,7 @@ pub fn reconstruct_surface<'py>(
     aabb_max: Option<[f64; 3]>,
     multi_threading: bool,
     simd: bool,
+    kernel_type: KernelType,
     global_neighborhood_list: bool,
     subdomain_grid: bool,
     subdomain_grid_auto_disable: bool,
@@ -181,7 +184,7 @@ pub fn reconstruct_surface<'py>(
         enable_simd: simd,
         spatial_decomposition,
         global_neighborhood_list,
-        kernel_type: splashsurf_lib::kernel::KernelType::CubicSpline,
+        kernel_type: kernel_type.into_lib_enum(),
     };
 
     let element_type = particles.dtype();

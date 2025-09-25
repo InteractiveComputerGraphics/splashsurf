@@ -18,7 +18,7 @@ use std::borrow::Cow;
 
 use crate::mesh::PyMeshWithData;
 use crate::reconstruction::PySurfaceReconstruction;
-use crate::utils::{IndexT, pyerr_unsupported_scalar};
+use crate::utils::{IndexT, KernelType, pyerr_unsupported_scalar};
 
 /// Runs the surface reconstruction pipeline for the given particle positions with optional post-processing
 ///
@@ -49,7 +49,9 @@ use crate::utils::{IndexT, pyerr_unsupported_scalar};
 /// multi_threading
 ///     Flag to enable multi-threading for the reconstruction and post-processing steps.
 /// simd
-///    Flag to enable SIMD vectorization for the reconstruction if supported by the CPU architecture.
+///     Flag to enable SIMD vectorization for the reconstruction if supported by the CPU architecture.
+/// kernel_type
+///     Kernel function to use for the reconstruction.
 /// subdomain_grid
 ///     Flag to enable spatial decomposition by dividing the domain into subdomains with dense marching cube grids for efficient multi-threading.
 /// subdomain_grid_auto_disable
@@ -110,7 +112,7 @@ use crate::utils::{IndexT, pyerr_unsupported_scalar};
 #[pyo3(name = "reconstruction_pipeline")]
 #[pyo3(signature = (particles, *, attributes_to_interpolate = None,
     particle_radius, rest_density = 1000.0, smoothing_length, cube_size, iso_surface_threshold = 0.6,
-    aabb_min = None, aabb_max = None, multi_threading = true, simd = true,
+    aabb_min = None, aabb_max = None, multi_threading = true, simd = true, kernel_type = KernelType::CubicSpline,
     subdomain_grid = true, subdomain_grid_auto_disable = true, subdomain_num_cubes_per_dim = 64,
     check_mesh_closed = false, check_mesh_manifold = false, check_mesh_orientation = false, check_mesh_debug = false,
     mesh_cleanup = false, mesh_cleanup_snap_dist = None, decimate_barnacles = false, keep_vertices = false, compute_normals = false, sph_normals = false,
@@ -131,6 +133,7 @@ pub fn reconstruction_pipeline<'py>(
     aabb_max: Option<[f64; 3]>,
     multi_threading: bool,
     simd: bool,
+    kernel_type: KernelType,
     subdomain_grid: bool,
     subdomain_grid_auto_disable: bool,
     subdomain_num_cubes_per_dim: u32,
@@ -198,7 +201,7 @@ pub fn reconstruction_pipeline<'py>(
         enable_simd: simd,
         spatial_decomposition,
         global_neighborhood_list: false,
-        kernel_type: splashsurf_lib::kernel::KernelType::CubicSpline,
+        kernel_type: kernel_type.into_lib_enum(),
     };
 
     let postprocessing_args = splashsurf::reconstruct::ReconstructionPostprocessingParameters {
