@@ -197,7 +197,7 @@ unsafe impl NeonKernel for CubicSplineKernelNeonF32 {
 
     /// Evaluates the cubic spline kernel at the specified radial distances
     #[target_feature(enable = "neon")]
-    fn evaluate(&self, r: float32x4_t) -> float32x4_t {
+    unsafe fn evaluate(&self, r: float32x4_t) -> float32x4_t {
         use core::arch::aarch64::*;
 
         let one = vdupq_n_f32(1.0);
