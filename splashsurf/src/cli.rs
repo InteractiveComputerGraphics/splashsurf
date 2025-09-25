@@ -86,7 +86,7 @@ pub(crate) enum KernelType {
     CubicSpline,
     Poly6,
     Spiky,
-    WendlandQuinticC2
+    WendlandQuinticC2,
 }
 
 impl KernelType {

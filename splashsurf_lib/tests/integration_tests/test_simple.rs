@@ -1,10 +1,10 @@
 use nalgebra::Vector3;
+use splashsurf_lib::kernel::KernelType;
 use splashsurf_lib::marching_cubes::check_mesh_consistency;
 use splashsurf_lib::{
     Aabb3d, GridDecompositionParameters, Parameters, Real, SpatialDecomposition,
     reconstruct_surface,
 };
-use splashsurf_lib::kernel::KernelType;
 
 enum Strategy {
     Global,

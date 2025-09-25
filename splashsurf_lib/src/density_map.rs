@@ -127,7 +127,12 @@ fn init_density_storage<R: Real>(densities: &mut Vec<R>, new_len: usize) {
 
 /// Computes the individual densities of particles using a standard SPH sum, sequential implementation
 #[inline(never)]
-pub fn sequential_compute_particle_densities<I: Index, R: Real, Nl: NeighborhoodList + ?Sized, K: SymmetricKernel3d<R>>(
+pub fn sequential_compute_particle_densities<
+    I: Index,
+    R: Real,
+    Nl: NeighborhoodList + ?Sized,
+    K: SymmetricKernel3d<R>,
+>(
     particle_positions: &[Vector3<R>],
     particle_neighbor_lists: &Nl,
     compact_support_radius: R,
@@ -379,12 +384,13 @@ pub fn sequential_generate_sparse_density_map<I: Index, R: Real, K: SymmetricKer
 
     let mut sparse_densities = new_map();
 
-    let density_map_generator: SparseDensityMapGenerator<I, R, K> = SparseDensityMapGenerator::try_new(
-        grid,
-        compact_support_radius,
-        cube_size,
-        particle_rest_mass,
-    )?;
+    let density_map_generator: SparseDensityMapGenerator<I, R, K> =
+        SparseDensityMapGenerator::try_new(
+            grid,
+            compact_support_radius,
+            cube_size,
+            particle_rest_mass,
+        )?;
 
     let process_particle = |particle_data: (&Vector3<R>, R)| {
         let (particle, particle_density) = particle_data;
@@ -429,12 +435,13 @@ pub fn parallel_generate_sparse_density_map<I: Index, R: Real, K: SymmetricKerne
 
     // Generate thread local density maps
     {
-        let density_map_generator: SparseDensityMapGenerator<I, R, K> = SparseDensityMapGenerator::try_new(
-            grid,
-            compact_support_radius,
-            cube_size,
-            particle_rest_mass,
-        )?;
+        let density_map_generator: SparseDensityMapGenerator<I, R, K> =
+            SparseDensityMapGenerator::try_new(
+                grid,
+                compact_support_radius,
+                cube_size,
+                particle_rest_mass,
+            )?;
 
         profile!("generate thread local maps");
 

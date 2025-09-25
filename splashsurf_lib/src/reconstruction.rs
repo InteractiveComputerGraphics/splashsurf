@@ -2,17 +2,39 @@ use crate::dense_subdomains::{
     compute_global_densities_and_neighbors, decomposition, initialize_parameters,
     reconstruct_subdomains, stitching, subdomain_classification::GhostMarginClassifier,
 };
+use crate::density_map::{compute_particle_densities_inplace, generate_sparse_density_map};
+use crate::kernel::{
+    CubicSplineKernel, KernelType, Poly6Kernel, SpikyKernel, WendlandQuinticC2Kernel,
+};
 use crate::mesh::TriMesh3d;
 use crate::uniform_grid::UniformGrid;
 use crate::workspace::LocalReconstructionWorkspace;
 use crate::{
-    Index, Parameters, Real, ReconstructionError, SurfaceReconstruction, density_map, kernel,
-    marching_cubes, neighborhood_search, profile,
+    Index, Parameters, Real, ReconstructionError, SurfaceReconstruction, kernel, marching_cubes,
+    neighborhood_search, profile,
 };
 use anyhow::Context;
 use log::{info, trace};
 use nalgebra::Vector3;
-use crate::kernel::{CubicSplineKernel, KernelType, Poly6Kernel, SpikyKernel, WendlandQuinticC2Kernel};
+
+macro_rules! call_with_kernel_type {
+    ($function:ident; $kernel_type:expr; $( $param:expr ), *) => {
+        match $kernel_type {
+            KernelType::CubicSpline => {
+                $function::<I, R, CubicSplineKernel<R>>($( $param ), *)
+            },
+            KernelType::Poly6 => {
+                $function::<I, R, Poly6Kernel<R>>($( $param ), *)
+            },
+            KernelType::Spiky => {
+                $function::<I, R, SpikyKernel<R>>($( $param ), *)
+            },
+            KernelType::WendlandQuinticC2 => {
+                $function::<I, R, WendlandQuinticC2Kernel<R>>($( $param ), *)
+            }
+        }
+    }
+}
 
 /// Performs a surface reconstruction with a regular grid for domain decomposition
 pub(crate) fn reconstruct_surface_subdomain_grid<I: Index, R: Real>(
@@ -32,80 +54,23 @@ pub(crate) fn reconstruct_surface_subdomain_grid<I: Index, R: Real>(
     let subdomains =
         decomposition::<I, R, GhostMarginClassifier<I>>(&internal_parameters, particle_positions)?;
 
-    let (particle_densities, particle_neighbors) = {
-        match parameters.kernel_type {
-            KernelType::CubicSpline => {
-                compute_global_densities_and_neighbors::<I, R, CubicSplineKernel<R>>(
-                    &internal_parameters,
-                    particle_positions,
-                    &subdomains,
-                )
-            },
-            KernelType::Poly6 => {
-                compute_global_densities_and_neighbors::<I, R, Poly6Kernel<R>>(
-                    &internal_parameters,
-                    particle_positions,
-                    &subdomains,
-                )
-            },
-            KernelType::Spiky => {
-                compute_global_densities_and_neighbors::<I, R, SpikyKernel<R>>(
-                    &internal_parameters,
-                    particle_positions,
-                    &subdomains,
-                )
-            },
-            KernelType::WendlandQuinticC2 => {
-                compute_global_densities_and_neighbors::<I, R, WendlandQuinticC2Kernel<R>>(
-                    &internal_parameters,
-                    particle_positions,
-                    &subdomains,
-                )
-            }
-        }
-    };
+    let (particle_densities, particle_neighbors) = call_with_kernel_type!(
+        compute_global_densities_and_neighbors;
+        parameters.kernel_type;
+        &internal_parameters,
+        particle_positions,
+        &subdomains
+    );
 
-    let surface_patches = {
-        match parameters.kernel_type {
-            KernelType::CubicSpline => {
-                reconstruct_subdomains::<I, R, CubicSplineKernel<R>>(
-                    &internal_parameters,
-                    particle_positions,
-                    &particle_densities,
-                    &subdomains,
-                    parameters.enable_simd,
-                )
-            },
-            KernelType::Poly6 => {
-                reconstruct_subdomains::<I, R, Poly6Kernel<R>>(
-                    &internal_parameters,
-                    particle_positions,
-                    &particle_densities,
-                    &subdomains,
-                    parameters.enable_simd,
-                )
-            },
-            KernelType::Spiky => {
-                reconstruct_subdomains::<I, R, SpikyKernel<R>>(
-                    &internal_parameters,
-                    particle_positions,
-                    &particle_densities,
-                    &subdomains,
-                    parameters.enable_simd,
-                )
-            },
-            KernelType::WendlandQuinticC2 => {
-                reconstruct_subdomains::<I, R, WendlandQuinticC2Kernel<R>>(
-                    &internal_parameters,
-                    particle_positions,
-                    &particle_densities,
-                    &subdomains,
-                    parameters.enable_simd,
-                )
-            }
-        }
-        
-    };
+    let surface_patches = call_with_kernel_type!(
+        reconstruct_subdomains;
+        parameters.kernel_type;
+        &internal_parameters,
+        particle_positions,
+        &particle_densities,
+        &subdomains,
+        parameters.enable_simd
+    );
 
     let global_mesh = stitching(surface_patches);
     info!(
@@ -197,49 +162,16 @@ pub(crate) fn compute_particle_densities_and_neighbors<I: Index, R: Real>(
     );
 
     trace!("Computing particle densities...");
-    match parameters.kernel_type {
-        KernelType::CubicSpline => {
-            density_map::compute_particle_densities_inplace::<I, R, CubicSplineKernel<R>>(
-                particle_positions,
-                particle_neighbor_lists.as_slice(),
-                parameters.compact_support_radius,
-                particle_rest_mass,
-                parameters.enable_multi_threading,
-                densities,
-            );
-        },
-        KernelType::Poly6 => {
-            density_map::compute_particle_densities_inplace::<I, R, Poly6Kernel<R>>(
-                particle_positions,
-                particle_neighbor_lists.as_slice(),
-                parameters.compact_support_radius,
-                particle_rest_mass,
-                parameters.enable_multi_threading,
-                densities,
-            );
-        },
-        KernelType::Spiky => {
-            density_map::compute_particle_densities_inplace::<I, R, SpikyKernel<R>>(
-                particle_positions,
-                particle_neighbor_lists.as_slice(),
-                parameters.compact_support_radius,
-                particle_rest_mass,
-                parameters.enable_multi_threading,
-                densities,
-            );
-        },
-        KernelType::WendlandQuinticC2 => {
-            density_map::compute_particle_densities_inplace::<I, R, WendlandQuinticC2Kernel<R>>(
-                particle_positions,
-                particle_neighbor_lists.as_slice(),
-                parameters.compact_support_radius,
-                particle_rest_mass,
-                parameters.enable_multi_threading,
-                densities,
-            );
-        }
-    }
-    
+    call_with_kernel_type!(
+        compute_particle_densities_inplace;
+        parameters.kernel_type;
+        particle_positions,
+        particle_neighbor_lists.as_slice(),
+        parameters.compact_support_radius,
+        particle_rest_mass,
+        parameters.enable_multi_threading,
+        densities
+    );
 }
 
 /// Reconstruct a surface, appends triangulation to the given mesh
@@ -268,62 +200,20 @@ pub(crate) fn reconstruct_single_surface_append<I: Index, R: Real>(
     // Create a new density map, reusing memory with the workspace is bad for cache efficiency
     // Alternatively one could reuse memory with a custom caching allocator
     let mut density_map = Default::default();
-    
-    match parameters.kernel_type {
-        KernelType::CubicSpline => {
-            density_map::generate_sparse_density_map::<I, R, CubicSplineKernel<R>>(
-                grid,
-                particle_positions,
-                particle_densities,
-                None,
-                particle_rest_mass,
-                parameters.compact_support_radius,
-                parameters.cube_size,
-                parameters.enable_multi_threading,
-                &mut density_map,
-            )?;
-        },
-        KernelType::Poly6 => {
-            density_map::generate_sparse_density_map::<I, R, Poly6Kernel<R>>(
-                grid,
-                particle_positions,
-                particle_densities,
-                None,
-                particle_rest_mass,
-                parameters.compact_support_radius,
-                parameters.cube_size,
-                parameters.enable_multi_threading,
-                &mut density_map,
-            )?;
-        },
-        KernelType::Spiky => {
-            density_map::generate_sparse_density_map::<I, R, SpikyKernel<R>>(
-                grid,
-                particle_positions,
-                particle_densities,
-                None,
-                particle_rest_mass,
-                parameters.compact_support_radius,
-                parameters.cube_size,
-                parameters.enable_multi_threading,
-                &mut density_map,
-            )?;
-        },
-        KernelType::WendlandQuinticC2 => {
-            density_map::generate_sparse_density_map::<I, R, WendlandQuinticC2Kernel<R>>(
-                grid,
-                particle_positions,
-                particle_densities,
-                None,
-                particle_rest_mass,
-                parameters.compact_support_radius,
-                parameters.cube_size,
-                parameters.enable_multi_threading,
-                &mut density_map,
-            )?;
-        }
-    }
-    
+
+    call_with_kernel_type!(
+        generate_sparse_density_map;
+        parameters.kernel_type;
+        grid,
+        particle_positions,
+        particle_densities,
+        None,
+        particle_rest_mass,
+        parameters.compact_support_radius,
+        parameters.cube_size,
+        parameters.enable_multi_threading,
+        &mut density_map
+    )?;
 
     marching_cubes::triangulate_density_map_append(
         grid,

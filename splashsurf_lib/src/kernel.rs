@@ -9,8 +9,8 @@
 //!  - `SpikyKernelNeonF32`
 //!  - `WendlandQuinticC2KernelAvxF32`
 //!  - `WendlandQuinticC2KernelNeonF32`
-//! 
-//! The Avx implementations are only available on `x86` and `x86_64` targets and require AVX2 and FMA support. 
+//!
+//! The Avx implementations are only available on `x86` and `x86_64` targets and require AVX2 and FMA support.
 //! Similarly, the Neon implementations are only available on `aarch64` targets and require NEON support.
 //!
 //! Note that documentation of the SIMD kernels is only available on the respective target architectures.
@@ -352,7 +352,7 @@ impl<R: Real> SymmetricKernel3d<R> for Poly6Kernel<R> {
     #[replace_float_literals(R::from_float(literal))]
     fn new(compact_support_radius: R) -> Self {
         let h = compact_support_radius;
-        let sigma = 315.0/(64.0*R::pi()*h.powi(9));
+        let sigma = 315.0 / (64.0 * R::pi() * h.powi(9));
 
         Self {
             compact_support_radius,
@@ -366,11 +366,11 @@ impl<R: Real> SymmetricKernel3d<R> for Poly6Kernel<R> {
 
     /// Evaluates the poly6 kernel at the radial distance `r`
     fn evaluate(&self, r: R) -> R {
-        let r2 = r*r;
+        let r2 = r * r;
         let h2 = self.compact_support_radius.powi(2);
         if r2 <= h2 {
             self.normalization * (h2 - r2).powi(3)
-        }else {
+        } else {
             R::zero()
         }
     }
@@ -392,7 +392,7 @@ impl<R: Real> SymmetricKernel3d<R> for Poly6Kernel<R> {
 
     /// Evaluates the norm of the gradient of the poly6 kernel at the radial distance `r`
     fn evaluate_gradient_norm(&self, r: R) -> R {
-        let r2 = r*r;
+        let r2 = r * r;
         let h2 = self.compact_support_radius.powi(2);
 
         if r2 <= h2 {
@@ -416,9 +416,9 @@ impl Poly6KernelNeonF32 {
     pub fn new(compact_support_radius: f32) -> Self {
         let r = compact_support_radius;
         let r9 = r.powi(9);
-        let sigma = 315.0/(64.0*std::f32::consts::PI*r9);
+        let sigma = 315.0 / (64.0 * std::f32::consts::PI * r9);
         Self {
-            squared_compact_support: r*r,
+            squared_compact_support: r * r,
             sigma,
         }
     }
@@ -464,9 +464,9 @@ impl Poly6KernelAvxF32 {
     pub fn new(compact_support_radius: f32) -> Self {
         let r = compact_support_radius;
         let r9 = r.powi(9);
-        let sigma = 315.0/(64.0*std::f32::consts::PI*r9);
+        let sigma = 315.0 / (64.0 * std::f32::consts::PI * r9);
         Self {
-            squared_compact_support: r*r,
+            squared_compact_support: r * r,
             sigma,
         }
     }
@@ -513,7 +513,7 @@ impl<R: Real> SymmetricKernel3d<R> for SpikyKernel<R> {
     #[replace_float_literals(R::from_float(literal))]
     fn new(compact_support_radius: R) -> Self {
         let h = compact_support_radius;
-        let sigma = 15.0/(R::pi()*h.powi(6));
+        let sigma = 15.0 / (R::pi() * h.powi(6));
 
         Self {
             compact_support_radius,
@@ -527,11 +527,11 @@ impl<R: Real> SymmetricKernel3d<R> for SpikyKernel<R> {
 
     /// Evaluates the spiky kernel at the radial distance `r`
     fn evaluate(&self, r: R) -> R {
-        let r2 = r*r;
+        let r2 = r * r;
         let h2 = self.compact_support_radius.powi(2);
         if r2 <= h2 {
             self.normalization * (self.compact_support_radius - r).powi(3)
-        }else {
+        } else {
             R::zero()
         }
     }
@@ -547,7 +547,11 @@ impl<R: Real> SymmetricKernel3d<R> for SpikyKernel<R> {
             // normalize x
             let x = x.unscale(r);
 
-            x.scale(R::from_float(-3.0) * self.normalization * (self.compact_support_radius - r).powi(2))
+            x.scale(
+                R::from_float(-3.0)
+                    * self.normalization
+                    * (self.compact_support_radius - r).powi(2),
+            )
         } else {
             x.scale(R::zero())
         }
@@ -555,7 +559,7 @@ impl<R: Real> SymmetricKernel3d<R> for SpikyKernel<R> {
 
     /// Evaluates the norm of the gradient of the spiky kernel at the radial distance `r`
     fn evaluate_gradient_norm(&self, r: R) -> R {
-        let r2 = r*r;
+        let r2 = r * r;
         let h2 = self.compact_support_radius.powi(2);
 
         if r2 <= h2 {
@@ -579,7 +583,7 @@ impl SpikyKernelNeonF32 {
     pub fn new(compact_support_radius: f32) -> Self {
         let r = compact_support_radius;
         let r6 = r.powi(6);
-        let sigma = 15.0/(std::f32::consts::PI*r6);
+        let sigma = 15.0 / (std::f32::consts::PI * r6);
         Self {
             compact_support: r,
             sigma,
@@ -628,7 +632,7 @@ impl SpikyKernelAvxF32 {
     pub fn new(compact_support_radius: f32) -> Self {
         let r = compact_support_radius;
         let r6 = r.powi(6);
-        let sigma = 15.0/(std::f32::consts::PI*r6);
+        let sigma = 15.0 / (std::f32::consts::PI * r6);
         Self {
             compact_support: r,
             sigma,
@@ -678,7 +682,7 @@ impl<R: Real> SymmetricKernel3d<R> for WendlandQuinticC2Kernel<R> {
     #[replace_float_literals(R::from_float(literal))]
     fn new(compact_support_radius: R) -> Self {
         let h = compact_support_radius;
-        let sigma = 21.0/(2.0*R::pi()*h.powi(3));
+        let sigma = 21.0 / (2.0 * R::pi() * h.powi(3));
 
         Self {
             compact_support_radius,
@@ -695,7 +699,7 @@ impl<R: Real> SymmetricKernel3d<R> for WendlandQuinticC2Kernel<R> {
         let q = r / self.compact_support_radius;
         if q <= R::one() {
             self.normalization * (R::one() - q).powi(4) * (R::from_float(4.0) * q + R::one())
-        }else {
+        } else {
             R::zero()
         }
     }
@@ -742,7 +746,7 @@ impl WendlandQuinticC2KernelNeonF32 {
         let r = compact_support_radius;
         let compact_support_inv = 1.0 / r;
         let r3 = r.powi(3);
-        let sigma = 21.0/(2.0*std::f32::consts::PI*r3);
+        let sigma = 21.0 / (2.0 * std::f32::consts::PI * r3);
 
         Self {
             compact_support_inv,
@@ -797,7 +801,7 @@ impl WendlandQuinticC2KernelAvxF32 {
         let r = compact_support_radius;
         let compact_support_inv = 1.0 / r;
         let r3 = r.powi(3);
-        let sigma = 21.0/(2.0*std::f32::consts::PI*r3);
+        let sigma = 21.0 / (2.0 * std::f32::consts::PI * r3);
 
         Self {
             compact_support_inv,
@@ -867,7 +871,8 @@ mod kernel_tests {
                     for j in -n..n {
                         for k in -n..n {
                             let r_in = Vector3::new(i as f64, j as f64, k as f64) * dr;
-                            let r_out = Vector3::new((i + 1) as f64, (j + 1) as f64, (k + 1) as f64) * dr;
+                            let r_out =
+                                Vector3::new((i + 1) as f64, (j + 1) as f64, (k + 1) as f64) * dr;
                             let r = ((r_in + r_out) * 0.5).norm();
 
                             integral += dvol * kernel.evaluate(r);
