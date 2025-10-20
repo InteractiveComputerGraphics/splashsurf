@@ -3,6 +3,7 @@ use nalgebra::Vector3;
 use splashsurf_lib::GridDecompositionParameters;
 #[cfg(feature = "io")]
 use splashsurf_lib::io::vtk_format::write_vtk;
+use splashsurf_lib::kernel::KernelType;
 use splashsurf_lib::marching_cubes::check_mesh_consistency;
 use std::path::Path;
 
@@ -31,6 +32,7 @@ macro_rules! generate_single_particle_test {
                 ),
                 rest_density: 1000.0,
                 global_neighborhood_list: false,
+                kernel_type: KernelType::CubicSpline,
             };
 
             let reconstruction =

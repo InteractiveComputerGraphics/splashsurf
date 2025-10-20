@@ -3,8 +3,31 @@ use numpy::{Element, PyArray, PyUntypedArray};
 use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 use pyo3::{Bound, PyAny, PyErr, PyResult};
+use pyo3_stub_gen::derive::gen_stub_pyclass_enum;
 use splashsurf_lib::Real;
 use splashsurf_lib::nalgebra::SVector;
+
+/// Enum for specifying the Kernel function used for the reconstruction
+#[gen_stub_pyclass_enum]
+#[pyclass]
+#[derive(Clone)]
+pub enum KernelType {
+    CubicSpline,
+    Poly6,
+    Spiky,
+    WendlandQuinticC2,
+}
+
+impl KernelType {
+    pub fn into_lib_enum(&self) -> splashsurf_lib::kernel::KernelType {
+        match self {
+            KernelType::CubicSpline => splashsurf_lib::kernel::KernelType::CubicSpline,
+            KernelType::Poly6 => splashsurf_lib::kernel::KernelType::Poly6,
+            KernelType::Spiky => splashsurf_lib::kernel::KernelType::Spiky,
+            KernelType::WendlandQuinticC2 => splashsurf_lib::kernel::KernelType::WendlandQuinticC2,
+        }
+    }
+}
 
 /// The index type used for all grids and reconstructions in this crate
 pub(crate) type IndexT = i64;

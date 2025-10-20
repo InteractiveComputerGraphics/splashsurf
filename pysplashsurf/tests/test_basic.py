@@ -301,7 +301,7 @@ def interpolator_test(dtype):
     rest_mass = 1000.0 * 0.025**3
 
     interpolator = pysplashsurf.SphInterpolator(
-        particles, reconstruction.particle_densities, rest_mass, compact_support
+        particles, reconstruction.particle_densities, rest_mass, compact_support, pysplashsurf.KernelType.CubicSpline
     )
 
     assert type(interpolator) is pysplashsurf.SphInterpolator

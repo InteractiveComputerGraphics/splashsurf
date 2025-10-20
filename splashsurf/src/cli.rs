@@ -80,6 +80,26 @@ impl Switch {
     }
 }
 
+/// An enum for specifying the wanted kernel type in the CLI
+#[derive(Copy, Clone, Debug, PartialEq, Eq, clap::ValueEnum)]
+pub(crate) enum KernelType {
+    CubicSpline,
+    Poly6,
+    Spiky,
+    WendlandQuinticC2,
+}
+
+impl KernelType {
+    pub(crate) fn into_lib_enum(self) -> splashsurf_lib::kernel::KernelType {
+        match self {
+            KernelType::CubicSpline => splashsurf_lib::kernel::KernelType::CubicSpline,
+            KernelType::Poly6 => splashsurf_lib::kernel::KernelType::Poly6,
+            KernelType::Spiky => splashsurf_lib::kernel::KernelType::Spiky,
+            KernelType::WendlandQuinticC2 => splashsurf_lib::kernel::KernelType::WendlandQuinticC2,
+        }
+    }
+}
+
 /// Runs the splashsurf CLI with the provided command line arguments.
 ///
 /// This function behaves like the binary `splashsurf` command line tool including output to stdout

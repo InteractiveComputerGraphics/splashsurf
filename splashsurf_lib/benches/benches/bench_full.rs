@@ -105,6 +105,7 @@ pub fn surface_reconstruction_dam_break(c: &mut Criterion) {
         enable_simd: true,
         spatial_decomposition: SpatialDecomposition::None,
         global_neighborhood_list: false,
+        kernel_type: splashsurf_lib::kernel::KernelType::CubicSpline,
     };
 
     let mut group = c.benchmark_group("full surface reconstruction");
@@ -165,6 +166,7 @@ pub fn surface_reconstruction_double_dam_break(c: &mut Criterion) {
         enable_simd: true,
         spatial_decomposition: SpatialDecomposition::None,
         global_neighborhood_list: false,
+        kernel_type: splashsurf_lib::kernel::KernelType::CubicSpline,
     };
 
     let mut group = c.benchmark_group("full surface reconstruction");
@@ -225,6 +227,7 @@ pub fn surface_reconstruction_double_dam_break_inplace(c: &mut Criterion) {
         enable_simd: true,
         spatial_decomposition: SpatialDecomposition::None,
         global_neighborhood_list: false,
+        kernel_type: splashsurf_lib::kernel::KernelType::CubicSpline,
     };
 
     let mut group = c.benchmark_group("full surface reconstruction");

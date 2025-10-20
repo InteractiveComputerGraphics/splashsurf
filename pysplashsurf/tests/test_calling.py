@@ -59,6 +59,7 @@ def reconstruction_pipeline(
     smoothing_length=2.0,
     cube_size=0.5,
     iso_surface_threshold=0.6,
+    kernel_type=pysplashsurf.KernelType.CubicSpline,
     mesh_smoothing_weights=False,
     output_mesh_smoothing_weights=False,
     sph_normals=False,
@@ -109,6 +110,7 @@ def reconstruction_pipeline(
         rest_density=rest_density,
         smoothing_length=smoothing_length,
         cube_size=cube_size,
+        kernel_type=kernel_type,
         iso_surface_threshold=iso_surface_threshold,
         mesh_smoothing_weights=mesh_smoothing_weights,
         sph_normals=sph_normals,
@@ -276,3 +278,56 @@ def test_with_post_processing_f32():
 
 def test_with_post_processing_f64():
     with_post_processing_test(np.float64)
+
+
+def poly6_kernel_test(dtype):
+    start = now_s()
+    subprocess.run(
+        [BINARY_PATH]
+        + f"reconstruct {VTK_PATH} -o {DIR.joinpath('test_bin.vtk')} -r=0.025 -l=2.0 -c=0.5 -t=0.6 {"-d=on" if dtype == np.float64 else ""} --kernel=poly6 --subdomain-grid=on --mesh-cleanup=off --mesh-smoothing-weights=off --mesh-smoothing-iters=0 --normals=off --normals-smoothing-iters=0".split(),
+        check=True,
+    )
+    print("Binary done in", now_s() - start)
+
+    start = now_s()
+    reconstruction_pipeline(
+        VTK_PATH,
+        DIR.joinpath("test.vtk"),
+        particle_radius=0.025,
+        smoothing_length=2.0,
+        cube_size=0.5,
+        iso_surface_threshold=0.6,
+        kernel_type=pysplashsurf.KernelType.Poly6,
+        mesh_smoothing_weights=False,
+        mesh_smoothing_iters=0,
+        normals_smoothing_iters=0,
+        mesh_cleanup=False,
+        compute_normals=False,
+        subdomain_grid=True,
+        dtype=dtype
+    )
+    print("Python done in", now_s() - start)
+
+    binary_mesh = meshio.read(DIR.joinpath("test_bin.vtk"))
+    python_mesh = meshio.read(DIR.joinpath("test.vtk"))
+
+    binary_verts = np.array(binary_mesh.points, dtype=dtype)
+    python_verts = np.array(python_mesh.points, dtype=dtype)
+
+    print("# of vertices binary:", len(binary_verts))
+    print("# of vertices python:", len(python_verts))
+
+    assert len(binary_verts) == len(python_verts)
+
+    binary_verts.sort(axis=0)
+    python_verts.sort(axis=0)
+
+    assert np.allclose(binary_verts, python_verts)
+
+
+def test_poly6_kernel_f32():
+    poly6_kernel_test(np.float32)
+
+
+def test_poly6_kernel_f64():
+    poly6_kernel_test(np.float64)

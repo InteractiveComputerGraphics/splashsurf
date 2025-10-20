@@ -29,6 +29,7 @@ fn reconstruct_particles<P: AsRef<Path>>(particle_file: P) -> SurfaceReconstruct
             auto_disable: false,
         }),
         global_neighborhood_list: false,
+        kernel_type: splashsurf_lib::kernel::KernelType::CubicSpline,
     };
 
     reconstruct_surface::<i64, _>(particle_positions.as_slice(), &parameters).unwrap()

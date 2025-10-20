@@ -1,6 +1,6 @@
 //! Implementation of the `reconstruct` subcommand of the splashsurf CLI.
 
-use crate::cli::Switch;
+use crate::cli::{KernelType, Switch};
 use crate::reconstruct::arguments::*;
 use crate::{io, logging};
 use anyhow::{Context, anyhow};
@@ -135,7 +135,16 @@ pub(crate) struct ReconstructSubcommandArgs {
         require_equals = true
     )]
     pub simd: Switch,
-
+    /// Kernel that is used for the reconstruction and interpolation.
+    #[arg(
+        help_heading = ARGS_ADV,
+        long,
+        default_value = "cubic-spline",
+        value_name = "cubic-spline|poly6|spiky|wendland-quintic-c2",
+        ignore_case = true,
+        require_equals = true
+    )]
+    pub kernel: KernelType,
     /// Enable automatic spatial decomposition using a regular grid-based approach (for efficient multithreading) if the domain is large enough
     #[arg(
         help_heading = ARGS_DECOMPOSITION,
@@ -651,6 +660,7 @@ pub(crate) mod arguments {
                 enable_simd: args.simd.into_bool(),
                 spatial_decomposition,
                 global_neighborhood_list: args.mesh_smoothing_weights.into_bool(),
+                kernel_type: args.kernel.into_lib_enum(),
             };
 
             // Optionally initialize thread pool
@@ -1143,6 +1153,7 @@ pub fn reconstruction_pipeline<'a, I: Index, R: Real>(
                 particle_densities,
                 particle_rest_mass,
                 params.compact_support_radius,
+                params.kernel_type,
             ))
         } else {
             None
