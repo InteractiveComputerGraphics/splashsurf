@@ -76,9 +76,8 @@ impl PySurfaceReconstruction {
             let array: ArrayView1<bool> = ArrayView1::from(p.as_slice());
             let pyarray = unsafe { PyArray1::borrow_from_array(&array, this.into_any()) };
             pyarray
-                .into_any()
-                .downcast_into::<PyUntypedArray>()
-                .expect("downcast should not fail")
+                .cast_into::<PyUntypedArray>()
+                .expect("cast should not fail")
         })
     }
 
@@ -185,7 +184,7 @@ pub fn reconstruct_surface<'py>(
 
     let element_type = particles.dtype();
     if element_type.is_equiv_to(&np::dtype::<f32>(py)) {
-        let particles = particles.downcast::<PyArray2<f32>>()?.try_readonly()?;
+        let particles = particles.cast::<PyArray2<f32>>()?.try_readonly()?;
         let particle_positions: &[Vector3<f32>] = bytemuck::cast_slice(particles.as_slice()?);
         let reconstruction = splashsurf_lib::reconstruct_surface::<IndexT, _>(
             particle_positions,
@@ -196,7 +195,7 @@ pub fn reconstruct_surface<'py>(
         .map_err(|e| anyhow!(e))?;
         PySurfaceReconstruction::try_from_generic(py, reconstruction)
     } else if element_type.is_equiv_to(&np::dtype::<f64>(py)) {
-        let particles = particles.downcast::<PyArray2<f64>>()?.try_readonly()?;
+        let particles = particles.cast::<PyArray2<f64>>()?.try_readonly()?;
         let particle_positions: &[Vector3<f64>] = bytemuck::cast_slice(particles.as_slice()?);
         let reconstruction =
             splashsurf_lib::reconstruct_surface::<IndexT, _>(particle_positions, &parameters)

@@ -71,7 +71,7 @@ pub fn convert_tris_to_quads<'py>(
         }
     }?;
 
-    if let Ok(mesh) = mesh.downcast::<PyMeshWithData>() {
+    if let Ok(mesh) = mesh.cast::<PyMeshWithData>() {
         let mut data_mesh = PyMeshWithData::try_from_pymesh(py, quad_mesh)?;
         data_mesh.point_attributes = mesh
             .borrow()
@@ -124,7 +124,7 @@ pub fn laplacian_smoothing_parallel<'py>(
     let mut mesh = mesh.borrow_mut(py);
 
     if let Some(mesh) = mesh.as_f32_mut() {
-        let weights = weights.downcast::<PyArray1<f32>>()?.try_readonly()?;
+        let weights = weights.cast::<PyArray1<f32>>()?.try_readonly()?;
         splashsurf_lib::postprocessing::par_laplacian_smoothing_inplace(
             mesh,
             &vertex_connectivity.borrow().connectivity,
@@ -133,7 +133,7 @@ pub fn laplacian_smoothing_parallel<'py>(
             weights.as_slice()?,
         );
     } else if let Some(mesh) = mesh.as_f64_mut() {
-        let weights = weights.downcast::<PyArray1<f64>>()?.try_readonly()?;
+        let weights = weights.cast::<PyArray1<f64>>()?.try_readonly()?;
         splashsurf_lib::postprocessing::par_laplacian_smoothing_inplace(
             mesh,
             &vertex_connectivity.borrow().connectivity,
@@ -172,7 +172,7 @@ pub fn laplacian_smoothing_normals_parallel<'py>(
     let py = normals.py();
     let element_type = normals.dtype();
     if element_type.is_equiv_to(&np::dtype::<f32>(py)) {
-        let mut normals = normals.downcast::<PyArray2<f32>>()?.try_readwrite()?;
+        let mut normals = normals.cast::<PyArray2<f32>>()?.try_readwrite()?;
         let normals_vec3: &mut [Vector3<f32>] = bytemuck::cast_slice_mut(normals.as_slice_mut()?);
         splashsurf_lib::postprocessing::par_laplacian_smoothing_normals_inplace(
             normals_vec3,
@@ -180,7 +180,7 @@ pub fn laplacian_smoothing_normals_parallel<'py>(
             iterations,
         );
     } else if element_type.is_equiv_to(&np::dtype::<f64>(py)) {
-        let mut normals = normals.downcast::<PyArray2<f64>>()?.try_readwrite()?;
+        let mut normals = normals.cast::<PyArray2<f64>>()?.try_readwrite()?;
         let normals_vec3: &mut [Vector3<f64>] = bytemuck::cast_slice_mut(normals.as_slice_mut()?);
         splashsurf_lib::postprocessing::par_laplacian_smoothing_normals_inplace(
             normals_vec3,

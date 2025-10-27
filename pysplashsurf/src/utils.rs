@@ -1,7 +1,6 @@
 use ndarray::{ArrayView, IxDyn};
 use numpy::{Element, PyArray, PyUntypedArray};
 use pyo3::exceptions::PyTypeError;
-use pyo3::prelude::*;
 use pyo3::{Bound, PyAny, PyErr, PyResult};
 use splashsurf_lib::Real;
 use splashsurf_lib::nalgebra::SVector;
@@ -137,8 +136,7 @@ pub(crate) fn view_generic<'py, R: Element>(
         ArrayView::from_shape(shape, values).map_err(anyhow::Error::new)?;
     let pyarray = unsafe { PyArray::borrow_from_array(&array, container) };
     Ok(pyarray
-        .into_any()
-        .downcast_into::<PyUntypedArray>()
+        .cast_into::<PyUntypedArray>()
         .expect("downcast should not fail"))
 }
 

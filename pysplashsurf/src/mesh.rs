@@ -29,7 +29,7 @@ fn view_triangles_generic<'py>(
 ) -> PyResult<Bound<'py, PyArray2<NumpyUsize>>> {
     let vertex_indices: &[NumpyUsize] = bytemuck::cast_slice(triangles);
     let view = utils::view_generic(vertex_indices, &[triangles.len(), 3], container)?.into_any();
-    Ok(view.downcast_into::<PyArray2<NumpyUsize>>()?)
+    Ok(view.cast_into::<PyArray2<NumpyUsize>>()?)
 }
 
 fn compute_normals_generic<'py, R: Real + Element>(
@@ -41,16 +41,15 @@ fn compute_normals_generic<'py, R: Real + Element>(
 
     Ok(PyArray::from_vec(py, normals_vec)
         .reshape([mesh.vertices().len(), 3])?
-        .into_any()
-        .downcast_into::<PyUntypedArray>()
-        .expect("downcast should not fail"))
+        .cast_into::<PyUntypedArray>()
+        .expect("cast should not fail"))
 }
 
 pub fn get_triangle_mesh_generic<'py>(mesh: &Bound<'py, PyAny>) -> Option<Py<PyTriMesh3d>> {
     let py = mesh.py();
-    if let Ok(mesh) = mesh.downcast::<PyTriMesh3d>() {
+    if let Ok(mesh) = mesh.cast::<PyTriMesh3d>() {
         Some(mesh.as_unbound().clone_ref(py))
-    } else if let Ok(data_mesh) = mesh.downcast::<PyMeshWithData>()
+    } else if let Ok(data_mesh) = mesh.cast::<PyMeshWithData>()
         && data_mesh.borrow().mesh_type() == MeshType::Tri3d
     {
         data_mesh.borrow().as_tri3d(py)
@@ -380,11 +379,11 @@ impl PyMeshAttribute {
     where
         PyMeshAttribute: From<OwnedMeshAttribute<R>>,
     {
-        let data = if let Ok(data) = data.downcast::<PyArray1<u64>>() {
+        let data = if let Ok(data) = data.cast::<PyArray1<u64>>() {
             OwnedAttributeData::ScalarU64(data.try_readonly()?.as_array().to_vec().into())
-        } else if let Ok(data) = data.downcast::<PyArray1<R>>() {
+        } else if let Ok(data) = data.cast::<PyArray1<R>>() {
             OwnedAttributeData::ScalarReal(data.try_readonly()?.as_array().to_vec().into())
-        } else if let Ok(data) = data.downcast::<PyArray2<R>>() {
+        } else if let Ok(data) = data.cast::<PyArray2<R>>() {
             let data_vec = data.try_readonly()?.as_slice()?.to_vec();
             if data.shape()[1] == 1 {
                 OwnedAttributeData::ScalarReal(bytemuck::cast_vec(data_vec).into())
@@ -584,10 +583,10 @@ impl PyMeshWithData {
         mesh: Bound<'py, PyAny>,
     ) -> PyResult<Self> {
         if mesh.is_instance_of::<PyTriMesh3d>() {
-            let mesh = mesh.downcast_into::<PyTriMesh3d>()?;
+            let mesh = mesh.cast_into::<PyTriMesh3d>()?;
             PyMeshWithData::try_from_pymesh(mesh.py(), mesh.unbind())
         } else if mesh.is_instance_of::<PyMixedTriQuadMesh3d>() {
-            let mesh = mesh.downcast_into::<PyMixedTriQuadMesh3d>()?;
+            let mesh = mesh.cast_into::<PyMixedTriQuadMesh3d>()?;
             PyMeshWithData::try_from_pymesh(mesh.py(), mesh.unbind())
         } else {
             Err(PyTypeError::new_err(

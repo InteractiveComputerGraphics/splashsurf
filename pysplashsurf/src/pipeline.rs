@@ -243,7 +243,7 @@ pub fn reconstruction_pipeline<'py>(
     }
 
     if element_type.is_equiv_to(&np::dtype::<f32>(py)) {
-        let particles = particles.downcast::<PyArray2<f32>>()?;
+        let particles = particles.cast::<PyArray2<f32>>()?;
         let reconstruction = reconstruction_pipeline_generic_impl::<IndexT, _>(
             particles,
             attributes_to_interpolate,
@@ -254,7 +254,7 @@ pub fn reconstruction_pipeline<'py>(
         )?;
         reconstruction_to_pymesh(py, reconstruction)
     } else if element_type.is_equiv_to(&np::dtype::<f64>(py)) {
-        let particles = particles.downcast::<PyArray2<f64>>()?;
+        let particles = particles.cast::<PyArray2<f64>>()?;
         let reconstruction = reconstruction_pipeline_generic_impl::<IndexT, _>(
             particles,
             attributes_to_interpolate,
@@ -288,21 +288,21 @@ fn reconstruction_pipeline_generic_impl<'py, I: Index, R: Real + Element>(
     // Collect readonly views of all attribute arrays
     for (key, value) in attributes_to_interpolate.iter().flatten() {
         let key_str: String = key
-            .downcast::<PyString>()
+            .cast::<PyString>()
             .expect("attribute key has to be a string")
             .extract()?;
 
-        if let Ok(value) = value.downcast::<PyArray1<u64>>() {
+        if let Ok(value) = value.cast::<PyArray1<u64>>() {
             attr_views.push(AttributePyView::U64(value.readonly()));
             attr_names.push(key_str);
-        } else if let Ok(value) = value.downcast::<PyArray1<R>>() {
+        } else if let Ok(value) = value.cast::<PyArray1<R>>() {
             attr_views.push(AttributePyView::Float(value.readonly()));
             attr_names.push(key_str);
-        } else if let Ok(value) = value.downcast::<PyArray2<R>>() {
+        } else if let Ok(value) = value.cast::<PyArray2<R>>() {
             attr_views.push(AttributePyView::FloatVec3(value.readonly()));
             attr_names.push(key_str);
         } else {
-            println!("Failed to downcast attribute {} to valid type", &key_str);
+            println!("Failed to cast attribute {} to valid type", &key_str);
         }
     }
 

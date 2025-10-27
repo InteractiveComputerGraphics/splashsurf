@@ -61,9 +61,9 @@ impl PyAabb3d {
         let py = points.py();
         let element_type = points.dtype();
         if element_type.is_equiv_to(&np::dtype::<f32>(py)) {
-            Self::from_points_generic(points.downcast::<PyArray2<f32>>()?)
+            Self::from_points_generic(points.cast::<PyArray2<f32>>()?)
         } else if element_type.is_equiv_to(&np::dtype::<f64>(py)) {
-            Self::from_points_generic(points.downcast::<PyArray2<f64>>()?)
+            Self::from_points_generic(points.cast::<PyArray2<f64>>()?)
         } else {
             Err(pyerr_unsupported_scalar())
         }

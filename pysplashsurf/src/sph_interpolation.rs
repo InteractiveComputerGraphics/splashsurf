@@ -41,8 +41,8 @@ impl PySphInterpolator {
         PySphInterpolator: From<SphInterpolator<R>>,
     {
         if let (Ok(particles), Ok(densities)) = (
-            particle_positions.downcast::<PyArray2<R>>(),
-            particle_densities.downcast::<PyArray1<R>>(),
+            particle_positions.cast::<PyArray2<R>>(),
+            particle_densities.cast::<PyArray1<R>>(),
         ) {
             let particles = particles.try_readonly()?;
             let particles: &[Vector3<R>] = bytemuck::cast_slice(particles.as_slice()?);
@@ -66,7 +66,7 @@ impl PySphInterpolator {
         interpolation_points: &Bound<'py, PyUntypedArray>,
     ) -> PyResult<Bound<'py, PyUntypedArray>> {
         let py = interpolation_points.py();
-        if let Ok(points) = interpolation_points.downcast::<PyArray2<R>>() {
+        if let Ok(points) = interpolation_points.cast::<PyArray2<R>>() {
             let points = points.try_readonly()?;
             let points: &[Vector3<R>] = bytemuck::cast_slice(points.as_slice()?);
 
@@ -74,9 +74,8 @@ impl PySphInterpolator {
             Ok(bytemuck::cast_vec::<Unit<Vector3<R>>, R>(normals_vec)
                 .into_pyarray(py)
                 .reshape((points.len(), 3))?
-                .into_any()
-                .downcast_into::<PyUntypedArray>()
-                .expect("downcast should not fail"))
+                .cast_into::<PyUntypedArray>()
+                .expect("cast should not fail"))
         } else {
             Err(pyerr_unsupported_scalar())
         }
@@ -102,9 +101,9 @@ impl PySphInterpolator {
         };
 
         // Get the per-particle quantity as a read-only contiguous slice
-        let quantity = if let Ok(q) = particle_quantity.downcast::<PyArray1<R>>() {
+        let quantity = if let Ok(q) = particle_quantity.cast::<PyArray1<R>>() {
             q.to_dyn().try_readonly()
-        } else if let Ok(q) = particle_quantity.downcast::<PyArray2<R>>() {
+        } else if let Ok(q) = particle_quantity.cast::<PyArray2<R>>() {
             q.to_dyn().try_readonly()
         } else {
             return Err(pyerr_scalar_type_mismatch());
@@ -112,7 +111,7 @@ impl PySphInterpolator {
         let quantity = quantity.as_slice()?;
 
         let points = interpolation_points
-            .downcast::<PyArray2<R>>()
+            .cast::<PyArray2<R>>()
             .map_err(|_| pyerr_scalar_type_mismatch())?
             .try_readonly()?;
         let points: &[Vector3<R>] = bytemuck::cast_slice(points.as_slice()?);
@@ -131,9 +130,8 @@ impl PySphInterpolator {
             Ok(bytemuck::cast_vec::<_, R>(interpolated)
                 .into_pyarray(py)
                 .reshape(shape)?
-                .into_any()
-                .downcast_into::<PyUntypedArray>()
-                .expect("downcast should not fail"))
+                .cast_into::<PyUntypedArray>()
+                .expect("cast should not fail"))
         }
 
         let py = particle_quantity.py();

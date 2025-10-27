@@ -77,7 +77,7 @@ pub fn neighborhood_search_spatial_hashing_parallel<'py>(
     let element_type = particle_positions.dtype();
     if element_type.is_equiv_to(&np::dtype::<f32>(py)) {
         let particle_positions = particle_positions
-            .downcast::<PyArray2<f32>>()?
+            .cast::<PyArray2<f32>>()?
             .try_readonly()?;
         let particles: &[Vector3<f32>] = bytemuck::cast_slice(particle_positions.as_slice()?);
 
@@ -89,7 +89,7 @@ pub fn neighborhood_search_spatial_hashing_parallel<'py>(
         );
     } else if element_type.is_equiv_to(&np::dtype::<f64>(py)) {
         let particle_positions = particle_positions
-            .downcast::<PyArray2<f64>>()?
+            .cast::<PyArray2<f64>>()?
             .try_readonly()?;
         let particles: &[Vector3<f64>] = bytemuck::cast_slice(particle_positions.as_slice()?);
 

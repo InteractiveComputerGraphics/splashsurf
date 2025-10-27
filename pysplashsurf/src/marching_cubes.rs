@@ -156,7 +156,7 @@ pub fn marching_cubes<'py>(
         }
     }
 
-    if let Ok(values) = values.downcast::<PyArray3<f32>>() {
+    if let Ok(values) = values.cast::<PyArray3<f32>>() {
         triangulate_density_map_generic(
             &values,
             iso_surface_threshold as f32,
@@ -164,7 +164,7 @@ pub fn marching_cubes<'py>(
             translation.map(|t| t.map(|t| t as f32)),
             return_grid,
         )
-    } else if let Ok(values) = values.downcast::<PyArray3<f64>>() {
+    } else if let Ok(values) = values.cast::<PyArray3<f64>>() {
         triangulate_density_map_generic(
             &values,
             iso_surface_threshold,

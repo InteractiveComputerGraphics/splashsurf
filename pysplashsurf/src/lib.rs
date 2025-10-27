@@ -70,7 +70,7 @@ fn pysplashsurf(m: &Bound<'_, PyModule>) -> PyResult<()> {
 #[pyo3(name = "run_splashsurf")]
 fn run_splashsurf_py<'py>(args: Bound<'py, PyList>) -> PyResult<()> {
     cli::run_splashsurf(args.iter().map(|arg| {
-        arg.downcast::<PyString>()
+        arg.cast::<PyString>()
             .expect("argument wasn't a string")
             .extract::<String>()
             .unwrap()
