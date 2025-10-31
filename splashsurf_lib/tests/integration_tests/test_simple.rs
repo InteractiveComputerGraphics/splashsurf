@@ -1,4 +1,5 @@
 use nalgebra::Vector3;
+use splashsurf_lib::kernel::KernelType;
 use splashsurf_lib::marching_cubes::check_mesh_consistency;
 use splashsurf_lib::{
     Aabb3d, GridDecompositionParameters, Parameters, Real, SpatialDecomposition,
@@ -32,6 +33,7 @@ fn params_with_aabb<R: Real>(
         enable_simd: false,
         spatial_decomposition: SpatialDecomposition::None,
         global_neighborhood_list: false,
+        kernel_type: KernelType::CubicSpline,
     };
 
     match strategy {

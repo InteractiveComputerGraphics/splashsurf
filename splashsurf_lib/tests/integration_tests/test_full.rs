@@ -1,13 +1,13 @@
 use nalgebra::Vector3;
 use splashsurf_lib::io::particles_from_file;
 use splashsurf_lib::io::vtk_format::write_vtk;
+use splashsurf_lib::kernel::KernelType;
 use splashsurf_lib::marching_cubes::check_mesh_consistency;
 use splashsurf_lib::{
     Aabb3d, GridDecompositionParameters, Parameters, Real, SpatialDecomposition,
     reconstruct_surface,
 };
 use std::path::Path;
-
 // TODO: Compare with a solution file
 // TODO: Test with a fixed grid?
 
@@ -38,6 +38,7 @@ fn params_with_aabb<R: Real>(
         enable_simd: false,
         spatial_decomposition: SpatialDecomposition::None,
         global_neighborhood_list: false,
+        kernel_type: KernelType::CubicSpline,
     };
 
     match strategy {

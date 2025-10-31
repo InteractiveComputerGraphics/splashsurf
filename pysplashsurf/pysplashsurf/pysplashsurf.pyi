@@ -185,11 +185,11 @@ class NeighborhoodLists:
 
 class SphInterpolator:
     r"""
-    Interpolator of per-particle quantities to arbitrary points using SPH interpolation (with cubic kernel)
+    Interpolator of per-particle quantities to arbitrary points using SPH interpolation
     """
-    def __new__(cls, particle_positions:numpy.typing.NDArray[typing.Any], particle_densities:numpy.typing.NDArray[typing.Any], particle_rest_mass:builtins.float, compact_support_radius:builtins.float) -> SphInterpolator:
+    def __new__(cls, particle_positions:numpy.typing.NDArray[typing.Any], particle_densities:numpy.typing.NDArray[typing.Any], particle_rest_mass:builtins.float, compact_support_radius:builtins.float, kernel_type:KernelType) -> SphInterpolator:
         r"""
-        Constructs an SPH interpolator (with cubic kernels) for the given particles
+        Constructs an SPH interpolator for the given particles
         
         Parameters
         ----------
@@ -200,7 +200,9 @@ class SphInterpolator:
         particle_rest_mass
             The rest mass of each particle (assumed to be the same for all particles).
         compact_support_radius
-            The compact support radius of the cubic spline kernel used for interpolation.
+            The compact support radius of the kernel used for interpolation.
+        kernel_type
+            The kernel function used for interpolation
         """
     def interpolate_quantity(self, particle_quantity:numpy.typing.NDArray[typing.Any], interpolation_points:numpy.typing.NDArray[typing.Any], *, first_order_correction:builtins.bool=False) -> numpy.typing.NDArray[typing.Any]:
         r"""
@@ -314,6 +316,15 @@ class VertexVertexConnectivity:
         r"""
         Returns the wrapped connectivity data by moving it out of this object (zero copy)
         """
+
+class KernelType(Enum):
+    r"""
+    Enum for specifying the Kernel function used for the reconstruction
+    """
+    CubicSpline = ...
+    Poly6 = ...
+    Spiky = ...
+    WendlandQuinticC2 = ...
 
 class MeshType(Enum):
     r"""
@@ -497,7 +508,7 @@ def neighborhood_search_spatial_hashing_parallel(particle_positions:numpy.typing
         The radius per particle where other particles are considered neighbors.
     """
 
-def reconstruct_surface(particles:numpy.typing.NDArray[typing.Any], *, particle_radius:builtins.float, rest_density:builtins.float=1000.0, smoothing_length:builtins.float, cube_size:builtins.float, iso_surface_threshold:builtins.float=0.6, aabb_min:typing.Optional[typing.Sequence[builtins.float]]=None, aabb_max:typing.Optional[typing.Sequence[builtins.float]]=None, multi_threading:builtins.bool=True, global_neighborhood_list:builtins.bool=False, subdomain_grid:builtins.bool=True, subdomain_grid_auto_disable:builtins.bool=True, subdomain_num_cubes_per_dim:builtins.int=64) -> SurfaceReconstruction:
+def reconstruct_surface(particles:numpy.typing.NDArray[typing.Any], *, particle_radius:builtins.float, rest_density:builtins.float=1000.0, smoothing_length:builtins.float, cube_size:builtins.float, iso_surface_threshold:builtins.float=0.6, aabb_min:typing.Optional[typing.Sequence[builtins.float]]=None, aabb_max:typing.Optional[typing.Sequence[builtins.float]]=None, multi_threading:builtins.bool=True, simd:builtins.bool=True, kernel_type:KernelType=..., global_neighborhood_list:builtins.bool=False, subdomain_grid:builtins.bool=True, subdomain_grid_auto_disable:builtins.bool=True, subdomain_num_cubes_per_dim:builtins.int=64) -> SurfaceReconstruction:
     r"""
     Performs a surface reconstruction from the given particles without additional post-processing
     
@@ -523,6 +534,8 @@ def reconstruct_surface(particles:numpy.typing.NDArray[typing.Any], *, particle_
         Upper corner of the AABB of particles to consider in the reconstruction.
     multi_threading
         Flag to enable multi-threading for the reconstruction and post-processing steps.
+    simd
+       Flag to enable SIMD vectorization for the reconstruction if supported by the CPU architecture.
     subdomain_grid
         Flag to enable spatial decomposition by dividing the domain into subdomains with dense marching cube grids for efficient multi-threading.
     subdomain_grid_auto_disable
@@ -531,7 +544,7 @@ def reconstruct_surface(particles:numpy.typing.NDArray[typing.Any], *, particle_
         Number of marching cubes voxels along each coordinate axis in each subdomain if the subdomain grid is enabled.
     """
 
-def reconstruction_pipeline(particles:numpy.typing.NDArray[typing.Any], *, attributes_to_interpolate:typing.Optional[dict]=None, particle_radius:builtins.float, rest_density:builtins.float=1000.0, smoothing_length:builtins.float, cube_size:builtins.float, iso_surface_threshold:builtins.float=0.6, aabb_min:typing.Optional[typing.Sequence[builtins.float]]=None, aabb_max:typing.Optional[typing.Sequence[builtins.float]]=None, multi_threading:builtins.bool=True, subdomain_grid:builtins.bool=True, subdomain_grid_auto_disable:builtins.bool=True, subdomain_num_cubes_per_dim:builtins.int=64, check_mesh_closed:builtins.bool=False, check_mesh_manifold:builtins.bool=False, check_mesh_orientation:builtins.bool=False, check_mesh_debug:builtins.bool=False, mesh_cleanup:builtins.bool=False, mesh_cleanup_snap_dist:typing.Optional[builtins.float]=None, decimate_barnacles:builtins.bool=False, keep_vertices:builtins.bool=False, compute_normals:builtins.bool=False, sph_normals:builtins.bool=False, normals_smoothing_iters:typing.Optional[builtins.int]=None, mesh_smoothing_iters:typing.Optional[builtins.int]=None, mesh_smoothing_weights:builtins.bool=True, mesh_smoothing_weights_normalization:builtins.float=13.0, generate_quads:builtins.bool=False, quad_max_edge_diag_ratio:builtins.float=1.75, quad_max_normal_angle:builtins.float=10.0, quad_max_interior_angle:builtins.float=135.0, output_mesh_smoothing_weights:builtins.bool=False, output_raw_normals:builtins.bool=False, output_raw_mesh:builtins.bool=False, mesh_aabb_min:typing.Optional[typing.Sequence[builtins.float]]=None, mesh_aabb_max:typing.Optional[typing.Sequence[builtins.float]]=None, mesh_aabb_clamp_vertices:builtins.bool=True) -> tuple[MeshWithData, SurfaceReconstruction]:
+def reconstruction_pipeline(particles:numpy.typing.NDArray[typing.Any], *, attributes_to_interpolate:typing.Optional[dict]=None, particle_radius:builtins.float, rest_density:builtins.float=1000.0, smoothing_length:builtins.float, cube_size:builtins.float, iso_surface_threshold:builtins.float=0.6, aabb_min:typing.Optional[typing.Sequence[builtins.float]]=None, aabb_max:typing.Optional[typing.Sequence[builtins.float]]=None, multi_threading:builtins.bool=True, simd:builtins.bool=True, kernel_type:KernelType=..., subdomain_grid:builtins.bool=True, subdomain_grid_auto_disable:builtins.bool=True, subdomain_num_cubes_per_dim:builtins.int=64, check_mesh_closed:builtins.bool=False, check_mesh_manifold:builtins.bool=False, check_mesh_orientation:builtins.bool=False, check_mesh_debug:builtins.bool=False, mesh_cleanup:builtins.bool=False, mesh_cleanup_snap_dist:typing.Optional[builtins.float]=None, decimate_barnacles:builtins.bool=False, keep_vertices:builtins.bool=False, compute_normals:builtins.bool=False, sph_normals:builtins.bool=False, normals_smoothing_iters:typing.Optional[builtins.int]=None, mesh_smoothing_iters:typing.Optional[builtins.int]=None, mesh_smoothing_weights:builtins.bool=True, mesh_smoothing_weights_normalization:builtins.float=13.0, generate_quads:builtins.bool=False, quad_max_edge_diag_ratio:builtins.float=1.75, quad_max_normal_angle:builtins.float=10.0, quad_max_interior_angle:builtins.float=135.0, output_mesh_smoothing_weights:builtins.bool=False, output_raw_normals:builtins.bool=False, output_raw_mesh:builtins.bool=False, mesh_aabb_min:typing.Optional[typing.Sequence[builtins.float]]=None, mesh_aabb_max:typing.Optional[typing.Sequence[builtins.float]]=None, mesh_aabb_clamp_vertices:builtins.bool=True) -> tuple[MeshWithData, SurfaceReconstruction]:
     r"""
     Runs the surface reconstruction pipeline for the given particle positions with optional post-processing
     
@@ -561,6 +574,10 @@ def reconstruction_pipeline(particles:numpy.typing.NDArray[typing.Any], *, attri
         Upper corner [x,y,z] of the AABB of particles to consider in the reconstruction.
     multi_threading
         Flag to enable multi-threading for the reconstruction and post-processing steps.
+    simd
+        Flag to enable SIMD vectorization for the reconstruction if supported by the CPU architecture.
+    kernel_type
+        Kernel function to use for the reconstruction.
     subdomain_grid
         Flag to enable spatial decomposition by dividing the domain into subdomains with dense marching cube grids for efficient multi-threading.
     subdomain_grid_auto_disable
