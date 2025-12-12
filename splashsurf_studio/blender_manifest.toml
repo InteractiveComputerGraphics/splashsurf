@@ -1,0 +1,75 @@
+schema_version = "1.0.0"
+
+# Example of manifest file for a Blender extension
+# Change the values according to your extension
+id = "splashsurf_studio"
+version = "1.0.0"
+name = "Splashsurf Studio"
+tagline = "Surface reconstruction for particle-based fluid simulations"
+maintainer = "Fabian Löschner"
+# Supported types: "add-on", "theme"
+type = "add-on"
+
+# Optional link to documentation, support, source files, etc
+website = "https://splashsurf.physics-simulation.org/"
+
+# Optional list defined by Blender and server, see:
+# https://docs.blender.org/manual/en/dev/advanced/extensions/tags.html
+tags = ["Add Mesh", "Mesh", "Object"]
+
+blender_version_min = "4.5.0"
+# # Optional: Blender version that the extension does not support, earlier versions are supported.
+# # This can be omitted and defined later on the extensions platform if an issue is found.
+# blender_version_max = "5.1.0"
+
+# License conforming to https://spdx.org/licenses/ (use "SPDX: prefix)
+# https://docs.blender.org/manual/en/dev/advanced/extensions/licenses.html
+license = [
+  "SPDX:GPL-3.0-or-later",
+]
+# Optional: required by some licenses.
+# copyright = [
+#   "2002-2024 Developer Name",
+#   "1998 Company Name",
+# ]
+
+# Optional list of supported platforms. If omitted, the extension will be available in all operating systems.
+platforms = ["windows-x64", "macos-arm64", "linux-x64", "windows-arm64", "macos-x64"]
+
+# Optional: bundle 3rd party Python modules.
+# https://docs.blender.org/manual/en/dev/advanced/extensions/python_wheels.html
+wheels = [
+  "./wheels/pysplashsurf-0.14.0.0-cp310-abi3-macosx_14_0_arm64.whl",
+  "./wheels/pysplashsurf-0.14.0.0-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+  "./wheels/pysplashsurf-0.14.0.0-cp310-abi3-win_amd64.whl",
+  "./wheels/pysplashsurf-0.14.0.0-cp310-abi3-win_arm64.whl",
+  "./wheels/pysplashsurf-0.14.0.0-cp310-abi3-macosx_13_0_x86_64.whl"
+]
+
+# Optional: add-ons can list which resources they will require:
+# * files (for access of any filesystem operations)
+# * network (for internet access)
+# * clipboard (to read and/or write the system clipboard)
+# * camera (to capture photos and videos)
+# * microphone (to capture audio)
+#
+# If using network, remember to also check `bpy.app.online_access`
+# https://docs.blender.org/manual/en/dev/advanced/extensions/addons.html#internet-access
+#
+# For each permission it is important to also specify the reason why it is required.
+# Keep this a single short sentence without a period (.) at the end.
+# For longer explanations use the documentation or detail page.
+#
+# [permissions]
+# network = "Need to sync motion-capture data to server"
+# files = "Import/export FBX from/to disk"
+# clipboard = "Copy and paste bone transforms"
+
+# Optional: build settings.
+# https://docs.blender.org/manual/en/dev/advanced/extensions/command_line_arguments.html#command-line-args-extension-build
+# [build]
+# paths_exclude_pattern = [
+#   "__pycache__/",
+#   "/.git/",
+#   "/*.zip",
+# ]
