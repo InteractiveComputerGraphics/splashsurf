@@ -65,6 +65,15 @@ All cached reconstructions can be updated manually using the "Regenerate Cache" 
     ![Error log panel](img/error_log.png)
  - The add-on automatically enables `Render > Lock Interface` to prevent crashes during rendering.
 
+## Preparing extension release
+To package the extension for the Blender extension repository use the `blender --command extension build` command.
+Use the `--split-platforms` flag to reduce size for individual platforms.
+On MacOS the full command to run in this folder is:
+```
+/Applications/Blender.app/Contents/MacOS/Blender --command extension build --source-dir src --split-platforms
+```
+Remember to update the packaged wheels and to update version numbers in the add-on.
+
 ## Acknowledgements
 
 This add-on contains notable contributions from the following people:
