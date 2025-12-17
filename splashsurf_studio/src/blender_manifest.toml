@@ -3,7 +3,7 @@ schema_version = "1.0.0"
 # Example of manifest file for a Blender extension
 # Change the values according to your extension
 id = "splashsurf_studio"
-version = "1.0.0"
+version = "1.0.1"
 name = "Splashsurf Studio"
 tagline = "Surface reconstruction for particle-based fluid simulations"
 maintainer = "Fabian Löschner"

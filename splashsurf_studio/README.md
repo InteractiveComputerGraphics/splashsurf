@@ -65,6 +65,11 @@ All cached reconstructions can be updated manually using the "Regenerate Cache" 
     ![Error log panel](img/error_log.png)
  - The add-on automatically enables `Render > Lock Interface` to prevent crashes during rendering.
 
+## Version History
+
+ - **Version 1.0.1**: Split extension into packages per platform, remove image files from package
+ - **Version 1.0.0**: Initial submission, based on `pySplashsurf 0.14.0.0`
+
 ## Preparing extension release
 To package the extension for the Blender extension repository use the `blender --command extension build` command.
 Use the `--split-platforms` flag to reduce size for individual platforms.
