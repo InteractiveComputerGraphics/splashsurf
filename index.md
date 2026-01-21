@@ -9,6 +9,9 @@
 
 ## News
 
+**2025-12-17**: We published a Blender add-on ["Splashsurf Studio"](https://extensions.blender.org/add-ons/splashsurf-studio/) for on-the-fly surface reconstruction during rendering using splashsurf in Blender. 
+You can find it on the [official extension repository](https://extensions.blender.org/add-ons/splashsurf-studio/).
+
 **2025-06-25**: We published Python bindings for the CLI of splashsurf and most library features 🐍! Pre-built wheels can be installed using PIP: `pip install pysplashsurf`. See the [PyPI entry of pySplashsurf](https://pypi.org/project/pysplashsurf) for more information.
 
 **2023-09-25**: The project now implements the paper ["Weighted Laplacian Smoothing for Surface Reconstruction of Particle-based Fluids" (Löschner, Böttcher, Jeske, Bender; 2023)](https://animation.rwth-aachen.de/publication/0583/). 
@@ -23,10 +26,11 @@ You can see this rendering in motion in [this video](https://youtu.be/2bYvaUXlBQ
 
 ## About
 
-This project consists of the following crates:
+This project consists of the following components:
  - 🛠️ `splashsurf`: Binary crate with a CLI (command line interface) to quickly run surface reconstructions of SPH particle data files from the terminal. Install with `cargo install splashsurf`.
  - 🧰 `splashsurf_lib`: Rust library that implements the reconstruction method used by the CLI. Allows integrating the reconstruction procedure directly into other Rust applications. Furthermore, it resembles a framework providing access to individual building blocks to create your own surface reconstruction pipeline.
- - 🐍 `pysplashsurf`: Bindings to the CLI and library for Python. Install with `pip install splashsurf` and see the [`README`](pysplashsurf/README.md) for more details.
+ - 🐍 `pysplashsurf`: Bindings to the CLI and library for Python. Install with `pip install splashsurf` and see the [`README`](https://github.com/InteractiveComputerGraphics/splashsurf/blob/main/pysplashsurf/README.md) for more details.
+ - 🎬 `splashsurf_studio`: Blender add-on built on top of the Python bindings for on-the-fly surface reconstruction. Available from the [official Blender extension repository](https://extensions.blender.org/add-ons/splashsurf-studio/).
 
 <p align="center">
 <img src="assets/example_particles.png" alt="Image of the original particle data" width="32%"> <img src="assets/example_coarse.png" alt="Image of a coarse reconstructed surface mesh" width="32%"> <img src="assets/example_fine.png" alt="Image of a fine reconstructed surface mesh" width="32%">
