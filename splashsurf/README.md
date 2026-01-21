@@ -8,26 +8,24 @@
 [![Rust library & CLI](https://github.com/InteractiveComputerGraphics/splashsurf/actions/workflows/build.yml/badge.svg)](https://github.com/InteractiveComputerGraphics/splashsurf/actions/workflows/build.yml)
 [![Python bindings](https://github.com/InteractiveComputerGraphics/splashsurf/actions/workflows/pysplashsurf_CI.yml/badge.svg)](https://github.com/InteractiveComputerGraphics/splashsurf/actions/workflows/pysplashsurf_CI.yml)
 
-CLI for surface reconstruction of particle data from SPH simulations, written in Rust. For a the library used by the CLI see the [`splashsurf_lib`](https://crates.io/crates/splashsurf_lib) crate.
+CLI for surface reconstruction of particle data from SPH simulations, written in Rust. For the library used by the CLI see the [`splashsurf_lib`](https://crates.io/crates/splashsurf_lib) crate.
 
 <p align="center">
 <img src="https://raw.githubusercontent.com/InteractiveComputerGraphics/splashsurf/main/example_particles.png" alt="Image of the original particle data" width="32%"> <img src="https://raw.githubusercontent.com/InteractiveComputerGraphics/splashsurf/main/example_coarse.png" alt="Image of a coarse reconstructed surface mesh" width="32%"> <img src="https://raw.githubusercontent.com/InteractiveComputerGraphics/splashsurf/main/example_fine.png" alt="Image of a fine reconstructed surface mesh" width="32%">
 </p>
 
-`splashsurf` is a tool to reconstruct surfaces meshes from SPH particle data.
-The first image shows the visualization of a set of particles from an SPH fluid simulation from [SPlisHSPlasH](https://github.com/InteractiveComputerGraphics/SPlisHSPlasH).
-The particle radius is `0.025`. As the rendering of a fluid should not look like a ball pit, a surface mesh has to be
-reconstructed from this particle data. The next image shows a reconstructed surface mesh of the fluid produced by `splashsurf`
-with a "smoothing length" of `2.2` times the particles radius and a cell size of `1.1` times the particle radius. The
-third image shows a finer reconstruction with a cell size of `0.45` times the particle radius. These surface meshes can
-then be fed into 3D rendering software such as [Blender](https://www.blender.org/) to generate beautiful water animations.
-The result might look something like this:
+`splashsurf` is a tool designed to reconstruct surface meshes from SPH particle data. 
+The first image illustrates the visualization of a set of particles from an SPH fluid simulation made using [SPlisHSPlasH](https://github.com/InteractiveComputerGraphics/SPlisHSPlasH).
+The particle radius is `0.025`.
+To ensure that the rendering of a fluid does not resemble a ball pit, a surface mesh must be reconstructed from this particle data.
+The second image displays a reconstructed surface mesh of the fluid produced by `splashsurf`, utilizing a "smoothing length" of `2.2` times the particle radius and a cell size of `1.1` times the particle radius.
+The third image showcases a finer reconstruction with a cell size of `0.45` times the particle radius.
+These surface meshes can then be imported into 3D rendering software such as [Blender](https://www.blender.org/) to create stunning water animations.
+The result may resemble the following:
 
 <p align="center">
 <img src="https://raw.githubusercontent.com/w1th0utnam3/w1th0utnam3.github.io/master/splashsurf.gif" alt="Rendered water animation" width="96%">
 </p>
-
-Note: This animation does not show the recently added smoothing features of the tool, for more recent rendering see [this video](https://youtu.be/2bYvaUXlBQs).
 
 ---
 

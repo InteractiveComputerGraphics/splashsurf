@@ -10,10 +10,11 @@
 
 Surface reconstruction library and CLI for particle data from SPH simulations, written in Rust.
 
-This repository consists of the following crates:
+This repository contains of the following components:
  - 🛠️ `splashsurf`: Binary crate with a CLI (command line interface) to quickly run surface reconstructions of SPH particle data files from the terminal. Install with `cargo install splashsurf`.
- - 🧰 `splashsurf_lib`: Library that implements the reconstruction pipeline used by the CLI. Allows integrating the reconstruction procedure directly into other Rust applications. Furthermore, it resembles a framework providing access to individual building blocks to create your own surface reconstruction pipeline.
+ - 🧰 `splashsurf_lib`: Rust library that implements the reconstruction method used by the CLI. Allows integrating the reconstruction procedure directly into other Rust applications. Furthermore, it resembles a framework providing access to individual building blocks to create your own surface reconstruction pipeline.
  - 🐍 `pysplashsurf`: Bindings to the CLI and library for Python. Install with `pip install splashsurf` and see the [`README`](pysplashsurf/README.md) for more details.
+ - 🎬 `splashsurf_studio`: Blender add-on built on top of the Python bindings for on-the-fly surface reconstruction. Available from the [official Blender extension repository](https://extensions.blender.org/add-ons/splashsurf-studio/).
 
 This page provides an overview of the CLI's features and high-level notes on implementation of the reconstruction method.
 
@@ -21,20 +22,18 @@ This page provides an overview of the CLI's features and high-level notes on imp
 <img src="example_particles.png" alt="Image of the original particle data" width="32%"> <img src="example_coarse.png" alt="Image of a coarse reconstructed surface mesh" width="32%"> <img src="example_fine.png" alt="Image of a fine reconstructed surface mesh" width="32%">
 </p>
 
-`splashsurf` is a tool to reconstruct surfaces meshes from SPH particle data.
-The first image shows the visualization of a set of particles from an SPH fluid simulation from [SPlisHSPlasH](https://github.com/InteractiveComputerGraphics/SPlisHSPlasH).
-The particle radius is `0.025`. As the rendering of a fluid should not look like a ball pit, a surface mesh has to be
-reconstructed from this particle data. The next image shows a reconstructed surface mesh of the fluid produced by `splashsurf`
-with a "smoothing length" of `2.2` times the particles radius and a cell size of `1.1` times the particle radius. The
-third image shows a finer reconstruction with a cell size of `0.45` times the particle radius. These surface meshes can
-then be fed into 3D rendering software such as [Blender](https://www.blender.org/) to generate beautiful water animations.
-The result might look something like this:
+`splashsurf` is a tool designed to reconstruct surface meshes from SPH particle data. 
+The first image illustrates the visualization of a set of particles from an SPH fluid simulation made using [SPlisHSPlasH](https://github.com/InteractiveComputerGraphics/SPlisHSPlasH).
+The particle radius is `0.025`.
+To ensure that the rendering of a fluid does not resemble a ball pit, a surface mesh must be reconstructed from this particle data.
+The second image displays a reconstructed surface mesh of the fluid produced by `splashsurf`, utilizing a "smoothing length" of `2.2` times the particle radius and a cell size of `1.1` times the particle radius.
+The third image showcases a finer reconstruction with a cell size of `0.45` times the particle radius.
+These surface meshes can then be imported into 3D rendering software such as [Blender](https://www.blender.org/) to create stunning water animations.
+The result may resemble the following:
 
 <p align="center">
 <img src="https://raw.githubusercontent.com/w1th0utnam3/w1th0utnam3.github.io/master/splashsurf.gif" alt="Rendered water animation" width="96%">
 </p>
-
-Note: This animation does not show the recently added smoothing features of the tool, for more recent rendering see [this video](https://youtu.be/2bYvaUXlBQs).
 
 ---
 
