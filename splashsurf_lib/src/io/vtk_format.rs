@@ -192,8 +192,7 @@ pub fn write_vtk<P: AsRef<Path>>(
 ) -> Result<(), anyhow::Error> {
     profile!("write_vtk");
     let vtk_file = Vtk {
-        version: Version::new((4, 2)),
-        //version: Version::new_legacy(4, 2),
+        version: Version::new_legacy(4, 2),
         title: title.to_string(),
         file_path: None,
         byte_order: ByteOrder::BigEndian,
