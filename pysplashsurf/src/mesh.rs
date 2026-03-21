@@ -95,7 +95,7 @@ enum PyTriMesh3dData {
 
 /// Triangle surface mesh in 3D
 #[gen_stub_pyclass]
-#[pyclass]
+#[pyclass(from_py_object)]
 #[pyo3(name = "TriMesh3d")]
 #[derive(Clone)]
 pub struct PyTriMesh3d {
@@ -226,7 +226,7 @@ enum PyMixedTriQuadMesh3dData {
 
 /// Mixed triangle and quad surface mesh in 3D
 #[gen_stub_pyclass]
-#[pyclass]
+#[pyclass(from_py_object)]
 #[pyo3(name = "MixedTriQuadMesh3d")]
 #[derive(Clone)]
 pub struct PyMixedTriQuadMesh3d {
@@ -336,9 +336,9 @@ where
 }
 
 /// Enum specifying the type of mesh wrapped by a ``MeshWithData``
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 #[gen_stub_pyclass_enum]
-#[pyclass(eq)]
+#[pyclass(from_py_object)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum MeshType {
     /// 3D triangle mesh
     Tri3d,
@@ -361,7 +361,7 @@ enum PyMeshAttributeData {
 }
 
 #[gen_stub_pyclass]
-#[pyclass]
+#[pyclass(from_py_object)]
 #[pyo3(name = "MeshAttribute")]
 #[derive(Clone)]
 pub struct PyMeshAttribute {
