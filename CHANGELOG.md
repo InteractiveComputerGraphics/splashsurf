@@ -4,6 +4,10 @@ The following changes are present in the `main` branch of the repository and are
 
  - N/A
 
+## Version 0.14.1
+
+ - Upgrades to dependencies to fix deprecation warnings (vtkio, PyO3)
+
 ## Version 0.14.0
 
  - Lib: Implement AVX and NEON variants of f32 cubic spline kernel
