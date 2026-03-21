@@ -64,7 +64,7 @@ jobs:
   #       with:
   #         name: pysplashsurf.pyi
   #         path: pysplashsurf/pysplashsurf/
-  #     - uses: actions/setup-python@v5
+  #     - uses: actions/setup-python@v6
   #       with:
   #         python-version: 3.12
   #     # QEMU is required for non-native archs
@@ -116,14 +116,14 @@ jobs:
         with:
           name: pysplashsurf.pyi
           path: pysplashsurf/pysplashsurf/
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: 3.12
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
-          args: --release --out wheelhouse --auditwheel repair -m pysplashsurf/Cargo.toml
+          args: --release --out wheelhouse --auditwheel repair -m pysplashsurf/Cargo.toml -i python3.12
           #sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
           manylinux: 2014
       - name: Audit & fix wheels
@@ -159,7 +159,7 @@ jobs:
   #       with:
   #         name: pysplashsurf.pyi
   #         path: pysplashsurf/pysplashsurf/
-  #     - uses: actions/setup-python@v5
+  #     - uses: actions/setup-python@v6
   #       with:
   #         python-version: 3.12
   #     - name: Install cibuildwheel
@@ -196,14 +196,14 @@ jobs:
         with:
           name: pysplashsurf.pyi
           path: pysplashsurf/pysplashsurf/
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: 3.12
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
-          args: --release --out wheelhouse -m pysplashsurf/Cargo.toml
+          args: --release --out wheelhouse -m pysplashsurf/Cargo.toml -i python3.12
           #sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
       - name: Audit & fix wheels
         run: |
@@ -234,7 +234,7 @@ jobs:
   #       with:
   #         name: pysplashsurf.pyi
   #         path: pysplashsurf/pysplashsurf/
-  #     - uses: actions/setup-python@v5
+  #     - uses: actions/setup-python@v6
   #       with:
   #         python-version: 3.12
   #     - name: Install cibuildwheel
@@ -278,7 +278,7 @@ jobs:
         with:
           name: pysplashsurf.pyi
           path: pysplashsurf/pysplashsurf/
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: 3.12
           architecture: ${{ matrix.py-arch }}
@@ -286,7 +286,7 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
-          args: --release --out wheelhouse -m pysplashsurf/Cargo.toml
+          args: --release --out wheelhouse -m pysplashsurf/Cargo.toml -i python3.12
           #sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
       - name: Audit wheels
         run: |
@@ -330,9 +330,9 @@ jobs:
         with:
           pattern: wheels-*
           merge-multiple: true
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
-          python-version: 3.x
+          python-version: 3.12
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -352,15 +352,15 @@ jobs:
       filename: ${{ steps.get_filename.outputs.file_name }}
     steps:
     - uses: actions/checkout@v6
-    - uses: actions/setup-python@v5
+    - uses: actions/setup-python@v6
       with:
-        python-version: 3.x
+        python-version: 3.12
     - name: Build wheels
       uses: PyO3/maturin-action@v1
       with:
         target: x86_64
-        args: --release --out dist -m pysplashsurf/Cargo.toml
-        manylinux: auto
+        args: --release --out dist --auditwheel repair -m pysplashsurf/Cargo.toml -i python3.12
+        manylinux: 2014
     - name: Get wheel name
       id: get_filename
       run: |
@@ -378,9 +378,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v6
-    - uses: actions/setup-python@v5
+    - uses: actions/setup-python@v6
       with:
-        python-version: 3.x
+        python-version: 3.12
     - name: Download wheel
       uses: actions/download-artifact@v4
       with:
@@ -415,9 +415,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v6
-    - uses: actions/setup-python@v5
+    - uses: actions/setup-python@v6
       with:
-        python-version: 3.x
+        python-version: 3.12
     - uses: mamba-org/setup-micromamba@v2
       with:
         environment-file: pysplashsurf/python_environment.yaml
