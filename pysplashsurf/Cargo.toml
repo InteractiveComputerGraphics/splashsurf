@@ -13,7 +13,7 @@ numpy = "0.28"
 ndarray = "0.17"
 bytemuck = { version = "1.23", features = ["extern_crate_alloc"] }
 anyhow = "1.0"
-pyo3-stub-gen = "0.19"
+pyo3-stub-gen = "0.22"
 
 [build-dependencies]
 pyo3-build-config = { version = "0.28" , features = ["resolve-config"] }
