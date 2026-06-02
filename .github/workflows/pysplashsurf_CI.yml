@@ -26,13 +26,13 @@ jobs:
     name: Run stub generator
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
       - uses: moonrepo/setup-rust@v1
       - run: |
           cargo run --bin stub_gen --no-default-features
         working-directory: pysplashsurf
       - name: Upload stub as artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: pysplashsurf.pyi
           path: pysplashsurf/pysplashsurf/
@@ -60,7 +60,7 @@ jobs:
   #   steps:
   #     - uses: actions/checkout@v6
   #     - name: Download stub artifact
-  #       uses: actions/download-artifact@v4
+  #       uses: actions/download-artifact@v8
   #       with:
   #         name: pysplashsurf.pyi
   #         path: pysplashsurf/pysplashsurf/
@@ -96,7 +96,7 @@ jobs:
   #           CIBW_BEFORE_ALL_LINUX: curl -sSf https://sh.rustup.rs | sh -s -- -y
   #           CIBW_ENVIRONMENT_LINUX: "PATH=$HOME/.cargo/bin:$PATH"
   #     - name: Upload wheels
-  #       uses: actions/upload-artifact@v4
+  #       uses: actions/upload-artifact@v7
   #       with:
   #         name: wheels-${{ matrix.python-version }}
   #         path: wheelhouse
@@ -112,7 +112,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: Download stub artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: pysplashsurf.pyi
           path: pysplashsurf/pysplashsurf/
@@ -131,7 +131,7 @@ jobs:
           pip install auditwheel
           auditwheel repair wheelhouse/*.whl
       - name: Upload wheels
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: wheels-linux-${{ matrix.target }}
           path: wheelhouse
@@ -155,7 +155,7 @@ jobs:
   #   steps:
   #     - uses: actions/checkout@v6
   #     - name: Download stub artifact
-  #       uses: actions/download-artifact@v4
+  #       uses: actions/download-artifact@v8
   #       with:
   #         name: pysplashsurf.pyi
   #         path: pysplashsurf/pysplashsurf/
@@ -174,7 +174,7 @@ jobs:
   #           CIBW_TEST_SOURCES: "pysplashsurf/tests"
   #           CIBW_TEST_REQUIRES: pytest meshio trimesh rtree scipy
   #     - name: Upload wheels
-  #       uses: actions/upload-artifact@v4
+  #       uses: actions/upload-artifact@v7
   #       with:
   #         name: wheels-${{ matrix.python-version }}
   #         path: wheelhouse
@@ -192,7 +192,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: Download stub artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: pysplashsurf.pyi
           path: pysplashsurf/pysplashsurf/
@@ -210,7 +210,7 @@ jobs:
           pip install delocate
           delocate-wheel -v wheelhouse/*.whl
       - name: Upload wheels
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: wheels-macos-${{ matrix.target }}
           path: wheelhouse
@@ -230,7 +230,7 @@ jobs:
   #   steps:
   #     - uses: actions/checkout@v6
   #     - name: Download stub artifact
-  #       uses: actions/download-artifact@v4
+  #       uses: actions/download-artifact@v8
   #       with:
   #         name: pysplashsurf.pyi
   #         path: pysplashsurf/pysplashsurf/
@@ -249,7 +249,7 @@ jobs:
   #           #CIBW_TEST_SOURCES: "pysplashsurf/tests"
   #           #CIBW_TEST_REQUIRES: pytest meshio trimesh rtree scipy
   #     - name: Upload wheels
-  #       uses: actions/upload-artifact@v4
+  #       uses: actions/upload-artifact@v7
   #       with:
   #         name: wheels-${{ matrix.python-version }}
   #         path: wheelhouse
@@ -274,7 +274,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: Download stub artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: pysplashsurf.pyi
           path: pysplashsurf/pysplashsurf/
@@ -293,7 +293,7 @@ jobs:
           pip install delvewheel
           delvewheel show -v wheelhouse/*.whl
       - name: Upload wheels
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: wheels-windows-${{ matrix.target }}
           path: wheelhouse
@@ -305,7 +305,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: Download stub artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: pysplashsurf.pyi
           path: pysplashsurf/pysplashsurf/
@@ -315,7 +315,7 @@ jobs:
           command: sdist
           args: --out dist -m pysplashsurf/Cargo.toml
       - name: Upload sdist
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: wheels-sdist
           path: dist
@@ -326,7 +326,7 @@ jobs:
     if: ${{ startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') }}
     needs: [linux_wheels, macos_wheels, windows_wheels, sdist, tests, docs]
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: wheels-*
           merge-multiple: true
@@ -367,7 +367,7 @@ jobs:
         FILE_NAME=$(ls dist)
         echo "file_name=$FILE_NAME" >> $GITHUB_OUTPUT
     - name: Upload wheel
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: doc_tests_wheel
         path: dist
@@ -382,7 +382,7 @@ jobs:
       with:
         python-version: 3.12
     - name: Download wheel
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v8
       with:
         name: doc_tests_wheel
         path: dist/
@@ -392,7 +392,7 @@ jobs:
     - uses: ammaraskar/sphinx-action@8.2.3
       with:
         docs-folder: "pysplashsurf/pysplashsurf/docs/"
-    - uses: actions/upload-artifact@v4
+    - uses: actions/upload-artifact@v7
       with:
         name: DocumentationHTML
         path: pysplashsurf/pysplashsurf/docs/build/html/
@@ -418,7 +418,7 @@ jobs:
     - uses: actions/setup-python@v6
       with:
         python-version: 3.12
-    - uses: mamba-org/setup-micromamba@v2
+    - uses: mamba-org/setup-micromamba@v3
       with:
         environment-file: pysplashsurf/python_environment.yaml
         init-shell: >-
@@ -427,7 +427,7 @@ jobs:
         conda info
         conda list
     - name: Download wheel
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v8
       with:
         name: doc_tests_wheel
         path: dist/
