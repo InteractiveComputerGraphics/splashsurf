@@ -1,9 +1,12 @@
 //! Functions for interpolating quantities (e.g. normals, scalar fields) by evaluating SPH sums
 
 use crate::Real;
-use crate::kernel::SymmetricKernel3d;
+use crate::ThreadSafe;
+use crate::kernel::{
+    CubicSplineKernel, KernelType, Poly6Kernel, SpikyKernel, SymmetricKernel3d,
+    WendlandQuinticC2Kernel,
+};
 use crate::profile;
-use crate::{ThreadSafe, kernel};
 use nalgebra::{SVector, Unit, Vector3};
 use rayon::prelude::*;
 use rstar::RTree;
@@ -14,6 +17,7 @@ use std::ops::AddAssign;
 pub struct SphInterpolator<R: Real> {
     compact_support_radius: R,
     tree: RTree<Particle<R>>,
+    kernel_type: KernelType,
 }
 
 /// Particle type that is stored in the R-tree for fast SPH neighbor queries
@@ -62,6 +66,7 @@ impl<R: Real> SphInterpolator<R> {
         particle_densities: &[R],
         particle_rest_mass: R,
         compact_support_radius: R,
+        kernel_type: KernelType,
     ) -> Self {
         assert_eq!(particle_positions.len(), particle_densities.len());
 
@@ -70,6 +75,7 @@ impl<R: Real> SphInterpolator<R> {
         Self {
             compact_support_radius,
             tree,
+            kernel_type,
         }
     }
 
@@ -86,40 +92,65 @@ impl<R: Real> SphInterpolator<R> {
     ) {
         profile!("interpolate_normals_inplace");
 
-        let squared_support = self.compact_support_radius * self.compact_support_radius;
-        let kernel = kernel::CubicSplineKernel::new(self.compact_support_radius);
+        fn interpolate_normals_helper<R: Real, K: SymmetricKernel3d<R> + Sync>(
+            sph: &SphInterpolator<R>,
+            interpolation_points: &[Vector3<R>],
+            normals: &mut Vec<Unit<Vector3<R>>>,
+        ) {
+            let squared_support = sph.compact_support_radius * sph.compact_support_radius;
 
-        interpolation_points
-            .par_iter()
-            .map(|x_i| {
-                // Compute the gradient of the particle density field which points in the same direction as surface normals
-                let mut density_grad = Vector3::zeros();
+            let kernel = K::new(sph.compact_support_radius);
 
-                // SPH: Iterate over all other particles within the squared support radius
-                let query_point = bytemuck::cast::<_, [R; 3]>(*x_i);
-                for p_j in self
-                    .tree
-                    .locate_within_distance(query_point, squared_support)
-                {
-                    // Volume of the neighbor particle
-                    let vol_j = p_j.data.volume;
-                    // Position of the neighbor particle
-                    let x_j = bytemuck::cast_ref::<_, Vector3<R>>(p_j.geom());
+            interpolation_points
+                .par_iter()
+                .map(|x_i| {
+                    // Compute the gradient of the particle density field which points in the same direction as surface normals
+                    let mut density_grad = Vector3::zeros();
 
-                    // Relative position `dx` and distance `r` of the neighbor particle
-                    let dx = x_j - x_i;
-                    let r = dx.norm();
+                    // SPH: Iterate over all other particles within the squared support radius
+                    let query_point = bytemuck::cast::<_, [R; 3]>(*x_i);
+                    for p_j in sph
+                        .tree
+                        .locate_within_distance(query_point, squared_support)
+                    {
+                        // Volume of the neighbor particle
+                        let vol_j = p_j.data.volume;
+                        // Position of the neighbor particle
+                        let x_j = bytemuck::cast_ref::<_, Vector3<R>>(p_j.geom());
 
-                    // Compute the contribution of the neighbor to the gradient of the density field
-                    // TODO: Replace this by a discrete gradient norm evaluation
-                    let kernel_grad = dx.unscale(r) * kernel.evaluate_gradient_norm(r);
-                    density_grad += kernel_grad * vol_j;
-                }
+                        // Relative position `dx` and distance `r` of the neighbor particle
+                        let dx = x_j - x_i;
+                        let r = dx.norm();
 
-                // Normalize the gradient to get the surface normal
-                Unit::new_normalize(density_grad)
-            })
-            .collect_into_vec(normals);
+                        // Compute the contribution of the neighbor to the gradient of the density field
+                        // TODO: Replace this by a discrete gradient norm evaluation
+                        let kernel_grad = dx.unscale(r) * kernel.evaluate_gradient_norm(r);
+                        density_grad += kernel_grad * vol_j;
+                    }
+
+                    // Normalize the gradient to get the surface normal
+                    Unit::new_normalize(density_grad)
+                })
+                .collect_into_vec(normals);
+        }
+
+        match self.kernel_type {
+            KernelType::CubicSpline => interpolate_normals_helper::<R, CubicSplineKernel<R>>(
+                self,
+                interpolation_points,
+                normals,
+            ),
+            KernelType::Poly6 => {
+                interpolate_normals_helper::<R, Poly6Kernel<R>>(self, interpolation_points, normals)
+            }
+            KernelType::Spiky => {
+                interpolate_normals_helper::<R, SpikyKernel<R>>(self, interpolation_points, normals)
+            }
+            KernelType::WendlandQuinticC2 => interpolate_normals_helper::<
+                R,
+                WendlandQuinticC2Kernel<R>,
+            >(self, interpolation_points, normals),
+        }
     }
 
     /// Interpolates surface normals (i.e. normalized SPH gradient of the indicator function) of the fluid to the given points using SPH interpolation
@@ -212,49 +243,95 @@ impl<R: Real> SphInterpolator<R> {
         profile!("interpolate_quantity_inplace");
         assert_eq!(particle_quantity.len(), self.tree.size());
 
-        let squared_support = self.compact_support_radius * self.compact_support_radius;
-        let kernel = kernel::CubicSplineKernel::new(self.compact_support_radius);
+        fn interpolate_quantity_helper<
+            R: Real,
+            T: InterpolationQuantity<R>,
+            K: SymmetricKernel3d<R> + Sync,
+        >(
+            sph: &SphInterpolator<R>,
+            particle_quantity: &[T],
+            interpolation_points: &[Vector3<R>],
+            interpolated_values: &mut Vec<T>,
+            first_order_correction: bool,
+        ) {
+            let squared_support = sph.compact_support_radius * sph.compact_support_radius;
+            let kernel = K::new(sph.compact_support_radius);
 
-        let enable_correction = if first_order_correction {
-            R::one()
-        } else {
-            R::zero()
-        };
+            let enable_correction = if first_order_correction {
+                R::one()
+            } else {
+                R::zero()
+            };
 
-        interpolation_points
-            .par_iter()
-            .map(|x_i| {
-                let mut interpolated_value = T::zero();
-                let mut correction = R::zero();
+            interpolation_points
+                .par_iter()
+                .map(|x_i| {
+                    let mut interpolated_value = T::zero();
+                    let mut correction = R::zero();
 
-                // SPH: Iterate over all other particles within the squared support radius
-                let query_point = bytemuck::cast::<_, [R; 3]>(*x_i);
-                for p_j in self
-                    .tree
-                    .locate_within_distance(query_point, squared_support)
-                {
-                    // Volume of the neighbor particle
-                    let vol_j = p_j.data.volume;
-                    // Position of the neighbor particle
-                    let x_j = bytemuck::cast_ref::<_, Vector3<R>>(p_j.geom());
+                    // SPH: Iterate over all other particles within the squared support radius
+                    let query_point = bytemuck::cast::<_, [R; 3]>(*x_i);
+                    for p_j in sph
+                        .tree
+                        .locate_within_distance(query_point, squared_support)
+                    {
+                        // Volume of the neighbor particle
+                        let vol_j = p_j.data.volume;
+                        // Position of the neighbor particle
+                        let x_j = bytemuck::cast_ref::<_, Vector3<R>>(p_j.geom());
 
-                    // Relative position `dx` and distance `r` of the neighbor particle
-                    let dx = x_j - x_i;
-                    let r = dx.norm();
+                        // Relative position `dx` and distance `r` of the neighbor particle
+                        let dx = x_j - x_i;
+                        let r = dx.norm();
 
-                    // Unchecked access is fine as we asserted before that the slice has the correct length
-                    let A_j = unsafe { particle_quantity.get_unchecked(p_j.data.index).clone() };
-                    let W_ij = kernel.evaluate(r);
+                        // Unchecked access is fine as we asserted before that the slice has the correct length
+                        let A_j =
+                            unsafe { particle_quantity.get_unchecked(p_j.data.index).clone() };
+                        let W_ij = kernel.evaluate(r);
 
-                    interpolated_value += A_j.scale(vol_j * W_ij);
-                    correction += vol_j * W_ij;
-                }
+                        interpolated_value += A_j.scale(vol_j * W_ij);
+                        correction += vol_j * W_ij;
+                    }
 
-                let correction_factor =
-                    enable_correction * correction.recip() + (R::one() - enable_correction);
-                interpolated_value.scale(correction_factor)
-            })
-            .collect_into_vec(interpolated_values);
+                    let correction_factor =
+                        enable_correction * correction.recip() + (R::one() - enable_correction);
+                    interpolated_value.scale(correction_factor)
+                })
+                .collect_into_vec(interpolated_values);
+        }
+
+        match self.kernel_type {
+            KernelType::CubicSpline => interpolate_quantity_helper::<R, T, CubicSplineKernel<R>>(
+                self,
+                particle_quantity,
+                interpolation_points,
+                interpolated_values,
+                first_order_correction,
+            ),
+            KernelType::Poly6 => interpolate_quantity_helper::<R, T, Poly6Kernel<R>>(
+                self,
+                particle_quantity,
+                interpolation_points,
+                interpolated_values,
+                first_order_correction,
+            ),
+            KernelType::Spiky => interpolate_quantity_helper::<R, T, SpikyKernel<R>>(
+                self,
+                particle_quantity,
+                interpolation_points,
+                interpolated_values,
+                first_order_correction,
+            ),
+            KernelType::WendlandQuinticC2 => {
+                interpolate_quantity_helper::<R, T, WendlandQuinticC2Kernel<R>>(
+                    self,
+                    particle_quantity,
+                    interpolation_points,
+                    interpolated_values,
+                    first_order_correction,
+                )
+            }
+        }
     }
 }
 

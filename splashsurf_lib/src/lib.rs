@@ -42,6 +42,7 @@ pub use crate::traits::{Index, Real, RealConvert, ThreadSafe};
 pub use crate::uniform_grid::UniformGrid;
 
 use crate::density_map::DensityMapError;
+use crate::kernel::KernelType;
 use crate::marching_cubes::MarchingCubesError;
 use crate::mesh::TriMesh3d;
 use crate::uniform_grid::GridConstructionError;
@@ -186,6 +187,7 @@ pub struct Parameters<R: Scalar> {
     /// Depending on the settings of the reconstruction, neighborhood lists are only computed locally
     /// in subdomains. Enabling this flag joins this data over all particles which can add a small overhead.
     pub global_neighborhood_list: bool,
+    pub kernel_type: KernelType,
 }
 
 impl<R: Real> Parameters<R> {
@@ -206,6 +208,7 @@ impl<R: Real> Parameters<R> {
             enable_simd: true,
             spatial_decomposition: Default::default(),
             global_neighborhood_list: false,
+            kernel_type: KernelType::CubicSpline,
         }
     }
 
@@ -238,6 +241,7 @@ impl<R: Real> Parameters<R> {
             enable_simd: self.enable_simd,
             spatial_decomposition: self.spatial_decomposition.clone(),
             global_neighborhood_list: self.global_neighborhood_list,
+            kernel_type: self.kernel_type.clone(),
         })
     }
 }

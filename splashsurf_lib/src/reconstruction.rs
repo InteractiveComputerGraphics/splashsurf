@@ -2,16 +2,39 @@ use crate::dense_subdomains::{
     compute_global_densities_and_neighbors, decomposition, initialize_parameters,
     reconstruct_subdomains, stitching, subdomain_classification::GhostMarginClassifier,
 };
+use crate::density_map::{compute_particle_densities_inplace, generate_sparse_density_map};
+use crate::kernel::{
+    CubicSplineKernel, KernelType, Poly6Kernel, SpikyKernel, WendlandQuinticC2Kernel,
+};
 use crate::mesh::TriMesh3d;
 use crate::uniform_grid::UniformGrid;
 use crate::workspace::LocalReconstructionWorkspace;
 use crate::{
-    Index, Parameters, Real, ReconstructionError, SurfaceReconstruction, density_map, kernel,
-    marching_cubes, neighborhood_search, profile,
+    Index, Parameters, Real, ReconstructionError, SurfaceReconstruction, kernel, marching_cubes,
+    neighborhood_search, profile,
 };
 use anyhow::Context;
 use log::{info, trace};
 use nalgebra::Vector3;
+
+macro_rules! call_with_kernel_type {
+    ($function:ident; $kernel_type:expr; $( $param:expr ), *) => {
+        match $kernel_type {
+            KernelType::CubicSpline => {
+                $function::<I, R, CubicSplineKernel<R>>($( $param ), *)
+            },
+            KernelType::Poly6 => {
+                $function::<I, R, Poly6Kernel<R>>($( $param ), *)
+            },
+            KernelType::Spiky => {
+                $function::<I, R, SpikyKernel<R>>($( $param ), *)
+            },
+            KernelType::WendlandQuinticC2 => {
+                $function::<I, R, WendlandQuinticC2Kernel<R>>($( $param ), *)
+            }
+        }
+    }
+}
 
 /// Performs a surface reconstruction with a regular grid for domain decomposition
 pub(crate) fn reconstruct_surface_subdomain_grid<I: Index, R: Real>(
@@ -31,18 +54,22 @@ pub(crate) fn reconstruct_surface_subdomain_grid<I: Index, R: Real>(
     let subdomains =
         decomposition::<I, R, GhostMarginClassifier<I>>(&internal_parameters, particle_positions)?;
 
-    let (particle_densities, particle_neighbors) = compute_global_densities_and_neighbors(
+    let (particle_densities, particle_neighbors) = call_with_kernel_type!(
+        compute_global_densities_and_neighbors;
+        parameters.kernel_type;
         &internal_parameters,
         particle_positions,
-        &subdomains,
+        &subdomains
     );
 
-    let surface_patches = reconstruct_subdomains(
+    let surface_patches = call_with_kernel_type!(
+        reconstruct_subdomains;
+        parameters.kernel_type;
         &internal_parameters,
         particle_positions,
         &particle_densities,
         &subdomains,
-        parameters.enable_simd,
+        parameters.enable_simd
     );
 
     let global_mesh = stitching(surface_patches);
@@ -135,13 +162,15 @@ pub(crate) fn compute_particle_densities_and_neighbors<I: Index, R: Real>(
     );
 
     trace!("Computing particle densities...");
-    density_map::compute_particle_densities_inplace::<I, R>(
+    call_with_kernel_type!(
+        compute_particle_densities_inplace;
+        parameters.kernel_type;
         particle_positions,
         particle_neighbor_lists.as_slice(),
         parameters.compact_support_radius,
         particle_rest_mass,
         parameters.enable_multi_threading,
-        densities,
+        densities
     );
 }
 
@@ -171,7 +200,10 @@ pub(crate) fn reconstruct_single_surface_append<I: Index, R: Real>(
     // Create a new density map, reusing memory with the workspace is bad for cache efficiency
     // Alternatively one could reuse memory with a custom caching allocator
     let mut density_map = Default::default();
-    density_map::generate_sparse_density_map(
+
+    call_with_kernel_type!(
+        generate_sparse_density_map;
+        parameters.kernel_type;
         grid,
         particle_positions,
         particle_densities,
@@ -180,7 +212,7 @@ pub(crate) fn reconstruct_single_surface_append<I: Index, R: Real>(
         parameters.compact_support_radius,
         parameters.cube_size,
         parameters.enable_multi_threading,
-        &mut density_map,
+        &mut density_map
     )?;
 
     marching_cubes::triangulate_density_map_append(

@@ -28,6 +28,7 @@ fn parameters_canyon() -> Parameters<f32> {
             auto_disable: false,
         }),
         global_neighborhood_list: false,
+        kernel_type: splashsurf_lib::kernel::KernelType::CubicSpline,
     }
 }
 
